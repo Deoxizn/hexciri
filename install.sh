@@ -32,6 +32,12 @@ confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
 
 [[ -f /etc/arch-release ]] || { err "not Arch — run on a fresh minimal Arch install"; exit 1; }
 (( EUID != 0 )) || { err "run as user, not root"; exit 1; }
+# A passwordless window from a crashed bootstrap would silently skip auth —
+# keep it only inside a live stage2 run, otherwise remove and prompt normally.
+if [[ -f /etc/sudoers.d/hexciri-install && -z ${HEXCIRI_STAGE2:-} ]]; then
+  warn "removing stale passwordless-sudo window from a previous run"
+  sudo rm -f /etc/sudoers.d/hexciri-install
+fi
 sudo -v || exit 1
 
 export HEXCIRI_PATH="${HEXCIRI_PATH:-/usr/share/hexciri}"

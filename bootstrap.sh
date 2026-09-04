@@ -2,13 +2,13 @@
 # hexciri bootstrap — Arch ISO → fully automatic hexciri install.
 #
 #   curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash
-#   curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash -s -- --channel bleeding
+#   curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash -s -- --kernel bore
 #
 # Only 9 things are ever typed (everything else is automatic):
 #   disk, full-disk-vs-free-space, filesystem, channel, hostname,
 #   username, user password, timezone, LUKS yes/no.
-# --channel only changes the channel default; everything is still asked.
-# Run as root on the Arch ISO live environment. DESTRUCTIVE: wipes $DISK.
+# --kernel preselects the GPU kernel (else auto). Run as root on the
+# Arch ISO live environment. DESTRUCTIVE: wipes $DISK (full mode).
 set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
@@ -68,7 +68,7 @@ unset USERPASS2
 DETECTED_TZ="$(curl -fsSL --max-time 8 https://ipapi.co/timezone 2>/dev/null || true)"
 [[ -f /usr/share/zoneinfo/$DETECTED_TZ ]] || DETECTED_TZ="UTC"
 read -rp "timezone [$DETECTED_TZ]: " TIMEZONE </dev/tty; TIMEZONE="${TIMEZONE:-$DETECTED_TZ}"
-[[ -f /usr/share/zoneinfo/"$TIMEZONE" ]] || { err "unknown timezone: $TIMEZONE"; exit 1; }
+[[ $TIMEZONE != *".."* && -f /usr/share/zoneinfo/"$TIMEZONE" ]] || { err "unknown timezone: $TIMEZONE"; exit 1; }
 LUKS="${LUKS:-no}"
 if $LUKS_ASK; then
   read -rp "encrypt disk with LUKS? [y/N]: " luks_ans </dev/tty
@@ -101,7 +101,7 @@ if [[ $MODE == free ]]; then
   command -v parted &>/dev/null || { err "parted missing on this ISO — cannot map free space"; exit 1; }
 fi
 
-# ── channel is always asked; --channel only pre-fills the default ──
+# ── channel is always asked ──
 read -rp "channel [stable/bleeding, default stable]: " CHANNEL </dev/tty
 CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
@@ -232,8 +232,8 @@ chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/hexciri"
 # for the install only; install.sh closes it (plus an EXIT trap here).
 printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$USERNAME" > /etc/sudoers.d/hexciri-install
 chmod 440 /etc/sudoers.d/hexciri-install
-trap 'rm -f /etc/sudoers.d/hexciri-install' EXIT
-su - "$USERNAME" -c "cd ~/hexciri && ./install.sh -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}"
+trap 'rm -f /etc/sudoers.d/hexciri-install /root/hexciri-stage2.sh' EXIT
+su - "$USERNAME" -c "export HEXCIRI_STAGE2=1; cd ~/hexciri && ./install.sh -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}"
 STAGE2
 
 info "stage 2 (chroot)..."
