@@ -11,8 +11,9 @@ Arch × Niri × Noctalia
 ## Install
 
 1. Flash the Arch ISO, boot it (UEFI), connect network (`iwctl` for wifi).
-2. Run it — 10 things are typed (username, password, hostname, timezone,
-   filesystem, channel, LUKS, kernel, disk), everything else is automatic:
+2. Run it — 9 things are typed (username, password, hostname, timezone,
+   filesystem, channel, LUKS, disk), everything else is automatic
+   (kernel auto-detects; override post-install with `hexciri-gpu`):
 
 ```bash
 curl -LO https://hexciri.dirty.pizza/hexciri

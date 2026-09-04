@@ -4,9 +4,9 @@
 #   curl -LO https://hexciri.dirty.pizza/hexciri
 #   sh hexciri [--kernel bore]
 #
-# 10 things are typed, everything else is automatic: username, password,
-# hostname, timezone, filesystem, channel, LUKS, kernel, disk (+wipe confirm).
-# --kernel only pre-fills the kernel prompt. Run as root on the
+# 9 things are typed, everything else is automatic: username, password,
+# hostname, timezone, filesystem, channel, LUKS, disk (+wipe confirm).
+# --kernel silently preselects (installer auto-detects otherwise). Run as root on the
 # Arch ISO live environment. DESTRUCTIVE: wipes $DISK (full mode).
 set -euo pipefail
 
@@ -14,7 +14,7 @@ SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
 BOOTSTRAP_REV=2   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
-KERNEL_PICK=""         # --kernel pre-fills the kernel prompt below (empty = auto)
+KERNEL_PICK=""         # --kernel silently preselects (empty = auto-detect in installer)
 while (($#)); do
   case "$1" in
     --kernel=*) KERNEL_PICK="${1#*=}"; shift ;;
@@ -116,14 +116,6 @@ else
 fi
 [[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
 if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
-
-# ── kernel is always asked (flag only pre-fills); auto = LTS pin on 1xxx, stock otherwise ──
-if [[ -z $KERNEL_PICK ]]; then
-  read -rp "kernel [stock/lts/omarchy/bore/muqss, default auto]: " KERNEL_PICK </dev/tty
-  KERNEL_PICK="${KERNEL_PICK,,}"
-fi
-[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { err "kernel must be stock|lts|omarchy|bore|muqss (or empty for auto)"; exit 1; }
-info "kernel: ${KERNEL_PICK:-auto}"
 
 # ── summary + final confirm (nothing touched until this passes) ──
 echo ""
