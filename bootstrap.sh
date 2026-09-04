@@ -46,8 +46,8 @@ done
 info "site: $SITE"
 
 # ── the only 9 typed things: identity first, disk choices last ──
-read -rp "hostname [hexciri]: " HOSTNAME </dev/tty; HOSTNAME="${HOSTNAME:-hexciri}"
 read -rp "username [hex]: " USERNAME </dev/tty; USERNAME="${USERNAME:-hex}"
+read -rp "hostname [hexciri]: " HOSTNAME </dev/tty; HOSTNAME="${HOSTNAME:-hexciri}"
 for _try in 1 2 3; do
   read -rsp "password for $USERNAME: " USERPASS </dev/tty; echo
   read -rsp "confirm password: " USERPASS2 </dev/tty; echo
