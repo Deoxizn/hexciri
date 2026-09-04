@@ -8,10 +8,13 @@ set -euo pipefail
 
 KERNEL_PICK=""
 YES=false
-for arg in "$@"; do
-  case "$arg" in
-    --kernel=*) KERNEL_PICK="${arg#*=}" ;;
-    -y|--yes) YES=true ;;
+while (($#)); do
+  case "$1" in
+    --kernel=*) KERNEL_PICK="${1#*=}"; shift ;;
+    --kernel) KERNEL_PICK="${2:-}"; shift 2 ;;
+    -y|--yes) YES=true; shift ;;
+    --) shift ;;
+    *) shift ;;
   esac
 done
 [[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { echo "hexciri-gpu: --kernel must be stock|lts|omarchy|bore|muqss"; exit 1; }

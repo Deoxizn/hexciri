@@ -2,7 +2,7 @@
 
 <img src="branding/hexciri.png" alt="Hexciri" width="650">
 
-Arch-based Niri + Noctalia distro. Own void, own mirrors policy, own theme engine.
+Arch × Niri × Noctalia
 
 [hexciri.dirty.pizza](https://hexciri.dirty.pizza)
 
@@ -11,29 +11,21 @@ Arch-based Niri + Noctalia distro. Own void, own mirrors policy, own theme engin
 ## Install
 
 1. Flash the Arch ISO, boot it (UEFI), connect network (`iwctl` for wifi).
-2. Run one line 
+2. Run it — 10 things are typed (username, password, hostname, timezone,
+   filesystem, channel, LUKS, kernel, disk), everything else is automatic:
 
 ```bash
 curl -LO https://hexciri.dirty.pizza/hexciri
 sh hexciri
 ```
 
-One-liner pipe works identically:
+Pipe works identically: `curl -fsSL https://hexciri.dirty.pizza/hexciri | bash`.
+`--kernel=` pre-fills the kernel prompt (auto = LTS pin on 1xxx, stock
+otherwise; custom kernels need bleeding):
 
 ```bash
-curl -fsSL https://hexciri.dirty.pizza/hexciri | bash
-```
-
-Flags only pre-fill defaults — everything is still asked:
-
-| flag | default | notes |
-|---|---|---|
-| `--kernel=stock\|lts\|omarchy\|bore\|muqss` | auto (LTS pin on 1xxx, stock otherwise) | custom kernels need bleeding |
-| `--no-luks` | ask | skip the encryption prompt |
-
-```bash
-# example: BORE pre-selected for the GPU step
-curl -fsSL https://hexciri.dirty.pizza/hexciri | bash -s -- --kernel bore
+curl -LO https://hexciri.dirty.pizza/hexciri
+sh hexciri --kernel bore
 ```
 
 3. Reboot → straight into Niri

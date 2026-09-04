@@ -9,14 +9,17 @@ CHANNEL="stable"
 KERNEL_PICK=""
 YES=false
 DRY_RUN=false
-for arg in "$@"; do
-  case "$arg" in
-    -y|--yes) YES=true ;;
-    --dry-run) DRY_RUN=true ;;
-    --channel) shift || true ;;
-    --channel=*) CHANNEL="${arg#*=}" ;;
-    --kernel=*) KERNEL_PICK="${arg#*=}" ;;
-    stable|bleeding) CHANNEL="$arg" ;;
+while (($#)); do
+  case "$1" in
+    -y|--yes) YES=true; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    --channel=*) CHANNEL="${1#*=}"; shift ;;
+    --channel) CHANNEL="${2:-}"; shift 2 ;;
+    --kernel=*) KERNEL_PICK="${1#*=}"; shift ;;
+    --kernel) KERNEL_PICK="${2:-}"; shift 2 ;;
+    stable|bleeding) CHANNEL="$1"; shift ;;
+    --) shift ;;
+    *) shift ;;
   esac
 done
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { echo "channel must be stable|bleeding"; exit 1; }

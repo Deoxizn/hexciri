@@ -13,14 +13,15 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=1   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=2   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
-KERNEL_PICK=""         # --kernel=stock|lts|omarchy|bore|muqss preselects the GPU kernel (else auto)
-LUKS_ASK=true
-for arg in "$@"; do
-  case "$arg" in
-    --kernel=*) KERNEL_PICK="${arg#*=}" ;;
-    --no-luks) LUKS_ASK=false; LUKS=no ;;
+KERNEL_PICK=""         # --kernel pre-fills the kernel prompt below (empty = auto)
+while (($#)); do
+  case "$1" in
+    --kernel=*) KERNEL_PICK="${1#*=}"; shift ;;
+    --kernel) KERNEL_PICK="${2:-}"; shift 2 ;;
+    --) shift ;;
+    *) shift ;;
   esac
 done
 [[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { echo "kernel must be stock|lts|omarchy|bore|muqss"; exit 1; }
@@ -93,10 +94,8 @@ info "channel: $CHANNEL"
 
 # ── encryption choice, then disk (destructive choices last) ──
 LUKS="${LUKS:-no}"
-if $LUKS_ASK; then
-  read -rp "encrypt disk with LUKS? [y/N]: " luks_ans </dev/tty
-  [[ $luks_ans =~ ^[Yy]$ ]] && LUKS=yes || LUKS=no
-fi
+read -rp "encrypt disk with LUKS? [y/N]: " luks_ans </dev/tty
+[[ $luks_ans =~ ^[Yy]$ ]] && LUKS=yes || LUKS=no
 if [[ $LUKS == yes ]]; then
   # disk unlock reuses the user password (one password to remember)
   LUKSPASS="$USERPASS"
@@ -118,6 +117,14 @@ else
 fi
 [[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
 if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
+
+# ── kernel is always asked (flag only pre-fills); auto = LTS pin on 1xxx, stock otherwise ──
+if [[ -z $KERNEL_PICK ]]; then
+  read -rp "kernel [stock/lts/omarchy/bore/muqss, default auto]: " KERNEL_PICK </dev/tty
+  KERNEL_PICK="${KERNEL_PICK,,}"
+fi
+[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { err "kernel must be stock|lts|omarchy|bore|muqss (or empty for auto)"; exit 1; }
+info "kernel: ${KERNEL_PICK:-auto}"
 
 # ── summary + final confirm (nothing touched until this passes) ──
 echo ""
