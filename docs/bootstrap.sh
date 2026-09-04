@@ -46,12 +46,25 @@ done
 info "site: $SITE"
 
 # ── the only 9 typed things ──
+# mode first: it decides whether the disk question means wipe or share
+read -rp "full disk wipe or install into free space? [full/free, default full]: " MODE </dev/tty
+MODE="${MODE,,}"; MODE="${MODE:-full}"
+[[ $MODE == full || $MODE == free ]] || { err "mode must be full|free"; exit 1; }
+if [[ $MODE == free ]]; then
+  command -v parted &>/dev/null || { err "parted missing on this ISO — cannot map free space"; exit 1; }
+fi
 info "disks:"; lsblk -d -n -o NAME,SIZE,MODEL | sed 's/^/  \/dev\//'
-read -rp "disk to WIPE (e.g. nvme0n1, sda — bare name): " DISK </dev/tty
+if [[ $MODE == full ]]; then
+  read -rp "disk to WIPE (e.g. nvme0n1, sda — bare name): " DISK </dev/tty
+else
+  read -rp "disk with unpartitioned free space (e.g. nvme0n1 — bare name): " DISK </dev/tty
+fi
 [[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
 if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
-read -rp "type the disk name again to confirm WIPE of /dev/$DISK: " CONFIRM </dev/tty
-[[ $CONFIRM == "$DISK" ]] || { err "mismatch — aborting, disk untouched"; exit 1; }
+if [[ $MODE == full ]]; then
+  read -rp "type the disk name again to confirm WIPE of /dev/$DISK: " CONFIRM </dev/tty
+  [[ $CONFIRM == "$DISK" ]] || { err "mismatch — aborting, disk untouched"; exit 1; }
+fi
 read -rp "hostname [hexciri]: " HOSTNAME </dev/tty; HOSTNAME="${HOSTNAME:-hexciri}"
 read -rp "username [hex]: " USERNAME </dev/tty; USERNAME="${USERNAME:-hex}"
 for _try in 1 2 3; do
@@ -65,8 +78,12 @@ for _try in 1 2 3; do
 done
 unset USERPASS2
 # timezone defaults to GeoIP-detected (Enter accepts); typed override always works
-DETECTED_TZ="$(curl -fsSL --max-time 8 https://ipapi.co/timezone 2>/dev/null || true)"
-[[ -f /usr/share/zoneinfo/$DETECTED_TZ ]] || DETECTED_TZ="UTC"
+DETECTED_TZ=""
+for geo in "https://ipapi.co/timezone" "https://ipinfo.io/timezone"; do
+  DETECTED_TZ="$(curl -fsSL --max-time 8 "$geo" 2>/dev/null | tr -d '[:space:]' || true)"
+  [[ -f /usr/share/zoneinfo/$DETECTED_TZ ]] && break || DETECTED_TZ=""
+done
+[[ -n $DETECTED_TZ ]] || DETECTED_TZ="UTC"
 read -rp "timezone [$DETECTED_TZ]: " TIMEZONE </dev/tty; TIMEZONE="${TIMEZONE:-$DETECTED_TZ}"
 [[ $TIMEZONE != *".."* && -f /usr/share/zoneinfo/"$TIMEZONE" ]] || { err "unknown timezone: $TIMEZONE"; exit 1; }
 LUKS="${LUKS:-no}"
@@ -92,16 +109,7 @@ mkfs_root() { # $1 = device
   else mkfs.ext4 -q -L hexciri "$1" >/dev/null; fi
 }
 
-# ── full disk (wipe, like a fresh Arch) vs free space (dual-boot, untouched
-#    existing partitions; reuses the existing ESP when there is one) ──
-read -rp "full disk wipe or install into free space? [full/free, default full]: " MODE </dev/tty
-MODE="${MODE,,}"; MODE="${MODE:-full}"
-[[ $MODE == full || $MODE == free ]] || { err "mode must be full|free"; exit 1; }
-if [[ $MODE == free ]]; then
-  command -v parted &>/dev/null || { err "parted missing on this ISO — cannot map free space"; exit 1; }
-fi
-
-# ── channel is always asked ──
+# ── partition (mode chosen up top; free mode reuses the ESP, touches nothing else) ──
 read -rp "channel [stable/bleeding, default stable]: " CHANNEL </dev/tty
 CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
