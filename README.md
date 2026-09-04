@@ -14,14 +14,14 @@ Arch-based Niri + Noctalia distro. Own void, own mirrors policy, own theme engin
 2. Run one line 
 
 ```bash
-curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash
+curl -LO https://hexciri.dirty.pizza/hexciri
+sudo bash hexciri
 ```
 
-Prefer download-first (identical, easier to inspect/retry):
+One-liner pipe works identically:
 
 ```bash
-curl -LO https://hexciri.dirty.pizza/bootstrap.sh
-sudo bash bootstrap.sh
+curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash
 ```
 
 Flags only pre-fill defaults — everything is still asked:
