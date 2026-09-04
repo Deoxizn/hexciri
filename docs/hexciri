@@ -126,7 +126,7 @@ fi
 [[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
 if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
 
-# ── kernel: default auto (flag silently preselects); installer enforces the LTS pin on 1xxx ──
+# ── kernel: default auto (flag silently preselects); installer enforces the LTS pin on GTX 1xxx or older ──
 if [[ -z $KERNEL_PICK ]]; then
   read -rp "kernel [stock/lts/omarchy/bore/muqss, default auto]: " KERNEL_PICK </dev/tty
   KERNEL_PICK="${KERNEL_PICK,,}"

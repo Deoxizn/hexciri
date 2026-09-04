@@ -26,7 +26,7 @@ Kernel prompt (default auto):
 |---|---|
 | `stock`, `lts` | `linux`, `linux-lts` |
 | `omarchy`, `bore`, `muqss` | `linux-omarchy*` (bleeding) |
-| empty | auto (LTS pin on 1xxx, stock otherwise) |
+| empty | auto (LTS pin on GTX 1xxx or older, stock otherwise) |
 
 Full package names (`linux-omarchy-bore`) work too.
 
@@ -63,7 +63,7 @@ Stable is month-held pkgs; bleeding is normal Arch rolling release.
 ## GPU
 
 Autodetected at install (mesa / `nvidia-open` / `580xx` with a hard LTS pin
-on 1xxx-era cards). To change later, re-run `hexciri-gpu` — `--kernel` is
+on NVIDIA GTX 1xxx or older cards). To change later, re-run `hexciri-gpu` — `--kernel` is
 available where the card allows it.
 
 

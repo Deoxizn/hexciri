@@ -1,8 +1,8 @@
 #!/bin/bash
-# hexciri:summary=GPU autodetect + setup: mesa/vulkan per vendor, nvidia-open 6xx (Turing+), 580xx + LTS pin (1xxx/older)
+# hexciri:summary=GPU autodetect + setup: mesa/vulkan per vendor, nvidia-open 6xx (Turing+), 580xx + LTS pin (GTX 1xxx or older)
 # usage: hexciri-gpu [--kernel=stock|lts|omarchy|bore|muqss] [--yes]
 #   --kernel picks the default kernel (default: current-best for your card).
-#   omarchy/bore/muqss kernels need the bleeding channel; 1xxx/older cards
+#   omarchy/bore/muqss kernels need the bleeding channel; GTX 1xxx or older cards
 #   refuse non-LTS kernels (580xx only survives LTS).
 set -euo pipefail
 
@@ -55,7 +55,7 @@ nvidia_id_ge() { # $1 = hex floor, true if any NVIDIA VGA/3D >= it
   done
   return 1
 }
-nvidia_legacy() { # Maxwell/Pascal/Volta: 0x1340..0x1e00 (incl. all 1xxx)
+nvidia_legacy() { # Maxwell/Pascal/Volta: 0x1340..0x1e00 (GTX 1xxx or older)
   local d id
   for d in "$PCI_PATH"/*; do
     [[ $(<"$d/vendor") == "0x10de" ]] || continue
@@ -110,7 +110,7 @@ has_vendor 0x10de && NVIDIA=true
 nvidia_legacy && LEGACY=true
 
 if $LEGACY; then
-  info "legacy NVIDIA card detected (Maxwell/Pascal/Volta, incl. 1xxx)."
+  info "legacy NVIDIA card detected (Maxwell/Pascal/Volta — GTX 1xxx or older)."
   if [[ -n $KERNEL_PICK && $KERNEL_PICK != lts ]]; then
     err "580xx drivers only survive the LTS kernel — refusing --kernel=$KERNEL_PICK."
     err "run without --kernel (uses LTS) or pick --kernel=lts."
