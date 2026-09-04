@@ -1,0 +1,36 @@
+#!/bin/bash
+# hexciri:power=session-power-menu
+# hexciri:summary=Power menu — lock, logout, suspend, hibernate, reboot, shutdown
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+choice=$(printf '%s\n' \
+    "Lock" \
+    "Logout" \
+    "Suspend" \
+    "Hibernate" \
+    "Reboot" \
+    "Shutdown" | "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Power: ' --width=28 --lines=6)
+
+[[ -z "$choice" ]] && exit 0
+
+confirm() {
+    local action="$1"
+    local result
+    result=$(printf '%s\n' Confirm Cancel | "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt="$action: " --width=16 --lines=2)
+    [[ "$result" == "Confirm" ]]
+}
+
+do_action() {
+    case "$choice" in
+        Lock)         hexciri-lock & ;;
+        Logout)       niri msg action quit ;;
+        Suspend)      systemctl suspend ;;
+        Hibernate)    systemctl hibernate ;;
+        Reboot)       confirm "Reboot" && systemctl reboot ;;
+        Shutdown)     confirm "Shutdown" && systemctl poweroff ;;
+    esac
+}
+
+do_action

@@ -1,0 +1,33 @@
+#!/bin/bash
+# hexciri:menu=root
+# hexciri:summary=Root menu — every entry works out of the box (more arrive as suites port)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FUZZEL="$SCRIPT_DIR/hexciri-fuzzel"
+
+choice=$(
+  printf '%s\n' \
+    'Apps' \
+    'Defaults >' \
+    'Kernel >' \
+    'Power >' \
+    'Themes >' \
+    'Update' |
+    "$FUZZEL" --dmenu --prompt='► Hexciri ' --width=28 --lines=6
+) || exit 0
+choice=${choice%' >'}
+
+case "$choice" in
+  Apps)     exec "$FUZZEL" ;;
+  Defaults) exec "$SCRIPT_DIR/hexciri-defaults" ;;
+  Kernel)   exec "$SCRIPT_DIR/hexciri-kernel" ;;
+  Power)    exec "$SCRIPT_DIR/hexciri-power" ;;
+  Update)   exec "$SCRIPT_DIR/hexciri-terminal" -e hexciri-update ;;
+  Themes)
+    theme="$(hexciri-theme-list 2>/dev/null | "$FUZZEL" --dmenu --prompt='Theme: ' --width=30 --lines=6)" || exit 0
+    [[ -n $theme ]] || exit 0
+    # theme-list prints Title Case; theme-set normalizes back
+    hexciri-theme-set "$theme"
+    ;;
+esac

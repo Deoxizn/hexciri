@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hexciri — Arch-based Niri + Noctalia distro</title>
+<meta name="description" content="Hexciri is a minimal Arch-based distro: Niri scrollable tiling, Noctalia shell, month-held stable or rolling bleeding channels, GPU autodetect, one-file theme engine. One curl line from the Arch ISO to a themed desktop.">
+<meta name="author" content="Deoxizn">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://hexciri.dirty.pizza/">
+<meta name="theme-color" content="#0b0911">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Hexciri">
+<meta property="og:url" content="https://hexciri.dirty.pizza/">
+<meta property="og:title" content="Hexciri — Arch-based Niri + Noctalia distro">
+<meta property="og:description" content="Niri scrollable tiling + Noctalia shell on Arch. Stable or bleeding channels, GPU autodetect, one-file theme engine, one curl to install.">
+<meta property="og:image" content="https://hexciri.dirty.pizza/logo.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Hexciri — Arch-based Niri + Noctalia distro">
+<meta name="twitter:description" content="Niri + Noctalia on Arch. Stable or bleeding, GPU autodetect, one-file themes, one curl to install.">
+<meta name="twitter:image" content="https://hexciri.dirty.pizza/logo.png">
+<link rel="icon" type="image/png" href="logo.png">
+<style>
+  :root {
+    --bg: #0b0911;
+    --bg-soft: #14111a;
+    --card: #171620;
+    --rose: #b6849d;
+    --muted: #6b5e72;
+    --text: #d8d0dc;
+    --line: rgba(182, 132, 157, 0.22);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 16px/1.65 system-ui, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+  header.hero { text-align: center; padding: 72px 24px 48px; }
+  header.hero img { width: 180px; height: 180px; }
+  header.hero h1 { font-size: 44px; letter-spacing: 14px; color: var(--rose); margin: 18px 0 8px; font-weight: 800; }
+  header.hero p { color: var(--muted); font-size: 18px; }
+  pre.curl { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin: 28px auto 0; max-width: 640px; overflow-x: auto; font: 14px/1.6 ui-monospace, monospace; }
+  section { padding: 36px 0; border-top: 1px solid var(--line); }
+  h2 { color: var(--rose); font-size: 22px; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  code { font-family: ui-monospace, monospace; font-size: 13px; background: var(--bg-soft); padding: 2px 6px; border-radius: 5px; }
+  ol, ul { padding-left: 22px; }
+  li { margin: 6px 0; }
+  footer { text-align: center; padding: 40px 24px 64px; color: var(--muted); border-top: 1px solid var(--line); }
+  footer a { color: var(--rose); }
+  a { color: var(--rose); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <img src="logo.png" alt="Hexciri emblem">
+  <h1>HEXCIRI</h1>
+  <p>Arch-based Niri + Noctalia distro. Own void.</p>
+  <pre class="curl">curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash</pre>
+</header>
+<div class="wrap">
+<section>
+  <h2>Install</h2>
+  <ol>
+    <li>Flash the Arch ISO, boot UEFI, connect network (<code>iwctl</code> for wifi).</li>
+    <li>Run the line above — 9 things are typed (disk, full-vs-free, filesystem, channel, hostname, username, password, timezone, LUKS), everything else is automatic.</li>
+    <li>Reboot → straight into Niri. Press <code>Mod+K</code> for the keybinding list.</li>
+  </ol>
+</section>
+<section>
+  <h2>Defaults</h2>
+  <table>
+    <tr><th>slot</th><th>default</th></tr>
+    <tr><td>terminal / shell</td><td><code>kitty</code> / <code>fish</code> + starship</td></tr>
+    <tr><td>browser / files / editor</td><td><code>brave-origin</code> / <code>strata</code> / <code>zed</code></td></tr>
+    <tr><td>agent</td><td><code>opencode</code> (<code>Mod+`</code>)</td></tr>
+    <tr><td>kernel</td><td><code>linux</code> + <code>lts</code> fallback</td></tr>
+    <tr><td>gpu</td><td>autodetect (mesa / nvidia-open / 580xx+LTS pin)</td></tr>
+    <tr><td>theme / channel</td><td><code>sakurazuki</code> / <code>stable</code></td></tr>
+  </table>
+</section>
+<section>
+  <h2>Channels &amp; GPU</h2>
+  <p><code>stable</code> is month-held pkgs; <code>bleeding</code> is normal Arch rolling release (<code>--channel</code> only pre-fills the prompt). GPU setup runs at install: Turing+ gets <code>nvidia-open</code> 6xx, 1xxx-era gets <code>580xx</code> pinned to LTS, everything else gets mesa/vulkan. <code>--kernel</code> preselects (custom kernels need bleeding).</p>
+</section>
+<section>
+  <h2>Theme engine</h2>
+  <p>One <code>colors.toml</code> recolors kitty, fuzzel, Strata, fish, Zed, Noctalia, and Niri borders via <code>hexciri-theme-set</code>. Drop-ins live in <code>~/.config/hexciri/hooks/theme-set.d/</code>.</p>
+</section>
+</div>
+<footer>
+  <a href="https://github.com/Deoxizn/hexciri">GitHub</a> · <a href="https://github.com/Deoxizn/hexciri/blob/main/CHANGELOG.md">Changelog</a> · Hexciri <code>v0.1.0</code>
+</footer>
+</body>
+</html>

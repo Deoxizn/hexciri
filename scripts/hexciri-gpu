@@ -1,0 +1,137 @@
+#!/bin/bash
+# hexciri:summary=GPU autodetect + setup: mesa/vulkan per vendor, nvidia-open 6xx (Turing+), 580xx + LTS pin (1xxx/older)
+# usage: hexciri-gpu [--kernel=stock|lts|omarchy|bore|muqss] [--yes]
+#   --kernel picks the default kernel (default: current-best for your card).
+#   omarchy/bore/muqss kernels need the bleeding channel; 1xxx/older cards
+#   refuse non-LTS kernels (580xx only survives LTS).
+set -euo pipefail
+
+KERNEL_PICK=""
+YES=false
+for arg in "$@"; do
+  case "$arg" in
+    --kernel=*) KERNEL_PICK="${arg#*=}" ;;
+    -y|--yes) YES=true ;;
+  esac
+done
+[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { echo "hexciri-gpu: --kernel must be stock|lts|omarchy|bore|muqss"; exit 1; }
+
+info() { echo -e "\e[0;36m[hexciri:gpu]\e[0m $*"; }
+ok()   { echo -e "\e[0;32m[hexciri:gpu]\e[0m $*"; }
+err()  { echo -e "\e[0;31m[hexciri:gpu]\e[0m $*" >&2; }
+confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
+
+PCI_PATH="${HEXCIRI_PCI_DEVICES_PATH:-/sys/bus/pci/devices}"
+has_vendor() { # $1 = 0x10de etc, reads sysfs (no PCI wakeups)
+  local d
+  for d in "$PCI_PATH"/*; do
+    [[ $(<"$d/vendor") == "$1" ]] || continue
+    [[ $(<"$d/class") == 0x03* ]] && return 0
+  done
+  return 1
+}
+nvidia_id_ge() { # $1 = hex floor, true if any NVIDIA VGA/3D >= it
+  local d
+  for d in "$PCI_PATH"/*; do
+    [[ $(<"$d/vendor") == "0x10de" ]] || continue
+    [[ $(<"$d/class") == 0x03* ]] || continue
+    (( $(<"$d/device") >= $1 )) && return 0
+  done
+  return 1
+}
+nvidia_legacy() { # Maxwell/Pascal/Volta: 0x1340..0x1e00 (incl. all 1xxx)
+  local d id
+  for d in "$PCI_PATH"/*; do
+    [[ $(<"$d/vendor") == "0x10de" ]] || continue
+    [[ $(<"$d/class") == 0x03* ]] || continue
+    id=$(<"$d/device")
+    (( id >= 0x1340 && id < 0x1e00 )) && return 0
+  done
+  return 1
+}
+
+pkg() {
+  local missing=()
+  for p in "$@"; do pacman -Q "$p" &>/dev/null || missing+=("$p"); done
+  ((${#missing[@]})) || return 0
+  info "pacman: ${missing[*]}"
+  sudo pacman -S --noconfirm --needed "${missing[@]}"
+}
+
+use_kernel() { # $1 = hexciri-kernel key; ensures installed + default
+  info "kernel -> $1"
+  hexciri-kernel run "$1"
+}
+
+set_default_entry() { # $1 = entry file name
+  [[ -f /boot/loader/entries/$1 ]] || return 0
+  if grep -q '^default ' /boot/loader/loader.conf 2>/dev/null; then
+    sudo sed -i "s|^default .*|default $1|" /boot/loader/loader.conf
+  else
+    echo "default $1" | sudo tee -a /boot/loader/loader.conf >/dev/null
+  fi
+}
+
+# ── shared Wayland/Niri bits for any NVIDIA card ──
+nvidia_common() {
+  info "NVIDIA Wayland plumbing (modeset, fbdev, early KMS, suspend)..."
+  printf 'blacklist nouveau\noptions nouveau modeset=0\n' | sudo tee /etc/modprobe.d/hexciri-nvidia.conf >/dev/null
+  printf 'options nvidia NVreg_PreserveVideoMemoryAllocations=1\n' | sudo tee /etc/modprobe.d/hexciri-nvidia-pm.conf >/dev/null
+  if ! grep -q 'nvidia_drm' /etc/mkinitcpio.conf 2>/dev/null; then
+    sudo cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
+    sudo sed -i 's/^MODULES=(\(.*\))/MODULES=(\1 nvidia nvidia_modeset nvidia_uvm nvidia_drm)/; s/  / /g' /etc/mkinitcpio.conf
+  fi
+  local changed=false
+  for e in /boot/loader/entries/hexciri-*.conf; do
+    [[ -f $e ]] || continue
+    grep -q 'nvidia-drm.modeset=1' "$e" || { sudo sed -i 's/^options \(.*\)/options \1 nvidia-drm.modeset=1 nvidia-drm.fbdev=1/' "$e"; changed=true; }
+  done
+  $changed && sudo mkinitcpio -P || true
+}
+
+NVIDIA=false; LEGACY=false
+has_vendor 0x10de && NVIDIA=true
+nvidia_legacy && LEGACY=true
+
+if $LEGACY; then
+  info "legacy NVIDIA card detected (Maxwell/Pascal/Volta, incl. 1xxx)."
+  if [[ -n $KERNEL_PICK && $KERNEL_PICK != lts ]]; then
+    err "580xx drivers only survive the LTS kernel — refusing --kernel=$KERNEL_PICK."
+    err "run without --kernel (uses LTS) or pick --kernel=lts."
+    exit 1
+  fi
+  confirm "Pin LTS kernel + install 580xx drivers?" || exit 0
+  use_kernel lts
+  set_default_entry hexciri-linux-lts.conf
+  headers=()
+  for k in linux-lts; do pacman -Q "$k" &>/dev/null && headers+=("$k-headers"); done
+  pkg "${headers[@]}" nvidia-580xx-utils nvidia-580xx-dkms lib32-nvidia-580xx-utils
+  nvidia_common
+  ok "legacy stack ready. REBOOT required."
+  confirm "Reboot now?" && systemctl reboot
+  exit 0
+fi
+
+if $NVIDIA; then
+  info "modern NVIDIA card detected (Turing+, GSP)."
+  KERNEL_PICK="${KERNEL_PICK:-stock}"
+  confirm "Install nvidia-open 6xx drivers (kernel: $KERNEL_PICK)?" || exit 0
+  use_kernel "$KERNEL_PICK"
+  headers=()
+  for k in linux linux-lts linux-omarchy linux-omarchy-bore linux-omarchy-muqss; do
+    pacman -Q "$k" &>/dev/null && headers+=("$k-headers")
+  done
+  pkg "${headers[@]}" nvidia-open-dkms nvidia-utils lib32-nvidia-utils
+  nvidia_common
+  ok "nvidia-open stack ready. REBOOT required."
+  confirm "Reboot now?" && systemctl reboot
+  exit 0
+fi
+
+# ── no NVIDIA: mesa/vulkan per vendor (also the base under hybrid laptops) ──
+info "no NVIDIA card — mesa/vulkan stack."
+pkgs=(mesa vulkan-icd-loader lib32-mesa lib32-vulkan-icd-loader)
+has_vendor 0x8086 && pkgs+=(vulkan-intel lib32-vulkan-intel)
+has_vendor 0x1002 && pkgs+=(vulkan-radeon lib32-vulkan-radeon)
+pkg "${pkgs[@]}"
+ok "graphics stack ready (no reboot needed)."

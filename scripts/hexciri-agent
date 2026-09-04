@@ -1,0 +1,26 @@
+#!/bin/bash
+# hexciri:summary=Launch the default coding agent in a floating terminal (default: opencode)
+# usage: hexciri-agent [--pick] | hexciri-agent <agent> [args...]
+set -euo pipefail
+
+STATE_BASE="$HOME/.local/state/hexciri/defaults"
+agent="$(cat "$STATE_BASE/agent" 2>/dev/null || echo opencode)"
+
+if [[ ${1:-} == "--pick" ]]; then
+  shift || true
+  pick="$(printf '%s\n' opencode claude codex | hexciri-fuzzel --dmenu --prompt='Agent: ' --width=24 --lines=3)" || exit 0
+  [[ -n $pick ]] && agent="$pick"
+elif [[ -n ${1:-} ]]; then
+  agent="$1"; shift || true
+fi
+
+case "$agent" in
+  opencode) cmd=(opencode) ;;
+  claude)   cmd=(claude) ;;
+  codex)    cmd=(codex --approve-for-me) ;;
+  *)        cmd=("$agent") ;;
+esac
+cmd+=("$@")
+
+# floating TUI class, matching suite convention
+exec xdg-terminal-exec --app-id=TUI.float -e "${cmd[@]}"

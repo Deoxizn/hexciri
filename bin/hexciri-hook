@@ -1,0 +1,19 @@
+#!/bin/bash
+# hexciri:summary=Run a named hook from ~/.config/hexciri/hooks/<name> and ~/.config/hexciri/hooks/<name>.d/
+# hexciri:args=[name] [args...]
+set -e
+(( $# >= 1 )) || { echo "Usage: hexciri-hook [name] [args...]"; exit 1; }
+
+HOOK=$1
+HOOK_PATH="$HOME/.config/hexciri/hooks/$1"
+HOOK_DIR="$HOOK_PATH.d"
+shift
+
+[[ -f $HOOK_PATH ]] && bash "$HOOK_PATH" "$@" || true
+if [[ -d $HOOK_DIR ]]; then
+  for hook in "$HOOK_DIR"/*; do
+    [[ -f $hook ]] || continue
+    [[ $hook == *.sample ]] && continue
+    bash "$hook" "$@" || echo "Hook failed: $hook"
+  done
+fi

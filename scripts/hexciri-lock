@@ -1,0 +1,10 @@
+#!/bin/bash
+# hexciri:lock=session-lock
+# hexciri:summary=Lock screen + power off monitors after 20s if still locked
+# hexciri-lock — lock screen + power off monitors after 20s
+
+noctalia msg session lock 2>/dev/null || niri msg action power-off-monitors 2>/dev/null
+
+# Power off monitors after 20s if still locked (Noctalia owns idle timeouts)
+sleep 20
+niri msg action power-off-monitors 2>/dev/null

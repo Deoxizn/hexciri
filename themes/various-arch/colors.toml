@@ -1,0 +1,73 @@
+mode = "dark"
+
+accent = "#99CEEF"
+selection = "#313550"
+muted = "#63677F"
+
+background = "#1F1E2C"
+dark_background = "#171620"
+darker_background = "#100F16"
+lighter_background = "#2A293E"
+
+foreground = "#D6DBE7"
+dark_foreground = "#63677F"
+light_foreground = "#E9EEF8"
+bright_foreground = "#E9EEF8"
+
+# Cursor and selection (used by terminal + shell generation)
+cursor = "#D6DBE7"
+selection_foreground = "#D6DBE7"
+selection_background = "#313550"
+
+# Legacy short names (canonical takes precedence but exposed for compat)
+bg = "#1F1E2C"
+dark_bg = "#171620"
+darker_bg = "#100F16"
+lighter_bg = "#2A293E"
+fg = "#D6DBE7"
+dark_fg = "#63677F"
+light_fg = "#E9EEF8"
+bright_fg = "#E9EEF8"
+
+# ANSI 0-15 (derived from wallpaper pastels, used by Neovim custom theme + some templates)
+color0 = "#1F1E2C"
+color1 = "#B381A7"
+color2 = "#87B28E"
+color3 = "#A9BFA4"
+color4 = "#7A9FC0"
+color5 = "#9D8FC0"
+color6 = "#6EA7B4"
+color7 = "#E9EEF8"
+color8 = "#63677F"
+color9 = "#D29ABF"
+color10 = "#ADE5B4"
+color11 = "#C2D8B5"
+color12 = "#99CEEF"
+color13 = "#DCB4EE"
+color14 = "#8AD1E1"
+color15 = "#D6DBE7"
+
+# Hyprland borders (gradient aware - used by hyprland.lua.tpl and shell.toml.tpl)
+hyprland_active_border = "rgba(99ceefee) rgba(dcb4eecc) 45deg"
+hyprland_inactive_border = "rgba(63677faa)"
+
+# Additional semantic aliases for compatibility with Dune-style hand-written files
+active_border_color = "#99CEEF"
+active_tab_background = "#99CEEF"
+
+red = "#B381A7"
+yellow = "#A9BFA4"
+orange = "#D29ABF"
+green = "#87B28E"
+cyan = "#6EA7B4"
+blue = "#7A9FC0"
+magenta = "#9D8FC0"
+brown = "#C2D8B5"
+purple = "#9D8FC0"
+
+bright_red = "#D29ABF"
+bright_yellow = "#C2D8B5"
+bright_green = "#ADE5B4"
+bright_cyan = "#8AD1E1"
+bright_blue = "#99CEEF"
+bright_magenta = "#DCB4EE"

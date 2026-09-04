@@ -1,0 +1,7 @@
+[SddmGreeterTheme]
+Name=Hexciri
+Description=Demonic minimal login — emblem, password, Niri
+Author=Hexciri
+Type=sddm-theme
+Version=0.1.0
+QtVersion=6

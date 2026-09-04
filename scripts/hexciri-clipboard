@@ -1,0 +1,16 @@
+#!/bin/bash
+# hexciri:summary=Clipboard history picker (cliphist + fuzzel, vanilla Wayland)
+# usage: hexciri-clipboard [--clear]
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ ${1:-} == "--clear" ]]; then
+  cliphist wipe
+  notify-send "Hexciri" "Clipboard history cleared" 2>/dev/null || true
+  exit 0
+fi
+
+pick="$(cliphist list 2>/dev/null | "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Clipboard: ' --width=60 --lines=10)" || exit 0
+[[ -n $pick ]] || exit 0
+printf '%s' "$pick" | cliphist decode | wl-copy

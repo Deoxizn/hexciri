@@ -1,0 +1,97 @@
+# Hexciri — Noctalia config (Noctalia v5 schema)
+# https://github.com/deoxizn/hexciri
+#
+# Note: v5 removed several v4 sections ([general] default apps, [launcher]
+# command, [lock], [clipboard]). Default apps live in xdg-settings + state
+# (see hexciri-defaults); the lock screen is internal (see hexciri-lock).
+
+# ──────────────────────────────────────────────
+# Bar
+# Widget IDs are v5 names (spacer, active_window, ...). Per-widget settings
+# live in [widget.<name>] tables below.
+# ──────────────────────────────────────────────
+
+[bar.default]
+position = "top"
+thickness = 40                        # Bar height in pixels
+background_opacity = 0.95             # 0.0 = transparent, 1.0 = opaque
+reserve_space = true                  # Reserve screen space (don't overlap windows)
+start  = ["workspaces", "spacer", "active_window"]
+center = ["clock"]
+end    = ["network", "bluetooth", "battery", "volume", "brightness", "tray", "media"]
+
+[widget.clock]
+format = "{:%H:%M}"                   # 24-hour time (see date-format-tokens in Noctalia docs)
+tooltip_format = "{:%A, %d %B %Y}"    # Full date on hover
+
+[widget.spacer]
+type = "spacer"
+length = 8                            # Gap in pixels between workspaces and window title
+
+[widget.active_window]
+show_empty_label = true               # Show placeholder when no window is focused
+display = "icon_and_text"             # App icon + title (alternatives: icon, text)
+
+# ──────────────────────────────────────────────
+# Shell services (clipboard history lives here in v5)
+# ──────────────────────────────────────────────
+
+[shell]
+clipboard_enabled = true
+clipboard_history_max_entries = 100
+
+# ──────────────────────────────────────────────
+# Notifications
+# ──────────────────────────────────────────────
+
+[notification]
+position = "top_right"                # Corner for toast popups
+max_visible = 5                       # Max stacked toasts
+enable_daemon = true                  # Run the notification daemon
+
+# ──────────────────────────────────────────────
+# Idle → lock screen after 5 minutes
+# ──────────────────────────────────────────────
+
+[idle.behavior.lock]
+enabled = true
+timeout = 300.0                       # Seconds idle before locking
+
+# ──────────────────────────────────────────────
+# Wallpaper (rotates every 5 minutes)
+# ──────────────────────────────────────────────
+
+[wallpaper]
+enabled = true
+directory = "~/Pictures/Wallpapers"
+fill_mode = "crop"                    # Fill screen, cropping overflow
+transition = ["fade"]                 # Transition effect between wallpapers
+
+[wallpaper.automation]
+enabled = true
+interval_seconds = 300                # Rotate on this interval
+order = "random"
+
+# ──────────────────────────────────────────────
+# Dock (disabled — top bar only)
+# ──────────────────────────────────────────────
+
+[dock]
+enabled = false
+
+# ──────────────────────────────────────────────
+# OSD (volume/brightness overlays; per-kind toggles default on)
+# ──────────────────────────────────────────────
+
+[osd]
+enabled = true
+
+# ──────────────────────────────────────────────
+# Theming (custom palette generated from the hexciri theme on every
+# theme switch by hooks/theme-set.d/noctalia-sync.sh)
+# ──────────────────────────────────────────────
+
+[theme]
+source = "custom"
+custom_palette = "hexciri"
+mode = "dark"

@@ -1,0 +1,177 @@
+#!/bin/bash
+# hexciri:summary=Gaming setup: Steam/Heroic/Lutris/RetroArch, GPU lib32 drivers, Xbox controllers
+# usage: hexciri-gaming [run <steam|heroic|lutris|retroarch|drivers|xbox>]
+# gaming setup for vanilla Arch: launchers, drivers, controllers.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FUZZEL="$SCRIPT_DIR/hexciri-fuzzel"
+
+info() { echo -e "\e[0;36m[hexciri:gaming]\e[0m $*"; }
+err()  { echo -e "\e[0;31m[hexciri:gaming]\e[0m $*" >&2; }
+
+# repo packages, verified after install
+pkg() {
+  local missing=()
+  for p in "$@"; do pacman -Q "$p" &>/dev/null || missing+=("$p"); done
+  ((${#missing[@]})) || return 0
+  info "pacman: ${missing[*]}"
+  sudo pacman -S --noconfirm --needed "${missing[@]}"
+  for p in "${missing[@]}"; do
+    pacman -Q "$p" &>/dev/null || { err "package '$p' did not install"; exit 1; }
+  done
+}
+
+# AUR packages via yay (installed on demand)
+aur() {
+  command -v yay &>/dev/null || {
+    info "installing yay..."
+    sudo pacman -S --noconfirm --needed base-devel git
+    (cd /tmp && rm -rf yay-bin && git clone -q https://aur.archlinux.org/yay-bin.git && cd yay-bin && makepkg -si --noconfirm)
+  }
+  local missing=()
+  for p in "$@"; do pacman -Q "$p" &>/dev/null || missing+=("$p"); done
+  ((${#missing[@]})) || return 0
+  info "AUR: ${missing[*]}"
+  yay -S --noconfirm --needed "${missing[@]}"
+}
+
+PCI_PATH="${HEXCIRI_PCI_DEVICES_PATH:-/sys/bus/pci/devices}"
+nvidia_gsp() { # Turing+ (device >= 0x1e00)
+  local d
+  for d in "$PCI_PATH"/*; do
+    [[ $(<"$d/vendor") == "0x10de" ]] || continue
+    [[ $(<"$d/class") == 0x03* ]] || continue
+    (( $(<"$d/device") >= 0x1e00 )) && return 0
+  done
+  return 1
+}
+nvidia_legacy() { # Maxwell/Pascal/Volta (0x1340..0x1e00) -> 580xx
+  local d id
+  for d in "$PCI_PATH"/*; do
+    [[ $(<"$d/vendor") == "0x10de" ]] || continue
+    [[ $(<"$d/class") == 0x03* ]] || continue
+    id=$(<"$d/device")
+    (( id >= 0x1340 && id < 0x1e00 )) && return 0
+  done
+  return 1
+}
+
+do_drivers() {
+  info "detecting GPUs for lib32 drivers..."
+  local pkgs=()
+  lspci 2>/dev/null | grep -iE "(VGA|Display).*Intel" >/dev/null && pkgs+=(lib32-vulkan-intel)
+  lspci 2>/dev/null | grep -iE "(VGA|Display).*AMD" >/dev/null && pkgs+=(lib32-vulkan-radeon)
+  nvidia_gsp && pkgs+=(lib32-nvidia-utils)
+  nvidia_legacy && pkgs+=(lib32-nvidia-580xx-utils)
+  if ((${#pkgs[@]})); then pkg "${pkgs[@]}"; else info "no discrete GPU drivers needed"; fi
+}
+
+do_steam() {
+  info "installing Steam..."
+  pkg steam
+  do_drivers
+  info "starting Steam (first run takes a while)..."
+  setsid gtk-launch steam >/dev/null 2>&1 &
+}
+
+do_heroic() {
+  info "installing Heroic (Epic/GOG/Amazon)..."
+  aur heroic-games-launcher-bin
+  do_drivers
+  setsid gtk-launch heroic >/dev/null 2>&1 &
+}
+
+do_lutris() {
+  info "installing Lutris + Wine..."
+  pkg lutris umu-launcher wine-staging wine-mono wine-gecko winetricks python-protobuf
+  do_drivers
+  sudo sed -i '/env python3/ c\#!/bin/python3' /usr/bin/lutris
+  cat <<'EOF'
+
+Lutris opens now and fetches DXVK/VKD3D runtimes in the background
+(watch the bottom status bar), then press + to add games.
+
+EOF
+  setsid lutris >/dev/null 2>&1 &
+}
+
+do_retroarch() {
+  info "installing RetroArch + core set..."
+  pkg retroarch retroarch-assets-glui retroarch-assets-ozone retroarch-assets-xmb \
+    libretro-beetle-pce libretro-beetle-pce-fast libretro-beetle-psx libretro-beetle-psx-hw \
+    libretro-beetle-supergrafx libretro-blastem libretro-bsnes libretro-bsnes-hd \
+    libretro-core-info libretro-desmume libretro-dolphin libretro-flycast \
+    libretro-gambatte libretro-genesis-plus-gx libretro-kronos libretro-mame \
+    libretro-melonds libretro-mesen libretro-mesen-s libretro-mgba libretro-mupen64plus-next \
+    libretro-nestopia libretro-overlays libretro-parallel-n64 libretro-picodrive \
+    libretro-play libretro-ppsspp libretro-sameboy libretro-scummvm \
+    libretro-shaders-slang libretro-snes9x libretro-yabause
+  aur libretro-cap32-git libretro-fbneo-git libretro-uae-git \
+    libretro-vice-x128-git libretro-vice-x64-git libretro-vice-x64dtv-git libretro-vice-x64sc-git \
+    libretro-vice-xcbm2-git libretro-vice-xcbm5x0-git libretro-vice-xpet-git \
+    libretro-vice-xplus4-git libretro-vice-xscpu64-git libretro-vice-xvic-git \
+    libretro-database-git retroarch-joypad-autoconfig-git
+
+  mkdir -p "$HOME/Games/bios" "$HOME/Games/roms"
+  CFG="$HOME/.config/retroarch/retroarch.cfg"
+  mkdir -p "$(dirname "$CFG")"; touch "$CFG"
+  set_cfg() {
+    if grep -q "^$1 = " "$CFG"; then sed -i "s|^$1 = .*|$1 = \"$2\"|" "$CFG"
+    else echo "$1 = \"$2\"" >>"$CFG"; fi
+  }
+  set_cfg rgui_browser_directory "$HOME/Games/roms"
+  set_cfg system_directory "$HOME/Games/bios"
+  set_cfg libretro_directory "/usr/lib/libretro"
+  set_cfg libretro_info_path "/usr/share/libretro/info"
+  set_cfg overlay_directory "/usr/share/libretro/overlays"
+  set_cfg video_driver "vulkan"
+  set_cfg menu_driver "xmb"
+  set_cfg video_shader_enable "true"
+  set_cfg auto_shaders_enable "true"
+  set_cfg content_show_images "false"
+  set_cfg content_show_video "false"
+  info "put ROMs/BIOS in ~/Games, start RetroArch with Super+Space"
+  setsid xdg-open "$HOME/Games" >/dev/null 2>&1 &
+}
+
+do_xbox() {
+  info "installing Xbox controller support (xpadneo)..."
+  local headers=()
+  for k in linux linux-lts linux-omarchy linux-omarchy-bore linux-omarchy-muqss; do
+    pacman -Q "$k" &>/dev/null && headers+=("$k-headers")
+  done
+  pkg "${headers[@]}" xpadneo-dkms
+  echo blacklist xpad | sudo tee /etc/modprobe.d/blacklist-xpad.conf >/dev/null
+  echo hid_xpadneo | sudo tee /etc/modules-load.d/xpadneo.conf >/dev/null
+  id -nG "$USER" | grep -qw input || sudo usermod -aG input "$USER"
+  lsmod | grep -q '^xpad ' && sudo modprobe -r xpad 2>/dev/null || true
+  sudo modprobe hid_xpadneo 2>/dev/null || {
+    echo "Reboot to finish controller setup, then pair with Bluetooth."
+    exit 0
+  }
+  info "pair your controller over Bluetooth."
+}
+
+if [[ ${1:-} == run ]]; then
+  shift
+  case ${1:-} in
+    steam) do_steam ;; heroic) do_heroic ;; lutris) do_lutris ;;
+    retroarch) do_retroarch ;; drivers) do_drivers ;; xbox) do_xbox ;;
+    *) err "unknown: $1 (steam|heroic|lutris|retroarch|drivers|xbox)"; exit 1 ;;
+  esac
+  exit 0
+fi
+
+choice=$(
+  printf '%s\n' 'Steam' 'Heroic' 'Lutris' 'RetroArch' 'GPU setup' 'Xbox controllers' |
+    "$FUZZEL" --dmenu --prompt='Gaming: ' --width=28 --lines=6
+) || exit 0
+case "$choice" in
+  Steam) exec "$0" run steam ;;
+  Heroic) exec "$0" run heroic ;;
+  Lutris) exec "$0" run lutris ;;
+  RetroArch) exec "$0" run retroarch ;;
+  "GPU setup") exec hexciri-gpu ;;
+  "Xbox controllers") exec "$0" run xbox ;;
+esac

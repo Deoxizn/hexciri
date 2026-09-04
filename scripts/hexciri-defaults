@@ -1,0 +1,86 @@
+#!/bin/bash
+# hexciri:summary=Default apps: kitty + fish + brave-origin + strata + zed + opencode (xdg-native)
+# usage: hexciri-defaults [Browser|Editor|Terminal|Shell|Files|Agent]
+set -euo pipefail
+
+STATE_BASE="$HOME/.local/state/hexciri/defaults"
+mkdir -p "$STATE_BASE"
+get() { cat "$STATE_BASE/$1" 2>/dev/null || true; }
+setv() { printf '%s' "$2" > "$STATE_BASE/$1"; }
+
+# seed user core on first run
+[[ -f $STATE_BASE/terminal ]] || setv terminal kitty
+[[ -f $STATE_BASE/shell ]]    || setv shell fish
+[[ -f $STATE_BASE/browser ]]  || setv browser brave-origin
+[[ -f $STATE_BASE/files ]]    || setv files strata
+[[ -f $STATE_BASE/editor ]]   || setv editor zed
+[[ -f $STATE_BASE/agent ]]    || setv agent opencode
+
+menu_via_fuzzel() { # <prompt> <items...>
+  local prompt=$1; shift
+  if command -v hexciri-fuzzel &>/dev/null; then
+    printf '%s\n' "$@" | hexciri-fuzzel --dmenu --prompt="$prompt" --width=30 --lines=8
+  else
+    printf '%s\n' "$@" | head -n 1
+  fi
+}
+
+pick_type="${1:-}"
+if [[ -z $pick_type ]]; then
+  pick_type="$(menu_via_fuzzel 'Defaults: ' Browser Editor Terminal Shell Files Agent)" || exit 0
+fi
+
+case "${pick_type,,}" in
+  browser)
+    current="$(get browser)"
+    choice="$(menu_via_fuzzel 'Browser: ' brave-origin brave-origin-beta brave firefox chromium zen)" || exit 0
+    setv browser "$choice"
+    # map choice -> desktop file for xdg (first existing wins)
+    set_browser() {
+      for d in "$@"; do
+        [[ -f $HOME/.local/share/applications/$d || -f /usr/local/share/applications/$d || -f /usr/share/applications/$d ]] || continue
+        xdg-settings set default-web-browser "$d" 2>/dev/null && return 0
+      done
+      return 1
+    }
+    case "$choice" in
+      brave-origin) set_browser brave-origin.desktop com.brave.Origin.desktop || true ;;
+      brave-origin-beta) set_browser brave-origin-beta.desktop com.brave.Origin.beta.desktop || true ;;
+      brave) set_browser brave-browser.desktop || true ;;
+      firefox) set_browser firefox.desktop || true ;;
+      chromium) set_browser chromium.desktop || true ;;
+      zen) set_browser zen.desktop || true ;;
+    esac
+    ;;
+  terminal)
+    current="$(get terminal)"
+    choice="$(menu_via_fuzzel 'Terminal: ' kitty foot ghostty alacritty)" || exit 0
+    setv terminal "$choice"
+    ;;
+  shell)
+    choice="$(menu_via_fuzzel 'Shell: ' fish bash)" || exit 0
+    setv shell "$choice"
+    if [[ $choice == fish && $SHELL != *fish ]]; then
+      echo "run: chsh -s /usr/bin/fish (keeps bash until you do)"
+    fi
+    ;;
+  files)
+    choice="$(menu_via_fuzzel 'Files: ' strata nautilus thunar yazi)" || exit 0
+    setv files "$choice"
+    if [[ $choice == strata ]]; then
+      # Strata ships io.github.lgse.Strata.desktop; register as folder handler
+      xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
+    fi
+    ;;
+  editor)
+    choice="$(menu_via_fuzzel 'Editor: ' zed nvim helix code)" || exit 0
+    setv editor "$choice"
+    ;;
+  agent)
+    choice="$(menu_via_fuzzel 'Agent: ' opencode claude codex)" || exit 0
+    setv agent "$choice"
+    ;;
+  *) exit 0 ;;
+esac
+
+echo "default ${pick_type,,}: $(get "${pick_type,,}")"

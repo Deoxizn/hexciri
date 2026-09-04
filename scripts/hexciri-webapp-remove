@@ -1,0 +1,39 @@
+#!/bin/bash
+# hexciri:summary=Remove a web app desktop launcher
+# hexciri:args=[name]
+set -euo pipefail
+
+ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
+DESKTOP_DIR="$HOME/.local/share/applications"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+WEB_APPS=()
+WEB_APP_PATHS=()
+while IFS= read -r -d '' file; do
+  if grep -q '^Exec=.*hexciri-launch-webapp.*' "$file"; then
+    WEB_APPS+=("$(basename "${file%.desktop}")")
+    WEB_APP_PATHS+=("$file")
+  fi
+done < <(find "$DESKTOP_DIR" -name '*.desktop' -print0 2>/dev/null)
+
+path_for_web_app() {
+  local i
+  for i in "${!WEB_APPS[@]}"; do
+    [[ ${WEB_APPS[$i]} == "$1" ]] && { printf '%s\n' "${WEB_APP_PATHS[$i]}"; return 0; }
+  done
+}
+
+if (($# == 0)); then
+  ((${#WEB_APPS[@]})) || { echo "No web apps to remove."; exit 1; }
+  APP_NAME="$(printf '%s\n' "${WEB_APPS[@]}" | sort | "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Remove web app: ' --width=30 --lines=8)" || exit 0
+else
+  APP_NAME="$*"
+fi
+[[ -n ${APP_NAME:-} ]] || { echo "Select a web app to remove." >&2; exit 1; }
+
+icon_name=$(printf '%s\n' "$APP_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^[:alnum:]]\+/-/g; s/^-//; s/-$//')
+desktop_file=$(path_for_web_app "$APP_NAME")
+rm -f "${desktop_file:-$DESKTOP_DIR/$APP_NAME.desktop}"
+rm -f "$ICON_DIR/$icon_name.png" "$ICON_DIR/$APP_NAME.png"
+notify-send "Hexciri" "Web app removed: $APP_NAME" 2>/dev/null || true
+update-desktop-database "$DESKTOP_DIR" &>/dev/null || true

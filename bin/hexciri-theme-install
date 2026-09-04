@@ -1,0 +1,10 @@
+#!/bin/bash
+# hexciri:summary=Install a theme from a git repo into ~/.config/hexciri/themes
+# hexciri:args=<git-url>
+set -euo pipefail
+[[ -n ${1:-} ]] || { echo "Usage: hexciri-theme-install <git-url>"; exit 1; }
+dest="$HOME/.config/hexciri/themes/$(basename "$1" .git)"
+[[ -e $dest ]] && { echo "already exists: $dest"; exit 1; }
+mkdir -p "$HOME/.config/hexciri/themes"
+git clone "$1" "$dest"
+echo "installed: $dest"

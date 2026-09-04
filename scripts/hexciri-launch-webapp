@@ -1,0 +1,21 @@
+#!/bin/bash
+# hexciri:summary=Launch a URL as a web app window (Chromium-family --app=)
+# hexciri:args=<url> [extra browser args...]
+set -euo pipefail
+
+browser="$(xdg-settings get default-web-browser 2>/dev/null || true)"
+case "$browser" in
+  brave-origin*|brave*|google-chrome*|chromium*|microsoft-edge*|opera*|vivaldi*) ;;
+  *)
+    # default isn't app-capable: fall back to any installed Chromium-family browser
+    browser=""
+    for d in brave-origin.desktop com.brave.Origin.desktop brave-origin-beta.desktop brave-browser.desktop chromium.desktop google-chrome.desktop; do
+      if [[ -f $HOME/.local/share/applications/$d || -f /usr/share/applications/$d ]]; then browser="$d"; break; fi
+    done
+    [[ -n $browser ]] || { echo "hexciri-launch-webapp: no Chromium-family browser (brave-origin/chromium) installed" >&2; exit 1; }
+    ;;
+esac
+
+bin="$(sed -n 's/^Exec=\([^ ]*\).*/\1/p' "$HOME/.local/share/applications/$browser" /usr/share/applications/$browser 2>/dev/null | head -1)"
+[[ -n $bin ]] || { echo "hexciri-launch-webapp: cannot find browser binary for $browser" >&2; exit 1; }
+exec setsid "$bin" --app="$1" "${@:2}" >/dev/null 2>&1 &

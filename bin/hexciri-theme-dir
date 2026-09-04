@@ -1,0 +1,12 @@
+#!/bin/bash
+# hexciri:summary=Print the directory holding a theme, preferring a user copy
+# hexciri:args=<theme-name>
+set -euo pipefail
+theme="${1:-}"
+[[ -n $theme ]] || { echo "Usage: hexciri-theme-dir <theme-name>" >&2; exit 1; }
+HEXCIRI_PATH="${HEXCIRI_PATH:-/usr/share/hexciri}"
+for base in "$HOME/.config/hexciri/themes/$theme" "$HEXCIRI_PATH/themes/$theme"; do
+  if [[ -d $base ]]; then echo "$base"; exit 0; fi
+done
+echo "$HOME/.config/hexciri/themes/$theme"
+exit 1

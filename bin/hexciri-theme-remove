@@ -1,0 +1,10 @@
+#!/bin/bash
+# hexciri:summary=Remove a user-installed theme
+# hexciri:args=<theme-name>
+set -euo pipefail
+name="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
+[[ -n $name ]] || { echo "Usage: hexciri-theme-remove <theme-name>"; exit 1; }
+dest="$HOME/.config/hexciri/themes/$name"
+[[ -d $dest ]] || { echo "not a user theme: $name" >&2; exit 1; }
+rm -rf "$dest"
+echo "removed: $name"

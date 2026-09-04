@@ -1,0 +1,8 @@
+#!/bin/bash
+# hexciri:summary=Open the default terminal (reads hexciri defaults state, passes args through)
+# usage: hexciri-terminal [args...] (e.g. hexciri-terminal -e nvim)
+set -euo pipefail
+term="$(cat "$HOME/.local/state/hexciri/defaults/terminal" 2>/dev/null || echo kitty)"
+command -v "$term" &>/dev/null || term="kitty"
+command -v "$term" &>/dev/null || { echo "no terminal found (tried $term, kitty)" >&2; exit 1; }
+exec "$term" "$@"

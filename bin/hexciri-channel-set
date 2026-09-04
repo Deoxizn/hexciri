@@ -1,0 +1,37 @@
+#!/bin/bash
+# hexciri:summary=Set the hexciri package channel (stable|bleeding)
+# hexciri:args=<stable|bleeding>
+# hexciri:requires-sudo=true
+set -euo pipefail
+
+HEXCIRI_PATH="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+[[ -d "$HEXCIRI_PATH" ]] || HEXCIRI_PATH="$(cd "$(dirname "$0")/.." && pwd)"
+
+usage() { echo "Usage: hexciri-channel-set [stable|bleeding]"; }
+
+(( $# > 0 )) || { usage; exit 1; }
+channel="$1"
+
+case "$channel" in
+  stable)
+    src_conf="$HEXCIRI_PATH/default/pacman/pacman-stable.conf"
+    src_mirror="$HEXCIRI_PATH/default/pacman/mirrorlist-stable"
+    ;;
+  bleeding)
+    src_conf="$HEXCIRI_PATH/default/pacman/pacman-bleeding.conf"
+    src_mirror="$HEXCIRI_PATH/default/pacman/mirrorlist-bleeding"
+    ;;
+  *) echo "Unknown channel: $channel" >&2; usage >&2; exit 1 ;;
+esac
+
+[[ -f $src_conf && -f $src_mirror ]] || { echo "channel files missing in $HEXCIRI_PATH/default/pacman" >&2; exit 1; }
+
+echo "Setting channel to $channel"
+sudo cp -f /etc/pacman.conf /etc/pacman.conf.bak
+sudo cp -f /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
+sudo cp -f "$src_conf" /etc/pacman.conf
+sudo cp -f "$src_mirror" /etc/pacman.d/mirrorlist
+
+hexciri-hook pre-refresh-pacman 2>/dev/null || true
+
+sudo pacman -Syyuu --noconfirm

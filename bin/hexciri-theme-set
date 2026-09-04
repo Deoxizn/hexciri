@@ -1,0 +1,52 @@
+#!/bin/bash
+# hexciri:summary=Apply a hexciri theme (slim: colors.toml + background + hook, no Hyprland/shell IPC)
+# hexciri:args=<theme-name>
+set -euo pipefail
+
+[[ -n ${1:-} ]] || { echo "Usage: hexciri-theme-set <theme-name>"; exit 1; }
+THEME_INPUT="$1"
+THEME_NAME="$(printf '%s' "$THEME_INPUT" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
+HEXCIRI_PATH="${HEXCIRI_PATH:-/usr/share/hexciri}"
+
+resolve_dir() {
+  for base in "$HOME/.config/hexciri/themes/$THEME_NAME" "$HEXCIRI_PATH/themes/$THEME_NAME"; do
+    [[ -d $base ]] && { printf '%s' "$base"; return 0; }
+  done
+  return 1
+}
+
+SRC_DIR="$(resolve_dir)" || { echo "theme not found: $THEME_INPUT" >&2; exit 1; }
+[[ -f $SRC_DIR/colors.toml ]] || { echo "theme has no colors.toml: $SRC_DIR" >&2; exit 1; }
+
+STATE_BASE="$HOME/.local/state/hexciri/current"
+NEXT_DIR="$STATE_BASE/next-theme"
+DEST_LINK="$STATE_BASE/theme"
+mkdir -p "$STATE_BASE"
+
+rm -rf "$NEXT_DIR"
+cp -r "$SRC_DIR" "$NEXT_DIR"
+rm -rf "$DEST_LINK"
+cp -r "$NEXT_DIR" "$DEST_LINK"
+printf '%s' "$THEME_NAME" > "$STATE_BASE/theme.name"
+
+# background: first image in backgrounds/, prefer name match
+BG_LINK="$STATE_BASE/background"
+if [[ -d $DEST_LINK/backgrounds ]]; then
+  pick="$(find -L "$DEST_LINK/backgrounds" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | sort | head -n 1)"
+  if [[ -z $pick ]]; then
+    echo "hexciri-theme-set: no background found, keeping current"
+  else
+    ln -nsf "$pick" "$BG_LINK"
+  fi
+fi
+
+export HEXCIRI_CURRENT_THEME="$DEST_LINK"
+export HEXCIRI_THEME_NAME="$THEME_NAME"
+REPO_BIN="$(cd "$(dirname "$0")" && pwd)"
+if [[ -x $REPO_BIN/hexciri-theme-set-templates ]]; then
+  "$REPO_BIN/hexciri-theme-set-templates" "$DEST_LINK"
+elif command -v hexciri-theme-set-templates &>/dev/null; then
+  hexciri-theme-set-templates "$DEST_LINK"
+fi
+hexciri-hook theme-set "$THEME_NAME"
+echo "theme set: $THEME_NAME"

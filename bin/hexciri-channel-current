@@ -1,0 +1,25 @@
+#!/bin/bash
+# hexciri:summary=Print the active hexciri channel (stable|bleeding|unknown)
+set -euo pipefail
+
+if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist 2>/dev/null; then
+  mirror="stable"
+elif grep -q "https://mirror.omarchy.org/" /etc/pacman.d/mirrorlist 2>/dev/null; then
+  mirror="bleeding"
+else
+  mirror="unknown"
+fi
+
+if grep -q "https://pkgs.omarchy.org/stable/" /etc/pacman.conf 2>/dev/null; then
+  pkgs="stable"
+elif grep -q "https://pkgs.omarchy.org/edge/" /etc/pacman.conf 2>/dev/null; then
+  pkgs="bleeding"
+else
+  pkgs="unknown"
+fi
+
+if [[ $mirror == "$pkgs" ]]; then
+  echo "$mirror"
+else
+  echo "$mirror / $pkgs"
+fi

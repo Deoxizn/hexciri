@@ -1,0 +1,37 @@
+[Plymouth Theme]
+Name=Hexciri
+Description=Demonic minimal boot splash — emblem, progress bar
+ModuleName=two-step
+
+[two-step]
+Font=JetBrainsMono Nerd Font 12
+TitleFont=JetBrainsMono Nerd Font Bold 20
+ImageDir=/usr/share/plymouth/themes/hexciri
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.5
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.382
+HorizontalAlignment=.5
+VerticalAlignment=.62
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.34
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x000000
+BackgroundEndColor=0x000000
+ProgressBarBackgroundColor=0x43384c
+ProgressBarForegroundColor=0xb6849d
+DialogClearsFirmwareBackground=true
+MessageBelowAnimation=true
+
+[boot-up]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[shutdown]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[reboot]
+UseEndAnimation=false
+UseFirmwareBackground=false
