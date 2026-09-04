@@ -1,8 +1,8 @@
 #!/bin/bash
 # hexciri bootstrap — Arch ISO → fully automatic hexciri install.
 #
-#   curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash
-#   curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash -s -- --kernel bore
+#   curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | bash
+#   curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | bash -s -- --kernel bore
 #
 # Only 9 things are ever typed (everything else is automatic):
 #   disk, full-disk-vs-free-space, filesystem, channel, hostname,
@@ -29,7 +29,7 @@ info() { echo -e "\e[0;36m[hexciri:bootstrap]\e[0m $*"; }
 ok()   { echo -e "\e[0;32m[hexciri:bootstrap]\e[0m $*"; }
 err()  { echo -e "\e[0;31m[hexciri:bootstrap]\e[0m $*" >&2; }
 
-(( EUID == 0 )) || { err "run as root on the Arch ISO (curl ... | sudo bash)"; exit 1; }
+(( EUID == 0 )) || { err "run as root on the Arch ISO (curl ... | bash)"; exit 1; }
 command -v pacstrap &>/dev/null || { err "not an Arch ISO (no pacstrap)"; exit 1; }
 for cmd in sfdisk parted mkfs.fat mkfs.ext4 blkid findmnt arch-chroot git curl; do
   command -v "$cmd" &>/dev/null && continue
