@@ -34,7 +34,7 @@
   body { background: var(--bg); color: var(--text); font: 16px/1.65 system-ui, sans-serif; }
   .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
   header.hero { text-align: center; padding: 72px 24px 48px; }
-  header.hero img { width: 180px; height: 180px; }
+  header.hero img { width: min(340px, 85%); height: auto; }
   header.hero h1 { font-size: 44px; letter-spacing: 14px; color: var(--rose); margin: 18px 0 8px; font-weight: 800; }
   header.hero p { color: var(--muted); font-size: 18px; }
   pre.curl { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin: 28px auto 0; max-width: 640px; overflow-x: auto; font: 14px/1.6 ui-monospace, monospace; }
@@ -55,7 +55,7 @@
 <header class="hero">
   <img src="logo.png" alt="Hexciri emblem">
   <h1>HEXCIRI</h1>
-  <p>Arch-based Niri + Noctalia distro. Own void.</p>
+  <p>Arch × Niri × Noctalia</p>
   <pre class="curl">curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash</pre>
 </header>
 <div class="wrap">
@@ -89,7 +89,13 @@
 </section>
 </div>
 <footer>
-  <a href="https://github.com/Deoxizn/hexciri">GitHub</a> · <a href="https://github.com/Deoxizn/hexciri/blob/main/CHANGELOG.md">Changelog</a> · Hexciri <code>v0.1.0</code>
+  <div>
+    <a href="https://github.com/Deoxizn/hexciri" target="_blank" rel="noopener">hexciri</a> ·
+    <a href="https://github.com/niri-wm/niri" target="_blank" rel="noopener">Niri</a> ·
+    <a href="https://github.com/noctalia-dev/noctalia" target="_blank" rel="noopener">Noctalia</a> ·
+    <a href="https://archlinux.org" target="_blank" rel="noopener">Arch</a>
+  </div>
+  <div style="margin-top:.4rem;">© 2026–2026 <a href="https://dirty.pizza" target="_blank" rel="noopener">dirty.pizza</a></div>
 </footer>
 </body>
 </html>
