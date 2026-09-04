@@ -63,13 +63,8 @@ Stable is month-held pkgs; bleeding is normal Arch rolling release.
 ## GPU
 
 Autodetected at install (mesa / `nvidia-open` / `580xx` with a hard LTS pin
-on 1xxx-era cards — other kernels are refused there). Re-run anytime:
-
-```bash
-hexciri-gpu [--kernel=stock|lts|omarchy|bore|muqss] [-y]
-```
-
-Custom kernels need bleeding.
+on 1xxx-era cards). To change later, re-run `hexciri-gpu` — `--kernel` is
+available where the card allows it.
 
 
 ## Theme engine (colors.toml)
