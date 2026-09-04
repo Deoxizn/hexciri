@@ -60,10 +60,13 @@ done
 unset USERPASS2
 # timezone defaults to GeoIP-detected (Enter accepts); typed override always works
 DETECTED_TZ=""
-for geo in "https://ipapi.co/timezone" "https://ipinfo.io/timezone"; do
-  DETECTED_TZ="$(curl -fsSL --max-time 8 "$geo" 2>/dev/null | tr -d '[:space:]' || true)"
-  [[ -f /usr/share/zoneinfo/$DETECTED_TZ ]] && break || DETECTED_TZ=""
-done
+DETECTED_TZ="$(curl -fsSL --max-time 8 https://ipapi.co/timezone 2>/dev/null | tr -d '[:space:]' || true)"
+[[ -f /usr/share/zoneinfo/$DETECTED_TZ ]] || DETECTED_TZ="$(curl -fsSL --max-time 8 https://ipinfo.io/timezone 2>/dev/null | tr -d '[:space:]' || true)"
+[[ -f /usr/share/zoneinfo/$DETECTED_TZ ]] || DETECTED_TZ="$(curl -fsSL --max-time 8 'http://ip-api.com/line?fields=timezone' 2>/dev/null | tr -d '[:space:]' || true)"
+if [[ ! -f /usr/share/zoneinfo/$DETECTED_TZ ]]; then
+  DETECTED_TZ="$(curl -fsSL --max-time 8 https://worldtimeapi.org/api/ip 2>/dev/null | grep -oE '"timezone":"[^"]+"' | head -n 1 | cut -d'"' -f4 || true)"
+fi
+[[ -f /usr/share/zoneinfo/$DETECTED_TZ ]] || DETECTED_TZ=""
 [[ -n $DETECTED_TZ ]] || DETECTED_TZ="UTC"
 read -rp "timezone [$DETECTED_TZ]: " TIMEZONE </dev/tty; TIMEZONE="${TIMEZONE:-$DETECTED_TZ}"
 [[ $TIMEZONE != *".."* && -f /usr/share/zoneinfo/"$TIMEZONE" ]] || { err "unknown timezone: $TIMEZONE"; exit 1; }
