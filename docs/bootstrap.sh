@@ -118,10 +118,6 @@ else
 fi
 [[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
 if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
-if [[ $MODE == full ]]; then
-  read -rp "type the disk name again to confirm WIPE of /dev/$DISK: " CONFIRM </dev/tty
-  [[ $CONFIRM == "$DISK" ]] || { err "mismatch — aborting, disk untouched"; exit 1; }
-fi
 
 # ── summary + final confirm (nothing touched until this passes) ──
 echo ""
