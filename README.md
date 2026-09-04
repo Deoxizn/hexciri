@@ -26,7 +26,6 @@ Kernel prompt (default auto):
 |---|---|
 | `stock`, `lts` | `linux`, `linux-lts` |
 | `omarchy`, `bore`, `muqss` | `linux-omarchy*` (bleeding) |
-| empty | auto (LTS pin on GTX 1xxx or older, stock otherwise) |
 
 Full package names (`linux-omarchy-bore`) work too.
 
