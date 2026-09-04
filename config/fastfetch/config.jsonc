@@ -42,7 +42,7 @@
     },
     {
       "type": "title",
-      "format": "\u001b[1m\u001b[38;2;153;206;239m{user-name} @ \u001b[38;2;153;206;239m{host-name}",
+      "format": "\u001b[1m\u001b[38;2;153;206;239m{user-name} > \u001b[38;2;153;206;239m{host-name}",
     },
     {
       "type": "custom",

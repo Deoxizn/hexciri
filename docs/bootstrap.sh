@@ -67,16 +67,6 @@ done
 [[ -n $DETECTED_TZ ]] || DETECTED_TZ="UTC"
 read -rp "timezone [$DETECTED_TZ]: " TIMEZONE </dev/tty; TIMEZONE="${TIMEZONE:-$DETECTED_TZ}"
 [[ $TIMEZONE != *".."* && -f /usr/share/zoneinfo/"$TIMEZONE" ]] || { err "unknown timezone: $TIMEZONE"; exit 1; }
-LUKS="${LUKS:-no}"
-if $LUKS_ASK; then
-  read -rp "encrypt disk with LUKS? [y/N]: " luks_ans </dev/tty
-  [[ $luks_ans =~ ^[Yy]$ ]] && LUKS=yes || LUKS=no
-fi
-if [[ $LUKS == yes ]]; then
-  # disk unlock reuses the user password (one password to remember)
-  LUKSPASS="$USERPASS"
-fi
-
 timedatectl set-ntp true 2>/dev/null || true
 
 # ── filesystem: ext4 default (simplest, robust, no snapshot stack to feed);
@@ -95,6 +85,17 @@ read -rp "channel [stable/bleeding, default stable]: " CHANNEL </dev/tty
 CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
 info "channel: $CHANNEL"
+
+# ── encryption choice, then disk (destructive choices last) ──
+LUKS="${LUKS:-no}"
+if $LUKS_ASK; then
+  read -rp "encrypt disk with LUKS? [y/N]: " luks_ans </dev/tty
+  [[ $luks_ans =~ ^[Yy]$ ]] && LUKS=yes || LUKS=no
+fi
+if [[ $LUKS == yes ]]; then
+  # disk unlock reuses the user password (one password to remember)
+  LUKSPASS="$USERPASS"
+fi
 
 # ── disk goes last: destructive choices right before partitioning.
 # full mode wipes; free mode shares (reuses the ESP, touches nothing else) ──
