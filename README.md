@@ -11,9 +11,7 @@ Arch × Niri × Noctalia
 ## Install
 
 1. Flash the Arch ISO, boot it (UEFI), connect network (`iwctl` for wifi).
-2. Run it — 9 things are typed (username, password, hostname, timezone,
-   filesystem, channel, LUKS, disk), everything else is automatic
-   (kernel auto-detects; override post-install with `hexciri-gpu`):
+2. Run it 
 
 ```bash
 curl -LO https://hexciri.dirty.pizza/hexciri
@@ -21,13 +19,6 @@ sh hexciri
 ```
 
 Pipe works identically: `curl -fsSL https://hexciri.dirty.pizza/hexciri | bash`.
-`--kernel=` silently preselects (auto = LTS pin on 1xxx, stock
-otherwise; custom kernels need bleeding):
-
-```bash
-curl -LO https://hexciri.dirty.pizza/hexciri
-sh hexciri --kernel bore
-```
 
 3. Reboot → straight into Niri
 Press `Mod+K` for the searchable keybinding list.
