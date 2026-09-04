@@ -17,6 +17,13 @@ Arch-based Niri + Noctalia distro. Own void, own mirrors policy, own theme engin
 curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash
 ```
 
+Prefer download-first (identical, easier to inspect/retry):
+
+```bash
+curl -LO https://hexciri.dirty.pizza/bootstrap.sh
+sudo bash bootstrap.sh
+```
+
 Flags only pre-fill defaults — everything is still asked:
 
 | flag | default | notes |
