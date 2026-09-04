@@ -123,6 +123,29 @@ if [[ $MODE == full ]]; then
   [[ $CONFIRM == "$DISK" ]] || { err "mismatch — aborting, disk untouched"; exit 1; }
 fi
 
+# ── summary + final confirm (nothing touched until this passes) ──
+echo ""
+info "your choices:"
+printf '  %-10s %s\n' \
+  "mode"     "$MODE" \
+  "disk"     "/dev/$DISK" \
+  "fs"       "$FS" \
+  "channel"  "$CHANNEL" \
+  "kernel"   "${KERNEL_PICK:-auto}" \
+  "hostname" "$HOSTNAME" \
+  "username" "$USERNAME" \
+  "password" "(set, hidden)" \
+  "timezone" "$TIMEZONE" \
+  "luks"     "$LUKS (unlocks with user password)"
+echo ""
+if [[ $MODE == full ]]; then
+  read -rp "WIPE /dev/$DISK and install? [y/N]: " GO </dev/tty
+else
+  read -rp "Install into free space on /dev/$DISK? [y/N]: " GO </dev/tty
+fi
+[[ $GO =~ ^[Yy]$ ]] || { err "aborted — disk untouched"; exit 1; }
+echo ""
+
 # ── partition ──
 if [[ $MODE == full ]]; then
   info "partitioning /dev/$DISK (full wipe)..."
