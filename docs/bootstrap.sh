@@ -217,6 +217,9 @@ git clone --depth 1 "$REPO" /mnt/root/hexciri-install
 # ── stage 2 runs inside the new system ──
 cat > /mnt/root/hexciri-stage2.sh <<STAGE2
 set -euo pipefail
+info() { echo -e "\\e[0;36m[hexciri:stage2]\\e[0m \$*"; }
+ok()   { echo -e "\\e[0;32m[hexciri:stage2]\\e[0m \$*"; }
+err()  { echo -e "\\e[0;31m[hexciri:stage2]\\e[0m \$*" >&2; }
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc 2>/dev/null || true
 sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
