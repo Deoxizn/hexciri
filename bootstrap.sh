@@ -235,7 +235,7 @@ is_legacy_nvidia() {
   return 1
 }
 STAGE1_KERNEL=linux
-if is_legacy_nvidia || [[ $KERNEL_PICK == lts || $KERNEL_PICK == omarchy || $KERNEL_PICK == bore || $KERNEL_PICK == muqss ]]; then
+if is_legacy_nvidia || [[ $KERNEL_PICK == lts ]]; then
   STAGE1_KERNEL=linux-lts
 fi
 is_legacy_nvidia && info "legacy NVIDIA: base kernel linux-lts"

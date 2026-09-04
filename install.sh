@@ -192,6 +192,28 @@ if $SYSTEM_ONLY; then
       || warn "GPU setup needs attention — re-run: hexciri-gpu"
   fi
 
+  # ── single-kernel policy: a custom pick replaces the staged base kernel ──
+  if [[ $KERNEL_PICK == omarchy || $KERNEL_PICK == bore || $KERNEL_PICK == muqss ]] && ! $DRY_RUN; then
+    case $KERNEL_PICK in
+      omarchy) custom_pkg=linux-omarchy ;;
+      bore) custom_pkg=linux-omarchy-bore ;;
+      muqss) custom_pkg=linux-omarchy-muqss ;;
+    esac
+    if pacman -Q "$custom_pkg" &>/dev/null; then
+      for k in linux linux-lts; do
+        if pacman -Q "$k" &>/dev/null; then
+          info "removing staged $k (single-kernel policy)..."
+          pacman -Rns --noconfirm "$k"
+          pacman -Q "$k-headers" &>/dev/null && pacman -Rns --noconfirm "$k-headers" || true
+          rm -f "/boot/loader/entries/hexciri-$k.conf"
+        fi
+      done
+      mkinitcpio -P
+    else
+      warn "$custom_pkg did not install (custom kernels need bleeding) — keeping staged kernel"
+    fi
+  fi
+
   ok "system phase complete (channel: $CHANNEL)"
   exit 0
 fi
