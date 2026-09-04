@@ -57,9 +57,20 @@ read -rp "type the disk name again to confirm WIPE of /dev/$DISK: " CONFIRM </de
 [[ $CONFIRM == "$DISK" ]] || { err "mismatch — aborting, disk untouched"; exit 1; }
 read -rp "hostname [hexciri]: " HOSTNAME </dev/tty; HOSTNAME="${HOSTNAME:-hexciri}"
 read -rp "username [hex]: " USERNAME </dev/tty; USERNAME="${USERNAME:-hex}"
-read -rsp "password for $USERNAME: " USERPASS </dev/tty; echo
-[[ -n $USERPASS ]] || { err "empty password — aborting"; exit 1; }
-read -rp "timezone [UTC]: " TIMEZONE </dev/tty; TIMEZONE="${TIMEZONE:-UTC}"
+for _try in 1 2 3; do
+  read -rsp "password for $USERNAME: " USERPASS </dev/tty; echo
+  read -rsp "confirm password: " USERPASS2 </dev/tty; echo
+  if [[ -z $USERPASS ]]; then err "empty password — aborting"; exit 1; fi
+  [[ $USERPASS == "$USERPASS2" ]] && break
+  err "passwords do not match — try again"
+  USERPASS=""
+  (( _try == 3 )) && { err "3 mismatches — aborting"; exit 1; }
+done
+unset USERPASS2
+# timezone defaults to GeoIP-detected (Enter accepts); typed override always works
+DETECTED_TZ="$(curl -fsSL --max-time 8 https://ipapi.co/timezone 2>/dev/null || true)"
+[[ -f /usr/share/zoneinfo/$DETECTED_TZ ]] || DETECTED_TZ="UTC"
+read -rp "timezone [$DETECTED_TZ]: " TIMEZONE </dev/tty; TIMEZONE="${TIMEZONE:-$DETECTED_TZ}"
 [[ -f /usr/share/zoneinfo/"$TIMEZONE" ]] || { err "unknown timezone: $TIMEZONE"; exit 1; }
 LUKS="${LUKS:-no}"
 if $LUKS_ASK; then
