@@ -21,13 +21,12 @@ Flags only pre-fill defaults — everything is still asked:
 
 | flag | default | notes |
 |---|---|---|
-| `--channel=stable\|bleeding` | `stable` | bleeding unlocks omarchy/bore/muqss kernels |
 | `--kernel=stock\|lts\|omarchy\|bore\|muqss` | auto (LTS pin on 1xxx, stock otherwise) | custom kernels need bleeding |
 | `--no-luks` | ask | skip the encryption prompt |
 
 ```bash
-# example: bleeding + BORE from the first prompt on
-curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash -s -- --channel bleeding --kernel bore
+# example: BORE pre-selected for the GPU step
+curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | sudo bash -s -- --kernel bore
 ```
 
 3. Reboot → straight into Niri

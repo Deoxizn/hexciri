@@ -13,18 +13,15 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-CHANNEL_DEF="stable"   # --channel only changes this default; channel is still asked
+CHANNEL="stable"
 KERNEL_PICK=""         # --kernel=stock|lts|omarchy|bore|muqss preselects the GPU kernel (else auto)
 LUKS_ASK=true
 for arg in "$@"; do
   case "$arg" in
-    --channel=*) CHANNEL_DEF="${arg#*=}" ;;
-    stable|bleeding) CHANNEL_DEF="$arg" ;;
     --kernel=*) KERNEL_PICK="${arg#*=}" ;;
     --no-luks) LUKS_ASK=false; LUKS=no ;;
   esac
 done
-[[ $CHANNEL_DEF == stable || $CHANNEL_DEF == bleeding ]] || { echo "channel must be stable|bleeding"; exit 1; }
 [[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { echo "kernel must be stock|lts|omarchy|bore|muqss"; exit 1; }
 
 info() { echo -e "\e[0;36m[hexciri:bootstrap]\e[0m $*"; }
@@ -105,8 +102,8 @@ if [[ $MODE == free ]]; then
 fi
 
 # ── channel is always asked; --channel only pre-fills the default ──
-read -rp "channel [stable/bleeding, default $CHANNEL_DEF]: " CHANNEL </dev/tty
-CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-$CHANNEL_DEF}"
+read -rp "channel [stable/bleeding, default stable]: " CHANNEL </dev/tty
+CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
 info "channel: $CHANNEL"
 
