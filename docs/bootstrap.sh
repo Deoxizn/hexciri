@@ -78,8 +78,8 @@ if $LUKS_ASK; then
   [[ $luks_ans =~ ^[Yy]$ ]] && LUKS=yes || LUKS=no
 fi
 if [[ $LUKS == yes ]]; then
-  read -rsp "LUKS passphrase: " LUKSPASS </dev/tty; echo
-  [[ -n ${LUKSPASS:-} ]] || { err "empty LUKS passphrase — aborting"; exit 1; }
+  # disk unlock reuses the user password (one password to remember)
+  LUKSPASS="$USERPASS"
 fi
 
 timedatectl set-ntp true 2>/dev/null || true
