@@ -11,7 +11,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=2   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=3   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""         # set by the kernel prompt below (empty = auto-detect in installer)
 while (($#)); do
@@ -287,16 +287,13 @@ systemctl enable NetworkManager.service power-profiles-daemon.service >/dev/null
 
 cp -r /root/hexciri-install "/home/$USERNAME/hexciri"
 chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/hexciri"
-# su(1) sessions have no controlling TTY, so sudo(8) inside install.sh could
-# never prompt (fatal "a terminal is required"). Open a passwordless window
-# for the install only; install.sh closes it (plus an EXIT trap here).
-printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$USERNAME" > /etc/sudoers.d/hexciri-install
-chmod 440 /etc/sudoers.d/hexciri-install
-visudo -cqf /etc/sudoers.d/hexciri-install || { err "sudoers window failed validation — aborting before anything runs as $USERNAME"; exit 1; }
-su - "$USERNAME" -c "sudo -n true" 2>/dev/null || { err "passwordless sudo self-test FAILED as $USERNAME — aborting (report rev $BOOTSTRAP_REV)"; exit 1; }
-ok "sudo window verified for $USERNAME"
-trap 'rm -f /etc/sudoers.d/hexciri-install /root/hexciri-stage2.sh' EXIT
-su - "$USERNAME" -c "export HEXCIRI_STAGE2=1; cd ~/hexciri && ./install.sh -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}"
+# Split phases: system runs as root (no sudo needed), user runs as the user
+# with zero sudo calls — su(1) sessions have no controlling TTY, so nothing
+# here may ever depend on sudo prompting.
+trap 'rm -f /root/hexciri-stage2.sh' EXIT
+HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
+command -v fish &>/dev/null && chsh -s /usr/bin/fish "$USERNAME" || true
+su - "$USERNAME" -c "cd ~/hexciri && ./install.sh --user-only -y"
 STAGE2
 
 info "stage 2 (chroot)..."

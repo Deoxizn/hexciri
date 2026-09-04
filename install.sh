@@ -1,6 +1,11 @@
 #!/bin/bash
-# hexciri installer — fresh minimal Arch (archinstall: systemd-boot, NetworkManager)
-# → channel + keyring + packages → configs/scripts/themes → seed → login at SDDM/Niri
+# hexciri installer.
+#
+# Split phases so no step ever needs sudo without a terminal:
+#   --system-only  run as ROOT   (packages, system files, bootloader, services)
+#   --user-only    run as USER   (configs, state, theme seed — zero sudo calls)
+#   no flags       Already-on-Arch: system via sudo (real terminal), then user.
+#
 # usage: ./install.sh [-y] [--dry-run] [--channel stable|bleeding] [--kernel stock|lts|omarchy|bore|muqss]
 set -euo pipefail
 
@@ -9,10 +14,14 @@ CHANNEL="stable"
 KERNEL_PICK=""
 YES=false
 DRY_RUN=false
+SYSTEM_ONLY=false
+USER_ONLY=false
 while (($#)); do
   case "$1" in
     -y|--yes) YES=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --system-only) SYSTEM_ONLY=true; shift ;;
+    --user-only) USER_ONLY=true; shift ;;
     --channel=*) CHANNEL="${1#*=}"; shift ;;
     --channel) CHANNEL="${2:-}"; shift 2 ;;
     --kernel=*) KERNEL_PICK="${1#*=}"; shift ;;
@@ -39,75 +48,155 @@ ok()   { echo -e "\e[0;32m[hexciri]\e[0m $*"; }
 warn() { echo -e "\e[1;33m[hexciri]\e[0m $*" >&2; }
 err()  { echo -e "\e[0;31m[hexciri]\e[0m $*" >&2; }
 run() { if $DRY_RUN; then info "[dry-run] $*"; else "$@"; fi; }
-srun() { if $DRY_RUN; then info "[dry-run] sudo $*"; else sudo "$@"; fi; }
 confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
 
 [[ -f /etc/arch-release ]] || { err "not Arch — run on a fresh minimal Arch install"; exit 1; }
-(( EUID != 0 )) || { err "run as user, not root"; exit 1; }
-# A passwordless window from a crashed bootstrap would silently skip auth —
-# keep it only inside a live stage2 run, otherwise remove and prompt normally.
-if [[ -f /etc/sudoers.d/hexciri-install && -z ${HEXCIRI_STAGE2:-} ]]; then
-  warn "removing stale passwordless-sudo window from a previous run"
-  sudo rm -f /etc/sudoers.d/hexciri-install
-fi
-sudo -v || exit 1
 
 export HEXCIRI_PATH="${HEXCIRI_PATH:-/usr/share/hexciri}"
 export PATH="/usr/local/bin:$REPO_DIR/bin:$REPO_DIR/scripts:$PATH"
 
-info "channel: $CHANNEL"
-confirm "Install hexciri ($CHANNEL) on this machine?" || exit 0
-
-# ── channel + keyring ──
-info "deploying pacman channel..."
-srun cp -f /etc/pacman.conf "/etc/pacman.conf.bak.$(date +%s)"
-srun cp -f "$REPO_DIR/default/pacman/pacman-$CHANNEL.conf" /etc/pacman.conf
-srun cp -f "$REPO_DIR/default/pacman/mirrorlist-$CHANNEL" /etc/pacman.d/mirrorlist
-if ! pacman -Qi omarchy-keyring &>/dev/null; then
-  info "bootstrapping omarchy-keyring (signs the [omarchy] repo)..."
-  srun pacman-key --recv-keys 40DFB630FF42BCFFB047046CF0134EE680CAC571 --keyserver keyserver.ubuntu.com
-  srun pacman-key --lsign-key 40DFB630FF42BCFFB047046CF0134EE680CAC571
-fi
-run sudo pacman -Syyuu --noconfirm
-
-# ── packages (all repo packages; only Brave needs AUR) ──
-PKGS=(niri xwayland-satellite noctalia kitty fish fuzzel zed opencode strata
-  grim slurp wl-clipboard cliphist wtype playerctl brightnessctl mpv imv v4l-utils jq ffmpeg
-  gpu-screen-recorder
-  mesa vulkan-icd-loader lib32-mesa lib32-vulkan-icd-loader
-  libnotify gtk3 xdg-utils desktop-file-utils
-  polkit-gnome gnome-keyring xdg-desktop-portal-gtk xdg-desktop-portal-gnome
-  networkmanager sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd)
-MISSING=()
-for p in "${PKGS[@]}"; do pacman -Q "$p" &>/dev/null || MISSING+=("$p"); done
-if ((${#MISSING[@]})); then
-  info "installing: ${MISSING[*]}"
-  srun pacman -S --noconfirm "${MISSING[@]}"
-else
-  ok "repo packages present"
-fi
-if ! pacman -Q brave-origin-bin &>/dev/null && ! pacman -Q brave-origin-beta-bin &>/dev/null; then
-  command -v yay &>/dev/null || { info "installing yay..."; srun pacman -S --noconfirm --needed base-devel git; (cd /tmp && rm -rf yay-bin && git clone https://aur.archlinux.org/yay-bin.git && cd yay-bin && makepkg -si --noconfirm); }
-  info "installing brave-origin-bin (AUR)..."
-  run yay -S --noconfirm brave-origin-bin
+# ── dispatcher: plain invocation on a live system does system (via sudo) then user ──
+if ! $SYSTEM_ONLY && ! $USER_ONLY; then
+  (( EUID != 0 )) || { err "run as user, not root (or use --system-only)"; exit 1; }
+  info "channel: $CHANNEL"
+  confirm "Install hexciri ($CHANNEL) on this machine?" || exit 0
+  sudo -v || exit 1
+  sudo HEXCIRI_USER="$USER" "$0" --system-only ${YES:+ -y} ${DRY_RUN:+--dry-run} --channel "$CHANNEL" ${KERNEL_PICK:+--kernel "$KERNEL_PICK"}
+  exec "$0" --user-only ${YES:+ -y} ${DRY_RUN:+--dry-run} --channel "$CHANNEL"
 fi
 
-# ── commands → /usr/local/bin (on PATH for SDDM-launched Niri sessions) ──
-info "installing hexciri commands..."
-for f in "$REPO_DIR"/bin/* "$REPO_DIR"/scripts/*; do
-  [[ -f $f ]] && srun install -m755 "$f" "/usr/local/bin/$(basename "$f")"
-done
-ok "commands installed"
+if $SYSTEM_ONLY; then
+  (( EUID == 0 )) || { err "--system-only must run as root"; exit 1; }
+  TARGET_USER="${HEXCIRI_USER:-${SUDO_USER:-}}"
+  [[ -n $TARGET_USER && $TARGET_USER != root ]] || { err "--system-only needs HEXCIRI_USER set to a non-root user"; exit 1; }
+  id "$TARGET_USER" &>/dev/null || { err "user $TARGET_USER does not exist"; exit 1; }
+  as_user() { run su - "$TARGET_USER" -c "$*"; }
 
-# ── themes → /usr/share/hexciri + branding ──
-srun mkdir -p /usr/share/hexciri
-srun cp -r "$REPO_DIR/themes" /usr/share/hexciri/themes 2>/dev/null || srun cp -r "$REPO_DIR/themes/." /usr/share/hexciri/themes/
-srun mkdir -p /usr/share/pixmaps
-srun cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
-mkdir -p ~/.config/hexciri/branding
-cp -f "$REPO_DIR/branding/"*.png ~/.config/hexciri/branding/
+  # ── channel + keyring ──
+  info "deploying pacman channel..."
+  cp -f /etc/pacman.conf "/etc/pacman.conf.bak.$(date +%s)"
+  cp -f "$REPO_DIR/default/pacman/pacman-$CHANNEL.conf" /etc/pacman.conf
+  cp -f "$REPO_DIR/default/pacman/mirrorlist-$CHANNEL" /etc/pacman.d/mirrorlist
+  if ! pacman -Qi omarchy-keyring &>/dev/null; then
+    info "bootstrapping omarchy-keyring (signs the [omarchy] repo)..."
+    pacman-key --recv-keys 40DFB630FF42BCFFB047046CF0134EE680CAC571 --keyserver keyserver.ubuntu.com
+    pacman-key --lsign-key 40DFB630FF42BCFFB047046CF0134EE680CAC571
+  fi
+  run pacman -Syyuu --noconfirm
 
-# ── configs (backup-first) ──
+  # ── packages (all repo packages; Brave built from AUR as the user, installed as root) ──
+  PKGS=(base-devel git gnupg
+    niri xwayland-satellite noctalia kitty fish fuzzel zed opencode strata
+    grim slurp wl-clipboard cliphist wtype playerctl brightnessctl mpv imv v4l-utils jq ffmpeg
+    gpu-screen-recorder
+    mesa vulkan-icd-loader lib32-mesa lib32-vulkan-icd-loader
+    libnotify gtk3 xdg-utils desktop-file-utils
+    polkit-gnome gnome-keyring xdg-desktop-portal-gtk xdg-desktop-portal-gnome
+    networkmanager sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd)
+  MISSING=()
+  for p in "${PKGS[@]}"; do pacman -Q "$p" &>/dev/null || MISSING+=("$p"); done
+  if ((${#MISSING[@]})); then
+    info "installing: ${MISSING[*]}"
+    run pacman -S --noconfirm --needed "${MISSING[@]}"
+  else
+    ok "repo packages present"
+  fi
+  if ! pacman -Q brave-origin-bin &>/dev/null && ! pacman -Q brave-origin-beta-bin &>/dev/null; then
+    info "building brave-origin-bin (AUR, as $TARGET_USER)..."
+    run rm -rf /tmp/hexciri-aur
+    run mkdir -p /tmp/hexciri-aur
+    as_user "cd /tmp/hexciri-aur && git clone -q https://aur.archlinux.org/brave-origin-bin.git && cd brave-origin-bin && makepkg --noconfirm"
+    run pacman -U --noconfirm /tmp/hexciri-aur/brave-origin-bin/*.pkg.tar.zst
+    run rm -rf /tmp/hexciri-aur
+  fi
+
+  # ── commands → /usr/local/bin (on PATH for SDDM-launched Niri sessions) ──
+  info "installing hexciri commands..."
+  for f in "$REPO_DIR"/bin/* "$REPO_DIR"/scripts/*; do
+    [[ -f $f ]] && run install -m755 "$f" "/usr/local/bin/$(basename "$f")"
+  done
+  ok "commands installed"
+
+  # ── themes → /usr/share/hexciri + branding ──
+  run mkdir -p /usr/share/hexciri
+  run cp -r "$REPO_DIR/themes" /usr/share/hexciri/themes 2>/dev/null || run cp -r "$REPO_DIR/themes/." /usr/share/hexciri/themes/
+  run mkdir -p /usr/share/pixmaps
+  run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
+
+  # ── services + SDDM autologin (LUKS passphrase is the gate
+  # when encrypted, otherwise straight to Niri — no greeter stop) ──
+  run systemctl enable NetworkManager.service 2>/dev/null || true
+  run systemctl enable sddm.service 2>/dev/null || true
+  if ! $DRY_RUN; then
+    if [[ -f /etc/sddm.conf.d/10-hexciri-autologin.conf ]]; then
+      run cp -f /etc/sddm.conf.d/10-hexciri-autologin.conf "/etc/sddm.conf.d/10-hexciri-autologin.conf.bak.$(date +%s)"
+    else
+      run mkdir -p /etc/sddm.conf.d
+    fi
+    printf '[Autologin]\nUser=%s\nSession=niri.desktop\n' "$TARGET_USER" | run tee /etc/sddm.conf.d/10-hexciri-autologin.conf >/dev/null
+  fi
+
+  # ── SDDM theme (emblem + password greeter, Niri preferred) ──
+  if ! $DRY_RUN; then
+    run mkdir -p /usr/share/sddm/themes/hexciri
+    for f in Main.qml metadata.desktop theme.conf; do
+      run cp -f "$REPO_DIR/branding/sddm/$f" /usr/share/sddm/themes/hexciri/$f
+    done
+    run cp -f "$REPO_DIR/branding/logo.png" /usr/share/sddm/themes/hexciri/logo.png
+    printf '[Theme]\nCurrent=hexciri\n' | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
+  fi
+
+  # ── Plymouth splash (emblem two-step; LUKS prompt renders graphically) ──
+  if ! $DRY_RUN; then
+    pacman -Q plymouth &>/dev/null || run pacman -S --noconfirm plymouth
+    run mkdir -p /usr/share/plymouth/themes/hexciri
+    for f in hexciri.plymouth watermark.png lock.png; do
+      run cp -f "$REPO_DIR/branding/plymouth/$f" /usr/share/plymouth/themes/hexciri/$f
+    done
+    if ! grep -q '^Theme=hexciri' /etc/plymouth/plymouthd.conf 2>/dev/null; then
+      run mkdir -p /etc/plymouth
+      printf '[Daemon]\nTheme=hexciri\n' | run tee /etc/plymouth/plymouthd.conf >/dev/null
+    fi
+    # mkinitcpio: plymouth after udev; plymouth-encrypt instead of encrypt on LUKS
+    if ! grep -q ' plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
+      run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
+      if grep -q ' encrypt' /etc/mkinitcpio.conf; then
+        run sed -i 's/ encrypt / plymouth-encrypt /' /etc/mkinitcpio.conf
+      elif [[ $(findmnt -no SOURCE / 2>/dev/null) == /dev/mapper/* ]]; then
+        # LUKS root (stock HOOKS have no encrypt hook): add plymouth-encrypt after block
+        run sed -i 's/\(HOOKS=([^)]*block\)/\1 plymouth-encrypt/' /etc/mkinitcpio.conf
+      fi
+      run sed -i 's/\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
+      grep -q ' plymouth' /etc/mkinitcpio.conf || run sed -i 's/\(HOOKS=(base\)/\1 plymouth/' /etc/mkinitcpio.conf
+      run mkinitcpio -P
+    fi
+    # splash flag on hexciri-owned boot entries
+    for e in /boot/loader/entries/hexciri-*.conf; do
+      [[ -f $e ]] || continue
+      grep -q 'splash' "$e" || run sed -i 's/^options \(.*\)/options \1 splash/' "$e"
+    done
+  fi
+
+  # ── version stamp (hexciri-version reads this on installed systems) ──
+  if ! $DRY_RUN; then
+    v="$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo unknown)"
+    run mkdir -p /usr/share/hexciri
+    printf '%s %s\n' "$v" "$CHANNEL" | run tee /usr/share/hexciri/VERSION >/dev/null
+  fi
+
+  # ── GPU autodetect (runs as root here; installer reboots at the end, not mid-run) ──
+  if ! $DRY_RUN; then
+    # shellcheck disable=SC2086
+    HEXCIRI_NO_REBOOT=1 /usr/local/bin/hexciri-gpu -y ${KERNEL_PICK:+--kernel $KERNEL_PICK} \
+      || warn "GPU setup needs attention — re-run: hexciri-gpu"
+  fi
+
+  ok "system phase complete (channel: $CHANNEL)"
+  exit 0
+fi
+
+# ── USER phase: runs as the user, makes zero sudo calls ──
+(( EUID != 0 )) || { err "--user-only must not run as root"; exit 1; }
 bak="$HOME/.config/hexciri-backup/$(date +%Y%m%d%H%M%S)"
 deploy() { # <repo-rel> <dest>
   if [[ -f $2 ]] && ! cmp -s "$REPO_DIR/$1" "$2"; then
@@ -116,6 +205,12 @@ deploy() { # <repo-rel> <dest>
   mkdir -p "$(dirname "$2")"
   run cp -f "$REPO_DIR/$1" "$2"
 }
+
+# user branding art (system branding lives in /usr/share)
+mkdir -p ~/.config/hexciri/branding
+run cp -f "$REPO_DIR/branding/"*.png ~/.config/hexciri/branding/
+
+# ── configs (backup-first) ──
 deploy config/niri/config.kdl "$HOME/.config/niri/config.kdl"
 deploy config/noctalia/config.toml "$HOME/.config/noctalia/config.toml"
 deploy config/fastfetch/config.jsonc "$HOME/.config/fastfetch/config.jsonc"
@@ -142,87 +237,13 @@ for d in brave-origin.desktop com.brave.Origin.desktop brave-origin-beta.desktop
   fi
 done
 run xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
-if [[ $SHELL != *fish ]] && command -v fish &>/dev/null; then
-  if confirm "Switch login shell to fish? (current: $SHELL)"; then srun chsh -s /usr/bin/fish "$USER"; fi
-fi
-
-# ── services + SDDM autologin (LUKS passphrase is the gate
-# when encrypted, otherwise straight to Niri — no greeter stop) ──
-srun systemctl enable NetworkManager.service 2>/dev/null || true
-srun systemctl enable sddm.service 2>/dev/null || true
-if ! $DRY_RUN; then
-  if [[ -f /etc/sddm.conf.d/10-hexciri-autologin.conf ]]; then
-    srun cp -f /etc/sddm.conf.d/10-hexciri-autologin.conf "/etc/sddm.conf.d/10-hexciri-autologin.conf.bak.$(date +%s)"
-  else
-    srun mkdir -p /etc/sddm.conf.d
-  fi
-  printf '[Autologin]\nUser=%s\nSession=niri.desktop\n' "$USER" | srun tee /etc/sddm.conf.d/10-hexciri-autologin.conf >/dev/null
-fi
-
-# ── SDDM theme (emblem + password greeter, Niri preferred) ──
-if ! $DRY_RUN; then
-  srun mkdir -p /usr/share/sddm/themes/hexciri
-  for f in Main.qml metadata.desktop theme.conf; do
-    srun cp -f "$REPO_DIR/branding/sddm/$f" /usr/share/sddm/themes/hexciri/$f
-  done
-  srun cp -f "$REPO_DIR/branding/logo.png" /usr/share/sddm/themes/hexciri/logo.png
-  printf '[Theme]\nCurrent=hexciri\n' | srun tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
-fi
-
-# ── Plymouth splash (emblem two-step; LUKS prompt renders graphically) ──
-if ! $DRY_RUN; then
-  pacman -Q plymouth &>/dev/null || srun pacman -S --noconfirm plymouth
-  srun mkdir -p /usr/share/plymouth/themes/hexciri
-  for f in hexciri.plymouth watermark.png lock.png; do
-    srun cp -f "$REPO_DIR/branding/plymouth/$f" /usr/share/plymouth/themes/hexciri/$f
-  done
-  if ! grep -q '^Theme=hexciri' /etc/plymouth/plymouthd.conf 2>/dev/null; then
-    srun mkdir -p /etc/plymouth
-    printf '[Daemon]\nTheme=hexciri\n' | srun tee /etc/plymouth/plymouthd.conf >/dev/null
-  fi
-  # mkinitcpio: plymouth after udev; plymouth-encrypt instead of encrypt on LUKS
-  if ! grep -q ' plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
-    srun cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
-    if grep -q ' encrypt' /etc/mkinitcpio.conf; then
-      srun sed -i 's/ encrypt / plymouth-encrypt /' /etc/mkinitcpio.conf
-    elif [[ $(findmnt -no SOURCE / 2>/dev/null) == /dev/mapper/* ]]; then
-      # LUKS root (stock HOOKS have no encrypt hook): add plymouth-encrypt after block
-      srun sed -i 's/\(HOOKS=([^)]*block\)/\1 plymouth-encrypt/' /etc/mkinitcpio.conf
-    fi
-    srun sed -i 's/\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
-    grep -q ' plymouth' /etc/mkinitcpio.conf || srun sed -i 's/\(HOOKS=(base\)/\1 plymouth/' /etc/mkinitcpio.conf
-    srun mkinitcpio -P
-  fi
-  # splash flag on hexciri-owned boot entries
-  for e in /boot/loader/entries/hexciri-*.conf; do
-    [[ -f $e ]] || continue
-    grep -q 'splash' "$e" || srun sed -i 's/^options \(.*\)/options \1 splash/' "$e"
-  done
-fi
-
-# ── version stamp (hexciri-version reads this on installed systems) ──
-if ! $DRY_RUN; then
-  v="$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo unknown)"
-  srun mkdir -p /usr/share/hexciri
-  printf '%s %s\n' "$v" "$CHANNEL" | srun tee /usr/share/hexciri/VERSION >/dev/null
-fi
 
 # ── seed maiden theme ──
 if ! $DRY_RUN; then
-  HEXCIRI_PATH=/usr/share/hexciri /usr/local/bin/hexciri-theme-set sakurazuki
+  HEXCIRI_PATH=/usr/share/hexciri hexciri-theme-set sakurazuki
 fi
-
-# ── GPU autodetect (always runs; installer reboots at the end, not mid-run) ──
-if ! $DRY_RUN; then
-  # shellcheck disable=SC2086
-  HEXCIRI_NO_REBOOT=1 /usr/local/bin/hexciri-gpu -y ${KERNEL_PICK:+--kernel $KERNEL_PICK} \
-    || warn "GPU setup needs attention — re-run: hexciri-gpu"
-fi
-
-# ── close the bootstrap sudo window (belt+suspenders: stage2 traps it too) ──
-srun rm -f /etc/sudoers.d/hexciri-install 2>/dev/null || true
 
 echo ""
 ok "hexciri installed (channel: $CHANNEL, theme: sakurazuki)"
 info "configs: ~/.config/niri/config.kdl ~/.config/noctalia/config.toml (backups in $bak)"
-info "reboot → autologin straight into Niri → Mod+Space, Mod+Alt+Space, Mod+K"
+info "reboot → autologin straight into Niri → Mod+K for the keybinding list"
