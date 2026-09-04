@@ -105,6 +105,7 @@ if $SYSTEM_ONLY; then
     info "building brave-origin-bin (AUR, as $TARGET_USER)..."
     run rm -rf /tmp/hexciri-aur
     run mkdir -p /tmp/hexciri-aur
+    run chown "$TARGET_USER:$TARGET_USER" /tmp/hexciri-aur
     as_user "cd /tmp/hexciri-aur && git clone -q https://aur.archlinux.org/brave-origin-bin.git && cd brave-origin-bin && makepkg --noconfirm"
     run pacman -U --noconfirm /tmp/hexciri-aur/brave-origin-bin/*.pkg.tar.zst
     run rm -rf /tmp/hexciri-aur
