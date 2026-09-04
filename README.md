@@ -21,7 +21,7 @@ sh hexciri
 ```
 
 Pipe works identically: `curl -fsSL https://hexciri.dirty.pizza/hexciri | bash`.
-`--kernel=` pre-fills the kernel prompt (auto = LTS pin on 1xxx, stock
+`--kernel=` silently preselects (auto = LTS pin on 1xxx, stock
 otherwise; custom kernels need bleeding):
 
 ```bash
