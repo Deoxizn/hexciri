@@ -45,26 +45,7 @@ done
 
 info "site: $SITE"
 
-# ── the only 9 typed things ──
-# mode first: it decides whether the disk question means wipe or share
-read -rp "full disk wipe or install into free space? [full/free, default full]: " MODE </dev/tty
-MODE="${MODE,,}"; MODE="${MODE:-full}"
-[[ $MODE == full || $MODE == free ]] || { err "mode must be full|free"; exit 1; }
-if [[ $MODE == free ]]; then
-  command -v parted &>/dev/null || { err "parted missing on this ISO — cannot map free space"; exit 1; }
-fi
-info "disks:"; lsblk -d -n -o NAME,SIZE,MODEL | sed 's/^/  \/dev\//'
-if [[ $MODE == full ]]; then
-  read -rp "disk to WIPE (e.g. nvme0n1, sda — bare name): " DISK </dev/tty
-else
-  read -rp "disk with unpartitioned free space (e.g. nvme0n1 — bare name): " DISK </dev/tty
-fi
-[[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
-if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
-if [[ $MODE == full ]]; then
-  read -rp "type the disk name again to confirm WIPE of /dev/$DISK: " CONFIRM </dev/tty
-  [[ $CONFIRM == "$DISK" ]] || { err "mismatch — aborting, disk untouched"; exit 1; }
-fi
+# ── the only 9 typed things: identity first, disk choices last ──
 read -rp "hostname [hexciri]: " HOSTNAME </dev/tty; HOSTNAME="${HOSTNAME:-hexciri}"
 read -rp "username [hex]: " USERNAME </dev/tty; USERNAME="${USERNAME:-hex}"
 for _try in 1 2 3; do
@@ -114,6 +95,27 @@ read -rp "channel [stable/bleeding, default stable]: " CHANNEL </dev/tty
 CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
 info "channel: $CHANNEL"
+
+# ── disk goes last: destructive choices right before partitioning.
+# full mode wipes; free mode shares (reuses the ESP, touches nothing else) ──
+read -rp "full disk wipe or install into free space? [full/free, default full]: " MODE </dev/tty
+MODE="${MODE,,}"; MODE="${MODE:-full}"
+[[ $MODE == full || $MODE == free ]] || { err "mode must be full|free"; exit 1; }
+if [[ $MODE == free ]]; then
+  command -v parted &>/dev/null || { err "parted missing on this ISO — cannot map free space"; exit 1; }
+fi
+info "disks:"; lsblk -d -n -o NAME,SIZE,MODEL | sed 's/^/  \/dev\//'
+if [[ $MODE == full ]]; then
+  read -rp "disk to WIPE (e.g. nvme0n1, sda — bare name): " DISK </dev/tty
+else
+  read -rp "disk with unpartitioned free space (e.g. nvme0n1 — bare name): " DISK </dev/tty
+fi
+[[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
+if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
+if [[ $MODE == full ]]; then
+  read -rp "type the disk name again to confirm WIPE of /dev/$DISK: " CONFIRM </dev/tty
+  [[ $CONFIRM == "$DISK" ]] || { err "mismatch — aborting, disk untouched"; exit 1; }
+fi
 
 # ── partition ──
 if [[ $MODE == full ]]; then
