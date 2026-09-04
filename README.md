@@ -1,11 +1,12 @@
 <div align="center">
 
-<img src="branding/hexciri.png" alt="Hexciri" width="450">
-
-</div>
-
+<img src="branding/hexciri.png" alt="Hexciri" width="650">
 
 Arch-based Niri + Noctalia distro. Own void, own mirrors policy, own theme engine.
+
+[hexciri.dirty.pizza](https://hexciri.dirty.pizza)
+
+</div>
 
 ## Install
 
@@ -22,7 +23,6 @@ Flags only pre-fill defaults — everything is still asked:
 |---|---|---|
 | `--channel=stable\|bleeding` | `stable` | bleeding unlocks omarchy/bore/muqss kernels |
 | `--kernel=stock\|lts\|omarchy\|bore\|muqss` | auto (LTS pin on 1xxx, stock otherwise) | custom kernels need bleeding |
-| `--ref=<tag\|branch>` | newest `v*` tag | pin for testing |
 | `--no-luks` | ask | skip the encryption prompt |
 
 ```bash
@@ -60,21 +60,16 @@ Press `Mod+K` for the searchable keybinding list.
 Stable is month-held pkgs; bleeding is normal Arch rolling release.
 
 
-## GPU (autodetect, Niri needs modeset)
+## GPU
+
+Autodetected at install (mesa / `nvidia-open` / `580xx` with a hard LTS pin
+on 1xxx-era cards — other kernels are refused there). Re-run anytime:
 
 ```bash
 hexciri-gpu [--kernel=stock|lts|omarchy|bore|muqss] [-y]
 ```
 
-| card | driver | kernel rule |
-|---|---|---|
-| Turing+ (RTX 2xxx+, GTX 16xx) | `nvidia-open` 6xx DKMS | any (`--kernel` free) |
-| Maxwell/Pascal/Volta (incl. all 1xxx) | `nvidia-580xx` DKMS | **LTS only** (non-LTS `--kernel` refused) |
-| pre-Maxwell | nouveau (no driver to install) | any |
-| Intel/AMD only | mesa + vulkan per vendor | any |
-
-Always applied on NVIDIA: nouveau blacklist, early-KMS modules, suspend
-persistence, modeset flags on hexciri boot entries, reboot prompt.
+Custom kernels need bleeding.
 
 
 ## Theme engine (colors.toml)

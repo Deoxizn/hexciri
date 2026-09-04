@@ -15,14 +15,12 @@ SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
 CHANNEL_DEF="stable"   # --channel only changes this default; channel is still asked
 KERNEL_PICK=""         # --kernel=stock|lts|omarchy|bore|muqss preselects the GPU kernel (else auto)
-REF=""          # empty = newest v* tag, fallback main
 LUKS_ASK=true
 for arg in "$@"; do
   case "$arg" in
     --channel=*) CHANNEL_DEF="${arg#*=}" ;;
     stable|bleeding) CHANNEL_DEF="$arg" ;;
     --kernel=*) KERNEL_PICK="${arg#*=}" ;;
-    --ref=*) REF="${arg#*=}" ;;
     --no-luks) LUKS_ASK=false; LUKS=no ;;
   esac
 done
@@ -39,12 +37,7 @@ for cmd in sfdisk parted mkfs.fat mkfs.ext4 blkid findmnt arch-chroot git curl; 
   command -v "$cmd" &>/dev/null || { err "missing ISO tool: $cmd"; exit 1; }
 done
 
-# ── versioned ref: newest v* tag so curl installs a release, not a random main ──
-if [[ -z $REF ]]; then
-  REF="$(git ls-remote --tags --sort=-v:refname "$REPO" 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
-  [[ -n $REF ]] || REF="main"
-fi
-info "ref: $REF   site: $SITE"
+info "site: $SITE"
 
 # ── the only 9 typed things ──
 info "disks:"; lsblk -d -n -o NAME,SIZE,MODEL | sed 's/^/  \/dev\//'
@@ -165,10 +158,9 @@ genfstab -U /mnt >> /mnt/etc/fstab
 [[ $FS == btrfs ]] && sed -i '\| / btrfs |s/relatime/relatime,compress=zstd/' /mnt/etc/fstab
 
 # ── hexciri source at the pinned ref, into the new system ──
-info "fetching hexciri@$REF..."
+info "fetching hexciri..."
 rm -rf /mnt/root/hexciri-install
-git -c advice.detachedHead=false clone --depth 1 --branch "$REF" "$REPO" /mnt/root/hexciri-install 2>/dev/null \
-  || { info "tag $REF missing (repo not published yet?) — cloning main"; git clone --depth 1 "$REPO" /mnt/root/hexciri-install; }
+git clone --depth 1 "$REPO" /mnt/root/hexciri-install
 
 # ── stage 2 runs inside the new system ──
 cat > /mnt/root/hexciri-stage2.sh <<STAGE2
@@ -226,4 +218,4 @@ arch-chroot /mnt bash /root/hexciri-stage2.sh
 rm -f /mnt/root/hexciri-stage2.sh
 
 umount -R /mnt
-ok "done. reboot → autologin straight into Niri. ($HOSTNAME / $USERNAME / $CHANNEL@$REF)"
+ok "done. reboot → autologin straight into Niri. ($HOSTNAME / $USERNAME / $CHANNEL)"
