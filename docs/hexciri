@@ -49,7 +49,6 @@ info "hexciri bootstrap rev $BOOTSTRAP_REV"
 
 # ── the only 9 typed things: identity first, disk choices last ──
 read -rp "username [hex]: " USERNAME </dev/tty; USERNAME="${USERNAME:-hex}"
-read -rp "hostname [hexciri]: " HOSTNAME </dev/tty; HOSTNAME="${HOSTNAME:-hexciri}"
 for _try in 1 2 3; do
   read -rsp "password for $USERNAME: " USERPASS </dev/tty; echo
   read -rsp "confirm password: " USERPASS2 </dev/tty; echo
@@ -60,6 +59,7 @@ for _try in 1 2 3; do
   (( _try == 3 )) && { err "3 mismatches — aborting"; exit 1; }
 done
 unset USERPASS2
+read -rp "hostname [hexciri]: " HOSTNAME </dev/tty; HOSTNAME="${HOSTNAME:-hexciri}"
 # timezone defaults to GeoIP-detected (Enter accepts); typed override always works
 DETECTED_TZ=""
 DETECTED_TZ="$(curl -fsSL --max-time 8 https://ipapi.co/timezone 2>/dev/null | tr -d '[:space:]' || true)"
