@@ -20,6 +20,16 @@ sh hexciri
 
 Pipe works identically: `curl -fsSL https://hexciri.dirty.pizza/hexciri | bash`.
 
+Kernel prompt (default auto):
+
+| input | installs |
+|---|---|
+| `stock`, `lts` | `linux`, `linux-lts` |
+| `omarchy`, `bore`, `muqss` | `linux-omarchy*` (bleeding) |
+| empty | auto (LTS pin on 1xxx, stock otherwise) |
+
+Full package names (`linux-omarchy-bore`) work too.
+
 3. Reboot → straight into Niri
 Press `Mod+K` for the searchable keybinding list.
 
