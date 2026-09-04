@@ -112,6 +112,11 @@ case "${KERNEL_PICK,,}" in
   muqss|linux-omarchy-muqss) KERNEL_PICK=muqss ;;
 esac
 [[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { err "kernel must be stock|lts|omarchy|bore|muqss (or empty for auto)"; exit 1; }
+# custom kernels live in edge pkgs today (stable lacks them); relax if that changes
+if [[ $KERNEL_PICK == omarchy || $KERNEL_PICK == bore || $KERNEL_PICK == muqss ]] && [[ $CHANNEL != bleeding ]]; then
+  err "custom kernels ($KERNEL_PICK) need the bleeding channel — restart and pick bleeding at the channel prompt"
+  exit 1
+fi
 info "kernel: ${KERNEL_PICK:-auto}"
 
 

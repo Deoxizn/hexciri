@@ -29,8 +29,10 @@ do_kernel() {
   else
     case "$base" in
       linux-omarchy*)
-        channel_is_bleeding || {
-          warn "$base lives in the bleeding (edge) pkgs repo."
+        # availability, not channel name: true today only on bleeding,
+        # auto-relaxes if stable ever ships these kernels
+        pacman -Si "$base" &>/dev/null || {
+          warn "$base is not in your configured repos (today: bleeding only)."
           warn "Run: hexciri-channel-set bleeding — or install stock instead."
           exit 1
         }
