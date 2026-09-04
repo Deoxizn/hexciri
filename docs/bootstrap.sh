@@ -227,11 +227,17 @@ systemctl enable NetworkManager.service power-profiles-daemon.service >/dev/null
 
 cp -r /root/hexciri-install "/home/$USERNAME/hexciri"
 chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/hexciri"
+# su(1) sessions have no controlling TTY, so sudo(8) inside install.sh could
+# never prompt (fatal "a terminal is required"). Open a passwordless window
+# for the install only; install.sh closes it (plus an EXIT trap here).
+printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$USERNAME" > /etc/sudoers.d/hexciri-install
+chmod 440 /etc/sudoers.d/hexciri-install
+trap 'rm -f /etc/sudoers.d/hexciri-install' EXIT
 su - "$USERNAME" -c "cd ~/hexciri && ./install.sh -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}"
 STAGE2
 
 info "stage 2 (chroot)..."
-arch-chroot /mnt bash /root/hexciri-stage2.sh
+arch-chroot /mnt bash /root/hexciri-stage2.sh </dev/tty
 rm -f /mnt/root/hexciri-stage2.sh
 
 umount -R /mnt

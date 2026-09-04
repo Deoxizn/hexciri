@@ -19,7 +19,11 @@ done
 info() { echo -e "\e[0;36m[hexciri:gpu]\e[0m $*"; }
 ok()   { echo -e "\e[0;32m[hexciri:gpu]\e[0m $*"; }
 err()  { echo -e "\e[0;31m[hexciri:gpu]\e[0m $*" >&2; }
-confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
+confirm() { $YES && return 0; read -rp "$1 [y/N] " r </dev/tty; [[ $r =~ ^[Yy]$ ]]; }
+reboot_now() { # installer sets HEXCIRI_NO_REBOOT=1 so it can finish first
+  if [[ -n ${HEXCIRI_NO_REBOOT:-} ]]; then info "reboot required — finishing install first"; return 0; fi
+  confirm "Reboot now?" && systemctl reboot
+}
 
 PCI_PATH="${HEXCIRI_PCI_DEVICES_PATH:-/sys/bus/pci/devices}"
 has_vendor() { # $1 = 0x10de etc, reads sysfs (no PCI wakeups)
@@ -108,7 +112,7 @@ if $LEGACY; then
   pkg "${headers[@]}" nvidia-580xx-utils nvidia-580xx-dkms lib32-nvidia-580xx-utils
   nvidia_common
   ok "legacy stack ready. REBOOT required."
-  confirm "Reboot now?" && systemctl reboot
+  reboot_now
   exit 0
 fi
 
@@ -124,7 +128,7 @@ if $NVIDIA; then
   pkg "${headers[@]}" nvidia-open-dkms nvidia-utils lib32-nvidia-utils
   nvidia_common
   ok "nvidia-open stack ready. REBOOT required."
-  confirm "Reboot now?" && systemctl reboot
+  reboot_now
   exit 0
 fi
 

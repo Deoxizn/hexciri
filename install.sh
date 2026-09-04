@@ -194,12 +194,15 @@ if ! $DRY_RUN; then
   HEXCIRI_PATH=/usr/share/hexciri /usr/local/bin/hexciri-theme-set sakurazuki
 fi
 
-# ── GPU autodetect (always runs; may reboot at the end on NVIDIA) ──
+# ── GPU autodetect (always runs; installer reboots at the end, not mid-run) ──
 if ! $DRY_RUN; then
   # shellcheck disable=SC2086
-  /usr/local/bin/hexciri-gpu -y ${KERNEL_PICK:+--kernel $KERNEL_PICK} \
+  HEXCIRI_NO_REBOOT=1 /usr/local/bin/hexciri-gpu -y ${KERNEL_PICK:+--kernel $KERNEL_PICK} \
     || warn "GPU setup needs attention — re-run: hexciri-gpu"
 fi
+
+# ── close the bootstrap sudo window (belt+suspenders: stage2 traps it too) ──
+srun rm -f /etc/sudoers.d/hexciri-install 2>/dev/null || true
 
 echo ""
 ok "hexciri installed (channel: $CHANNEL, theme: sakurazuki)"
