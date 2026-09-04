@@ -1,13 +1,12 @@
 #!/bin/bash
 # hexciri bootstrap — Arch ISO → fully automatic hexciri install.
 #
-#   curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | bash
-#   curl -fsSL https://hexciri.dirty.pizza/bootstrap.sh | bash -s -- --kernel bore
+#   curl -LO https://hexciri.dirty.pizza/hexciri
+#   sh hexciri [--kernel bore]
 #
-# Only 9 things are ever typed (everything else is automatic):
-#   disk, full-disk-vs-free-space, filesystem, channel, hostname,
-#   username, user password, timezone, LUKS yes/no.
-# --kernel preselects the GPU kernel (else auto). Run as root on the
+# 10 things are typed, everything else is automatic: username, password,
+# hostname, timezone, filesystem, channel, LUKS, kernel, disk (+wipe confirm).
+# --kernel only pre-fills the kernel prompt. Run as root on the
 # Arch ISO live environment. DESTRUCTIVE: wipes $DISK (full mode).
 set -euo pipefail
 
