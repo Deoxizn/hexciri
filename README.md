@@ -14,14 +14,14 @@ Arch-based Niri + Noctalia distro. Own void, own mirrors policy, own theme engin
 2. Run one line 
 
 ```bash
-curl -LO https://dirty.pizza/hexciri
+curl -LO https://hexciri.dirty.pizza/hexciri
 sh hexciri
 ```
 
 One-liner pipe works identically:
 
 ```bash
-curl -fsSL https://dirty.pizza/hexciri | bash
+curl -fsSL https://hexciri.dirty.pizza/hexciri | bash
 ```
 
 Flags only pre-fill defaults — everything is still asked:
@@ -33,7 +33,7 @@ Flags only pre-fill defaults — everything is still asked:
 
 ```bash
 # example: BORE pre-selected for the GPU step
-curl -fsSL https://dirty.pizza/hexciri | bash -s -- --kernel bore
+curl -fsSL https://hexciri.dirty.pizza/hexciri | bash -s -- --kernel bore
 ```
 
 3. Reboot → straight into Niri
