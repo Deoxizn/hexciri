@@ -117,6 +117,14 @@ fi
 [[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
 if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
 
+# ── kernel: default auto (flag silently preselects); installer enforces the LTS pin on 1xxx ──
+if [[ -z $KERNEL_PICK ]]; then
+  read -rp "kernel [stock/lts/omarchy/bore/muqss, default auto]: " KERNEL_PICK </dev/tty
+  KERNEL_PICK="${KERNEL_PICK,,}"
+fi
+[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { err "kernel must be stock|lts|omarchy|bore|muqss (or empty for auto)"; exit 1; }
+info "kernel: ${KERNEL_PICK:-auto}"
+
 # ── summary + final confirm (nothing touched until this passes) ──
 echo ""
 info "your choices:"
