@@ -42,7 +42,7 @@ Press `Mod+K` for the searchable keybinding list.
 | files | `strata` | `hexciri-defaults` → Files |
 | editor | `zed` | `hexciri-defaults` → Editor |
 | agent | `opencode` (`Mod+`` `) | `hexciri-defaults` → Agent |
-| kernel | `linux` (+`linux-lts` fallback) | `hexciri-kernel` (bore/muqss on bleeding) |
+| kernel | your pick, `linux` if auto (+`linux-lts` fallback on custom/legacy) | `hexciri-kernel` (bore/muqss on bleeding) |
 | gpu | autodetect (mesa / nvidia-open / 580xx+LTS pin) | `hexciri-gpu` |
 | theme | `sakurazuki` | `hexciri-theme-set` |
 | channel | `stable` | `hexciri-channel-set` |
