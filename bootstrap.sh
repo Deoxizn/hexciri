@@ -97,6 +97,24 @@ CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
 info "channel: $CHANNEL"
 
+# ── kernel: default auto (flag silently preselects); installer enforces the LTS pin on GTX 1xxx or older ──
+if [[ -z $KERNEL_PICK ]]; then
+  read -rp "kernel [stock/lts/omarchy/bore/muqss, default auto]: " KERNEL_PICK </dev/tty
+  KERNEL_PICK="${KERNEL_PICK,,}"
+fi
+# accept short keys or full package names (linux-omarchy-bore -> bore)
+case "${KERNEL_PICK,,}" in
+  ""|"auto") KERNEL_PICK="" ;;
+  stock|linux) KERNEL_PICK=stock ;;
+  lts|linux-lts) KERNEL_PICK=lts ;;
+  omarchy|linux-omarchy) KERNEL_PICK=omarchy ;;
+  bore|linux-omarchy-bore) KERNEL_PICK=bore ;;
+  muqss|linux-omarchy-muqss) KERNEL_PICK=muqss ;;
+esac
+[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { err "kernel must be stock|lts|omarchy|bore|muqss (or empty for auto)"; exit 1; }
+info "kernel: ${KERNEL_PICK:-auto}"
+
+
 # ── encryption choice, then disk (destructive choices last) ──
 LUKS="${LUKS:-no}"
 read -rp "encrypt disk with LUKS? [y/N]: " luks_ans </dev/tty
@@ -122,23 +140,6 @@ else
 fi
 [[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
 if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
-
-# ── kernel: default auto (flag silently preselects); installer enforces the LTS pin on GTX 1xxx or older ──
-if [[ -z $KERNEL_PICK ]]; then
-  read -rp "kernel [stock/lts/omarchy/bore/muqss, default auto]: " KERNEL_PICK </dev/tty
-  KERNEL_PICK="${KERNEL_PICK,,}"
-fi
-# accept short keys or full package names (linux-omarchy-bore -> bore)
-case "${KERNEL_PICK,,}" in
-  ""|"auto") KERNEL_PICK="" ;;
-  stock|linux) KERNEL_PICK=stock ;;
-  lts|linux-lts) KERNEL_PICK=lts ;;
-  omarchy|linux-omarchy) KERNEL_PICK=omarchy ;;
-  bore|linux-omarchy-bore) KERNEL_PICK=bore ;;
-  muqss|linux-omarchy-muqss) KERNEL_PICK=muqss ;;
-esac
-[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { err "kernel must be stock|lts|omarchy|bore|muqss (or empty for auto)"; exit 1; }
-info "kernel: ${KERNEL_PICK:-auto}"
 
 # ── summary + final confirm (nothing touched until this passes) ──
 echo ""
