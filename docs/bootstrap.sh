@@ -2,23 +2,20 @@
 # hexciri bootstrap — Arch ISO → fully automatic hexciri install.
 #
 #   curl -LO https://hexciri.dirty.pizza/hexciri
-#   sh hexciri [--kernel bore]
+#   sh hexciri
 #
 # 9 things are typed, everything else is automatic: username, password,
 # hostname, timezone, filesystem, channel, LUKS, disk (+wipe confirm).
-# --kernel silently preselects (installer auto-detects otherwise). Run as root on the
-# Arch ISO live environment. DESTRUCTIVE: wipes $DISK (full mode).
+# Run as root on the Arch ISO live environment. DESTRUCTIVE: wipes $DISK (full mode).
 set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
 BOOTSTRAP_REV=2   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
-KERNEL_PICK=""         # --kernel silently preselects (empty = auto-detect in installer)
+KERNEL_PICK=""         # set by the kernel prompt below (empty = auto-detect in installer)
 while (($#)); do
   case "$1" in
-    --kernel=*) KERNEL_PICK="${1#*=}"; shift ;;
-    --kernel) KERNEL_PICK="${2:-}"; shift 2 ;;
     --) shift ;;
     *) shift ;;
   esac

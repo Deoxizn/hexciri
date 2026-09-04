@@ -62,8 +62,7 @@ Stable is month-held pkgs; bleeding is normal Arch rolling release.
 ## GPU
 
 Autodetected at install (mesa / `nvidia-open` / `580xx` with a hard LTS pin
-on NVIDIA GTX 1xxx or older cards). To change later, re-run `hexciri-gpu` — `--kernel` is
-available where the card allows it.
+on NVIDIA GTX 1xxx or older cards). To change later, re-run `hexciri-gpu`.
 
 
 ## Theme engine (colors.toml)
@@ -86,4 +85,5 @@ git clone https://github.com/Deoxizn/hexciri.git ~/hexciri
 cd ~/hexciri
 ./install.sh                     # stable channel
 ./install.sh --channel bleeding  # Rolling Release
+./install.sh --kernel bore       # preselect GPU kernel (else auto-detect)
 ```
