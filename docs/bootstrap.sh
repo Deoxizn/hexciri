@@ -34,7 +34,16 @@ err()  { echo -e "\e[0;31m[hexciri:bootstrap]\e[0m $*" >&2; }
 (( EUID == 0 )) || { err "run as root on the Arch ISO (curl ... | sudo bash)"; exit 1; }
 command -v pacstrap &>/dev/null || { err "not an Arch ISO (no pacstrap)"; exit 1; }
 for cmd in sfdisk parted mkfs.fat mkfs.ext4 blkid findmnt arch-chroot git curl; do
-  command -v "$cmd" &>/dev/null || { err "missing ISO tool: $cmd"; exit 1; }
+  command -v "$cmd" &>/dev/null && continue
+  case "$cmd" in
+    sfdisk|findmnt|blkid) pkg=util-linux ;;
+    mkfs.fat) pkg=dosfstools ;;
+    mkfs.ext4) pkg=e2fsprogs ;;
+    arch-chroot) pkg=arch-install-scripts ;;
+    *) pkg="$cmd" ;;
+  esac
+  info "ISO is missing $cmd — installing $pkg..."
+  pacman -Sy --noconfirm "$pkg" || { err "cannot install $pkg (network up?)"; exit 1; }
 done
 
 info "site: $SITE"
