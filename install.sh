@@ -23,6 +23,15 @@ while (($#)); do
   esac
 done
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { echo "channel must be stable|bleeding"; exit 1; }
+# accept short keys or full package names (linux-omarchy-bore -> bore)
+case "${KERNEL_PICK,,}" in
+  ""|"auto") KERNEL_PICK="" ;;
+  stock|linux) KERNEL_PICK=stock ;;
+  lts|linux-lts) KERNEL_PICK=lts ;;
+  omarchy|linux-omarchy) KERNEL_PICK=omarchy ;;
+  bore|linux-omarchy-bore) KERNEL_PICK=bore ;;
+  muqss|linux-omarchy-muqss) KERNEL_PICK=muqss ;;
+esac
 [[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { echo "kernel must be stock|lts|omarchy|bore|muqss"; exit 1; }
 
 info() { echo -e "\e[0;36m[hexciri]\e[0m $*"; }

@@ -23,6 +23,15 @@ while (($#)); do
     *) shift ;;
   esac
 done
+# accept short keys or full package names (linux-omarchy-bore -> bore)
+case "${KERNEL_PICK,,}" in
+  ""|"auto") KERNEL_PICK="" ;;
+  stock|linux) KERNEL_PICK=stock ;;
+  lts|linux-lts) KERNEL_PICK=lts ;;
+  omarchy|linux-omarchy) KERNEL_PICK=omarchy ;;
+  bore|linux-omarchy-bore) KERNEL_PICK=bore ;;
+  muqss|linux-omarchy-muqss) KERNEL_PICK=muqss ;;
+esac
 [[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { echo "kernel must be stock|lts|omarchy|bore|muqss"; exit 1; }
 
 info() { echo -e "\e[0;36m[hexciri:bootstrap]\e[0m $*"; }
@@ -122,6 +131,15 @@ if [[ -z $KERNEL_PICK ]]; then
   read -rp "kernel [stock/lts/omarchy/bore/muqss, default auto]: " KERNEL_PICK </dev/tty
   KERNEL_PICK="${KERNEL_PICK,,}"
 fi
+# accept short keys or full package names (linux-omarchy-bore -> bore)
+case "${KERNEL_PICK,,}" in
+  ""|"auto") KERNEL_PICK="" ;;
+  stock|linux) KERNEL_PICK=stock ;;
+  lts|linux-lts) KERNEL_PICK=lts ;;
+  omarchy|linux-omarchy) KERNEL_PICK=omarchy ;;
+  bore|linux-omarchy-bore) KERNEL_PICK=bore ;;
+  muqss|linux-omarchy-muqss) KERNEL_PICK=muqss ;;
+esac
 [[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { err "kernel must be stock|lts|omarchy|bore|muqss (or empty for auto)"; exit 1; }
 info "kernel: ${KERNEL_PICK:-auto}"
 
