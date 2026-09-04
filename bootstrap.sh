@@ -13,6 +13,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
+BOOTSTRAP_REV=1   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""         # --kernel=stock|lts|omarchy|bore|muqss preselects the GPU kernel (else auto)
 LUKS_ASK=true
@@ -44,6 +45,7 @@ for cmd in sfdisk parted mkfs.fat mkfs.ext4 blkid findmnt arch-chroot git curl; 
 done
 
 info "site: $SITE"
+info "hexciri bootstrap rev $BOOTSTRAP_REV"
 
 # ── the only 9 typed things: identity first, disk choices last ──
 read -rp "username [hex]: " USERNAME </dev/tty; USERNAME="${USERNAME:-hex}"
@@ -246,6 +248,9 @@ chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/hexciri"
 # for the install only; install.sh closes it (plus an EXIT trap here).
 printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$USERNAME" > /etc/sudoers.d/hexciri-install
 chmod 440 /etc/sudoers.d/hexciri-install
+visudo -cqf /etc/sudoers.d/hexciri-install || { err "sudoers window failed validation — aborting before anything runs as $USERNAME"; exit 1; }
+su - "$USERNAME" -c "sudo -n true" 2>/dev/null || { err "passwordless sudo self-test FAILED as $USERNAME — aborting (report rev $BOOTSTRAP_REV)"; exit 1; }
+ok "sudo window verified for $USERNAME"
 trap 'rm -f /etc/sudoers.d/hexciri-install /root/hexciri-stage2.sh' EXIT
 su - "$USERNAME" -c "export HEXCIRI_STAGE2=1; cd ~/hexciri && ./install.sh -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}"
 STAGE2
