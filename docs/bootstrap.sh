@@ -221,11 +221,28 @@ fi
 mkdir -p /mnt/boot
 mount "$ESP" /mnt/boot
 
-# ── base system ──
+# ── kernel set: exactly one bootable base kernel (+custom added later by the
+# installer, which also flips the default). Legacy NVIDIA (GTX 1xxx or older)
+# and custom picks stage on LTS; everything else stages on stock linux ──
+is_legacy_nvidia() {
+  local d id
+  for d in /sys/bus/pci/devices/*; do
+    [[ $(<"$d/vendor") == "0x10de" ]] || continue
+    [[ $(<"$d/class") == 0x03* ]] || continue
+    id=$(<"$d/device")
+    (( id >= 0x1340 && id < 0x1e00 )) && return 0
+  done
+  return 1
+}
+STAGE1_KERNEL=linux
+if is_legacy_nvidia || [[ $KERNEL_PICK == lts || $KERNEL_PICK == omarchy || $KERNEL_PICK == bore || $KERNEL_PICK == muqss ]]; then
+  STAGE1_KERNEL=linux-lts
+fi
+is_legacy_nvidia && info "legacy NVIDIA: base kernel linux-lts"
 UCODE="intel-ucode"
 grep -qi "AuthenticAMD" /proc/cpuinfo && UCODE="amd-ucode"
-info "base install ($UCODE)..."
-pacstrap -K /mnt base linux linux-lts linux-firmware "$UCODE" \
+info "base install ($STAGE1_KERNEL, $UCODE)..."
+pacstrap -K /mnt base "$STAGE1_KERNEL" linux-firmware "$UCODE" \
   networkmanager sudo git base-devel power-profiles-daemon nano file procps-ng \
   $([[ $LUKS == yes ]] && echo cryptsetup) $([[ $FS == btrfs ]] && echo btrfs-progs) >/dev/null
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -272,7 +289,8 @@ else
   ROOTOPTS="root=UUID=\$ROOTUUID rw quiet splash"
 fi
 MICRO="\$(ls /boot/*-ucode.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null || true)"
-for k in linux linux-lts; do
+for img in /boot/vmlinuz-*; do
+  k="\${img#/boot/vmlinuz-}"
   {
     echo "title   Hexciri (\$k)"
     echo "linux   /vmlinuz-\$k"
@@ -281,7 +299,7 @@ for k in linux linux-lts; do
     echo "options \$ROOTOPTS"
   } > "/boot/loader/entries/hexciri-\$k.conf"
 done
-echo -e "default hexciri-linux.conf\ntimeout 3" > /boot/loader/loader.conf
+echo -e "default hexciri-$STAGE1_KERNEL.conf\ntimeout 3" > /boot/loader/loader.conf
 
 systemctl enable NetworkManager.service power-profiles-daemon.service >/dev/null
 
