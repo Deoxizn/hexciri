@@ -9,11 +9,13 @@ Rectangle {
 
   property bool loginFailed: false
   property int sessionIndex: 0
+  // The installer stamps Username= into theme.conf, so on single-user installs
+  // there is a guaranteed known user: greet a password-only box and submit it
+  // automatically. Only multi-user / unknown-user installs fall back to an
+  // editable username field.
+  property bool passwordOnly: (config.Username || "").length > 0
 
   function defaultUser() {
-    // First: the installer wrote the actual user into theme.conf (guaranteed
-    // present, no model timing). Then lastUser (remembered by SDDM). Then scan
-    // the model. Empty last resort = user types it.
     var conf = config.Username || ""
     if (conf.length > 0) return conf
     var last = userModel.lastUser || ""
@@ -27,7 +29,7 @@ Rectangle {
   }
 
   function attemptLogin() {
-    var user = username.text
+    var user = root.passwordOnly ? config.Username : username.text
     if (user.length === 0) {
       errmsg.text = "no username entered"
       errmsg.visible = true
@@ -72,6 +74,7 @@ Rectangle {
         color: "#14111A"
         border.color: "#43384C"
         border.width: 1
+        visible: !root.passwordOnly
 
         TextInput {
           id: username
@@ -84,7 +87,7 @@ Rectangle {
           color: "#D8D0DC"
           text: root.defaultUser()
           selectionColor: "#43384C"
-          focus: true
+          focus: !root.passwordOnly
 
           Keys.onPressed: {
             if (event.key === Qt.Key_Tab || event.key === Qt.Key_Down ||
@@ -102,7 +105,7 @@ Rectangle {
       }
 
       Rectangle {
-        width: Math.min(root.width * 0.34, 320)
+        width: root.passwordOnly ? Math.min(root.width * 0.45, 380) : Math.min(root.width * 0.34, 320)
         height: Math.max(46, Math.round(root.height * 0.06))
         radius: 8
         color: "#14111A"
@@ -122,6 +125,7 @@ Rectangle {
           color: "#D8D0DC"
           selectionColor: "#43384C"
           selectedTextColor: "#D8D0DC"
+          focus: root.passwordOnly
 
           onTextChanged: root.loginFailed = false
 
