@@ -556,7 +556,7 @@ run xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null |
 #    [omarchy] repo package (which lags upstream's near-daily releases).
 #    Dry-run/offline: skip cleanly; hexciri-strata-install --check re-runs at
 #    every login via spawn-at-startup, so a fresh box self-heals on first boot. ──
-if (($(id -u) != 0 && ! $DRY_RUN)); then
+if (( $(id -u) != 0 )) && [[ $DRY_RUN == false ]]; then
   if ! (hexciri-strata-install 2>/dev/null); then
     warn "strata install deferred (offline?) — will run again at first login"
   fi
