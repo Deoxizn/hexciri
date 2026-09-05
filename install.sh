@@ -87,14 +87,15 @@ if $SYSTEM_ONLY; then
 
   # ── packages (all repo packages; Brave built from AUR as the user, installed as root) ──
   PKGS=(base-devel git gnupg
-    niri xwayland-satellite noctalia kitty fish fuzzel zed opencode strata
+    niri xwayland-satellite noctalia kitty fish fuzzel zed opencode
     grim slurp wl-clipboard cliphist wtype playerctl brightnessctl mpv v4l-utils jq fzf ffmpeg
     gpu-screen-recorder
     mesa vulkan-icd-loader lib32-mesa lib32-vulkan-icd-loader
     libnotify gtk3 xdg-utils desktop-file-utils
+    gtk4 gtksourceview5 poppler-glib bubblewrap ffmpegthumbnailer gst-libav gst-plugins-good graphene xdg-terminal-exec
     polkit-gnome gnome-keyring xdg-desktop-portal-gtk xdg-desktop-portal-gnome
     adw-gtk-theme
-    networkmanager openssh sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd
+    networkmanager openssh sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd inetutils
     gnome-disk-utility imv mupdf libreoffice-fresh
     cups hplip unzip fprintd
     bluez bluez-utils
@@ -253,6 +254,15 @@ HOOK
     run cp -f "$REPO_DIR/default/pam/sddm" /etc/pam.d/sddm
     info "sddm login: wired pam_gnome_keyring (auto-unlocks 'login' keyring)"
   fi
+  # Mask the gnome-keyring dbus-activation units. The package ships them enabled,
+  # and they spawn a second daemon that collides with the PAM one (two owners of
+  # org.freedesktop.secrets → apps like zed hit broken secret calls and show the
+  # "unlock login keyring" prompt even though PAM already unlocked it).
+  run mkdir -p /etc/systemd/user
+  for u in gnome-keyring-daemon.service gnome-keyring-daemon.socket; do
+    [[ -e /etc/systemd/user/$u ]] || run ln -sf /dev/null "/etc/systemd/user/$u"
+  done
+  info "masked gnome-keyring daemon socket/service (PAM daemon is the sole secrets owner)"
 
   # ── SDDM theme (emblem + password greeter, Niri preferred) ──
   if ! $DRY_RUN; then
@@ -497,6 +507,16 @@ for d in brave-origin.desktop com.brave.Origin.desktop brave-origin-beta.desktop
   fi
 done
 run xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
+
+# ── Strata: per-user GitHub release install (~/.local/bin) instead of the
+#    [omarchy] repo package (which lags upstream's near-daily releases).
+#    Dry-run/offline: skip cleanly; hexciri-strata-install --check re-runs at
+#    every login via spawn-at-startup, so a fresh box self-heals on first boot. ──
+if (($(id -u) != 0 && ! $DRY_RUN)); then
+  if ! (hexciri-strata-install 2>/dev/null); then
+    warn "strata install deferred (offline?) — will run again at first login"
+  fi
+fi
 
 # ── Work folder: create and pin in Strata (Strata reads the standard GTK
 #    bookmarks file; entries pointing at missing dirs are dropped, so mkdir first) ──

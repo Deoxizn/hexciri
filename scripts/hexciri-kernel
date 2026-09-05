@@ -57,6 +57,8 @@ do_kernel() {
     else
       echo "default $entry" | sudo tee -a /boot/loader/loader.conf >/dev/null
     fi
+    # record the pin so hexciri-sync preserves it across package transactions
+    echo "$entry" | sudo tee /usr/share/hexciri/boot-default >/dev/null
     ok "systemd-boot default -> $entry (stock kept as fallback)"
   else
     ok "$base ready (reboot, pick it in systemd-boot; stock kept)"

@@ -1,50 +1,111 @@
 #!/bin/bash
-# hexciri-niri-monitors: auto-append niri `output` blocks for connected outputs.
+# hexciri-niri-monitors: fill niri's Output/Monitor section for connected outputs.
 #
 # Runs at every login via spawn-at-startup in config.kdl. The installer's user
 # phase runs inside the chroot, where there is no niri socket and no /sys/class/
 # drm — so install-time monitor detection silently produced no output blocks on
-# fresh installs. This script runs in a live session (niri up) and closes the gap:
-# idempotent — it only appends per-output blocks when the config has none yet.
+# fresh installs. This script runs in a live session (niri up) and closes the gap.
+#
+# Behavior:
+#   * Configs with the marker pair  › hexciri-monitors:start/end ‹  have blocks
+#     for newly-detected outputs added between the markers. Existing blocks stay
+#     untouched, so hand-tuned mode/scale/VRR survive every login. Disconnections
+#     leave the block in place (you may re-attach a panel to that hotspot).
+#   * Older configs (no markers) are left alone once they contain any ^output
+#     block; otherwise one block per output is appended at the end as a fallback.
 set -euo pipefail
 
 cfg="${NIRI_CFG:-$HOME/.config/niri/config.kdl}"
 [[ -f $cfg ]] || { echo "no niri config: $cfg" >&2; exit 0; }
 
+sock="$(ls "/run/user/$(id -u)"/niri.*.sock 2>/dev/null | head -1)"
+[[ -n $sock ]] || { echo "no niri socket (not in a session?)" >&2; exit 0; }
+
+marker_start="^// >>> hexciri-monitors:start <<<"
+marker_end="^// >>> hexciri-monitors:end <<<"
+
+build_block() {
+  local nm="$1" mode="$2" scale="$3" vrr="$4"
+  local b=""
+  local indent="    "
+  b+="output \"$nm\" {"
+  [[ -n $mode ]] && b+="\n${indent}mode \"$mode\""
+  [[ -n $scale ]] && b+="\n${indent}scale $scale"
+  [[ $vrr == 1 ]] && b+="\n${indent}variable-refresh-rate"
+  b+="\n}"
+  printf '%b' "$b"
+}
+
+detect() {
+  # Emits lines: NAME<TAB>MODE<TAB>SCALE<TAB>VRR  (one per detected output)
+  local line nm="" mode="" vrr="" ph="" wm="" hm="" wpx="" hpx="" scale=""
+  while read -r line; do
+    case "$line" in
+      Output*) nm="$(sed -n 's/.*(\([^()]*\)).*/\1/p' <<<"$line")" ;;
+      *"Current mode:"*)
+        mode="$(sed -n 's/.*Current mode: \([0-9]*x[0-9]*\) @ \([0-9.]*\).*/\1@\2/p' <<<"$line")" ;;
+      *"Variable refresh rate: supported"*) vrr=1 ;;
+      *"Variable refresh rate: not supported"*) vrr=0 ;;
+      *"Physical size:"*)
+        ph="$(sed -n 's/.*Physical size: \([0-9]*\)x\([0-9]*\).*/\1 \2/p' <<<"$line")"
+        wm="${ph% *}"; hm="${ph#* }"
+        wpx="${mode%%x*}"; hpx="${mode%@*}"; hpx="${hpx#*x}"
+        scale=1
+        if (( wpx > 0 && hpx > 0 && wm > 0 && hm > 0 )); then
+          scale="$(awk -v W="$wpx" -v H="$hpx" -v WM="$wm" -v HM="$hm" \
+            'BEGIN{ ppi=sqrt(W*W+H*H)*25.4/sqrt(WM*WM+HM*HM); s=ppi/160; if(s<1)s=1; if(s>2)s=2;
+                    printf "%.2f", int(s*4+0.5)/4 }')"
+        fi
+        if [[ -n $nm ]]; then
+          printf '%s\t%s\t%s\t%s\n' "$nm" "$mode" "$scale" "${vrr:-0}"
+        fi
+        nm=""; mode=""; vrr=""; ph=""; scale=1
+        ;;
+    esac
+  done < <(NIRI_SOCKET="$sock" niri msg outputs 2>/dev/null)
+}
+
+get_markers() {
+  grep -n -E "$marker_start" "$cfg" | head -1 | cut -d: -f1 || true
+  grep -n -E "$marker_end" "$cfg" | head -1 | cut -d: -f1 || true
+}
+
+# ── case A: marker-based managed section ─────────────────────────────────────
+read -r line_s line_e < <(get_markers || true)
+if [[ -n $line_s && -n $line_e && $line_s -lt $line_e ]]; then
+  managed="$(sed -n "$((line_s + 1)),$((line_e - 1))p" "$cfg")"
+  changed=0
+  while IFS=$'\t' read -r nm mode scale vrr; do
+    [[ -n $nm ]] || continue
+    grep -q "output \"$nm\"" <<<"$managed" && continue
+    managed+="$(build_block "$nm" "$mode" "$scale" "$vrr")\n\n"
+    changed=1
+  done < <(detect)
+
+  if (( changed )); then
+    tmp="$cfg.tmp.$$"
+    {
+      sed -n "1,${line_s}p" "$cfg"
+      printf '%b' "$managed"
+      sed -n "${line_e},\$p" "$cfg"
+    } > "$tmp"
+    mv "$tmp" "$cfg"
+    echo "appended new-output block(s) to $cfg"
+    NIRI_SOCKET="$sock" niri msg action load-config-file 2>/dev/null || true
+  fi
+  exit 0
+fi
+
+# ── case B: legacy config without markers ────────────────────────────────────
 if grep -q '^output ' "$cfg"; then
   exit 0 # already has output block(s); leave user config alone
 fi
 
-sock="$(ls "/run/user/$(id -u)"/niri.*.sock 2>/dev/null | head -1)"
-[[ -n $sock ]] || { echo "no niri socket (not in a session?)" >&2; exit 0; }
-
-nm="" mode="" vrr="" ph="" wm="" hm="" wpx="" hpx="" scale="" line="" section=""
-while read -r line; do
-  case "$line" in
-    Output*) nm="$(sed -n 's/.*(\([^()]*\)).*/\1/p' <<<"$line")" ;;
-    *"Current mode:"*)
-      mode="$(sed -n 's/.*Current mode: \([0-9]*x[0-9]*\) @ \([0-9.]*\).*/\1@\2/p' <<<"$line")" ;;
-    *"Variable refresh rate: supported"*) vrr=1 ;;
-    *"Variable refresh rate: not supported"*) vrr=0 ;;
-    *"Physical size:"*)
-      ph="$(sed -n 's/.*Physical size: \([0-9]*\)x\([0-9]*\).*/\1 \2/p' <<<"$line")"
-      wm="${ph% *}"; hm="${ph#* }"
-      wpx="${mode%%x*}"; hpx="${mode%@*}"; hpx="${hpx#*x}"
-      scale=1
-      if (( wpx > 0 && hpx > 0 && wm > 0 && hm > 0 )); then
-        scale="$(awk -v W="$wpx" -v H="$hpx" -v WM="$wm" -v HM="$hm" \
-          'BEGIN{ ppi=sqrt(W*W+H*H)*25.4/sqrt(WM*WM+HM*HM); s=ppi/160; if(s<1)s=1; if(s>2)s=2;
-                  printf "%.2f", int(s*4+0.5)/4 }')"
-      fi
-      if [[ -n $nm && -n $mode ]] && ! grep -q "^output \"$nm\"" "$cfg"; then
-        section+="output \"$nm\" {\n    mode \"$mode\"\n    scale $scale"
-        (( vrr == 1 )) && section+="\n    variable-refresh-rate"
-        section+="\n}\n\n"
-      fi
-      vrr=0; nm="" mode="" vrr="" ph="" wm="" hm="" wpx="" hpx=""
-      ;;
-  esac
-done < <(NIRI_SOCKET="$sock" niri msg outputs 2>/dev/null)
+section=""
+while IFS=$'\t' read -r nm mode scale vrr; do
+  [[ -n $nm ]] || continue
+  section+="$(build_block "$nm" "$mode" "$scale" "$vrr")\n\n"
+done < <(detect)
 
 if [[ -n $section ]]; then
   printf '\n# Auto-appended by hexciri-niri-monitors from live niri outputs\n%b' "$section" >> "$cfg"

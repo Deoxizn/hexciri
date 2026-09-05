@@ -1,0 +1,119 @@
+#!/bin/bash
+# hexciri-strata-install: install/update Strata from GitHub release archives (per-user).
+#
+# Why not the omarchy repo? The maintainer ships releases near-daily on GitHub,
+# while the [omarchy] repo lags by days (0.8.0 vs 0.10.0+) and pacman-built
+# installs can only update via their package manager. A ~/.local/bin release
+# install gets Strata's built-in updater (Settings → Updates) for verified
+# daily updates, decoupled from the distro repo. This script mirrors that manual
+# install so hexciri can provision / refresh it idempotently.
+#
+#   hexciri-strata-install            install or update to the latest stable
+#   hexciri-strata-install --check    print installed vs latest, update if newer
+#   hexciri-strata-install --force    re-download even if versions match
+#   hexciri-strata-install --version  print the installed version, exit 0/1
+#
+# Per-user: installs under ~/.local/{bin,share}, no sudo. Safe every login.
+set -euo pipefail
+
+REPO=lgse/strata
+ARCH="${HEXCIRI_ARCH:-$(uname -m)}"
+case "$ARCH" in
+  x86_64) target=x86_64-unknown-linux-gnu ;;
+  aarch64) target=aarch64-unknown-linux-gnu ;;
+  *) echo "hexciri-strata-install: unsupported arch $ARCH" >&2; exit 1 ;;
+esac
+
+BIN="$HOME/.local/bin/strata"
+DESKTOP="$HOME/.local/share/applications/io.github.lgse.Strata.desktop"
+ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
+ICON="$ICON_DIR/io.github.lgse.Strata.svg"
+VER_FILE="$HOME/.local/state/hexciri/strata.version"
+CACHE="$HOME/.cache/hexciri/strata"
+
+info() { echo "hexciri-strata-install: $*"; }
+
+print_installed() {
+  if [[ -x $BIN ]]; then
+    cat "$VER_FILE" 2>/dev/null || echo "present (version unknown)"
+  else
+    echo "not installed"
+  fi
+}
+
+latest_tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
+  | python3 -c 'import sys,json
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+print(d.get("tag_name",""))' 2>/dev/null || true)"
+if [[ -z $latest_tag ]]; then
+  echo "hexciri-strata-install: could not reach GitHub API (offline?)" >&2
+  exit 2
+fi
+installed="$(print_installed)"
+
+case "${1:-}" in
+  --version)
+    echo "$installed"
+    [[ $installed == not* ]] && exit 1
+    exit 0
+    ;;
+  --check|--force)
+    if [[ ${1:-} != --force ]] && [[ $latest_tag == "$installed" ]]; then
+      info "already on $latest_tag (${ARCH}) — nothing to do"
+      exit 0
+    fi
+    ;;
+  *)
+    [[ -x $BIN ]] && [[ $latest_tag == "$installed" ]] && {
+      info "already on $latest_tag (${ARCH}) — nothing to do"
+      exit 0
+    }
+    ;;
+esac
+
+info "installing Strata $latest_tag ($target)..."
+
+mkdir -p "$CACHE"
+cd "$CACHE"
+ver="${latest_tag#v}"
+tarball="strata-$ver-$target.tar.gz"
+url="https://github.com/$REPO/releases/download/$latest_tag/$tarball"
+if [[ ! -f $tarball ]]; then
+  curl -fsSL -O "$url"
+  curl -fsSL -O "$url.sha256"
+fi
+
+# verify (never trust a silently-corroded download)
+if ! sha256sum -c "$tarball.sha256" >/dev/null 2>&1; then
+  echo "hexciri-strata-install: checksum mismatch for $tarball" >&2
+  rm -f "$tarball" "$tarball.sha256"
+  exit 1
+fi
+
+rm -rf "strata-extract-$latest_tag"
+mkdir -p "strata-extract-$latest_tag"
+tar -xzf "$tarball" -C "strata-extract-$latest_tag" --strip-components=1
+extract="strata-extract-$latest_tag"
+
+mkdir -p "$(dirname "$BIN")" "$(dirname "$DESKTOP")" "$ICON_DIR"
+install -m755 "$extract/strata" "$BIN"
+install -m644 "$extract/io.github.lgse.Strata.desktop" "$DESKTOP"
+install -m644 "$extract/io.github.lgse.Strata.svg" "$ICON"
+
+printf '%s\n' "$latest_tag" > "$VER_FILE"
+update-desktop-database "$(dirname "$DESKTOP")" 2>/dev/null || true
+gtk-update-icon-cache -qtf "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+
+# bake the absolute path into the desktop entry: xdg-launched Strata must
+# resolve even when ~/.local/bin is not yet on the session PATH.
+sed -i "s|^Exec=strata |Exec=$BIN |" "$DESKTOP" 2>/dev/null || true
+sed -i "s|^Exec=strata$|Exec=$BIN|" "$DESKTOP" 2>/dev/null || true
+
+info "installed Strata $latest_tag → $BIN (in-app Updates can self-update daily)"
+info "xdg-mime: io.github.lgse.Strata.desktop → inode/directory"
+xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
+
+rm -rf "$extract"

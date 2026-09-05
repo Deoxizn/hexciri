@@ -1,5 +1,9 @@
 # hexciri fish: vanilla helper functions (no third-party tools)
 
+# per-user binaries (hexciri-strata-install → ~/.local/bin/strata, cargo, etc.)
+# prepend so ~/.local/bin shadows system copies (e.g. omarchy strata 0.8.0)
+contains $HOME/.local/bin $PATH; or set -gpa PATH $HOME/.local/bin
+
 function compress
   set dir $argv[1]
   set dir (string replace -r '/$' '' -- $dir)

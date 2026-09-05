@@ -33,12 +33,22 @@ if [[ -d /boot/loader ]]; then
         echo "options $ROOTOPTS"
       } > "/boot/loader/entries/hexciri-$k.conf"
     done
-    # default = newest kernel by the freshly-built initramfs (matches what the
-    # last mkinitcpio run produced); a stale default only lingers if its kernel
-    # is still installed and is genuinely the newest
-    newest="$(ls -1t /boot/initramfs-*.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null | sed 's/^initramfs-//; s/\.img$//' || echo linux)"
-    echo -e "default hexciri-$newest.conf\ntimeout 3" > /boot/loader/loader.conf
-    log "systemd-boot entries regenerated (default: hexciri-$newest.conf)"
+    # default = newest kernel by initramfs mtime, UNLESS the user pinned one via
+    # hexciri-kernel/hexciri-gpu (recorded in /usr/share/hexciri/boot-default) —
+    # that choice wins as long as its entry still exists. A pinned default is how
+    # a deliberate bore/LTS pick survives a later stock-kernel rebuild (which
+    # would otherwise steal the default by having the freshest mtime).
+    default=""
+    if [[ -r /usr/share/hexciri/boot-default ]]; then
+      pin="$(cat /usr/share/hexciri/boot-default 2>/dev/null || true)"
+      [[ -f /boot/loader/entries/$pin ]] && default="$pin"
+    fi
+    if [[ -z $default ]]; then
+      newest="$(ls -1t /boot/initramfs-*.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null | sed 's/^initramfs-//; s/\.img$//' || echo linux)"
+      default="hexciri-$newest.conf"
+    fi
+    echo -e "default $default\ntimeout 3" > /boot/loader/loader.conf
+    log "systemd-boot entries regenerated (default: $default)"
   fi
 fi
 
@@ -74,6 +84,17 @@ if [[ -f /etc/pam.d/sddm ]] && ! grep -q 'pam_gnome_keyring.so' /etc/pam.d/sddm;
   fi
   log "restored sddm PAM (gnome-keyring + fprintd)"
 fi
+
+# ── 3b. mask gnome-keyring dbus-activation units: the package ships them enabled,
+# ── and a second daemon then fights the PAM one for org.freedesktop.secrets,
+# ── making apps (zed) show the unlock prompt despite an already-unlocked keyring.
+mkdir -p /etc/systemd/user
+for u in gnome-keyring-daemon.service gnome-keyring-daemon.socket; do
+  if [[ ! -e /etc/systemd/user/$u ]]; then
+    ln -sf /dev/null "/etc/systemd/user/$u"
+    log "masked $u (PAM daemon is the sole secrets owner)"
+  fi
+done
 
 # ── 4. app-menu curation: re-hide utility entries the packages re-show ──
 for f in avahi-discover.desktop bssh.desktop bvnc.desktop lstopo.desktop \

@@ -86,6 +86,7 @@ set_default_entry() { # $1 = entry file name
   else
     echo "default $1" | sudo tee -a /boot/loader/loader.conf >/dev/null
   fi
+  echo "$1" | sudo tee /usr/share/hexciri/boot-default >/dev/null  # preserve across hexciri-sync
 }
 
 # ── shared Wayland/Niri bits for any NVIDIA card ──

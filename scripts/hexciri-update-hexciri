@@ -28,10 +28,12 @@ fi
 
 echo
 echo "== 2/3 reinstalling (user + system phase) =="
+current="$(hexciri-channel-current 2>/dev/null || echo stable)"
+echo "channel in use: $current"
 (
   cd "$REPO"
-  ./install.sh --user-only -y || { echo "user phase failed" >&2; exit 1; }
-  run_as_root env HEXCIRI_USER="$(id -un)" ./install.sh --system-only -y || { echo "system phase failed" >&2; exit 1; }
+  ./install.sh --user-only -y --channel "$current" || { echo "user phase failed" >&2; exit 1; }
+  run_as_root env HEXCIRI_USER="$(id -un)" ./install.sh --system-only -y --channel "$current" || { echo "system phase failed" >&2; exit 1; }
 )
 
 echo
