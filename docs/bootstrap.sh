@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=25   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=26   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -33,8 +33,16 @@ LIVE_CONF=/root/pacman-hexciri.conf
 LIVE_KEYRING=/root/.hexciri-gnupg-seed
 mkdir -p "$LIVE_CACHE"
 if [[ ! -f $LIVE_CONF ]]; then
-  sed '0,/^CacheDir = /s|^CacheDir = .*|CacheDir = '"$LIVE_CACHE"'|' /etc/pacman.conf > "$LIVE_CONF"
-  printf 'CacheDir = /var/cache/pacman/pkg/\n' >> "$LIVE_CONF"
+  # CacheDir is only valid inside [options]; an ISO pacman.conf has no other
+  # placeholder guarantees, so strip any existing CacheDir lines and emit
+  # exactly one, positioned right after the [options] header (a directive at
+  # EOF lands after [extra]/[multilib] and pacman rejects: "not recognized").
+  awk -v c="$LIVE_CACHE" '
+    /^[[:space:]]*#?CacheDir/ { next }
+    { print }
+    /^\[options\]/ && !n { print "CacheDir = " c; n=1 }
+    END { if (!n) { print "[options]"; print "CacheDir = " c } }
+  ' /etc/pacman.conf > "$LIVE_CONF"
 fi
 info "package cache: $LIVE_CACHE (persists across wipe retries)"
 
