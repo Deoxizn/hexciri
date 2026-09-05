@@ -1,7 +1,7 @@
 #!/bin/bash
 # hexciri:menu=system-update
 # hexciri:summary=Maintenance: clock sync, system cleaner, user password.
-# Notably no LUKS/snapshot/tmux rows (hexciri is deliberately minimal).
+# Notably no snapshot/tmux rows (hexciri is deliberately minimal).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

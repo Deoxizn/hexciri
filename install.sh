@@ -188,7 +188,8 @@ HOOK
   run mkdir -p /usr/share/pixmaps
   run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
 
-  # ── services + SDDM (greeter login; autologin returns with LUKS) ──
+  # ── services + SDDM (greeter login with a password; no disk encryption,
+  #    so the login gate lives at the sddm prompt itself) ──
   run systemctl enable NetworkManager.service 2>/dev/null || true
   run systemctl enable sshd.service 2>/dev/null || true
   run systemctl enable sddm.service 2>/dev/null || true
@@ -232,35 +233,12 @@ HOOK
       run mkdir -p /etc/plymouth
       printf '[Daemon]\nTheme=hexciri\n' | run tee /etc/plymouth/plymouthd.conf >/dev/null
     fi
-    # mkinitcpio: encrypt after block on LUKS roots (classic hook; plymouth +
-    # encrypt is the working pair — Arch has no plymouth-encrypt hook)
-    mkinitcpio_backed_up=0
-    if [[ ${HEXCIRI_LUKS:-no} == yes || $(findmnt -no SOURCE / 2>/dev/null) == /dev/mapper/* ]]; then
-      grep -q ' encrypt' /etc/mkinitcpio.conf || {
-        run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
-        mkinitcpio_backed_up=1
-        run sed -i 's/\(HOOKS=([^)]*block\)/\1 encrypt/' /etc/mkinitcpio.conf
-      }
-    fi
     # mkinitcpio: plymouth after udev for splash
     if ! grep -q ' plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
-      (( mkinitcpio_backed_up )) || run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
+      run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
       run sed -i 's/\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
       grep -q ' plymouth' /etc/mkinitcpio.conf || run sed -i 's/\(HOOKS=(base\)/\1 plymouth/' /etc/mkinitcpio.conf
       run mkinitcpio -P
-    fi
-    # LUKS insurance: fail loudly (pre-reboot) if cryptsetup is missing from
-    # the generated initramfs — the hours-long failure mode was discovering
-    # a phantom/absent hook only at the first boot
-    if [[ ${HEXCIRI_LUKS:-no} == yes || $(findmnt -no SOURCE / 2>/dev/null) == /dev/mapper/* ]]; then
-      for img in /boot/initramfs-*.img; do
-        [[ -f $img ]] || continue
-        if lsinitcpio -l "$img" 2>/dev/null | grep -q cryptsetup; then
-          ok "initramfs ${img##*/}: encrypt/cryptsetup present"
-        else
-          warn "cryptsetup missing from ${img##*/} — LUKS boot will fail (re-run: mkinitcpio -P)"
-        fi
-      done
     fi
     # splash flag on hexciri-owned boot entries
     for e in /boot/loader/entries/hexciri-*.conf; do

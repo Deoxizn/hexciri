@@ -2,7 +2,6 @@
 
 ## 2026-09-05 — hexciri v0.1.1
 
-- **LUKS encryption back**: opt-in LUKS2 on the root filesystem (passphrase = the user password, no extra prompt). Bootstrap rev 6 adds a `--test-luks` pre-flight proving luksFormat/open/close on a throwaway file before any disk is touched, cryptsetup staged into the base install, and `cryptdevice=UUID=…:cryptroot` boot entries.
 - **Transparent terminals**: kitty `background_opacity 0.35` plus a niri `background-effect { blur true }` window rule (niri 26.04 window effects) so reduced opacity reads as soft translucency. Focus ring and border are now off — niri paints both as a solid rectangle *behind* windows (per its FAQ), which covers semitransparent windows and hides the blur; that was the real reason focused terminals rendered opaque.
 - **Noctalia bar rework**: launcher, wallpaper, workspaces, spacer, media, active_window, 12-hour clock, notifications, clipboard, tray, network, bluetooth, volume, brightness, battery, arch-updater, control-center; 12-hour time throughout (`{:%I:%M %p}`); wallpaper picker + rotation point at the active theme's backgrounds; rotation off by default.
 - **sakurazuki default theme**: kitty background follows the theme's `Background`; the theme-set hook now also drives Qt theming via qt6ct (Fusion + a QPalette color scheme generated from theme tokens, roles live-verified).

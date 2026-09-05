@@ -28,9 +28,8 @@ Kernel prompt (default auto):
 
 Full package names (`linux-omarchy-bore`) work too.
 
-Encryption prompt (optional): `y` gives you LUKS2 on root — the passphrase is
-your own user password, so there's nothing extra to type. Pre-flight: `sh hexciri --test-luks`
-proves the cryptsetup chain on a throwaway file before any disk is touched.
+The disk is left unencrypted — the login gate is the SDDM password prompt
+(minimal themed greeter), there is no disk-encryption step to answer.
 
 3. Reboot → straight into Niri
 Press `Mod+K` for the searchable keybinding list.
@@ -47,12 +46,11 @@ Press `Mod+K` for the searchable keybinding list.
 | agent | `opencode` (`Mod+`` `) | `hexciri-defaults` → Agent |
 | kernel | your pick, `linux` if auto (+`linux-lts` fallback on custom/legacy) | `hexciri-kernel` (bore/muqss on bleeding) |
 | gpu | autodetect (mesa / nvidia-open / 580xx+LTS pin) | `hexciri-gpu` |
-| encryption | opt-in LUKS2 on root (passphrase = your user password) | re-install |
 | monitors | auto-detect (output blocks + scale from physical size) | `~/.config/niri/config.kdl` |
 | bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |
 | channel | `stable` | `hexciri-channel-set` |
-| boot | systemd-boot, plymouth splash, SDDM autologin | — |
+| boot | systemd-boot, plymouth splash, SDDM password greeter | — |
 | prompt/fetch | starship + fastfetch w/ emblem | `~/.config/starship.toml`, `~/.config/fastfetch/config.jsonc` |
 
 ## Channels

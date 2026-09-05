@@ -76,7 +76,7 @@
     <li>Run the line above.</li>
     <li>Reboot → straight into Niri. Press <code>Mod+K</code> for the keybinding list.</li>
   </ol>
-  <p style="margin-top:14px;">Optional <code>y</code> at the encryption prompt gives you LUKS2 on root — the passphrase is your own user password. Pre-flight: <code>sh hexciri --test-luks</code> proves the cryptsetup chain on a throwaway file before any disk is touched.</p>
+  <p style="margin-top:14px;">The disk is left unencrypted — login is the SDDM password prompt (minimal themed greeter), no disk-encryption step to answer.</p>
 </section>
 <section>
   <h2>Defaults</h2>
@@ -87,7 +87,6 @@
     <tr><td>agent</td><td><code>opencode</code> (<code>Mod+`</code>)</td></tr>
     <tr><td>kernel</td><td><code>linux</code> + <code>lts</code> fallback</td></tr>
     <tr><td>gpu</td><td>autodetect (mesa / nvidia-open / 580xx+LTS pin)</td></tr>
-    <tr><td>encryption</td><td>opt-in LUKS2 on root (passphrase = your user password)</td></tr>
     <tr><td>monitors</td><td>auto-detect output blocks + scale from physical size</td></tr>
     <tr><td>bluetooth</td><td>on (bluez + bar widget)</td></tr>
     <tr><td>theme / channel</td><td><code>sakurazuki</code> / <code>stable</code></td></tr>

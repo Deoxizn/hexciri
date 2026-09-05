@@ -4,15 +4,15 @@
 #   curl -LO https://hexciri.dirty.pizza/hexciri
 #   sh hexciri
 #
-# 10 things are typed, everything else is automatic: username, hostname,
-# timezone, filesystem, encryption, channel, mode (full/free), disk
-# (+wipe confirm), and a final reboot prompt.
+# 9 things are typed, everything else is automatic: username, hostname,
+# timezone, filesystem, channel, mode (full/free), disk (+wipe confirm),
+# and a final reboot prompt.
 # Run as root on the Arch ISO live environment. DESTRUCTIVE: wipes $DISK (full mode).
 set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=14   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=15   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -23,39 +23,18 @@ err()  { echo -e "\e[0;31m[hexciri:bootstrap]\e[0m $*" >&2; }
 
 (( EUID == 0 )) || { err "run as root on the Arch ISO (curl ... | bash)"; exit 1; }
 command -v pacstrap &>/dev/null || { err "not an Arch ISO (no pacstrap)"; exit 1; }
-for cmd in sfdisk parted mkfs.fat mkfs.ext4 blkid findmnt cryptsetup arch-chroot git curl; do
+for cmd in sfdisk parted mkfs.fat mkfs.ext4 blkid findmnt arch-chroot git curl; do
   command -v "$cmd" &>/dev/null && continue
   case "$cmd" in
     sfdisk|findmnt|blkid) pkg=util-linux ;;
     mkfs.fat) pkg=dosfstools ;;
     mkfs.ext4) pkg=e2fsprogs ;;
-    cryptsetup) pkg=cryptsetup ;;
     arch-chroot) pkg=arch-install-scripts ;;
     *) pkg="$cmd" ;;
   esac
   info "ISO is missing $cmd — installing $pkg..."
   pacman -Sy --noconfirm "$pkg" || { err "cannot install $pkg (network up?)"; exit 1; }
 done
-
-# ── optional pre-flight: prove the exact cryptsetup command chain on a
-#    throwaway file BEFORE any disk is touched (no reboot needed) ──
-if [[ ${1:-} == --test-luks ]]; then
-  command -v cryptsetup &>/dev/null || { err "cryptsetup not available at all — cannot test"; exit 1; }
-  info "LUKS self-test on a throwaway file (no real disks touched)..."
-  IMG=/tmp/hexciri-luks-test.img
-  rm -f "$IMG"
-  dd if=/dev/zero of="$IMG" bs=1M count=64 status=none
-  PASS="hexciri-luks-selftest"
-  printf '%s' "$PASS" | cryptsetup luksFormat --batch-mode --type luks2 "$IMG" - \
-    || { err "luksFormat failed on test image"; exit 1; }
-  printf '%s' "$PASS" | cryptsetup open "$IMG" crypttest - \
-    || { err "luksOpen failed on test image"; exit 1; }
-  [[ -b /dev/mapper/crypttest ]] || { err "mapper crypttest did not appear"; exit 1; }
-  cryptsetup close crypttest || { err "luksClose failed on test image"; exit 1; }
-  rm -f "$IMG"
-  ok "LUKS self-test passed — luksFormat/open/close round-trip works"
-  exit 0
-fi
 
 info "site: $SITE"
 info "hexciri bootstrap rev $BOOTSTRAP_REV"
@@ -108,12 +87,6 @@ CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
 info "channel: $CHANNEL"
 
-# ── encryption: LUKS2 on the root partition; passphrase = the user password ──
-read -rp "encrypt the root filesystem with LUKS? [y/N]: " luks_ans </dev/tty
-LUKS=no
-[[ $luks_ans =~ ^[Yy]$ ]] && LUKS=yes
-[[ $LUKS == yes ]] && LUKSPASS="$USERPASS"
-
 info "kernel: auto (stock; LTS pinned on legacy NVIDIA by the installer)"
 
 
@@ -134,9 +107,8 @@ else
 fi
 [[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
 if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
-# ── clear stale state from previous runs (lingering mounts, open mappers) ──
+# ── clear stale state from previous runs (lingering mounts) ──
 umount -R /mnt 2>/dev/null || true
-command -v cryptsetup &>/dev/null && cryptsetup close cryptroot 2>/dev/null || true
 
 # ── summary + final confirm (nothing touched until this passes) ──
 echo ""
@@ -145,7 +117,6 @@ printf '  %-10s %s\n' \
   "mode"     "$MODE" \
   "disk"     "/dev/$DISK" \
   "fs"       "$FS" \
-  "encryption" "$LUKS" \
   "channel"  "$CHANNEL" \
   "kernel"   "auto" \
   "hostname" "$HOSTNAME" \
@@ -208,17 +179,8 @@ else
   [[ $FORMAT_ESP == yes ]] && mkfs.fat -F32 "$ESP" >/dev/null
 fi
 
-if [[ $LUKS == yes ]]; then
-  info "encrypting $ROOT with LUKS2 (passphrase = the user password)..."
-  printf '%s' "$LUKSPASS" | cryptsetup luksFormat --batch-mode --type luks2 "$ROOT" -
-  printf '%s' "$LUKSPASS" | cryptsetup open "$ROOT" cryptroot -
-  [[ -b /dev/mapper/cryptroot ]] || { err "cryptroot did not come up — aborting"; exit 1; }
-  mkfs_root /dev/mapper/cryptroot
-  mount /dev/mapper/cryptroot /mnt
-else
-  mkfs_root "$ROOT"
-  mount "$ROOT" /mnt
-fi
+mkfs_root "$ROOT"
+mount "$ROOT" /mnt
 mkdir -p /mnt/boot
 mount "$ESP" /mnt/boot
 
@@ -245,7 +207,7 @@ grep -qi "AuthenticAMD" /proc/cpuinfo && UCODE="amd-ucode"
 info "base install ($STAGE1_KERNEL, $UCODE)..."
 pacstrap -K /mnt base "$STAGE1_KERNEL" linux-firmware "$UCODE" \
   networkmanager sudo git base-devel power-profiles-daemon nano file procps-ng \
-  $([[ $LUKS == yes ]] && echo cryptsetup) $([[ $FS == btrfs ]] && echo btrfs-progs) >/dev/null
+  $([[ $FS == btrfs ]] && echo btrfs-progs) >/dev/null
 genfstab -U /mnt >> /mnt/etc/fstab
 [[ $FS == btrfs ]] && sed -i '\| / btrfs |s/relatime/relatime,compress=zstd/' /mnt/etc/fstab
 
@@ -281,16 +243,7 @@ sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 bootctl install --esp-path=/boot >/dev/null
 ROOTUUID="\$(findmnt -no UUID /)"
-if [[ $LUKS == yes ]]; then
-  LUKSUUID="\$(blkid -s UUID -o value $ROOT)"
-  if [[ \${#LUKSUUID} -ne 36 ]]; then
-    err "LUKS partition UUID did not resolve — aborting before install"
-    exit 1
-  fi
-  ROOTOPTS="cryptdevice=UUID=\$LUKSUUID:cryptroot root=/dev/mapper/cryptroot rw quiet splash"
-else
-  ROOTOPTS="root=UUID=\$ROOTUUID rw quiet splash"
-fi
+ROOTOPTS="root=UUID=\$ROOTUUID rw quiet splash"
 MICRO="\$(ls /boot/*-ucode.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null || true)"
 # stale entries from previous installs carry dead UUIDs — remove our own first
 rm -f /boot/loader/entries/hexciri-*.conf
@@ -307,7 +260,7 @@ done
 echo -e "default hexciri-$STAGE1_KERNEL.conf\ntimeout 3" > /boot/loader/loader.conf
 # one-shot insurance: a malformed options line boots to a timeout with no
 # useful error, so refuse to continue if spacing or an empty UUID slipped in
-if grep -qE '(cryptdevice|root|options) +=' /boot/loader/entries/hexciri-*.conf; then
+if grep -qE '(root|options) +=' /boot/loader/entries/hexciri-*.conf; then
   err "boot entry malformed (spaced key=value) — aborting before install"
   grep -H . /boot/loader/entries/hexciri-*.conf >&2 || true
   exit 1
@@ -324,7 +277,7 @@ chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.local"
 # with zero sudo calls — su(1) sessions have no controlling TTY, so nothing
 # here may ever depend on sudo prompting.
 trap 'rm -f /root/hexciri-stage2.sh' EXIT
-HEXCIRI_USER="$USERNAME" HEXCIRI_LUKS="$LUKS" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
+HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
 command -v fish &>/dev/null && chsh -s /usr/bin/fish "$USERNAME" || true
 su - "$USERNAME" -c "cd ~/.local/opt/hexciri && ./install.sh --user-only -y"
 STAGE2
