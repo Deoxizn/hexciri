@@ -193,6 +193,9 @@ HOOK
   run systemctl enable NetworkManager.service 2>/dev/null || true
   run systemctl enable sshd.service 2>/dev/null || true
   run systemctl enable sddm.service 2>/dev/null || true
+  # SSH keys are generated on first start by sshd-keygen.service; enabling
+  # without --now is intentional here (we're in the install chroot, no systemd
+  # PID 1), so sshd comes up automatically on first real boot.
   # ── session: sddm rejects login pre-PAM when no session is selectable,
   #    which reads exactly like a wrong password on first try. niri ships its
   #    desktop file; guarantee one exists as a fallback minimal entry ──
@@ -245,11 +248,21 @@ HOOK
       run mkdir -p /etc/plymouth
       printf '[Daemon]\nTheme=hexciri\n' | run tee /etc/plymouth/plymouthd.conf >/dev/null
     fi
-    # mkinitcpio: plymouth after udev for splash
-    if ! grep -q ' plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
+    # mkinitcpio: plymouth after systemd/udev for splash. Anchor to the live
+    # HOOKS line only — the stock mkinitcpio.conf is full of commented-out
+    # 'plymouth' example hooks, and a file-wide grep false-positives on them,
+    # silently skipping the insert (surfaced on the Framework as a boot with the
+    # stock arch splash despite Theme=hexciri).
+    if ! grep -q '^HOOKS=.* plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
       run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
-      run sed -i 's/\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
-      grep -q ' plymouth' /etc/mkinitcpio.conf || run sed -i 's/\(HOOKS=(base\)/\1 plymouth/' /etc/mkinitcpio.conf
+      if grep -q '^HOOKS=(base systemd' /etc/mkinitcpio.conf; then
+        run sed -i 's/^HOOKS=(base systemd/& plymouth/' /etc/mkinitcpio.conf
+      elif grep -q '^HOOKS=.*udev' /etc/mkinitcpio.conf; then
+        run sed -i 's/^\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
+      fi
+      if ! grep -q '^HOOKS=.* plymouth' /etc/mkinitcpio.conf; then
+        warn "could not insert plymouth hook (HOOKS=$(grep '^HOOKS=' /etc/mkinitcpio.conf))"
+      fi
       run mkinitcpio -P
     fi
     # theme-packaged proof: if hexciri isn't in the initramfs, plymouth falls

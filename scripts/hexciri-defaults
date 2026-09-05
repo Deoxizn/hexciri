@@ -98,8 +98,18 @@ case "${pick_type,,}" in
     choice="$(menu_via_fuzzel 'Shell: ' -- "$(available shell "$current" fish bash)")" || exit 0
     [[ -n $choice ]] || exit 0
     setv shell "$choice"
-    if [[ $choice == fish && $SHELL != *fish ]]; then
-      echo "run: chsh -s /usr/bin/fish (keeps bash until you do)"
+    # shell is the interactive terminal shell only; the login shell stays bash
+    # (SSH/su/scripts stay POSIX-safe). kitty reads it from this default.
+    if command -v kitty >/dev/null 2>&1; then
+      if [[ $choice == fish ]]; then
+        kitty +kitten edit-config main.conf --replace 'shell fish' --apply-config "shell fish" >/dev/null 2>&1 \
+          || sed -i 's|^shell .*|shell fish|' "$HOME/.config/kitty/kitty.conf" 2>/dev/null || true
+        echo "kitty terminals now open in fish"
+      else
+        sed -i 's|^shell .*|shell '"$choice"'|' "$HOME/.config/kitty/kitty.conf" 2>/dev/null \
+          || printf 'shell %s\n' "$choice" >> "$HOME/.config/kitty/kitty.conf"
+        echo "kitty terminals now open in $choice"
+      fi
     fi
     ;;
   files)

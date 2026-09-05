@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=18   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=19   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -306,7 +306,10 @@ chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.local"
 # here may ever depend on sudo prompting.
 trap 'rm -f /root/hexciri-stage2.sh' EXIT
 HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
-command -v fish &>/dev/null && chsh -s /usr/bin/fish "$USERNAME" || true
+# login shell stays bash: SSH remote commands, su(1), and every POSIX script
+# route through the login shell — fish as $SHELL mangles those (for/done loops,
+# quoting). fish instead launches explicitly from the terminal via kitty
+# `shell fish`, so interactive sessions still get fish with zero login cost.
 su - "$USERNAME" -c "cd ~/.local/opt/hexciri && ./install.sh --user-only -y --channel $CHANNEL"
 STAGE2
 
