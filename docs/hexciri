@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=16   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=17   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -144,7 +144,6 @@ EOF
   partprobe "/dev/$DISK"
   udevadm settle 2>/dev/null || sleep 2
   ESP="/dev/$DISK$P""1"; ROOT="/dev/$DISK$P""2"
-  mkfs.fat -F32 "$ESP" >/dev/null
   FORMAT_ESP=yes
 else
   info "mapping free space on /dev/$DISK (existing partitions untouched)..."
@@ -176,7 +175,6 @@ else
   udevadm settle 2>/dev/null || sleep 2
   ROOT="/dev/$DISK$P$((LASTNUM+1))"
   info "created root $ROOT ($((ROOT_SIZE/1024/1024/1024))G $FS)"
-  [[ $FORMAT_ESP == yes ]] && mkfs.fat -F32 "$ESP" >/dev/null
 fi
 
 # residual-signature guard: a partition node still carrying an old signature (a
@@ -195,10 +193,13 @@ for d in "$ESP" "$ROOT"; do
   t="$(blkid -s TYPE -o value "$d" 2>/dev/null || true)"
   [[ -n $t ]] && { err "could not clear $t on $d — refusing to continue"; exit 1; }
 done
+# format AFTER the guard: rev 16 mkfs'd the ESP before wiping, and the guard
+# then erased the fresh FAT → bare node probing → squashfs superblock error.
+[[ $FORMAT_ESP == yes ]] && { info "formatting ESP $ESP (vfat)"; mkfs.fat -F32 "$ESP" >/dev/null; }
 mkfs_root "$ROOT"
-mount "$ROOT" /mnt
+mount -t "$FS" "$ROOT" /mnt
 mkdir -p /mnt/boot
-mount "$ESP" /mnt/boot
+mount -t vfat "$ESP" /mnt/boot
 
 # ── kernel set: exactly one bootable base kernel (+custom added later by the
 # installer, which also flips the default). Legacy NVIDIA (GTX 1xxx or older)
