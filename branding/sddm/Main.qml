@@ -50,7 +50,7 @@ Rectangle {
 
   Column {
     anchors.centerIn: parent
-    spacing: Math.round(root.height * 0.03)
+    spacing: Math.round(root.height * 0.028)
 
     Image {
       id: logo
@@ -61,72 +61,75 @@ Rectangle {
       anchors.horizontalCenter: parent.horizontalCenter
     }
 
-    Rectangle {
-      width: Math.min(root.width * 0.34, 320)
-      height: Math.max(46, Math.round(root.height * 0.06))
-      radius: 8
-      color: "#14111A"
-      border.color: "#43384C"
-      border.width: 1
+    Row {
+      spacing: Math.round(root.height * 0.015)
       anchors.horizontalCenter: parent.horizontalCenter
 
-      TextInput {
-        id: username
-        anchors.fill: parent
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        verticalAlignment: TextInput.AlignVCenter
-        font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 20
-        color: "#D8D0DC"
-        text: root.defaultUser()
-        selectionColor: "#43384C"
-        focus: true
+      Rectangle {
+        width: Math.min(root.width * 0.34, 320)
+        height: Math.max(46, Math.round(root.height * 0.06))
+        radius: 8
+        color: "#14111A"
+        border.color: "#43384C"
+        border.width: 1
 
-        Keys.onPressed: {
-          if (event.key === Qt.Key_Tab || event.key === Qt.Key_Down ||
-              event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-              root.attemptLogin()
-              event.accepted = true
-            } else {
-              password.forceActiveFocus()
-              event.accepted = true
+        TextInput {
+          id: username
+          anchors.fill: parent
+          anchors.leftMargin: 16
+          anchors.rightMargin: 16
+          verticalAlignment: TextInput.AlignVCenter
+          font.family: "JetBrainsMono Nerd Font"
+          font.pixelSize: 20
+          color: "#D8D0DC"
+          text: root.defaultUser()
+          selectionColor: "#43384C"
+          focus: true
+
+          Keys.onPressed: {
+            if (event.key === Qt.Key_Tab || event.key === Qt.Key_Down ||
+                event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+              if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                root.attemptLogin()
+                event.accepted = true
+              } else {
+                password.forceActiveFocus()
+                event.accepted = true
+              }
             }
           }
         }
       }
-    }
 
-    Rectangle {
-      width: Math.min(root.width * 0.34, 320)
-      height: Math.max(46, Math.round(root.height * 0.06))
-      radius: 8
-      color: "#14111A"
-      border.color: root.loginFailed ? "#f7768e" : "#43384C"
-      border.width: 1
-      anchors.horizontalCenter: parent.horizontalCenter
+      Rectangle {
+        width: Math.min(root.width * 0.34, 320)
+        height: Math.max(46, Math.round(root.height * 0.06))
+        radius: 8
+        color: "#14111A"
+        border.color: root.loginFailed ? "#f7768e" : "#43384C"
+        border.width: 1
 
-      TextInput {
-        id: password
-        anchors.fill: parent
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        verticalAlignment: TextInput.AlignVCenter
-        echoMode: TextInput.Password
-        font.family: "JetBrainsMono Nerd Font"
-        font.pixelSize: 20
-        passwordCharacter: "\u2022"
-        color: "#D8D0DC"
-        selectionColor: "#43384C"
-        selectedTextColor: "#D8D0DC"
+        TextInput {
+          id: password
+          anchors.fill: parent
+          anchors.leftMargin: 16
+          anchors.rightMargin: 16
+          verticalAlignment: TextInput.AlignVCenter
+          echoMode: TextInput.Password
+          font.family: "JetBrainsMono Nerd Font"
+          font.pixelSize: 20
+          passwordCharacter: "\u2022"
+          color: "#D8D0DC"
+          selectionColor: "#43384C"
+          selectedTextColor: "#D8D0DC"
 
-        onTextChanged: root.loginFailed = false
+          onTextChanged: root.loginFailed = false
 
-        Keys.onPressed: {
-          if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.attemptLogin()
-            event.accepted = true
+          Keys.onPressed: {
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+              root.attemptLogin()
+              event.accepted = true
+            }
           }
         }
       }
