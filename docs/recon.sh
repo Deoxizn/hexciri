@@ -5,10 +5,18 @@ set -uo pipefail
 say() { echo -e "\e[0;36m[recon]\e[0m $*"; }
 verdict() { echo -e "\e[1;33m[verdict]\e[0m $*"; }
 
-ESP="$(lsblk -rn -o NAME,FSTYPE | awk '$2=="vfat"{print "/dev/"$1}' | head -n 1)"
-LUKSDEV="$(blkid -o device -t TYPE=crypto_LUKS 2>/dev/null | head -n 1)"
-[[ -n ${ESP:-} ]] || { verdict "NO ESP FOUND (no vfat partition)"; exit 1; }
-[[ -n ${LUKSDEV:-} ]] || { verdict "NO LUKS PARTITION FOUND"; exit 1; }
+cryptsetup close cryptroot 2>/dev/null || true
+for cand in $(lsblk -rn -o NAME,FSTYPE | awk '$2=="vfat"{print "/dev/"$1}'); do
+  mkdir -p /mnt/espchk
+  mount -o ro "$cand" /mnt/espchk 2>/dev/null || continue
+  if ls /mnt/espchk/loader/entries/hexciri-*.conf >/dev/null 2>&1; then
+    ESP="$cand"
+    umount /mnt/espchk
+    break
+  fi
+  umount /mnt/espchk
+done
+[[ -n ${ESP:-} ]] || { verdict "NO ESP WITH HEXCIRI ENTRIES (checked all vfat)"; exit 1; }
 say "esp=$ESP luks=$LUKSDEV"
 mkdir -p /mnt
 mount "$ESP" /mnt 2>/dev/null || true
