@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=17   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=18   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -256,6 +256,17 @@ useradd -m -G wheel,lp,scanner -s /bin/bash "$USERNAME"
 printf '%s:%s' "$USERNAME" "$USERPASS" | chpasswd
 # root shares the user password: single-user/emergency shells stay usable
 printf 'root:%s' "$USERPASS" | chpasswd
+# prove the captured password actually authenticates BOTH users before the
+# install continues — a stored-but-wrong password surfaced as a greeter
+# rejection on first try and cost a re-install; no longer shipable.
+for _u in "$USERNAME" root; do
+  if printf '%s\\n' "$USERPASS" | su -s /bin/sh "$_u" -c true >/dev/null 2>&1; then
+    ok "password verified for $_u"
+  else
+    err "password did NOT take for $_u — aborting (re-run with a clean password)"
+    exit 1
+  fi
+done
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 bootctl install --esp-path=/boot >/dev/null
@@ -296,7 +307,7 @@ chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.local"
 trap 'rm -f /root/hexciri-stage2.sh' EXIT
 HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
 command -v fish &>/dev/null && chsh -s /usr/bin/fish "$USERNAME" || true
-su - "$USERNAME" -c "cd ~/.local/opt/hexciri && ./install.sh --user-only -y"
+su - "$USERNAME" -c "cd ~/.local/opt/hexciri && ./install.sh --user-only -y --channel $CHANNEL"
 STAGE2
 
 info "stage 2 (chroot)..."
