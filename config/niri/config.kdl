@@ -517,6 +517,7 @@ layer-rule {
 // ──────────────────────────────────────────────
 
 spawn-at-startup "hexciri-niri-monitors"   // First login: auto-append output blocks (install-time detect can't see monitors in chroot)
+spawn-at-startup "hexciri-theme-ensure"    // First login: re-apply the active theme if the chroot seed left it dormant
 spawn-at-startup "noctalia"                 // Noctalia shell (bar, notifications, idle/lock, etc.)
 spawn-at-startup "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"   // Polkit auth dialogs (vanilla GNOME agent)
 spawn-sh-at-startup "wl-paste --type text --watch cliphist store"   // Feed text copies into clipboard history

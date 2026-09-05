@@ -119,14 +119,17 @@ if $SYSTEM_ONLY; then
     run rm -rf /tmp/hexciri-aur
   fi
 
-  # ── hide noisy utility desktop entries (avahi UI + hwloc) ──
+  # ── hide noisy utility desktop entries (avahi UI, hwloc, qt/v4l tooling) ──
   # avahi-discover, bssh, bvnc are LAN-discovery tools the average desktop user
-  # never opens; lstopo is hwloc's hardware-topology viewer. They only exist in
-  # the menu because the packages install plain .desktop files — mark them
+  # never opens; lstopo is hwloc's hardware-topology viewer; qv4l2/qvidcap are
+  # v4l-utils video-device debuggers; qt6ct is the Qt6 settings config GUI that
+  # most users reach via their DE settings or the config file. They only exist
+  # in the menu because the packages install plain .desktop files — mark them
   # NoDisplay so they vanish from app menus without uninstalling the packages.
   # Matches on the exact basename and refuses to touch anything else.
-  info "hiding avahi/hwloc utility entries from app menus..."
-  for f in avahi-discover.desktop bssh.desktop bvnc.desktop lstopo.desktop; do
+  info "hiding avahi/hwloc/qt/v4l utility entries from app menus..."
+  for f in avahi-discover.desktop bssh.desktop bvnc.desktop lstopo.desktop \
+           qv4l2.desktop qvidcap.desktop qt6ct.desktop; do
     d="/usr/share/applications/$f"
     if [[ -f $d ]] && grep -q '^NoDisplay=true' "$d"; then
       : # already curated
@@ -522,8 +525,13 @@ if command -v pipewire >/dev/null 2>&1; then
 fi
 
 # ── seed maiden theme ──
+# Non-fatal: runs inside the chroot user phase where no session/compositor is
+# up, so it can die partway (theme tree or noctalia palette patch missing).
+# hexciri-theme-ensure re-applies it at first login; a failure here must never
+# abort the rest of the user phase.
 if ! $DRY_RUN; then
-  HEXCIRI_PATH=/usr/share/hexciri hexciri-theme-set sakurazuki
+  HEXCIRI_PATH=/usr/share/hexciri hexciri-theme-set sakurazuki \
+    || warn "theme seed incomplete — hexciri-theme-ensure will re-apply at first login"
 fi
 
 # ── noctalia arch-updater plugin presets: plugin-level settings are owned by

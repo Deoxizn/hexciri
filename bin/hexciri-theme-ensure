@@ -1,0 +1,40 @@
+#!/bin/bash
+# hexciri-theme-ensure: make sure the active theme is actually live.
+#
+# The installer seeds the maiden theme from within the chroot user phase, where
+# no noctalia/niri/session exists — if that run dies partway, the box boots
+# themeless (default palette, no wallpaper). This runs at every login via
+# spawn-at-startup, cheaply checks that Noctalia is on the hexciri custom
+# palette and the theme tree exists, and only re-runs hexciri-theme-set when
+# something is missing. Idempotent and near-instant on healthy setups.
+set -euo pipefail
+
+state="$HOME/.local/state/hexciri/current"
+name_file="$state/theme.name"
+noctalia_cfg="$HOME/.config/noctalia/config.toml"
+
+need_apply=false
+
+if [[ -f $name_file ]]; then
+  name="$(<"$name_file")"
+else
+  name="sakurazuki"
+  need_apply=true
+fi
+
+if [[ ! -d "$state/theme" || ! -f "$state/theme/colors.toml" ]]; then
+  need_apply=true
+fi
+
+if grep -q 'source = "custom"' "$noctalia_cfg" 2>/dev/null; then
+  :
+else
+  need_apply=true
+fi
+
+if $need_apply; then
+  echo "hexciri-theme-ensure: $(<"$name_file") theme not live — re-applying $name"
+  hexciri-theme-set "$name"
+else
+  echo "hexciri-theme-ensure: theme '$name' is live, nothing to do"
+fi
