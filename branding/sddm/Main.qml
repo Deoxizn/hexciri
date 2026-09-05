@@ -7,27 +7,26 @@ Rectangle {
   height: Screen.height
   color: "#0b0911"
 
-  property string currentUser: {
-    // lastUser is frequently stale/empty on a fresh install; fall back to the
-    // first real user in the model (skipping the built-in system accounts).
+  function resolveUser() {
+    // Resolve at submit time: userModel may not be populated when the file is
+    // first evaluated, and a stale property then sends an empty username to
+    // SDDM ("user not known to the underlying authentication module").
     var last = userModel.lastUser || ""
+    if (last.length > 0) return last
     for (var i = 0; i < userModel.rowCount(); i++) {
       var u = (userModel.data(userModel.index(i, 0), Qt.DisplayRole) || "").toString()
-      if (u === last) return u
       if (u !== "root" && u !== "nobody" && u !== "systemd-coredump")
         return u
     }
-    return last
+    return ""
   }
 
-  property int sessionIndex: 0
-  property bool sessionOK: false
-
   function attemptLogin() {
-    // fail visibly instead of a silent "Authentication failed": the most common
-    // first-boot trap was an empty lastUser (SDDM then authenticates an empty
-    // username and rejects the password) or a missing session.
-    if (root.currentUser.length === 0) {
+    // Resolve NOW, not from a cached property — an empty username made SDDM
+    // log "user not known to the underlying authentication module" and fail
+    // the password even though it was correct.
+    var user = root.resolveUser()
+    if (user.length === 0) {
       errmsg.text = "no user selected — cannot log in"
       errmsg.visible = true
       return
@@ -37,7 +36,7 @@ Rectangle {
       errmsg.visible = true
       return
     }
-    sddm.login(root.currentUser, password.text, root.sessionIndex)
+    sddm.login(user, password.text, root.sessionIndex)
   }
 
   Connections {
@@ -66,7 +65,7 @@ Rectangle {
     }
 
     Text {
-      text: root.currentUser
+      text: root.resolveUser()
       color: "#D8D0DC"
       font.family: "JetBrainsMono Nerd Font"
       font.pixelSize: Math.max(18, Math.round(root.height * 0.034))
