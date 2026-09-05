@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-05 — hexciri v0.1.2
+
+- **hexciriv2 brand refresh**: new emblem (2000×1828) now ships everywhere — SDDM theme, plymouth theme, README, and the docs/website logo — and the old banner emblems are gone. A clean unbranded variant is the fastfetch logo.
+- **Greeter, finally right**: the panel's DPI no longer scales the greeter layout (was ~4× on the 2880×1920 Framework), so the emblem renders at true size (716px) with a slim 150px entry; the logo PNG is right-sized (800px) so the greeter paints instantly instead of a long black wait; the fingerprint flow is a single friendly prompt — no retry timers, no phantom red "authentication failed".
+- **fastfetch**: unbranded logo installed to `~/.config/fastfetch/hexciri-nb.png`, box 70×31 with 3px top padding; the installer drops the asset + config in place.
+- **Keyring, quiesced**: fingerprint-first now lives in `system-auth` (supersedes the SDDM-local copy — one place covers sddm/sudo/su/login, no double prompt at the greeter), while SDDM's PAM keeps the gnome-keyring unlock lines so fingerprint logins never hit "Unlock Login Keyring"; gnome-keyring is pinned at 48.0 via `IgnorePkg` in both pacman channels (50.0 crashes — SIGABRT on concurrent Secret Service OpenSession/PKCS11), with a hexciri-menu shortcut to downgrade if it ever slips in.
+- **Plymouth**: hexciri moves to the script module with emblem, entry pill, lock, and progress art; the splash only engages where a boot-time prompt exists to brand — installs that boot straight to the greeter no longer sit on a black splash.
+- **hexciri-security**: the Fingerprint menu entry appears only when a reader is actually present.
+- **hexciri-update-run**: the post-update reboot offer follows the pinned boot default (hexciri-kernel pin, else loader default) instead of the newest module dir, so a second staged kernel no longer spoofs a reboot.
+- **hexciri-sync**: PAM restoration rebalanced around `system-auth` + the keyring pin; SDDM theme deploy expanded to the full greeter asset set.
+
 ## 2026-09-05 — hexciri v0.1.1
 
 - **Transparent terminals**: kitty `background_opacity 0.35` plus a niri `background-effect { blur true }` window rule (niri 26.04 window effects) so reduced opacity reads as soft translucency. Focus ring and border are now off — niri paints both as a solid rectangle *behind* windows (per its FAQ), which covers semitransparent windows and hides the blur; that was the real reason focused terminals rendered opaque.

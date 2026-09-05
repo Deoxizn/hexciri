@@ -24,11 +24,40 @@ confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
   fi
 } 2>&1 | tee -a "$LOG"
 
-# reboot offer when the running kernel is no longer the newest installed
+# Reboot offer only when the kernel hexciri is pinned to boot differs from the
+# one currently running. hexciri's single-kernel policy means normally exactly
+# one module dir exists; if a second kernel is present (e.g. a stock `linux`
+# staged during install that was never de-picked), "newest module dir" would
+# wrongly claim the kernel changed — the pin (hexciri-kernel choice recorded in
+# /usr/share/hexciri/boot-default, else the loader default) is authoritative.
 running=$(uname -r)
-newest="$(ls -1 /usr/lib/modules/ 2>/dev/null | sort -V | tail -n 1)"
-if [[ -n $newest && $newest != "$running"* && $running != "$newest"* ]]; then
-  echo "kernel: $running -> $newest"
+expected=""
+
+pin=/usr/share/hexciri/boot-default
+entry=""
+if [[ -r $pin ]]; then
+  e="$(cat "$pin" 2>/dev/null || true)"
+  [[ -f /boot/loader/entries/$e ]] && entry="$e"
+fi
+if [[ -z $entry && -r /boot/loader/loader.conf ]]; then
+  e="$(awk '$1=="default"{print $2}' /boot/loader/loader.conf 2>/dev/null)"
+  [[ -f /boot/loader/entries/$e ]] && entry="$e"
+fi
+
+if [[ -n $entry ]]; then
+  vmlinuz="$(awk '$1=="linux"{print $2; exit}' "/boot/loader/entries/$entry" 2>/dev/null)"
+  pkg="${vmlinuz##*/}"; pkg="${pkg#vmlinuz-}"
+  for d in /usr/lib/modules/*; do
+    [[ -d $d ]] || continue
+    if pacman -Qqo "$d" 2>/dev/null | grep -qx "$pkg"; then
+      expected="${d##*/}"; break
+    fi
+  done
+fi
+[[ -n $expected ]] || expected="$(ls -1 /usr/lib/modules/ 2>/dev/null | sort -V | tail -n 1)"
+
+if [[ -n $expected && $expected != "$running" ]]; then
+  echo "kernel: $running -> $expected (a different kernel is now the boot default)"
   confirm "Reboot now?" && systemctl reboot
 else
   echo "update complete (kernel $running current)."

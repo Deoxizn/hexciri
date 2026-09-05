@@ -1,6 +1,7 @@
 #%PAM-1.0
 
-auth        sufficient  pam_fprintd.so
+# Fingerprint comes via system-auth (included by system-login below) — keeping
+# it here too would prompt twice at the greeter.
 auth        include     system-login
 -auth       optional    pam_gnome_keyring.so
 -auth       optional    pam_kwallet5.so

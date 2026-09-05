@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="branding/hexciri.png" alt="Hexciri" width="650">
+<img src="branding/hexciri-nb.png" alt="Hexciri" width="650">
 
 Arch × Niri × Noctalia
 

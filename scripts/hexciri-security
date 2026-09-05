@@ -9,28 +9,36 @@ if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "
 bindir="${bindir:-$SCRIPT_DIR}"
 
 menu=""
-declare -A cmd_for=()
+add() { menu+="$1"$'\n'; }
 
-add() {
-  local label=$1 cond=$2
-  shift 2
-  [[ -n $cond ]] && ! "$cond" >/dev/null 2>&1 && return 0
-  cmd_for[$label]="$*"
-  menu+="$label"$'\n'
-}
-
-add 'Fingerprint' "$bindir/hexciri-hw-fingerprint" "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'if ! command -v fprintd-enroll >/dev/null 2>&1; then echo "Installing fprintd (fingerprint support)..."; sudo pacman -S --noconfirm fprintd; fi; if command -v fprintd-enroll >/dev/null 2>&1; then fprintd-enroll; else echo "fprintd failed to install — run: sudo pacman -S fprintd"; fi; read -rp "Press Enter to close"'
-add 'Fido2'             ''                               "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'echo "Plug in your FIDO2 key."; read -rp "It should register via your app. Configure: sudo systemctl enable fido2-token-gc; See arch-wiki FIDO2."; echo done'
-add 'SSHD'              ''                               "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'if systemctl is-enabled sshd >/dev/null 2>&1; then sudo systemctl disable --now sshd && echo "ssh disabled"; else sudo systemctl enable --now sshd && echo "ssh enabled"; fi; read -rp "Press enter to close"' 
-add 'Passwordless Sudo' ''                               "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'sudo tee /etc/sudoers.d/20-hexciri-$USER >/dev/null <<EOF
-$USER ALL=(ALL) NOPASSWD: ALL
-EOF
-sudo chmod 440 /etc/sudoers.d/20-hexciri-$USER; echo "passwordless sudo enabled for $USER"; read -rp "Press enter to close"'
+# Fingerprint only when the reader exists on this machine
+"$bindir/hexciri-hw-fingerprint" >/dev/null 2>&1 && add 'Fingerprint'
+add 'Fido2'
+add 'SSHD'
+add 'Passwordless Sudo'
 
 choice=$(
   printf '%s' "$menu" |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Security: ' --width=30 --lines=${#cmd_for[@]}
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Security: ' --width=30 --lines="$(printf '%s\n' "$menu" | sed '/^$/d' | wc -l)"
 ) || exec "$SCRIPT_DIR/hexciri-system"
 
-cmd=${cmd_for[$choice]:-}
-[[ -n $cmd ]] && eval exec "$cmd"
+enter_term() { "$SCRIPT_DIR/hexciri-terminal" -e bash -c "$1"; }
+
+case "$choice" in
+  "Fingerprint")
+    enter_term 'if ! command -v fprintd-enroll >/dev/null 2>&1; then echo "Installing fprintd (fingerprint support)..."; sudo pacman -S --noconfirm fprintd; fi; if command -v fprintd-enroll >/dev/null 2>&1; then fprintd-enroll; else echo "fprintd failed to install -- run: sudo pacman -S fprintd"; fi; read -rp "Press Enter to close"'
+    ;;
+  "Fido2")
+    enter_term 'echo "Plug in your FIDO2 key."; read -rp "It should register via your app. Configure: sudo systemctl enable fido2-token-gc; See arch-wiki FIDO2."; echo done'
+    ;;
+  "SSHD")
+    enter_term 'if systemctl is-enabled sshd >/dev/null 2>&1; then sudo systemctl disable --now sshd && echo "ssh disabled"; else sudo systemctl enable --now sshd && echo "ssh enabled"; fi; read -rp "Press enter to close"'
+    ;;
+  "Passwordless Sudo")
+    enter_term 'sudo tee /etc/sudoers.d/20-hexciri-$USER >/dev/null <<EOF
+$USER ALL=(ALL) NOPASSWD: ALL
+EOF
+sudo chmod 440 /etc/sudoers.d/20-hexciri-$USER; echo "passwordless sudo enabled for $USER"; read -rp "Press enter to close"'
+    ;;
+  *) exec "$SCRIPT_DIR/hexciri-system" ;;
+esac

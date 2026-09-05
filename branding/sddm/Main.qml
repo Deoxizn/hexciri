@@ -7,96 +7,146 @@ Rectangle {
   height: Screen.height
   color: "#0b0911"
 
-  property bool loginFailed: false
-  property int sessionIndex: 0
-  // The installer stamps Username= into theme.conf, so on single-user installs
-  // there is a guaranteed known user: greet a password-only box and submit it
-  // automatically. Only multi-user / unknown-user installs fall back to an
-  // editable username field.
-  property bool passwordOnly: (config.Username || "").length > 0
-
-  function defaultUser() {
-    var conf = config.Username || ""
-    if (conf.length > 0) return conf
-    var last = userModel.lastUser || ""
-    if (last.length > 0) return last
-    for (var i = 0; i < userModel.rowCount(); i++) {
-      var u = (userModel.data(userModel.index(i, 0), Qt.DisplayRole) || "").toString()
-      if (u !== "root" && u !== "nobody" && u !== "systemd-coredump")
-        return u
+  // Design canvas is 640x790 and never scales above 1x, so on big panels
+  // (2880x1920 here) everything renders at true pixel size; smaller panels
+  // scale the canvas down proportionally to fit.
+  property real scaleFactor: Math.min(1, root.width / 640, root.height / 790)
+  property string currentUser: {
+    if (config.Username && config.Username.length > 0) return config.Username
+    return userModel.lastUser
+  }
+  property int sessionIndex: {
+    for (var i = 0; i < sessionModel.rowCount(); i++) {
+      var name = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString()
+      if (name.indexOf("niri") !== -1 || name.indexOf("uwsm") !== -1)
+        return i
     }
-    return ""
+    return sessionModel.lastIndex
   }
 
-  function attemptLogin() {
-    var user = root.passwordOnly ? config.Username : username.text
-    if (user.length === 0) {
-      errmsg.text = "no username entered"
-      errmsg.visible = true
-      return
-    }
-    sddm.login(user, password.text, root.sessionIndex)
-  }
+  property string infoText: ""
+  property string errText: ""
 
   Connections {
     target: sddm
     function onLoginFailed() {
-      root.loginFailed = true
+      root.errText = "authentication failed"
+      root.infoText = ""
       password.text = ""
       password.focus = true
+      messageReset.start()
     }
     function onLoginSucceeded() {
-      root.loginFailed = false
+      root.errText = ""
+      root.infoText = ""
+    }
+    function onInformationMessage(message) {
+      if (message && message.length > 0) {
+        root.infoText = message
+        root.errText = ""
+      }
     }
   }
 
-  Column {
-    anchors.centerIn: parent
-    spacing: Math.round(root.height * 0.028)
+  // Auto-clears the red error banner a few seconds after a failed attempt.
+  Timer {
+    id: messageReset
+    interval: 4000
+    onTriggered: root.errText = ""
+  }
 
-    Image {
-      id: logo
-      source: "logo.png"
-      width: Math.min(root.width * 0.5, 520)
-      height: Math.round(width * 0.545)
-      fillMode: Image.PreserveAspectFit
-      anchors.horizontalCenter: parent.horizontalCenter
+  Item {
+    id: stage
+    width: 640
+    height: 790
+    anchors.centerIn: parent
+    transform: Scale {
+      xScale: root.scaleFactor
+      yScale: root.scaleFactor
+      origin.x: 320
+      origin.y: 395
     }
 
-    Row {
-      spacing: Math.round(root.height * 0.015)
-      anchors.horizontalCenter: parent.horizontalCenter
+    Column {
+      anchors.centerIn: parent
+      spacing: 40
 
-      Rectangle {
-        width: Math.min(root.width * 0.34, 320)
-        height: Math.max(46, Math.round(root.height * 0.06))
-        radius: 8
-        color: "#14111A"
-        border.color: "#43384C"
-        border.width: 1
-        visible: !root.passwordOnly
+      Image {
+        id: logo
+        source: "logo.png"
+        width: Math.min(sourceSize.width, 716)
+        height: sourceSize.width > 0 ? Math.round(width * sourceSize.height / sourceSize.width) : 0
+        fillMode: Image.PreserveAspectFit
+        anchors.horizontalCenter: parent.horizontalCenter
+      }
 
-        TextInput {
-          id: username
-          anchors.fill: parent
-          anchors.leftMargin: 16
-          anchors.rightMargin: 16
-          verticalAlignment: TextInput.AlignVCenter
-          font.family: "JetBrainsMono Nerd Font"
-          font.pixelSize: 20
-          color: "#D8D0DC"
-          text: root.defaultUser()
-          selectionColor: "#43384C"
-          focus: !root.passwordOnly
+      Row {
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: 15
 
-          Keys.onPressed: {
-            if (event.key === Qt.Key_Tab || event.key === Qt.Key_Down ||
-                event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+        Image {
+          source: root.errText.length > 0 ? "lock-failed.png" : "lock.png"
+          width: 34
+          height: 38
+          fillMode: Image.PreserveAspectFit
+          anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Item {
+          width: entry.width
+          height: entry.height
+
+          Image {
+            id: entry
+            source: root.errText.length > 0 ? "entry-failed.png" : "entry.png"
+            width: 150
+            height: 26
+            anchors.centerIn: parent
+          }
+
+          Row {
+            anchors.left: parent.left
+            anchors.leftMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 5
+
+            Repeater {
+              model: Math.min(password.text.length, 21)
+
+              Image {
+                source: "bullet.png"
+                width: 6
+                height: 6
+              }
+            }
+          }
+
+          TextInput {
+            id: password
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            verticalAlignment: TextInput.AlignVCenter
+            echoMode: TextInput.Password
+            font.family: "JetBrainsMono Nerd Font"
+            font.pixelSize: 17
+            font.letterSpacing: 2
+            passwordCharacter: "\u2022"
+            color: "transparent"
+            selectionColor: "transparent"
+            selectedTextColor: "transparent"
+            cursorDelegate: Item {}
+            focus: true
+
+            onTextChanged: {
+              root.errText = ""
+              root.infoText = ""
+            }
+
+            Keys.onPressed: {
               if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                root.attemptLogin()
-                event.accepted = true
-              } else {
-                password.forceActiveFocus()
+                root.infoText = ""
+                sddm.login(root.currentUser, password.text, root.sessionIndex)
                 event.accepted = true
               }
             }
@@ -104,58 +154,35 @@ Rectangle {
         }
       }
 
-      Rectangle {
-        width: root.passwordOnly ? Math.min(root.width * 0.45, 380) : Math.min(root.width * 0.34, 320)
-        height: Math.max(46, Math.round(root.height * 0.06))
-        radius: 8
-        color: "#14111A"
-        border.color: root.loginFailed ? "#f7768e" : "#43384C"
-        border.width: 1
-
-        TextInput {
-          id: password
-          anchors.fill: parent
-          anchors.leftMargin: 16
-          anchors.rightMargin: 16
-          verticalAlignment: TextInput.AlignVCenter
-          echoMode: TextInput.Password
-          font.family: "JetBrainsMono Nerd Font"
-          font.pixelSize: 20
-          passwordCharacter: "\u2022"
-          color: "#D8D0DC"
-          selectionColor: "#43384C"
-          selectedTextColor: "#D8D0DC"
-          focus: root.passwordOnly
-
-          onTextChanged: root.loginFailed = false
-
-          Keys.onPressed: {
-            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-              root.attemptLogin()
-              event.accepted = true
-            }
-          }
-        }
+      Text {
+        visible: root.infoText.length > 0 || root.errText.length > 0
+        text: root.errText.length > 0 ? root.errText : root.infoText
+        color: root.errText.length > 0 ? "#f7768e" : "#b6849d"
+        font.family: "JetBrainsMono Nerd Font"
+        font.pixelSize: 16
+        anchors.horizontalCenter: parent.horizontalCenter
       }
     }
+  }
 
-    Text {
-      id: errmsg
-      visible: root.loginFailed
-      text: "authentication failed"
-      color: "#f7768e"
-      font.family: "JetBrainsMono Nerd Font"
-      font.pixelSize: Math.max(14, Math.round(root.height * 0.026))
-      anchors.horizontalCenter: parent.horizontalCenter
+  // Fingerprint-first: start authentication as soon as the greeter is up so
+  // fprintd claims the reader and prompts immediately (no password needed).
+  // If fprintd is slow, the first attempt fails with a brief red flash and
+  // the reader stays armed for the next touch; Enter falls back to password.
+  Timer {
+    id: autoStart
+    interval: 1000
+    repeat: false
+    onTriggered: {
+      if (root.currentUser.length > 0) {
+        root.infoText = "touch the reader or enter your password"
+        sddm.login(root.currentUser, "", root.sessionIndex)
+      }
     }
   }
 
   Component.onCompleted: {
-    username.text = root.defaultUser()
-    for (var i = 0; i < sessionModel.rowCount(); i++) {
-      var n = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString().toLowerCase()
-      if (n.indexOf("niri") !== -1) { root.sessionIndex = i; break }
-      root.sessionIndex = i
-    }
+    password.forceActiveFocus()
+    autoStart.start()
   }
 }

@@ -72,6 +72,13 @@ if $SYSTEM_ONLY; then
   [[ -n $TARGET_USER && $TARGET_USER != root ]] || { err "--system-only needs HEXCIRI_USER set to a non-root user"; exit 1; }
   id "$TARGET_USER" &>/dev/null || { err "user $TARGET_USER does not exist"; exit 1; }
   as_user() { run su - "$TARGET_USER" -c "$*"; }
+  # disk-encryption gate: bootstrap writes /etc/hexciri/encrypt on LUKS installs.
+  # Encryption is treated as the login (boot unlock → straight to the desktop via
+  # sddm autologin, plymouth brands the unlock); no-LUKS installs skip both and
+  # keep the password greeter as the login gate.
+  ENCRYPT_LUKS=false
+  [[ -f /etc/hexciri/encrypt ]] && ENCRYPT_LUKS=true
+  $ENCRYPT_LUKS && info "LUKS root detected (marker /etc/hexciri/encrypt)"
 
   # ── channel + keyring ──
   info "deploying pacman channel..."
@@ -101,7 +108,7 @@ if $SYSTEM_ONLY; then
     bluez bluez-utils
     tesseract zbar qrencode fwupd zenity kdialog qt6ct localsend
     pipewire pipewire-pulse wireplumber
-    zram-generator pacman-contrib)
+    zram-generator pacman-contrib cryptsetup)
   MISSING=()
   for p in "${PKGS[@]}"; do pacman -Q "$p" &>/dev/null || MISSING+=("$p"); done
   if ((${#MISSING[@]})); then
@@ -220,8 +227,9 @@ HOOK
   run mkdir -p /usr/share/pixmaps
   run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
 
-  # ── services + SDDM (greeter login with a password; no disk encryption,
-  #    so the login gate lives at the sddm prompt itself) ──
+  # ── services + SDDM (no disk encryption → the login gate lives at the sddm
+  #    prompt itself; encryption → the unlock at boot IS the login, so sddm
+  #    autologins straight to the desktop) ──
   run systemctl enable NetworkManager.service 2>/dev/null || true
   run systemctl enable sshd.service 2>/dev/null || true
   run systemctl enable sddm.service 2>/dev/null || true
@@ -243,8 +251,16 @@ HOOK
   run usermod -aG lp,scanner "$TARGET_USER" 2>/dev/null || true
   # ── bluetooth: bluez stack + rfkill; bar widget + pairing need bluetoothd ──
   run systemctl enable --now bluetooth.service 2>/dev/null || true
-  # remove any autologin config: no encryption gate means no free pass
-  run rm -f /etc/sddm.conf.d/10-hexciri-autologin.conf 2>/dev/null || true
+  if $ENCRYPT_LUKS; then
+    # encryption gate = the login: LUKS unlock at boot, then straight to desktop
+    run mkdir -p /etc/sddm.conf.d
+    printf '[Autologin]\nSession=niri.desktop\nUser=%s\n' "$TARGET_USER" \
+      | run tee /etc/sddm.conf.d/10-hexciri-autologin.conf >/dev/null
+    info "LUKS install: sddm autologin as $TARGET_USER (login gate is the boot unlock)"
+  else
+    # no encryption gate means no free pass — greeter login with a password
+    run rm -f /etc/sddm.conf.d/10-hexciri-autologin.conf 2>/dev/null || true
+  fi
 
   # ── gnome-keyring: unlock the login keyring at sddm login via pam. Without
   #    this, the "Unlock Login Keyring" popup appears whenever the first app
@@ -254,15 +270,35 @@ HOOK
     run cp -f "$REPO_DIR/default/pam/sddm" /etc/pam.d/sddm
     info "sddm login: wired pam_gnome_keyring (auto-unlocks 'login' keyring)"
   fi
-  # Mask the gnome-keyring dbus-activation units. The package ships them enabled,
-  # and they spawn a second daemon that collides with the PAM one (two owners of
-  # org.freedesktop.secrets → apps like zed hit broken secret calls and show the
-  # "unlock login keyring" prompt even though PAM already unlocked it).
-  run mkdir -p /etc/systemd/user
-  for u in gnome-keyring-daemon.service gnome-keyring-daemon.socket; do
-    [[ -e /etc/systemd/user/$u ]] || run ln -sf /dev/null "/etc/systemd/user/$u"
-  done
-  info "masked gnome-keyring daemon socket/service (PAM daemon is the sole secrets owner)"
+  # fingerprint-first for sudo/su/login (system-auth also backs sddm via
+  # system-login); sufficient → password still works when no print is present
+  if [[ ! -f /etc/pam.d/system-auth ]] || ! grep -q 'pam_fprintd.so' /etc/pam.d/system-auth; then
+    run cp -f /etc/pam.d/system-auth "/etc/pam.d/system-auth.bak.$(date +%s)" 2>/dev/null || true
+    run cp -f "$REPO_DIR/default/pam/system-auth" /etc/pam.d/system-auth
+    info "system-auth: fingerprint-first for sudo/su/login"
+  fi
+  # ── gnome-keyring: PIN the last known-good build. 50.0 has an unfixed
+  #    upstream crash (SIGABRT in g_variant_new during concurrent Secret
+  #    Service OpenSession/PKCS11 negotiation) that kills the PAM daemon and
+  #    leaves a locked replacement → "unlock login keyring" popups. Parking
+  #    48.0 with IgnorePkg removes the crashing code entirely — no masks, no
+  #    dbus overrides: a healthy daemon stays the sole owner of
+  #    org.freedesktop.secrets. Return to a clean upgrade once upstream ships
+  #    a fixed 50.x (delete the IgnorePkg line below). ──
+  if pacman -Q gnome-keyring 2>/dev/null | grep -q ' 50\.'; then
+    gkr_pkg=/var/cache/pacman/pkg/gnome-keyring-1:48.0-1-x86_64.pkg.tar.zst
+    if [[ ! -f $gkr_pkg ]]; then
+      run curl -fLo "$gkr_pkg" "https://archive.archlinux.org/packages/g/gnome-keyring/gnome-keyring-1%3A48.0-1-x86_64.pkg.tar.zst"
+    fi
+    run pacman -U --noconfirm "$gkr_pkg"
+    info "downgraded gnome-keyring to 48.0 (50.0 crashes; parked until upstream fixes it)"
+  fi
+  if ! grep -Eq '^IgnorePkg[[:space:]]*=.*gnome-keyring' /etc/pacman.conf; then
+    # must live under [options]; appending at EOF lands in the last repo
+    # section and pacman conflates directives with repo entries
+    run sed -i '/^\[options\]/a IgnorePkg = gnome-keyring' /etc/pacman.conf
+    info "parked gnome-keyring via IgnorePkg"
+  fi
 
   # ── SDDM theme (emblem + password greeter, Niri preferred) ──
   if ! $DRY_RUN; then
@@ -270,7 +306,10 @@ HOOK
     for f in Main.qml metadata.desktop theme.conf; do
       run cp -f "$REPO_DIR/branding/sddm/$f" /usr/share/sddm/themes/hexciri/$f
     done
-    run cp -f "$REPO_DIR/branding/logo.png" /usr/share/sddm/themes/hexciri/logo.png
+    # hexciri's own greeter asset set (proven on this hardware)
+    for f in logo.png lock.png lock-failed.png entry.png entry-failed.png bullet.png; do
+      run cp -f "$REPO_DIR/branding/sddm/$f" /usr/share/sddm/themes/hexciri/$f
+    done
     # Prefill the greeter's username field from the install user this session;
     # the SddmComponents user model can be empty/slow on a fresh first boot.
     printf '\nUsername=%s\n' "${TARGET_USER:-}" | run tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null
@@ -278,11 +317,15 @@ HOOK
     printf '[Theme]\nCurrent=hexciri\n' | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
   fi
 
-  # ── Plymouth splash (emblem two-step) ──
-  if ! $DRY_RUN; then
+  # ── Plymouth splash (hexciri script theme, provably rendered on this box).
+  #    Only meaningful on encrypted installs: LUKS gives the boot an unlock
+  #    moment to brand (plymouth shows the password dialog), and with no LUKS
+  #    the splash flashes for ~1s on a fast NVMe and reads as a black screen —
+  #    skip it entirely there. ──
+  if $ENCRYPT_LUKS && ! $DRY_RUN; then
     pacman -Q plymouth &>/dev/null || run pacman -S --noconfirm plymouth
     run mkdir -p /usr/share/plymouth/themes/hexciri
-    for f in hexciri.plymouth watermark.png lock.png; do
+    for f in hexciri.plymouth hexciri.script logo.png lock.png entry.png bullet.png progress_bar.png progress_box.png; do
       run cp -f "$REPO_DIR/branding/plymouth/$f" /usr/share/plymouth/themes/hexciri/$f
     done
     if ! grep -q '^Theme=hexciri' /etc/plymouth/plymouthd.conf 2>/dev/null; then
@@ -305,6 +348,18 @@ HOOK
         warn "could not insert plymouth hook (HOOKS=$(grep '^HOOKS=' /etc/mkinitcpio.conf))"
       fi
       run mkinitcpio -P
+    fi
+    # LUKS: cryptdevice=PARTUUID=... needs the udev 'encrypt' hook (before
+    # filesystems) so the container opens at boot and the branded plymouth
+    # password dialog takes the passphrase.
+    if ! grep -q '^HOOKS=.* encrypt' /etc/mkinitcpio.conf 2>/dev/null; then
+      run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
+      run sed -i 's/^HOOKS=(\([^)]*\)filesystems/\1encrypt filesystems/' /etc/mkinitcpio.conf
+      if grep -q '^HOOKS=.* encrypt' /etc/mkinitcpio.conf; then
+        run mkinitcpio -P
+      else
+        warn "could not insert encrypt hook (HOOKS=$(grep '^HOOKS=' /etc/mkinitcpio.conf))"
+      fi
     fi
     # theme-packaged proof: if hexciri isn't in the initramfs, plymouth falls
     # back to the stock arch theme ('ARCH LINUX' wordmark) at boot. Fail loudly
@@ -473,6 +528,8 @@ if [[ -f $niri_cfg ]] && ! grep -q '^output ' "$niri_cfg"; then
 fi
 
 deploy config/noctalia/config.toml "$HOME/.config/noctalia/config.toml"
+run mkdir -p "$HOME/.config/fastfetch"
+run cp -f "$REPO_DIR/branding/hexciri-nb.png" "$HOME/.config/fastfetch/hexciri-nb.png"
 deploy config/fastfetch/config.jsonc "$HOME/.config/fastfetch/config.jsonc"
 deploy config/starship/starship.toml "$HOME/.config/starship.toml"
 deploy config/fish/conf.d/hexciri-starship.fish "$HOME/.config/fish/conf.d/hexciri-starship.fish"
