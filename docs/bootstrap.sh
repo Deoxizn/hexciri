@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=23   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=24   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -270,9 +270,16 @@ if [[ -d $LIVE_KEYRING ]] && [[ -d /mnt/etc ]]; then
 else
   PACSTRAP_K=(-K)
 fi
+# seed the pristine mkinitcpio config BEFORE the kernel hook builds. The linux
+# package's post-install runs mkinitcpio inside the chroot during pacstrap, so a
+# stale/corrupt /etc/mkinitcpio.conf makes that build fail and pacman ABORTS the
+# whole transaction ('failed to generate ramfs'). mkinitcpio keeps an existing
+# config file, so pre-placing the stock ISO copy guarantees a clean first build.
+install -Dm644 /etc/mkinitcpio.conf /mnt/etc/mkinitcpio.conf
 pacstrap "${PACSTRAP_K[@]}" -C "$LIVE_CONF" /mnt base "$STAGE1_KERNEL" linux-firmware "$UCODE" \
   networkmanager sudo git base-devel power-profiles-daemon nano file procps-ng \
-  $([[ $FS == btrfs ]] && echo btrfs-progs) >/dev/null
+  $([[ $FS == btrfs ]] && echo btrfs-progs) >/dev/null \
+  || { err "pacstrap failed (base install aborted) — not continuing into a broken system"; exit 1; }
 # persist the fresh keyring so the NEXT attempt skips keygen entirely
 if [[ -d /mnt/etc/pacman.d/gnupg ]]; then
   rm -rf "$LIVE_KEYRING"
