@@ -115,10 +115,9 @@ Rectangle {
         font.family: "JetBrainsMono Nerd Font"
         font.pixelSize: 20
         passwordCharacter: "\u2022"
-        color: "transparent"
-        selectionColor: "transparent"
-        selectedTextColor: "transparent"
-        cursorDelegate: Item {}
+        color: "#D8D0DC"
+        selectionColor: "#43384C"
+        selectedTextColor: "#D8D0DC"
 
         onTextChanged: root.loginFailed = false
 
@@ -143,6 +142,7 @@ Rectangle {
   }
 
   Component.onCompleted: {
+    username.text = root.defaultUser()
     for (var i = 0; i < sessionModel.rowCount(); i++) {
       var n = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString().toLowerCase()
       if (n.indexOf("niri") !== -1) { root.sessionIndex = i; break }
