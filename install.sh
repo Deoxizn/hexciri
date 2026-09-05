@@ -496,6 +496,7 @@ fi
 #    required on any plugin version that honors these keys. ──
 mkdir -p "$HOME/.local/state/noctalia"
 SEED_TMP="$HOME/.local/state/noctalia/settings.hexciri-seed"
+run mkdir -p "$HOME/.local/state/noctalia"
 if grep -q '\[plugin_settings."yuuto/arch-updater"\]' "$HOME/.local/state/noctalia/settings.toml" 2>/dev/null; then
   ok "arch-updater plugin presets present (left untouched)"
 else
