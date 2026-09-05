@@ -28,6 +28,10 @@ Kernel prompt (default auto):
 
 Full package names (`linux-omarchy-bore`) work too.
 
+Encryption prompt (optional): `y` gives you LUKS2 on root — the passphrase is
+your own user password, so there's nothing extra to type. Pre-flight: `sh hexciri --test-luks`
+proves the cryptsetup chain on a throwaway file before any disk is touched.
+
 3. Reboot → straight into Niri
 Press `Mod+K` for the searchable keybinding list.
 
@@ -43,6 +47,9 @@ Press `Mod+K` for the searchable keybinding list.
 | agent | `opencode` (`Mod+`` `) | `hexciri-defaults` → Agent |
 | kernel | your pick, `linux` if auto (+`linux-lts` fallback on custom/legacy) | `hexciri-kernel` (bore/muqss on bleeding) |
 | gpu | autodetect (mesa / nvidia-open / 580xx+LTS pin) | `hexciri-gpu` |
+| encryption | opt-in LUKS2 on root (passphrase = your user password) | re-install |
+| monitors | auto-detect (output blocks + scale from physical size) | `~/.config/niri/config.kdl` |
+| bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |
 | channel | `stable` | `hexciri-channel-set` |
 | boot | systemd-boot, plymouth splash, SDDM autologin | — |
@@ -74,7 +81,24 @@ hexciri-theme-install <git-url> | hexciri-theme-remove <name>
 
 State: `~/.local/state/hexciri/current/{theme,theme.name,background}`.
 Hook: `~/.config/hexciri/hooks/theme-set.d/` → `noctalia-sync.sh` writes
-`~/.config/noctalia/palettes/hexciri.json`, patches `config.toml` + Niri borders.
+`~/.config/noctalia/palettes/hexciri.json`, patches `config.toml` + Niri
+borders, and drives Qt theming (qt6ct Fusion palette).
+
+## Highlights
+
+- **Transparent terminals** — kitty runs at reduced background opacity with
+  niri window-effect blur behind it. No focus ring / border: niri draws those
+  as a solid rectangle behind the window (per its FAQ), which would cover the
+  translucency.
+- **Gaming** — `hexciri-gaming`: Steam, Heroic, Lutris, RetroArch, Minecraft,
+  Battle.net (umu-launcher + GE-Proton), GeForce NOW, Xbox Cloud, GPU setup,
+  Xbox controllers. `hexciri-packages` → Gaming for launchers.
+- **Never-clobber config deploy** — install.sh sha-tracks configs: untouched
+  ones update in place; if you've edited one, yours stays and the repo default
+  lands as `<file>.hexciri` alongside (backups in `~/.config/hexciri-backup/`).
+- **12-hour clock** — bar + dashboard use `{:%I:%M %p}`.
+- **Share with Qt dialogs** — kdialog file/folder pickers run in-process under
+  Niri (no desktop-portal dependency); zenity falls back.
 
 ## Already on Arch?
 Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:
