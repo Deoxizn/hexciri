@@ -14,12 +14,10 @@ Arch × Niri × Noctalia
 2. Run it 
 
 ```bash
-curl --fail --retry 3 --location --output hexciri https://hexciri.dirty.pizza/install && sh hexciri
+curl -Lo hexciri https://hexciri.dirty.pizza/install && sh hexciri
 ```
 
 Pipe works identically: `curl -fsSL https://hexciri.dirty.pizza/install | bash`.
-Check `ls -l hexciri` if `sh` complains the file is missing — that means the
-download didn't land (bring up wifi with `iwctl` first).
 
 Kernel prompt (default auto):
 
