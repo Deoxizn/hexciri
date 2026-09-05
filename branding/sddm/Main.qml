@@ -36,23 +36,14 @@ Rectangle {
 
   Column {
     anchors.centerIn: parent
-    spacing: Math.round(root.height * 0.03)
+    spacing: Math.round(root.height * 0.035)
 
     Image {
       id: logo
       source: "logo.png"
-      sourceSize: Qt.size(1024, 1024)
-      width: Math.min(root.width * 0.4, 460)
-      height: sourceSize.height > 0 ? Math.round(width * sourceSize.height / sourceSize.width) : 0
+      width: Math.min(root.width * 0.5, 520)
+      height: Math.round(width * 0.545)
       fillMode: Image.PreserveAspectFit
-      anchors.horizontalCenter: parent.horizontalCenter
-    }
-
-    Text {
-      text: "H E X C I R I"
-      color: "#B6849D"
-      font.family: "JetBrainsMono Nerd Font"
-      font.pixelSize: Math.max(28, Math.round(root.height * 0.055))
       anchors.horizontalCenter: parent.horizontalCenter
     }
 
@@ -66,7 +57,7 @@ Rectangle {
 
     Rectangle {
       width: Math.min(root.width * 0.34, 400)
-      height: Math.round(root.height * 0.085)
+      height: Math.max(50, Math.round(root.height * 0.065))
       radius: 8
       color: "#14111A"
       border.color: root.loginFailed ? "#f7768e" : "#43384C"
