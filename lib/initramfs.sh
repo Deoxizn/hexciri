@@ -40,6 +40,10 @@ UDEV_HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefo
 
 log() { echo "initramfs: $*"; }
 
+hook_available() { # name -> 0 when the initcpio hook file is present
+  [[ -f /usr/lib/initcpio/hooks/$1 ]] || [[ -f /etc/initcpio/hooks/$1 ]]
+}
+
 active_words() { # conf -> one word per line (empty if none parseable)
   local line
   line=$(grep -m1 '^[[:space:]]*HOOKS=(' "$CONF" 2>/dev/null || true)
@@ -136,15 +140,23 @@ ensure_apply() { # ensure the config holds one canonical line with wanted words
     fi
     log "no parseable HOOKS line (${CONF}) — seeding canonical default"
   fi
-  $WANT_PLYMOUTH && {
-    local anchor=systemd have_systemd=false w
-    for w in "${words[@]}"; do [[ $w == systemd ]] && have_systemd=true; done
-    $have_systemd || anchor=udev
-    mapfile -t words < <(insert_after plymouth "$anchor" "${words[@]}")
-  }
-  $WANT_ENCRYPT && {
-    mapfile -t words < <(insert_before encrypt filesystems "${words[@]}")
-  }
+  if $WANT_PLYMOUTH; then
+    if ! hook_available plymouth; then
+      log "plymouth requested but its initcpio hook is absent (package not installed?) — skipping plymouth"
+    else
+      local anchor=systemd have_systemd=false w
+      for w in "${words[@]}"; do [[ $w == systemd ]] && have_systemd=true; done
+      $have_systemd || anchor=udev
+      mapfile -t words < <(insert_after plymouth "$anchor" "${words[@]}")
+    fi
+  fi
+  if $WANT_ENCRYPT; then
+    if ! hook_available encrypt; then
+      log "encrypt requested but its initcpio hook is absent (cryptsetup not installed?) — skipping encrypt"
+    else
+      mapfile -t words < <(insert_before encrypt filesystems "${words[@]}")
+    fi
+  fi
 
   local want existing
   want=$(canonical_line "${words[@]}")

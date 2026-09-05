@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=24   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=25   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -295,16 +295,12 @@ git clone --depth 1 "$REPO" /mnt/root/hexciri-install
 
 # ── stage 2 runs inside the new system ──
 # boot-time HOOKS line is managed by lib/initramfs.sh (deterministic +
-# self-healing). On LUKS we also need plymouth + encrypt; on a reused disk a
-# config corrupted by an earlier failed attempt must be repaired first — it
-# shows up as 'mkinitcpio.conf line 55: syntax error' / 'failed to generate
-# ramfs' at pacstrap's kernel post-install, and pacman never overwrites a
-# modified config, so it would survive into every later install.
-if [[ $ENCRYPT == yes ]]; then
-  IR_CMD="ensure --plymouth --encrypt /etc/mkinitcpio.conf"
-else
-  IR_CMD="repair /etc/mkinitcpio.conf"
-fi
+# self-healing). Here we only REPAIR + rebuild the stock initramfs: plymouth and
+# cryptsetup (whose initcpio hooks back the plymouth/encrypt words) are not in
+# the base pacstrap, so adding those words now would fail the rebuild with
+# "ERROR hook plymouth cannot be found". install.sh enables them later, after
+# the packages land. ──
+IR_CMD="repair /etc/mkinitcpio.conf"
 cat > /mnt/root/hexciri-stage2.sh <<STAGE2
 set -euo pipefail
 info() { echo -e "\\e[0;36m[hexciri:stage2]\\e[0m \$*"; }
