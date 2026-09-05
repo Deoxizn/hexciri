@@ -1,0 +1,85 @@
+#!/bin/bash
+# hexciri:summary=Re-apply hexciri system state after package transactions (alpm hook + manual)
+# Package upgrades routinely clobber hexciri's bits:
+#   * kernels install + mkinitcpio builds the initramfs, but systemd-boot gets no
+#     new entry — the box keeps booting the old default (see: linux-omarchy-bore)
+#   * mkinitcpio repackages /etc/mkinitcpio.conf, dropping the 'plymouth' HOOKS
+#     word and quietly killing the splash
+#   * sddm heals /etc/pam.d/sddm, losing pam_gnome_keyring + pam_fprintd
+#   * avahi/hwloc/v4l-utils/qt6ct restore their stock .desktop files, so the
+#     NoDisplay curation reverts and the menu cruft returns
+# Runs as root via /usr/share/libalpm/hooks/hexciri-sync.hook (PostTransaction)
+# or manually. Idempotent; safe to run any time.
+set -euo pipefail
+
+log() { echo "hexciri-sync: $*"; }
+
+# ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
+if [[ -d /boot/loader ]]; then
+  ROOTUUID="$(findmnt -no UUID / 2>/dev/null || true)"
+  ROOTOPTS="root=UUID=$ROOTUUID rw quiet splash"
+  MICRO="$(ls /boot/*-ucode.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null || true)"
+  if [[ -z $ROOTUUID ]]; then
+    log "warning: no root UUID resolvable, skipping loader entries"
+  elif compgen -G '/boot/vmlinuz-*' >/dev/null; then
+    rm -f /boot/loader/entries/hexciri-*.conf
+    for img in /boot/vmlinuz-*; do
+      k="${img#/boot/vmlinuz-}"
+      {
+        echo "title   Hexciri ($k)"
+        echo "linux   /vmlinuz-$k"
+        [[ -n $MICRO ]] && echo "initrd  /$MICRO"
+        echo "initrd  /initramfs-$k.img"
+        echo "options $ROOTOPTS"
+      } > "/boot/loader/entries/hexciri-$k.conf"
+    done
+    # default = newest kernel by the freshly-built initramfs (matches what the
+    # last mkinitcpio run produced); a stale default only lingers if its kernel
+    # is still installed and is genuinely the newest
+    newest="$(ls -1t /boot/initramfs-*.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null | sed 's/^initramfs-//; s/\.img$//' || echo linux)"
+    echo -e "default hexciri-$newest.conf\ntimeout 3" > /boot/loader/loader.conf
+    log "systemd-boot entries regenerated (default: hexciri-$newest.conf)"
+  fi
+fi
+
+# ── 2. plymouth: keep the HOOKS word + splash theme, rebuild only when changed ──
+if ! grep -q '^HOOKS=.* plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
+  cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)" 2>/dev/null || true
+  if grep -q '^HOOKS=(base systemd' /etc/mkinitcpio.conf; then
+    sed -i 's/^HOOKS=(base systemd/& plymouth/' /etc/mkinitcpio.conf
+  elif grep -q '^HOOKS=.*udev' /etc/mkinitcpio.conf; then
+    sed -i 's/^\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
+  fi
+  grep -q '^HOOKS=.* plymouth' /etc/mkinitcpio.conf \
+    && log "re-added plymouth to mkinitcpio HOOKS (REBUILDING)" && mkinitcpio -P
+fi
+
+# ── 2b. plymouth theme: re-assert hexciri (upgrades reset plymouthd.defaults) ──
+if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+  if [[ "$(plymouth-set-default-theme 2>/dev/null || true)" != "hexciri" ]]; then
+    plymouth-set-default-theme -R hexciri >/dev/null 2>&1 || plymouth-set-default-theme hexciri >/dev/null 2>&1 || true
+    log "re-applied hexciri plymouth theme"
+  fi
+fi
+
+# ── 3. SDDM PAM: restore gnome-keyring + fprintd if the stock file came back ──
+if [[ -f /etc/pam.d/sddm ]] && ! grep -q 'pam_gnome_keyring.so' /etc/pam.d/sddm; then
+  cp -f /etc/pam.d/sddm "/etc/pam.d/sddm.bak.$(date +%s)" 2>/dev/null || true
+  sed -i '0,/auth\(.*\)include.*system-login/s//auth        sufficient  pam_fprintd.so\n&/' /etc/pam.d/sddm
+  # the gnome-keyring/kwallet lines go right after 'auth include system-login'
+  if ! grep -q 'pam_gnome_keyring.so' /etc/pam.d/sddm; then
+    sed -i '/^auth *include *system-login/a -auth       optional    pam_gnome_keyring.so\n-auth       optional    pam_kwallet5.so' /etc/pam.d/sddm
+    sed -i '/^password *include *system-login/a -password   optional    pam_gnome_keyring.so    use_authtok' /etc/pam.d/sddm
+    sed -i '/^session *include *system-login/a -session    optional    pam_gnome_keyring.so    auto_start\n-session    optional    pam_kwallet5.so         auto_start' /etc/pam.d/sddm
+  fi
+  log "restored sddm PAM (gnome-keyring + fprintd)"
+fi
+
+# ── 4. app-menu curation: re-hide utility entries the packages re-show ──
+for f in avahi-discover.desktop bssh.desktop bvnc.desktop lstopo.desktop \
+         qv4l2.desktop qvidcap.desktop qt6ct.desktop; do
+  d="/usr/share/applications/$f"
+  [[ -f $d ]] && ! grep -q '^NoDisplay=true' "$d" && printf 'NoDisplay=true\n' >> "$d" && log "hid $f"
+done
+
+exit 0

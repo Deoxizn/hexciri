@@ -1,0 +1,18 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = linux*
+Target = mkinitcpio
+Target = sddm
+Target = plymouth
+Target = avahi
+Target = hwloc
+Target = v4l-utils
+Target = qt6ct
+
+[Action]
+Description = Re-applying hexciri system state (boot entries, plymouth, PAM, menu curation)
+When = PostTransaction
+Exec = /usr/local/bin/hexciri-sync

@@ -192,6 +192,16 @@ HOOK
     ok "paccache hook present"
   fi
 
+  # ── hexciri system sync: keep boot entries/plymouth/PAM/menu curated across
+  #    package upgrades, which routinely clobber them (kernels land with no
+  #    systemd-boot entry; mkinitcpio drops 'plymouth' from HOOKS; sddm heals
+  #    /etc/pam.d/sddm; avahi/hwloc/v4l-utils/qt6ct restore NoDisplay'd
+  #    .desktop files). The Exec path must stay a plain command that works
+  #    without a TTY or user env — it runs as root inside the transaction. ──
+  run mkdir -p /usr/share/libalpm/hooks
+  run install -m644 "$REPO_DIR/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook
+  info "wrote /usr/share/libalpm/hooks/hexciri-sync.hook (PostTransaction hexciri sync)"
+
   # ── commands → /usr/local/bin (on PATH for SDDM-launched Niri sessions) ──
   info "installing hexciri commands..."
   for f in "$REPO_DIR"/bin/* "$REPO_DIR"/scripts/*; do
