@@ -12,9 +12,10 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=13   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=14   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
+START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
 
 info() { echo -e "\e[0;36m[hexciri:bootstrap]\e[0m $*"; }
 ok()   { echo -e "\e[0;32m[hexciri:bootstrap]\e[0m $*"; }
@@ -334,6 +335,8 @@ rm -f /mnt/root/hexciri-stage2.sh
 
 umount -R /mnt
 ok "install complete ($HOSTNAME / $USERNAME / $CHANNEL)"
+elapsed=$(( $(date +%s) - START_EPOCH ))
+ok "install took $(( elapsed / 60 ))m $(( elapsed % 60 ))s"
 echo ""
 read -rp "Reboot now? [Y/n]: " RB </dev/tty
 if [[ $RB =~ ^[Nn]$ ]]; then
