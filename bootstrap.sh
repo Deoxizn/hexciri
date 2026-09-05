@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=27   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=28   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -27,11 +27,16 @@ command -v pacstrap &>/dev/null || { err "not an Arch ISO (no pacstrap)"; exit 1
 # ── persistent pacman cache + gpg keyring seed. The ISO root is tmpfs that
 # ── survives across install attempts while the live session is up, so reruns
 # ── after a wipe skip the base re-download AND the in-chroot gpg keygen (the
-# ── slow 'gpg part' after the prompts). ──
-LIVE_CACHE=/root/.hexciri-pkgcache
+# ── slow 'gpg part' after the prompts). The cache must NOT live under /root:
+# ── archiso pacman downloads as a dropped user (DownloadUser), and /root is
+# ── 0700 so that user cannot even traverse it — every payload dir creation then
+# ── fails with EPERM and the transaction aborts. /tmp is 1777 and reaches the
+# ── same drop user. ──
+LIVE_CACHE=/tmp/hexciri-pkgcache
 LIVE_CONF=/root/pacman-hexciri.conf
 LIVE_KEYRING=/root/.hexciri-gnupg-seed
 mkdir -p "$LIVE_CACHE"
+chmod 1777 "$LIVE_CACHE"
 if [[ ! -f $LIVE_CONF ]]; then
   # CacheDir is only valid inside [options]; an ISO pacman.conf has no other
   # placeholder guarantees, so strip any existing CacheDir lines and emit
