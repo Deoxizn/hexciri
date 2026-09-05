@@ -217,6 +217,7 @@ HOOK
       run cp -f "$REPO_DIR/branding/sddm/$f" /usr/share/sddm/themes/hexciri/$f
     done
     run cp -f "$REPO_DIR/branding/logo.png" /usr/share/sddm/themes/hexciri/logo.png
+    run mkdir -p /etc/sddm.conf.d
     printf '[Theme]\nCurrent=hexciri\n' | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
   fi
 
