@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=15   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=16   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -136,7 +136,7 @@ echo ""
 if [[ $MODE == full ]]; then
   info "partitioning /dev/$DISK (full wipe)..."
   wipefs -af "/dev/$DISK" >/dev/null
-  sfdisk -q "/dev/$DISK" <<EOF
+  sfdisk -q --force "/dev/$DISK" <<EOF
 label: gpt
 ,1G,U
 ;
@@ -164,14 +164,14 @@ else
     ESP_START=$FREE_START; ESP_SIZE=$((1024*1024*1024))
     ROOT_START=$((FREE_START + ESP_SIZE)); ROOT_SIZE=$((FREE_SIZE - ESP_SIZE))
     LASTNUM="$(lsblk -rn -o NAME "/dev/$DISK" | grep -oE '[0-9]+$' | sort -n | tail -n 1)"
-    echo "start=$((ESP_START/512)), size=$((ESP_SIZE/512)), type=U" | sfdisk --append -q "/dev/$DISK"
+    echo "start=$((ESP_START/512)), size=$((ESP_SIZE/512)), type=U" | sfdisk --append -q --force "/dev/$DISK"
     partprobe "/dev/$DISK"
   udevadm settle 2>/dev/null || sleep 2
     ESP="/dev/$DISK$P$((LASTNUM+1))"; FORMAT_ESP=yes
     info "created new ESP $ESP"
   fi
   LASTNUM="$(lsblk -rn -o NAME "/dev/$DISK" | grep -oE '[0-9]+$' | sort -n | tail -n 1)"
-  echo "start=$((ROOT_START/512)), size=$((ROOT_SIZE/512)), type=83" | sfdisk --append -q "/dev/$DISK"
+  echo "start=$((ROOT_START/512)), size=$((ROOT_SIZE/512)), type=83" | sfdisk --append -q --force "/dev/$DISK"
   partprobe "/dev/$DISK"
   udevadm settle 2>/dev/null || sleep 2
   ROOT="/dev/$DISK$P$((LASTNUM+1))"
@@ -179,6 +179,22 @@ else
   [[ $FORMAT_ESP == yes ]] && mkfs.fat -F32 "$ESP" >/dev/null
 fi
 
+# residual-signature guard: a partition node still carrying an old signature (a
+# leftover LUKS container reads as crypto_LUKS and any mount fails) is force-
+# wiped here, before mkfs. blkid serves from the udev database, so re-settle
+# after each wipe and re-check; three tries cover LUKS header copies.
+for d in "$ESP" "$ROOT"; do
+  [[ $d == "$ESP" && $FORMAT_ESP != yes ]] && continue   # reused ESP: never touch
+  for try in 1 2 3; do
+    t="$(blkid -s TYPE -o value "$d" 2>/dev/null || true)"
+    [[ -n $t ]] || break
+    info "residual $t signature on $d (try $try) — force-wiping"
+    wipefs -af "$d" >/dev/null 2>&1 || true
+    udevadm settle 2>/dev/null || sleep 1
+  done
+  t="$(blkid -s TYPE -o value "$d" 2>/dev/null || true)"
+  [[ -n $t ]] && { err "could not clear $t on $d — refusing to continue"; exit 1; }
+done
 mkfs_root "$ROOT"
 mount "$ROOT" /mnt
 mkdir -p /mnt/boot
