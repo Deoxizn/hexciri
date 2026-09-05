@@ -4,8 +4,8 @@
 #   curl -LO https://hexciri.dirty.pizza/hexciri
 #   sh hexciri
 #
-# 9 things are typed, everything else is automatic: username, password,
-# hostname, timezone, filesystem, channel, LUKS, disk (+wipe confirm).
+# 8 things are typed, everything else is automatic: username, password,
+# hostname, timezone, filesystem, channel, disk (+wipe confirm).
 # Run as root on the Arch ISO live environment. DESTRUCTIVE: wipes $DISK (full mode).
 set -euo pipefail
 
@@ -96,10 +96,6 @@ read -rp "channel [stable/bleeding, default stable]: " CHANNEL </dev/tty
 CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
 info "channel: $CHANNEL"
-LUKS=no
-read -rp "encrypt disk with LUKS? [y/N]: " luks_ans </dev/tty
-[[ $luks_ans =~ ^[Yy]$ ]] && LUKS=yes || LUKS=no
-[[ $LUKS == yes ]] && LUKSPASS="$USERPASS"
 
 # ── kernel: default auto (flag silently preselects); installer enforces the LTS pin on GTX 1xxx or older ──
 if [[ -z $KERNEL_PICK ]]; then
@@ -155,7 +151,6 @@ printf '  %-10s %s\n' \
   "username" "$USERNAME" \
   "password" "(set, hidden)" \
   "timezone" "$TIMEZONE" \
-  "luks"     "$LUKS" \
 echo ""
 if [[ $MODE == full ]]; then
   read -rp "WIPE /dev/$DISK and install? [y/N]: " GO </dev/tty
@@ -209,15 +204,8 @@ else
   [[ $FORMAT_ESP == yes ]] && mkfs.fat -F32 "$ESP" >/dev/null
 fi
 
-if [[ $LUKS == yes ]]; then
-  printf '%s' "$LUKSPASS" | cryptsetup luksFormat --batch-mode --type luks2 "$ROOT" -
-  printf '%s' "$LUKSPASS" | cryptsetup open "$ROOT" cryptroot -
-  mkfs_root /dev/mapper/cryptroot
-  mount /dev/mapper/cryptroot /mnt
-else
-  mkfs_root "$ROOT"
-  mount "$ROOT" /mnt
-fi
+mkfs_root "$ROOT"
+mount "$ROOT" /mnt
 mkdir -p /mnt/boot
 mount "$ESP" /mnt/boot
 
@@ -244,7 +232,7 @@ grep -qi "AuthenticAMD" /proc/cpuinfo && UCODE="amd-ucode"
 info "base install ($STAGE1_KERNEL, $UCODE)..."
 pacstrap -K /mnt base "$STAGE1_KERNEL" linux-firmware "$UCODE" \
   networkmanager sudo git base-devel power-profiles-daemon nano file procps-ng \
-  $([[ $LUKS == yes ]] && echo cryptsetup) $([[ $FS == btrfs ]] && echo btrfs-progs) >/dev/null
+  $([[ $FS == btrfs ]] && echo btrfs-progs) >/dev/null
 genfstab -U /mnt >> /mnt/etc/fstab
 [[ $FS == btrfs ]] && sed -i '\| / btrfs |s/relatime/relatime,compress=zstd/' /mnt/etc/fstab
 
@@ -279,13 +267,8 @@ printf 'root:%s' "$USERPASS" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 bootctl install --esp-path=/boot >/dev/null
-if [[ "$LUKS" == yes ]]; then
-  LUKSUUID="\$(blkid -s UUID -o value $ROOT)"
-  ROOTOPTS="cryptdevice=UUID=\$LUKSUUID:cryptroot root=/dev/mapper/cryptroot rw quiet splash"
-else
-  ROOTUUID="\$(findmnt -no UUID /)"
-  ROOTOPTS="root=UUID=\$ROOTUUID rw quiet splash"
-fi
+ROOTUUID="\$(findmnt -no UUID /)"
+ROOTOPTS="root=UUID=\$ROOTUUID rw quiet splash"
 MICRO="\$(ls /boot/*-ucode.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null || true)"
 # stale entries from previous installs carry dead UUIDs — remove our own first
 rm -f /boot/loader/entries/hexciri-*.conf
@@ -302,10 +285,6 @@ done
 echo -e "default hexciri-$STAGE1_KERNEL.conf\ntimeout 3" > /boot/loader/loader.conf
 # one-shot insurance: a malformed options line boots to a timeout with no
 # useful error, so refuse to continue if spacing or an empty UUID slipped in
-if [[ "$LUKS" == yes && \${#LUKSUUID} -ne 36 ]]; then
-  err "LUKS UUID did not resolve — aborting before install"
-  exit 1
-fi
 if grep -qE '(cryptdevice|root|options) +=' /boot/loader/entries/hexciri-*.conf; then
   err "boot entry malformed (spaced key=value) — aborting before install"
   grep -H . /boot/loader/entries/hexciri-*.conf >&2 || true
@@ -320,7 +299,7 @@ chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/hexciri"
 # with zero sudo calls — su(1) sessions have no controlling TTY, so nothing
 # here may ever depend on sudo prompting.
 trap 'rm -f /root/hexciri-stage2.sh' EXIT
-HEXCIRI_USER="$USERNAME" HEXCIRI_LUKS="$LUKS" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
+HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
 command -v fish &>/dev/null && chsh -s /usr/bin/fish "$USERNAME" || true
 su - "$USERNAME" -c "cd ~/hexciri && ./install.sh --user-only -y"
 STAGE2

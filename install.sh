@@ -157,13 +157,9 @@ if $SYSTEM_ONLY; then
       run mkdir -p /etc/plymouth
       printf '[Daemon]\nTheme=hexciri\n' | run tee /etc/plymouth/plymouthd.conf >/dev/null
     fi
-    # mkinitcpio: plymouth after udev for splash; stock encrypt hook for LUKS
-    # (classic udev+encrypt pair per upstream guides — no phantom hooks)
+    # mkinitcpio: plymouth after udev for splash
     if ! grep -q ' plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
       run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
-      if [[ ${HEXCIRI_LUKS:-no} == yes || $(findmnt -no SOURCE / 2>/dev/null) == /dev/mapper/* ]]; then
-        grep -q ' encrypt' /etc/mkinitcpio.conf || run sed -i 's/\(HOOKS=([^)]*block\)/\1 encrypt/' /etc/mkinitcpio.conf
-      fi
       run sed -i 's/\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
       grep -q ' plymouth' /etc/mkinitcpio.conf || run sed -i 's/\(HOOKS=(base\)/\1 plymouth/' /etc/mkinitcpio.conf
       run mkinitcpio -P
