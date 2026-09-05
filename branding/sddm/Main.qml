@@ -11,9 +11,11 @@ Rectangle {
   property int sessionIndex: 0
 
   function defaultUser() {
-    // The model can be empty or slow to populate on a fresh SDDM; lastUser is
-    // informative but fall back to scanning the model, then accept manual typed
-    // username as the ultimate fallback (like a pure console prompt).
+    // First: the installer wrote the actual user into theme.conf (guaranteed
+    // present, no model timing). Then lastUser (remembered by SDDM). Then scan
+    // the model. Empty last resort = user types it.
+    var conf = config.Username || ""
+    if (conf.length > 0) return conf
     var last = userModel.lastUser || ""
     if (last.length > 0) return last
     for (var i = 0; i < userModel.rowCount(); i++) {

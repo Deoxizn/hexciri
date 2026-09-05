@@ -227,6 +227,9 @@ HOOK
       run cp -f "$REPO_DIR/branding/sddm/$f" /usr/share/sddm/themes/hexciri/$f
     done
     run cp -f "$REPO_DIR/branding/logo.png" /usr/share/sddm/themes/hexciri/logo.png
+    # Prefill the greeter's username field from the install user this session;
+    # the SddmComponents user model can be empty/slow on a fresh first boot.
+    printf '\nUsername=%s\n' "${TARGET_USER:-}" | run tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null
     run mkdir -p /etc/sddm.conf.d
     printf '[Theme]\nCurrent=hexciri\n' | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
   fi
