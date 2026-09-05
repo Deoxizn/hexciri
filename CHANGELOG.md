@@ -12,6 +12,14 @@
 - **Share pickers**: Qt-first kdialog file/folder dialogs (in-process under Niri, no desktop-portal dependency), zenity fallback.
 - **fastfetch**: logo 66x36, `user @ host` title, new `hexciri-fastfetch` command + `ff` alias; documented that fastfetch 2.68 has no true logo centering.
 - **Install URL**: bootstrap published at `https://hexciri.dirty.pizza/install` (rev 7; the old `/hexciri` path still works). One-liner is `curl -L -o hexciri https://hexciri.dirty.pizza/install && sh hexciri`.
+- **Plymouth splash fix**: install anchored the HOOKS edit to the live `HOOKS=` line (was matching commented examples and skipping the real one) so plymouth runs on first boot; rebuild verified to embed the hexciri theme.
+- **Bash login shell**: login shell stays `bash` (scripting-safe everywhere); `fish` is interactive-only via kitty `shell fish`. `hexciri-defaults` → Shell writes the kitty config rather than `chsh`; no more fish-only login shell to fight quoting in.
+- **Greeter password-only**: when the installer stamps `Username=` (always the case), the SDDM greeter shows only the password field — no username box to trip over — with the row layout kept for unknown-user fallback. PasswordOTS/asterisks draw correctly.
+- **Choose your app menus**: install.sh hides utility-only launcher entries (`avahi-discover`, `bssh`, `bvnc`, `lstopo`, `qv4l2`, `qvidcap`, `qt6ct`) by appending `NoDisplay=true`, so the game list and first-party apps are what the menu surfaces.
+- **Monitors survive install**: output blocks can't be detected inside the chroot, so `hexciri-niri-monitors` runs at first login (spawn-at-startup) and appends `output` blocks with the PPI-derived scale + VRR when none exist; install-time detection is only a fallback.
+- **Therapy from the first boot**: theme seed in the chroot is non-fatal, and `hexciri-theme-ensure` re-applies the active theme on each login if the tree or noctalia palette is missing — no more themeless first boot.
+- **Fingerprint login**: `fprintd` is in the base set and sddm's PAM chain gains `pam_fprintd.so` (sufficient), so enroled Goodix/Synaptics readers unlock at the greeter.
+- **Fuzzel colors schema fix**: fuzzel 1.15 `[colors]` wants RGBA 8-hex and the modern `text`/`selection-text`/`match` keys — the theme template generated the pre-1.15 names, so fuzzel silently fell back to defaults; regenerated with valid values on both boxes.
 
 ## 2026-09-04 — hexciri v0.1.0
 

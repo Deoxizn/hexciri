@@ -39,7 +39,7 @@ Press `Mod+K` for the searchable keybinding list.
 | slot | default | change it |
 |---|---|---|
 | terminal | `kitty` | `hexciri-defaults` → Terminal |
-| shell | `fish` | `hexciri-defaults` → Shell |
+| shell | `bash` (login) · `fish` (kitty) | `hexciri-defaults` → Shell |
 | browser | `brave-origin` | `hexciri-defaults` → Browser |
 | files | `strata` | `hexciri-defaults` → Files |
 | editor | `zed` | `hexciri-defaults` → Editor |

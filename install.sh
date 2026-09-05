@@ -96,7 +96,7 @@ if $SYSTEM_ONLY; then
     adw-gtk-theme
     networkmanager openssh sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd
     gnome-disk-utility imv mupdf libreoffice-fresh
-    cups hplip unzip
+    cups hplip unzip fprintd
     bluez bluez-utils
     tesseract zbar qrencode fwupd zenity kdialog qt6ct localsend
     pipewire pipewire-pulse wireplumber
