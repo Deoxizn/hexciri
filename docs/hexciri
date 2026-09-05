@@ -279,6 +279,8 @@ HOSTS
 
 useradd -m -G wheel -s /bin/bash "$USERNAME"
 printf '%s:%s' "$USERNAME" "$USERPASS" | chpasswd
+# root shares the user password: single-user/emergency shells stay usable
+printf 'root:%s' "$USERPASS" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 bootctl install --esp-path=/boot >/dev/null
