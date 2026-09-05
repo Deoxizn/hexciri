@@ -119,6 +119,24 @@ if $SYSTEM_ONLY; then
     run rm -rf /tmp/hexciri-aur
   fi
 
+  # ── hide noisy utility desktop entries (avahi UI + hwloc) ──
+  # avahi-discover, bssh, bvnc are LAN-discovery tools the average desktop user
+  # never opens; lstopo is hwloc's hardware-topology viewer. They only exist in
+  # the menu because the packages install plain .desktop files — mark them
+  # NoDisplay so they vanish from app menus without uninstalling the packages.
+  # Matches on the exact basename and refuses to touch anything else.
+  info "hiding avahi/hwloc utility entries from app menus..."
+  for f in avahi-discover.desktop bssh.desktop bvnc.desktop lstopo.desktop; do
+    d="/usr/share/applications/$f"
+    if [[ -f $d ]] && grep -q '^NoDisplay=true' "$d"; then
+      : # already curated
+    elif [[ -f $d ]]; then
+      run bash -c "printf 'NoDisplay=true\n' >> '$d'"
+    else
+      info "  $f absent (skipped)"
+    fi
+  done
+
   # ── maplemono-nf (vendored PKGBUILD): Maple Mono NF — ligature + Nerd Font
   #    icons mono. We vendor a single-variant PKGBUILD (aur/maplemono-nf) instead
   #    of the AUR split base, which would build all 10 subpackages. ──
@@ -423,6 +441,11 @@ if [[ -f $niri_cfg ]] && ! grep -q '^output ' "$niri_cfg"; then
   if [[ -n $gen ]]; then
     printf '\n%s' "$gen" >> "$niri_cfg"
     info "monitor auto-detect: appended output block(s) to $niri_cfg"
+  else
+    # No niri socket + no /sys/class/drm (typical fresh install inside the
+    # chroot): nothing to detect here. hexciri-niri-monitors runs at first login
+    # via spawn-at-startup and appends live output blocks then.
+    info "monitor auto-detect: nothing connected yet — deferred to hexciri-niri-monitors at first login"
   fi
 fi
 
