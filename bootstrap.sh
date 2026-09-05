@@ -86,9 +86,9 @@ read -rp "filesystem [ext4/btrfs, default ext4]: " FS </dev/tty
 FS="${FS,,}"; FS="${FS:-ext4}"
 [[ $FS == ext4 || $FS == btrfs ]] || { err "filesystem must be ext4|btrfs"; exit 1; }
 command -v "mkfs.$FS" &>/dev/null || { err "mkfs.$FS missing on this ISO"; exit 1; }
-mkfs_root() { # $1 = device
-  if [[ $FS == btrfs ]]; then mkfs.btrfs -q -L hexciri "$1" >/dev/null
-  else mkfs.ext4 -q -L hexciri "$1" >/dev/null; fi
+mkfs_root() { # $1 = device (force: re-runs must overwrite previous filesystems)
+  if [[ $FS == btrfs ]]; then mkfs.btrfs -f -q -L hexciri "$1" >/dev/null
+  else mkfs.ext4 -F -q -L hexciri "$1" >/dev/null; fi
 }
 
 # ── partition (mode chosen up top; free mode reuses the ESP, touches nothing else) ──
