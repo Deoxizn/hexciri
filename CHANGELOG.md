@@ -9,7 +9,6 @@
 - **hexciri-security**: the Fingerprint menu entry appears only when a reader is actually present.
 - **hexciri-update-run**: the post-update reboot offer follows the pinned boot default (hexciri-kernel pin, else loader default) instead of the newest module dir, so a second staged kernel no longer spoofs a reboot.
 - **hexciri-sync**: PAM restoration rebalanced around `system-auth` + the keyring pin; SDDM theme deploy expanded to the full greeter asset set.
-- **LUKS/plymouth removed**: disk encryption forced the boot into a plymouth unlock flow whose initramfs glue kept failing intermittently on fresh installs. hexciri is now plain-root only — no encrypt hook, no splash, fastest boot — and the login gate is the SDDM password/fingerprint greeter. The installer still repairs + canonicalizes `mkinitcpio.conf` HOOKS (self-healing) and force-erases any leftover `crypto_LUKS` signature on wipe.
 
 ## 2026-09-05 — hexciri v0.1.1
 
