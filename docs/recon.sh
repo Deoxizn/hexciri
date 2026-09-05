@@ -6,6 +6,8 @@ say() { echo -e "\e[0;36m[recon]\e[0m $*"; }
 verdict() { echo -e "\e[1;33m[verdict]\e[0m $*"; }
 
 cryptsetup close cryptroot 2>/dev/null || true
+LUKSDEV="$(blkid -o device -t TYPE=crypto_LUKS 2>/dev/null | head -n 1)"
+[[ -n ${LUKSDEV:-} ]] || { verdict "NO LUKS PARTITION FOUND"; exit 1; }
 for cand in $(lsblk -rn -o NAME,FSTYPE | awk '$2=="vfat"{print "/dev/"$1}'); do
   mkdir -p /mnt/espchk
   mount -o ro "$cand" /mnt/espchk 2>/dev/null || continue
