@@ -12,6 +12,7 @@
 - **Gaming growth**: Minecraft, Battle.net (umu-launcher + GE-Proton installer with partial-prefix wipe, `hexciri-launch-battlenet` + desktop entry), GeForce NOW, Xbox Cloud; `hexciri-packages` gains a Gaming entry.
 - **Share pickers**: Qt-first kdialog file/folder dialogs (in-process under Niri, no desktop-portal dependency), zenity fallback.
 - **fastfetch**: logo 66x36, `user @ host` title, new `hexciri-fastfetch` command + `ff` alias; documented that fastfetch 2.68 has no true logo centering.
+- **Install URL**: bootstrap published at `https://hexciri.dirty.pizza/install` (rev 7; the old `/hexciri` path still works). One-liner is `curl -L -o hexciri https://hexciri.dirty.pizza/install && sh hexciri`.
 
 ## 2026-09-04
 

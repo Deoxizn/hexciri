@@ -14,10 +14,10 @@ Arch × Niri × Noctalia
 2. Run it 
 
 ```bash
-curl -LO https://hexciri.dirty.pizza/hexciri && sh hexciri
+curl -L -o hexciri https://hexciri.dirty.pizza/install && sh hexciri
 ```
 
-Pipe works identically: `curl -fsSL https://hexciri.dirty.pizza/hexciri | bash`.
+Pipe works identically: `curl -fsSL https://hexciri.dirty.pizza/install | bash`.
 
 Kernel prompt (default auto):
 
