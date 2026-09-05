@@ -96,9 +96,6 @@ borders, and drives Qt theming (qt6ct Fusion palette).
 - **Never-clobber config deploy** — install.sh sha-tracks configs: untouched
   ones update in place; if you've edited one, yours stays and the repo default
   lands as `<file>.hexciri` alongside (backups in `~/.config/hexciri-backup/`).
-- **12-hour clock** — bar + dashboard use `{:%I:%M %p}`.
-- **Share with Qt dialogs** — kdialog file/folder pickers run in-process under
-  Niri (no desktop-portal dependency); zenity falls back.
 
 ## Already on Arch?
 Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:
