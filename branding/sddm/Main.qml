@@ -7,18 +7,36 @@ Rectangle {
   height: Screen.height
   color: "#0b0911"
 
-  property string currentUser: userModel.lastUser
-  property bool loginFailed: false
-  property int sessionIndex: {
-    for (var i = 0; i < sessionModel.rowCount(); i++) {
-      var name = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString().toLowerCase()
-      if (name.indexOf("niri") !== -1)
-        return i
+  property string currentUser: {
+    // lastUser is frequently stale/empty on a fresh install; fall back to the
+    // first real user in the model (skipping the built-in system accounts).
+    var last = userModel.lastUser || ""
+    for (var i = 0; i < userModel.rowCount(); i++) {
+      var u = (userModel.data(userModel.index(i, 0), Qt.DisplayRole) || "").toString()
+      if (u === last) return u
+      if (u !== "root" && u !== "nobody" && u !== "systemd-coredump")
+        return u
     }
-    return sessionModel.lastIndex
+    return last
   }
 
+  property int sessionIndex: 0
+  property bool sessionOK: false
+
   function attemptLogin() {
+    // fail visibly instead of a silent "Authentication failed": the most common
+    // first-boot trap was an empty lastUser (SDDM then authenticates an empty
+    // username and rejects the password) or a missing session.
+    if (root.currentUser.length === 0) {
+      errmsg.text = "no user selected — cannot log in"
+      errmsg.visible = true
+      return
+    }
+    if (!root.sessionOK) {
+      errmsg.text = "cannot find a session — install is broken"
+      errmsg.visible = true
+      return
+    }
     sddm.login(root.currentUser, password.text, root.sessionIndex)
   }
 
@@ -107,6 +125,7 @@ Rectangle {
     }
 
     Text {
+      id: errmsg
       visible: root.loginFailed
       text: "authentication failed"
       color: "#f7768e"
@@ -116,5 +135,13 @@ Rectangle {
     }
   }
 
-  Component.onCompleted: password.forceActiveFocus()
+  Component.onCompleted: {
+    // pick the first usable session (niri preferred) and confirm we found one
+    for (var i = 0; i < sessionModel.rowCount(); i++) {
+      var n = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString().toLowerCase()
+      if (n.indexOf("niri") !== -1) { root.sessionIndex = i; break }
+    }
+    root.sessionOK = sessionModel.rowCount() > 0
+    password.forceActiveFocus()
+  }
 }
