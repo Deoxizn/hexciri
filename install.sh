@@ -158,14 +158,13 @@ if $SYSTEM_ONLY; then
       run mkdir -p /etc/plymouth
       printf '[Daemon]\nTheme=hexciri\n' | run tee /etc/plymouth/plymouthd.conf >/dev/null
     fi
-    # mkinitcpio: plymouth after udev; plymouth-encrypt instead of encrypt on LUKS
+    # mkinitcpio: plymouth after udev for splash; stock encrypt hook for LUKS
+    # (Arch has no plymouth-encrypt hook — plymouth + encrypt is the pair)
     if ! grep -q ' plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
       run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
-      if grep -q ' encrypt' /etc/mkinitcpio.conf; then
-        run sed -i 's/ encrypt / plymouth-encrypt /' /etc/mkinitcpio.conf
-      elif [[ $(findmnt -no SOURCE / 2>/dev/null) == /dev/mapper/* ]]; then
-        # LUKS root (stock HOOKS have no encrypt hook): add plymouth-encrypt after block
-        run sed -i 's/\(HOOKS=([^)]*block\)/\1 plymouth-encrypt/' /etc/mkinitcpio.conf
+      if [[ ${HEXCIRI_LUKS:-no} == yes || $(findmnt -no SOURCE / 2>/dev/null) == /dev/mapper/* ]]; then
+        # LUKS root (stock HOOKS have no encrypt hook): add encrypt after block
+        grep -q ' encrypt' /etc/mkinitcpio.conf || run sed -i 's/\(HOOKS=([^)]*block\)/\1 encrypt/' /etc/mkinitcpio.conf
       fi
       run sed -i 's/\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
       grep -q ' plymouth' /etc/mkinitcpio.conf || run sed -i 's/\(HOOKS=(base\)/\1 plymouth/' /etc/mkinitcpio.conf
