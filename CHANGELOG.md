@@ -14,7 +14,7 @@
 - **fastfetch**: logo 66x36, `user @ host` title, new `hexciri-fastfetch` command + `ff` alias; documented that fastfetch 2.68 has no true logo centering.
 - **Install URL**: bootstrap published at `https://hexciri.dirty.pizza/install` (rev 7; the old `/hexciri` path still works). One-liner is `curl -L -o hexciri https://hexciri.dirty.pizza/install && sh hexciri`.
 
-## 2026-09-04
+## 2026-09-04 — hexciri v0.1.0
 
 - hexciri v0.1.0: own Arch-based Niri + Noctalia distro.
 -  curl bootstrap from the Arch ISO (9 typed prompts, full-disk or free-space dual-boot, ext4/btrfs, systemd-boot, SDDM autologin) and `./install.sh` for existing vanilla Arch
