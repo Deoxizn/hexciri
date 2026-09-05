@@ -1,8 +1,9 @@
 #!/bin/bash
 # hexciri bootstrap — Arch ISO → fully automatic hexciri install.
 #
-#   curl -Lo hexciri https://hexciri.dirty.pizza/install && sh hexciri
-#   (older published path https://hexciri.dirty.pizza/hexciri still works)
+#   curl -LO https://hexciri.dirty.pizza/hexciri
+#   sh hexciri
+#   (https://hexciri.dirty.pizza/install is the same file; use `-Lo hexciri` if you fetch that path)
 #
 # 10 things are typed, everything else is automatic: username, hostname,
 # timezone, filesystem, encryption, channel, mode (full/free), disk
@@ -12,7 +13,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=9   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=10   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 
