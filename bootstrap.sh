@@ -89,6 +89,10 @@ command -v "mkfs.$FS" &>/dev/null || { err "mkfs.$FS missing on this ISO"; exit 
 mkfs_root() { # $1 = device (force: re-runs must overwrite previous filesystems)
   if [[ $FS == btrfs ]]; then mkfs.btrfs -f -q -L hexciri "$1" >/dev/null
   else mkfs.ext4 -F -q -L hexciri "$1" >/dev/null; fi
+  local want have
+  [[ $FS == btrfs ]] && want=btrfs || want=ext4
+  have="$(blkid -s TYPE -o value "$1" 2>/dev/null || true)"
+  [[ $have == "$want" ]] || { err "format verification failed on $1 (want $want, got ${have:-nothing}) — aborting"; exit 1; }
 }
 
 # ── partition (mode chosen up top; free mode reuses the ESP, touches nothing else) ──
@@ -172,7 +176,8 @@ label: gpt
 ,1G,U
 ;
 EOF
-  partprobe "/dev/$DISK"; sleep 2
+  partprobe "/dev/$DISK"
+  udevadm settle 2>/dev/null || sleep 2
   ESP="/dev/$DISK$P""1"; ROOT="/dev/$DISK$P""2"
   mkfs.fat -F32 "$ESP" >/dev/null
   FORMAT_ESP=yes
@@ -195,13 +200,15 @@ else
     ROOT_START=$((FREE_START + ESP_SIZE)); ROOT_SIZE=$((FREE_SIZE - ESP_SIZE))
     LASTNUM="$(lsblk -rn -o NAME "/dev/$DISK" | grep -oE '[0-9]+$' | sort -n | tail -n 1)"
     echo "start=$((ESP_START/512)), size=$((ESP_SIZE/512)), type=U" | sfdisk --append -q "/dev/$DISK"
-    partprobe "/dev/$DISK"; sleep 2
+    partprobe "/dev/$DISK"
+  udevadm settle 2>/dev/null || sleep 2
     ESP="/dev/$DISK$P$((LASTNUM+1))"; FORMAT_ESP=yes
     info "created new ESP $ESP"
   fi
   LASTNUM="$(lsblk -rn -o NAME "/dev/$DISK" | grep -oE '[0-9]+$' | sort -n | tail -n 1)"
   echo "start=$((ROOT_START/512)), size=$((ROOT_SIZE/512)), type=83" | sfdisk --append -q "/dev/$DISK"
-  partprobe "/dev/$DISK"; sleep 2
+  partprobe "/dev/$DISK"
+  udevadm settle 2>/dev/null || sleep 2
   ROOT="/dev/$DISK$P$((LASTNUM+1))"
   info "created root $ROOT ($((ROOT_SIZE/1024/1024/1024))G $FS)"
   [[ $FORMAT_ESP == yes ]] && mkfs.fat -F32 "$ESP" >/dev/null
