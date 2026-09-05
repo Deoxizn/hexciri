@@ -75,25 +75,19 @@ fi
 
 # ── 2. plymouth: only on LUKS installs (see installer; a no-LUKS box has no
 # ── unlock to brand and skips plymouth entirely). Keep the HOOKS word + splash
-# ── theme, rebuild only when changed. ──
+# ── theme, rebuild only when changed. HOOKS handling lives in
+# ── lib/initramfs.sh: deterministic + self-healing (the old chain-sed could
+# ── mangle the line, and the mangled config was then inherited by every later
+# ── install — 'mkinitcpio.conf line 55: syntax error' / 'failed to generate
+# ── ramfs'). ──
+IR_HELPER="/usr/share/hexciri/lib/initramfs.sh"
+[[ -f $IR_HELPER ]] || IR_HELPER="$(cd "$(dirname "$0")/.." && pwd)/lib/initramfs.sh"
 if $ENCRYPT_LUKS && pacman -Q plymouth &>/dev/null; then
-  if ! grep -q '^HOOKS=.* plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
-    cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)" 2>/dev/null || true
-    if grep -q '^HOOKS=(base systemd' /etc/mkinitcpio.conf; then
-      sed -i 's/^HOOKS=(base systemd/& plymouth/' /etc/mkinitcpio.conf
-    elif grep -q '^HOOKS=.*udev' /etc/mkinitcpio.conf; then
-      sed -i 's/^\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
-    fi
-    grep -q '^HOOKS=.* plymouth' /etc/mkinitcpio.conf \
-      && log "re-added plymouth to mkinitcpio HOOKS (REBUILDING)" && mkinitcpio -P
-  fi
-  # LUKS: the cryptdevice=PARTUUID=... open needs the 'encrypt' hook (before
-  # filesystems); mkinitcpio upgrades routinely drop it alongside plymouth.
-  if ! grep -q '^HOOKS=.* encrypt' /etc/mkinitcpio.conf 2>/dev/null; then
-    cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)" 2>/dev/null || true
-    sed -i 's/^HOOKS=(\([^)]*\)filesystems/\1encrypt filesystems/' /etc/mkinitcpio.conf
-    grep -q '^HOOKS=.* encrypt' /etc/mkinitcpio.conf \
-      && log "re-added encrypt hook for LUKS root (REBUILDING)" && mkinitcpio -P
+  bash "$IR_HELPER" ensure --plymouth --encrypt /etc/mkinitcpio.conf
+  if [[ -f /etc/mkinitcpio.conf.hexciri-changed ]]; then
+    rm -f /etc/mkinitcpio.conf.hexciri-changed
+    log "mkinitcpio HOOKS ensured (plymouth + encrypt) — rebuilding initramfs"
+    mkinitcpio -P
   fi
 
   # ── 2b. plymouth theme: re-assert hexciri (upgrades reset plymouthd.defaults) ──

@@ -224,6 +224,8 @@ HOOK
   run rm -rf /usr/share/hexciri/default
   run mkdir -p /usr/share/hexciri/default
   run cp -r "$REPO_DIR/default/themed" /usr/share/hexciri/default/themed
+  run mkdir -p /usr/share/hexciri/lib
+  run cp -f "$REPO_DIR/lib/initramfs.sh" /usr/share/hexciri/lib/initramfs.sh
   run mkdir -p /usr/share/pixmaps
   run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
 
@@ -332,34 +334,16 @@ HOOK
       run mkdir -p /etc/plymouth
       printf '[Daemon]\nTheme=hexciri\n' | run tee /etc/plymouth/plymouthd.conf >/dev/null
     fi
-    # mkinitcpio: plymouth after systemd/udev for splash. Anchor to the live
-    # HOOKS line only — the stock mkinitcpio.conf is full of commented-out
-    # 'plymouth' example hooks, and a file-wide grep false-positives on them,
-    # silently skipping the insert (surfaced on the Framework as a boot with the
-    # stock arch splash despite Theme=hexciri).
-    if ! grep -q '^HOOKS=.* plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
-      run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
-      if grep -q '^HOOKS=(base systemd' /etc/mkinitcpio.conf; then
-        run sed -i 's/^HOOKS=(base systemd/& plymouth/' /etc/mkinitcpio.conf
-      elif grep -q '^HOOKS=.*udev' /etc/mkinitcpio.conf; then
-        run sed -i 's/^\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
-      fi
-      if ! grep -q '^HOOKS=.* plymouth' /etc/mkinitcpio.conf; then
-        warn "could not insert plymouth hook (HOOKS=$(grep '^HOOKS=' /etc/mkinitcpio.conf))"
-      fi
+    # mkinitcpio CONFIG is deterministic + self-healing now (lib/initramfs.sh):
+    # the chain-sed approach could mangle the HOOKS line, and a mangled config
+    # then got re-inherited by every later install (pacman never overwrites a
+    # modified config), which read as 'mkinitcpio.conf line 55: syntax error' /
+    # 'failed to generate ramfs'. This rewrites one canonical line + repairs any
+    # malformed one; plymouth lands after systemd/udev, encrypt before filesystems.
+    run "$REPO_DIR/lib/initramfs.sh" ensure --plymouth --encrypt /etc/mkinitcpio.conf
+    if [[ -f /etc/mkinitcpio.conf.hexciri-changed ]]; then
+      rm -f /etc/mkinitcpio.conf.hexciri-changed
       run mkinitcpio -P
-    fi
-    # LUKS: cryptdevice=PARTUUID=... needs the udev 'encrypt' hook (before
-    # filesystems) so the container opens at boot and the branded plymouth
-    # password dialog takes the passphrase.
-    if ! grep -q '^HOOKS=.* encrypt' /etc/mkinitcpio.conf 2>/dev/null; then
-      run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
-      run sed -i 's/^HOOKS=(\([^)]*\)filesystems/\1encrypt filesystems/' /etc/mkinitcpio.conf
-      if grep -q '^HOOKS=.* encrypt' /etc/mkinitcpio.conf; then
-        run mkinitcpio -P
-      else
-        warn "could not insert encrypt hook (HOOKS=$(grep '^HOOKS=' /etc/mkinitcpio.conf))"
-      fi
     fi
     # theme-packaged proof: if hexciri isn't in the initramfs, plymouth falls
     # back to the stock arch theme ('ARCH LINUX' wordmark) at boot. Fail loudly
@@ -409,6 +393,9 @@ HOOK
           rm -f "/boot/loader/entries/hexciri-$k.conf"
         fi
       done
+      # self-heal a possibly-inherited corrupt mkinitcpio.conf before rebuilding
+      run "$REPO_DIR/lib/initramfs.sh" repair /etc/mkinitcpio.conf
+      rm -f /etc/mkinitcpio.conf.hexciri-changed
       mkinitcpio -P
     else
       warn "$custom_pkg did not install (custom kernels need bleeding) — keeping staged kernel"

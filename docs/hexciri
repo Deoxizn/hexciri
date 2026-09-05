@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=21   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=22   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -257,6 +257,17 @@ rm -rf /mnt/root/hexciri-install
 git clone --depth 1 "$REPO" /mnt/root/hexciri-install
 
 # ── stage 2 runs inside the new system ──
+# boot-time HOOKS line is managed by lib/initramfs.sh (deterministic +
+# self-healing). On LUKS we also need plymouth + encrypt; on a reused disk a
+# config corrupted by an earlier failed attempt must be repaired first — it
+# shows up as 'mkinitcpio.conf line 55: syntax error' / 'failed to generate
+# ramfs' at pacstrap's kernel post-install, and pacman never overwrites a
+# modified config, so it would survive into every later install.
+if [[ $ENCRYPT == yes ]]; then
+  IR_CMD="ensure --plymouth --encrypt /etc/mkinitcpio.conf"
+else
+  IR_CMD="repair /etc/mkinitcpio.conf"
+fi
 cat > /mnt/root/hexciri-stage2.sh <<STAGE2
 set -euo pipefail
 info() { echo -e "\\e[0;36m[hexciri:stage2]\\e[0m \$*"; }
@@ -325,6 +336,15 @@ if grep -qE '(root|options|cryptdevice) +=' /boot/loader/entries/hexciri-*.conf;
   err "boot entry malformed (spaced key=value) — aborting before install"
   grep -H . /boot/loader/entries/hexciri-*.conf >&2 || true
   exit 1
+fi
+
+# ── initramfs guaranteed: self-heal (or ensure, on LUKS) the config, then
+# ── rebuild so a corrupted leftover from a previous install can't ship. ──
+bash /root/hexciri-install/lib/initramfs.sh $IR_CMD
+if [[ -f /etc/mkinitcpio.conf.hexciri-changed ]]; then
+  rm -f /etc/mkinitcpio.conf.hexciri-changed
+  info "rebuilt initramfs after mkinitcpio.conf fix"
+  mkinitcpio -P >/dev/null 2>&1 || mkinitcpio -P
 fi
 
 systemctl enable NetworkManager.service power-profiles-daemon.service >/dev/null
