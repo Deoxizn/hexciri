@@ -1,0 +1,47 @@
+#!/bin/bash
+# hexciri:remove=package-remover
+# hexciri:summary=Remove submenu: packages, installed web apps, or user themes
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+web_apps=()
+while IFS= read -r -d '' f; do
+  grep -qE '^Exec=.*hexciri-launch-webapp' "$f" &&
+    web_apps+=("$(basename "${f%.desktop}")")
+done < <(find "$HOME/.local/share/applications" -maxdepth 1 -name '*.desktop' -print0 2>/dev/null)
+
+themes=()
+while IFS= read -r t; do
+  themes+=("$t")
+done < <(find "$HOME/.config/hexciri/themes" -mindepth 1 -maxdepth 1 -type d ! -xtype l -printf '%f\n' 2>/dev/null | sort)
+
+menu=('Package')
+((${#web_apps[@]})) && menu+=('Web App')
+((${#themes[@]})) && menu+=('Theme')
+
+choice=$(
+  printf '%s\n' "${menu[@]}" |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Remove: ' --width=26 --lines=${#menu[@]}
+) || exit 0
+
+case "$choice" in
+  Package) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-pkg-remove" ;;
+  "Web App")
+    pick=$(
+      printf '%s\n' "${web_apps[@]}" | sort |
+        "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Remove web app: ' --width=30 --lines=9
+    ) || exit 0
+    [[ -n $pick ]] && exec "$SCRIPT_DIR/hexciri-webapp-remove" "$pick"
+    ;;
+  Theme)
+    pick=$(
+      printf '%s\n' "${themes[@]}" |
+        "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Remove theme: ' --width=30 --lines=9
+    ) || exit 0
+    [[ -n $pick ]] && exec "$bindir/hexciri-theme-remove" "$pick"
+    ;;
+esac

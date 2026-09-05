@@ -1,0 +1,104 @@
+#!/bin/bash
+# hexciri:menu=font
+# hexciri:summary=System monospace font picker
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+# Vanilla port of the Noctarchy font picker:
+# - same terminal configs (alacritty/kitty/ghostty/foot) + fontconfig as source of truth
+# - Noctalia reads fontconfig live; nothing to restart
+# - hexciri-hook font-set kept as the extension point
+set_font() {
+  local font_name="$1"
+
+  font_name="$(printf '%s' "$font_name" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  font_name="${font_name#✓ }"
+
+  # Resolve through fontconfig itself, not a raw grep: picker selections can
+  # carry stray whitespace/markup, and only the *same* chosen family (modulo
+  # case) is accepted — anything else is genuinely "not found".
+  local want canon got
+  want="$(printf '%s' "$font_name" | tr '[:upper:]' '[:lower:]')"
+  canon="$(fc-match -f '%{family[0]}' "$font_name" 2>/dev/null)"
+  if [[ -n $canon ]]; then
+    got="$(printf '%s' "$canon" | tr '[:upper:]' '[:lower:]')"
+    [[ $got == "$want" ]] || canon=""
+  fi
+  if [[ -z $canon ]]; then
+    notify-send -a hexciri "Font" "Font '$font_name' not found" 2>/dev/null || true
+    echo "Font '$font_name' not found (raw: $(printf '%q' "$1"))." >&2
+    exit 1
+  fi
+  font_name="$canon"
+
+  if [[ -f ~/.config/alacritty/alacritty.toml ]]; then
+    sed -i "s/family = \".*\"/family = \"$font_name\"/g" ~/.config/alacritty/alacritty.toml
+  fi
+
+  if [[ -f ~/.config/kitty/kitty.conf ]]; then
+    sed -i "s/^font_family .*/font_family $font_name/g" ~/.config/kitty/kitty.conf
+    pkill -USR1 kitty 2>/dev/null || true
+  fi
+
+  if [[ -f ~/.config/ghostty/config ]]; then
+    sed -i "s/font-family = \".*\"/font-family = \"$font_name\"/g" ~/.config/ghostty/config
+    pkill -SIGUSR2 ghostty 2>/dev/null || true
+  fi
+
+  if [[ -f ~/.config/foot/foot.ini ]]; then
+    sed -i -E "s/^(font=)[^:]*/\1$font_name/" ~/.config/foot/foot.ini
+  fi
+
+  local fontconfig_file="$HOME/.config/fontconfig/fonts.conf"
+  mkdir -p "$(dirname "$fontconfig_file")"
+  cat >"$fontconfig_file" <<XML
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <match target="pattern">
+    <test name="family" qual="any">
+      <string>monospace</string>
+    </test>
+    <edit name="family" mode="prepend_first" binding="strong">
+      <string>$font_name</string>
+    </edit>
+  </match>
+</fontconfig>
+XML
+
+  hexciri-hook font-set "$font_name" 2>/dev/null || true
+  notify-send -a hexciri "Font" "Font set to $font_name" 2>/dev/null || true
+  if pgrep -x ghostty >/dev/null 2>&1 || pgrep -x foot >/dev/null 2>&1; then
+    notify-send -a hexciri "Font" "Restart Ghostty/Foot to see the font change" 2>/dev/null || true
+  fi
+}
+
+# 'monospace' is a fontconfig alias, never a family line in fc-list — detect the
+# real current from kitty (hexciri's source of truth), else from fc-match.
+current=""
+if [[ -f ~/.config/kitty/kitty.conf ]]; then
+  current="$(grep -m1 '^font_family' ~/.config/kitty/kitty.conf | sed 's/^font_family *//; s/[[:space:]]*$//')"
+fi
+[[ -z $current ]] && current="$(fc-match -f '%{family[0]}' monospace 2>/dev/null)"
+
+choice=$(
+  set +o pipefail  # fuzzel owns the picker; upstream SIGPIPE (fuzzel quitting
+                   # early) must not turn a cancelled pick into a failure
+  # Monospace-only picker: fontconfig :mono filter kills UI/serif/arabic noise;
+  # then trim comma-aliases, collapse Mono/Propo/NL caret variants into the base
+  # Nerd font, drop symbol faces, case-insensitive unique + sort (sane font list)
+  fc-list :mono family |
+    sed 's/,.*//; s/ Nerd Font \(Mono\|Propo\|NL\)$/ Nerd Font/; s/NL Nerd Font$/ Nerd Font/' |
+    grep -viE 'emoji|icon|symbol|signwriting' |
+    awk '!seen[tolower($0)]++' |
+    sort -f |
+    awk -v cur="$current" '$0 == cur { print "✓ "$0; next } { print }' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Font: ' --width=36 --lines=18
+) || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
+
+font=${choice#✓ }
+[[ -n $font ]] && set_font "$font"

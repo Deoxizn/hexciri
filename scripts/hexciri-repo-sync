@@ -1,0 +1,53 @@
+#!/bin/bash
+# hexciri:summary=Pull latest hexciri repo and re-install (scripts, hooks, config).
+# No sync.sh exists — install.sh performs the copy, so pull visibly through it.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fuzzel="$SCRIPT_DIR/hexciri-fuzzel"
+
+fail() {
+  notify-send -a hexciri "$1" 2>/dev/null || true
+  echo "[hexciri] $1" >&2
+  exit 1
+}
+
+# Installed copies live in their config/usr dirs (no .git), so resolve the
+# repo from the state file written by install.sh, the standard user location,
+# or this script's own path.
+REPO_DIR=""
+STATE_FILE="$HOME/.local/state/hexciri/repo-path"
+[[ -r $STATE_FILE ]] && REPO_DIR=$(<"$STATE_FILE")
+if [[ ! -d "$REPO_DIR/.git" && -d "$HOME/.local/opt/hexciri/.git" ]]; then
+  REPO_DIR="$HOME/.local/opt/hexciri"
+fi
+if [[ ! -d "$REPO_DIR/.git" ]]; then
+  REPO_DIR="$(cd "$SCRIPT_DIR" && cd .. && pwd)"
+fi
+if [[ ! -d "$REPO_DIR/.git" ]]; then
+  fail "No hexciri repo found (state: ${REPO_DIR:-unset}). Clone it, then run ./install.sh."
+fi
+
+git -C "$REPO_DIR" fetch --quiet || true
+LOCAL=$(git -C "$REPO_DIR" rev-parse HEAD)
+REMOTE=$(git -C "$REPO_DIR" rev-parse '@{u}' 2>/dev/null || echo "$LOCAL")
+
+if [[ "$LOCAL" == "$REMOTE" ]]; then
+  notify-send -a hexciri "Repo is up to date"
+  exit 0
+fi
+
+result=$(printf '%s\n' "Pull now" "Later" | "$fuzzel" \
+  --dmenu --prompt='hexciri update available: ' --width=32 --lines=2) || exit 0
+
+if [[ "$result" == "Pull now" ]]; then
+  if git -C "$REPO_DIR" pull --rebase; then
+    notify-send -a hexciri "Repo updated"
+    # install.sh requires --channel (best-effort read of /etc/pacman.conf)
+    ch="stable"
+    grep -q 'https://pkgs.omarchy.org/edge/' /etc/pacman.conf 2>/dev/null && ch="bleeding"
+    "$REPO_DIR/install.sh" --channel "$ch" --user-only -y 2>/dev/null || true
+  else
+    notify-send -a hexciri "Failed to pull hexciri update"
+  fi
+fi

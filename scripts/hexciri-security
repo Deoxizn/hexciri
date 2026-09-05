@@ -1,0 +1,36 @@
+#!/bin/bash
+# hexciri:security=security-setup
+# hexciri:summary=Security setup: fingerprint login, FIDO2 keys, SSH daemon, passwordless sudo
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+menu=""
+declare -A cmd_for=()
+
+add() {
+  local label=$1 cond=$2
+  shift 2
+  [[ -n $cond ]] && ! "$cond" >/dev/null 2>&1 && return 0
+  cmd_for[$label]="$*"
+  menu+="$label"$'\n'
+}
+
+add 'Fingerprint' "$bindir/hexciri-hw-fingerprint" "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'if ! command -v fprintd-enroll >/dev/null 2>&1; then echo "Installing fprintd (fingerprint support)..."; sudo pacman -S --noconfirm fprintd; fi; if command -v fprintd-enroll >/dev/null 2>&1; then fprintd-enroll; else echo "fprintd failed to install — run: sudo pacman -S fprintd"; fi; read -rp "Press Enter to close"'
+add 'Fido2'             ''                               "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'echo "Plug in your FIDO2 key."; read -rp "It should register via your app. Configure: sudo systemctl enable fido2-token-gc; See arch-wiki FIDO2."; echo done'
+add 'SSHD'              ''                               "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'if systemctl is-enabled sshd >/dev/null 2>&1; then sudo systemctl disable --now sshd && echo "ssh disabled"; else sudo systemctl enable --now sshd && echo "ssh enabled"; fi; read -rp "Press enter to close"' 
+add 'Passwordless Sudo' ''                               "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'sudo tee /etc/sudoers.d/20-hexciri-$USER >/dev/null <<EOF
+$USER ALL=(ALL) NOPASSWD: ALL
+EOF
+sudo chmod 440 /etc/sudoers.d/20-hexciri-$USER; echo "passwordless sudo enabled for $USER"; read -rp "Press enter to close"'
+
+choice=$(
+  printf '%s' "$menu" |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Security: ' --width=30 --lines=${#cmd_for[@]}
+) || exec "$SCRIPT_DIR/hexciri-system"
+
+cmd=${cmd_for[$choice]:-}
+[[ -n $cmd ]] && eval exec "$cmd"

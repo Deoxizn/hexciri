@@ -1,0 +1,42 @@
+#!/bin/bash
+# hexciri:menu=cleaner
+# hexciri:summary=Clean pacman cache and remove orphaned packages safely (no y/n maze — paccache or explicit prompts)
+set -euo pipefail
+
+note() { notify-send -a hexciri "$1" 2>/dev/null || true; }
+
+echo "== 1/3 package cache =="
+if command -v paccache >/dev/null 2>&1; then
+  sudo paccache -rk0 >/dev/null 2>&1
+  echo "cache emptied (paccache -rk0)"
+else
+  sudo pacman -Scc --noconfirm >/dev/null 2>&1
+  echo "cache emptied (pacman -Scc)"
+fi
+
+echo
+echo "== 2/3 orphaned packages (no longer needed) =="
+orphans=$(pacman -Qtdq 2>/dev/null || true)
+if [[ -z $orphans ]]; then
+  echo "no orphaned packages"
+else
+  echo "$orphans"
+  echo -n "Remove these orphans? [y/N] "
+  IFS= read -r r
+  if [[ $r =~ ^[Yy]$ ]]; then
+    # shellcheck disable=SC2086
+    sudo pacman -Rns --noconfirm $orphans
+    echo "orphans removed."
+    note "Orphans removed"
+  else
+    echo "orphans kept."
+  fi
+fi
+
+echo
+echo "== 3/3 journal (keep last 100M) =="
+sudo journalctl --vacuum-size=100M 2>/dev/null || true
+echo "journal vacuumed."
+
+echo
+echo "cleanup done."

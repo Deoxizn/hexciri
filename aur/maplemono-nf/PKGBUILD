@@ -1,0 +1,22 @@
+# Vendored minimal build of the AUR `maplemono` split package.
+# Builds ONLY the Maple Mono NF variant (ligature + Nerd Font icons), pinned to
+# the official release zip + checksum instead of building all 10 subpackages.
+pkgname=maplemono-nf
+pkgver=7.9
+pkgrel=1
+pkgdesc='Maple Mono NF: open-source monospace with ligatures and Nerd Font icons'
+arch=('any')
+url='https://github.com/subframe7536/maple-font'
+license=('OFL-1.1')
+depends=('fontconfig')
+makedepends=('unzip')
+source=("MapleMono-NF-$pkgver.zip::https://github.com/subframe7536/maple-font/releases/download/v$pkgver/MapleMono-NF.zip")
+sha256sums=('59098b87c895d871635d37680e88000ae2b2b25b55428195b228ec589e35fb89')
+
+package() {
+  unzip -q "MapleMono-NF-$pkgver.zip" -d MapleMono-NF
+  install -d "$pkgdir/usr/share/fonts/MapleMono-NF"
+  install -d "$pkgdir/usr/share/licenses/$pkgname"
+  install -Dm644 -t "$pkgdir/usr/share/fonts/MapleMono-NF" MapleMono-NF/*.ttf
+  install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" MapleMono-NF/LICENSE.txt
+}

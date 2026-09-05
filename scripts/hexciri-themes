@@ -1,0 +1,54 @@
+#!/bin/bash
+# hexciri:themes=theme-submenu
+# hexciri:summary=Themes submenu: browse the theme list, switch palette source, or install a new theme
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+NOCTALIA_CFG="${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/config.toml"
+
+if [[ $# -gt 0 ]]; then
+  # Direct dispatch from menu search
+  choice="$*"
+else
+choice=$(
+  printf '%s\n' \
+    'Theme list' \
+    'Palette source' \
+    'Install theme' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=26 --lines=3
+) || exec "$SCRIPT_DIR/hexciri-menu"
+fi
+
+case "$choice" in
+  "Theme list")    exec "$SCRIPT_DIR/hexciri-themes-list" ;;
+  "Install theme") exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'read -rp "Theme git URL: " url; hexciri-theme-install "$url"; read -rp "press enter to close"' ;;
+  "Palette source")
+    current=""
+    if [[ -f "$NOCTALIA_CFG" ]] && grep -q 'source = "custom"' "$NOCTALIA_CFG" 2>/dev/null; then
+      current="Theme"
+    else
+      current="Wallpaper"
+    fi
+    source_choice=$(
+      printf '%s\n' \
+        'Theme (custom palette)' \
+        'Wallpaper (Material You)' |
+        "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt="Palette ($current): " --width=30 --lines=2
+    ) || exec "$SCRIPT_DIR/hexciri-themes"
+    if [[ -z "$source_choice" ]]; then
+      exec "$SCRIPT_DIR/hexciri-themes"
+    fi
+    if [[ "$source_choice" == *"custom"* ]]; then
+      sed -i 's/^source = .*/source = "custom"/' "$NOCTALIA_CFG"
+      sed -i 's/^custom_palette = .*/custom_palette = "hexciri"/' "$NOCTALIA_CFG"
+      echo "Switched to Theme palette"
+    else
+      sed -i 's/^source = .*/source = "wallpaper"/' "$NOCTALIA_CFG"
+      echo "Switched to Wallpaper palette"
+    fi
+    "$bindir/hexciri-theme-set" "$(cat "$HOME/.local/state/hexciri/current/theme.name" 2>/dev/null || true)" >/dev/null 2>&1 || true
+    ;;
+esac

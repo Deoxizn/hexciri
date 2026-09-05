@@ -1,0 +1,31 @@
+#!/bin/bash
+# hexciri:menu=system
+# hexciri:summary=System submenu: config, apps, fonts, network, security, kernel, splash, maintenance.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+choice=$(
+  printf '%s\n' \
+    'Boot Splash >' \
+    'Config >' \
+    'Default Apps >' \
+    'Fonts' \
+    'Kernel >' \
+    'Maintenance >' \
+    'Network >' \
+    'Security >' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='System: ' --width=26 --lines=8
+) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
+choice=${choice%' >'}
+
+case "$choice" in
+  "Boot Splash")  exec "$SCRIPT_DIR/hexciri-splash" ;;
+  "Config")       exec "$SCRIPT_DIR/hexciri-config" ;;
+  "Default Apps") exec "$SCRIPT_DIR/hexciri-defaults" ;;
+  "Fonts")        exec "$SCRIPT_DIR/hexciri-font" ;;
+  "Kernel")       exec "$SCRIPT_DIR/hexciri-kernel" ;;
+  "Maintenance")  exec "$SCRIPT_DIR/hexciri-system-update" ;;
+  "Network")      exec "$SCRIPT_DIR/hexciri-network" ;;
+  "Security")     exec "$SCRIPT_DIR/hexciri-security" ;;
+esac

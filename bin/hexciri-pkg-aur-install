@@ -1,0 +1,38 @@
+#!/bin/bash
+# hexciri:summary=Install AUR packages via a live fuzzy picker (requires yay or paru)
+# hexciri:requires-sudo=true
+set -euo pipefail
+
+command -v fzf >/dev/null 2>&1 || { echo "fzf not installed yet: sudo pacman -S fzf"; exit 1; }
+
+aur=()
+command -v yay >/dev/null 2>&1 && aur+=(yay)
+command -v paru >/dev/null 2>&1 && aur+=(paru)
+
+if ((${#aur[@]} == 0)); then
+  echo "No AUR helper installed. Install one, e.g.: sudo pacman -S --needed base-devel git"
+  echo "then: git clone https://aur.archlinux.org/yay-bin.git && cd yay-bin && makepkg -si"
+  exit 1
+fi
+au="${aur[0]}"
+
+list=$("$au" -Slqa 2>/dev/null || true)
+if [[ -z $list ]]; then
+  echo "No AUR listing available from $au (try first: $au -Syu)"
+  exit 1
+fi
+
+fzf_args=(
+  --multi
+  --preview "$au -Si {1} | head -30"
+  --preview-label='alt-p: toggle preview, tab: multi-select, alt-j/k: scroll'
+  --preview-label-pos='bottom'
+  --preview-window 'down:60%:wrap'
+  --bind 'alt-p:toggle-preview'
+  --bind 'alt-d:preview-half-page-down,alt-u:preview-half-page-up'
+  --bind 'alt-k:preview-up,alt-j:preview-down'
+)
+
+picked=$(printf '%s\n' "$list" | LC_ALL=C sort -f | fzf "${fzf_args[@]}") || exit 0
+[[ -n $picked ]] || exit 0
+echo "$picked" | sed 's/^/aur\//' | tr '\n' ' ' | xargs "$au" -S --noconfirm

@@ -1,0 +1,26 @@
+#!/bin/bash
+# hexciri:menu=system-update
+# hexciri:summary=Maintenance: clock sync, system cleaner, user password.
+# Notably no LUKS/snapshot/tmux rows (hexciri is deliberately minimal).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ $# -gt 0 ]]; then
+  # Direct dispatch from menu search
+  choice="$*"
+else
+choice=$(
+  printf '%s\n' \
+    'Sync system clock' \
+    'System Cleaner' \
+    'User password' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Maintenance: ' --width=30 --lines=3
+) || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
+fi
+
+case "$choice" in
+  "Sync system clock") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" bash -c 'sudo timedatectl set-ntp false; sudo timedatectl set-ntp true; timedatectl status' ;;
+  "System Cleaner")    exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-cleaner" ;;
+  "User password")     exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" passwd ;;
+esac

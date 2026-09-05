@@ -9,6 +9,12 @@
 # Bar
 # Widget IDs are v5 names (spacer, active_window, ...). Per-widget settings
 # live in [widget.<name>] tables below.
+#
+# Deliberate composition: this mimics a typical daily bar but WITHOUT the fun
+# extras (bongo-cat) and system-monitor widgets (cpu/mem/disk/temperature) —
+# clutter that duplicates what system monitors already show. Volume is kept
+# (everyone needs it) and brightness is kept (laptops). Feel free to add
+# sysmon back under [widget.sysmon] if you want resource use in the bar.
 # ──────────────────────────────────────────────
 
 [bar.default]
@@ -18,10 +24,10 @@ background_opacity = 0.95             # 0.0 = transparent, 1.0 = opaque
 reserve_space = true                  # Reserve screen space (don't overlap windows)
 start  = ["workspaces", "spacer", "active_window"]
 center = ["clock"]
-end    = ["network", "bluetooth", "battery", "volume", "brightness", "tray", "media"]
+end    = ["network", "bluetooth", "battery", "volume", "brightness", "yuuto/arch-updater:widget", "tray", "media"]
 
 [widget.clock]
-format = "{:%H:%M}"                   # 24-hour time (see date-format-tokens in Noctalia docs)
+format = "{:%I:%M %p}"                 # 12-hour time, e.g. 02:30 PM (see date-format-tokens in Noctalia docs)
 tooltip_format = "{:%A, %d %B %Y}"    # Full date on hover
 
 [widget.spacer]
@@ -95,3 +101,15 @@ enabled = true
 source = "custom"
 custom_palette = "hexciri"
 mode = "dark"
+
+# ──────────────────────────────────────────────
+# Plugins (noctalia community "arch-updater" bar widget)
+#   Enabled declaratively here; its plugin-level settings are owned by the
+#   state dir and are seeded by install.sh into
+#   ~/.local/state/noctalia/settings.toml (terminal=kitty,
+#   update_cmd=hexciri-update-run). No service.luau patching — the current
+#   plugin honors both keys natively.
+# ──────────────────────────────────────────────
+
+[plugins]
+enabled = ["yuuto/arch-updater"]

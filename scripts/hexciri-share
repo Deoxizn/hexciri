@@ -1,0 +1,66 @@
+#!/bin/bash
+# hexciri:menu=share
+# hexciri:summary=Share via LocalSend: clipboard, file, folder, or receive
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+if [[ $# -gt 0 ]]; then
+  # Direct dispatch from menu search
+  choice="$*"
+else
+choice=$(
+  printf '%s\n' \
+    'Clipboard' \
+    'File' \
+    'Folder' \
+    'Receive' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Share: ' --width=28 --lines=4
+) || exec "$SCRIPT_DIR/hexciri-trigger"   # Esc = back to trigger menu
+fi
+choice=${choice%' >'}
+
+share_via_cli() { # <path...> — send through the localsend-cli TUI (floating terminal)
+  exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" localsend-cli -f "$@"
+}
+
+case "$choice" in
+  "Clipboard")
+    tmp=$(mktemp --suffix=.txt)
+    if ! wl-paste >"$tmp" 2>/dev/null || [[ ! -s $tmp ]]; then
+      rm -f "$tmp"
+      notify-send -a hexciri "Share" "Clipboard is empty" 2>/dev/null || true
+      exit 0
+    fi
+    share_via_cli "$tmp"
+    ;;
+  "File")
+    if command -v zenity >/dev/null 2>&1; then
+      picked=$(zenity --file-selection --title "Share files" --multiple 2>/dev/null) || exit 0
+      # zenity --multiple returns "|"-separated paths
+      pick=()
+      while IFS= read -r p; do pick+=("$p"); done < <(tr '|' '\n' <<<"$picked")
+      share_via_cli "${pick[@]}"
+    else
+      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-share-pick"
+    fi
+    ;;
+  "Folder")
+    if command -v zenity >/dev/null 2>&1; then
+      picked=$(zenity --file-selection --directory --title "Share folder" 2>/dev/null) || exit 0
+      share_via_cli "$picked"
+    else
+      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-share-pick" --folder
+    fi
+    ;;
+  "Receive")
+    if command -v localsend >/dev/null 2>&1; then
+      exec localsend
+    else
+      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" localsend-cli
+    fi
+    ;;
+esac

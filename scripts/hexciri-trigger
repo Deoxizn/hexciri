@@ -1,0 +1,19 @@
+#!/bin/bash
+# hexciri:menu=trigger
+# hexciri:summary=Trigger submenu: hardware toggles and speed tests.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+choice=$(
+  printf '%s\n' \
+    'Hardware' \
+    'Speed Test >' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Trigger: ' --width=26 --lines=2
+) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
+choice=${choice%' >'}
+
+case "$choice" in
+  "Hardware")   exec "$SCRIPT_DIR/hexciri-hardware" ;;
+  "Speed Test") exec "$SCRIPT_DIR/hexciri-speedtest" ;;
+esac

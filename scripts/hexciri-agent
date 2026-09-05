@@ -22,5 +22,12 @@ case "$agent" in
 esac
 cmd+=("$@")
 
+# default working dir: ~/Work (projects/git) when present, else ~
+if [[ -n ${HEXCIRI_WORK_DIR:-} ]]; then
+  cd "$HEXCIRI_WORK_DIR" 2>/dev/null || true
+elif [[ -d $HOME/Work ]]; then
+  cd "$HOME/Work" 2>/dev/null || true
+fi
+
 # floating TUI class, matching suite convention
 exec xdg-terminal-exec --app-id=TUI.float -e "${cmd[@]}"

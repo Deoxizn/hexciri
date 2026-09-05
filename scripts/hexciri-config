@@ -1,0 +1,32 @@
+#!/bin/bash
+# hexciri:menu=config
+# hexciri:summary=Edit hexciri config files
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+if [[ $# -gt 0 ]]; then
+  # Direct dispatch from menu search
+  choice="$*"
+else
+choice=$(
+  printf '%s\n' \
+    'Niri config' \
+    'Noctalia config' \
+    'Palettes' \
+    'Hooks' \
+    'Scripts' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=24 --lines=5
+) || exec "$SCRIPT_DIR/hexciri-menu"
+fi
+
+case "$choice" in
+  'Niri config')     "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/niri/config.kdl" ;;
+  'Noctalia config') "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/config.toml" ;;
+  'Palettes')        "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/palettes/" ;;
+  'Hooks')           "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/hooks/" ;;
+  'Scripts')         "$bindir/hexciri-edit-file" "${HEXCIRI_PATH:-/usr/share/hexciri}/scripts/" ;;
+esac

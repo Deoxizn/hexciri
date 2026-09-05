@@ -1,0 +1,7 @@
+#!/bin/bash
+# hexciri:summary=Print network profile (wifi/ethernet) of the primary connection
+set -euo pipefail
+
+route_device=$(ip route get 1.1.1.1 2>/dev/null | awk '{ for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }')
+[[ -n $route_device ]] || exit 1
+[[ -d /sys/class/net/$route_device/wireless ]] && echo "wifi" || echo "ethernet"

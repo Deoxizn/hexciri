@@ -1,0 +1,75 @@
+#!/bin/bash
+# hexciri:summary=Toggle dedicated vs integrated GPU mode via supergfxd (hybrid GPU laptops)
+# hexciri:requires-sudo=true
+
+if ! command -v supergfxctl >/dev/null 2>&1; then
+  echo "Installing supergfxctl..."
+  sudo pacman -S --noconfirm supergfxctl || { echo "supergfxctl is not in the configured repos" >&2; exit 1; }
+
+  # Create config before starting service to prevent hang on first boot
+  sudo tee /etc/supergfxd.conf >/dev/null <<'CONF'
+{
+  "mode": "Hybrid",
+  "vfio_enable": true,
+  "vfio_save": false,
+  "always_reboot": false,
+  "no_logind": false,
+  "logout_timeout_s": 180,
+  "hotplug_type": "None"
+}
+CONF
+
+  sudo systemctl enable --now supergfxd
+fi
+
+gpu_mode=""
+for attempt in {1..3}; do
+  if gpu_mode=$(timeout --kill-after=1s 3s supergfxctl -g 2>/dev/null) && [[ -n $gpu_mode ]]; then
+    break
+  fi
+  gpu_mode=""
+  ((attempt < 3)) && sleep 1
+done
+
+if [[ -z $gpu_mode ]]; then
+  echo "supergfxd is not responding. Check: systemctl status supergfxd" >&2
+  exit 1
+fi
+
+confirm() { read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
+
+case "$gpu_mode" in
+"Integrated")
+  if confirm "Enable dedicated GPU and reboot?"; then
+    sudo sed -i "s/\"mode\": \".*\"/\"mode\": \"Hybrid\"/" /etc/supergfxd.conf
+    sudo rm -rf /usr/lib/systemd/system-sleep/force-igpu
+    sudo rm -rf /etc/systemd/system/supergfxd.service.d/delay-start.conf
+    systemctl reboot
+  fi
+  ;;
+"Hybrid")
+  if confirm "Use only integrated GPU and reboot?"; then
+    sudo sed -i "s/\"mode\": \".*\"/\"mode\": \"Integrated\"/" /etc/supergfxd.conf
+    sudo sed -i 's/"vfio_enable": false/"vfio_enable": true/' /etc/supergfxd.conf
+    sudo mkdir -p /usr/lib/systemd/system-sleep
+    sudo mkdir -p /etc/systemd/system/supergfxd.service.d
+    sudo tee /usr/lib/systemd/system-sleep/force-igpu >/dev/null <<'SH'
+#!/bin/sh
+# force integrated GPU after system sleep (dgpu could otherwise activate)
+case "$1" in
+post) echo IG >> /proc/acpi/call || true ;;
+esac
+SH
+    sudo chmod +x /usr/lib/systemd/system-sleep/force-igpu
+    sudo tee /etc/systemd/system/supergfxd.service.d/delay-start.conf >/dev/null <<'CNF'
+[Service]
+ExecStartPre=/bin/sleep 10
+CNF
+    systemctl reboot
+  fi
+  ;;
+*)
+  echo "Hybrid GPU not found or in unknown mode." >&2
+  exit 1
+  ;;
+esac

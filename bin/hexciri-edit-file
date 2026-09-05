@@ -1,0 +1,34 @@
+#!/bin/bash
+# hexciri:summary=Open a file/dir in the default editor (hexciri-defaults state → $EDITOR → installed fallback)
+set -euo pipefail
+
+resolve() {
+  local e=""
+  # Arch's zed package ships the binary as `zeditor`, not `zed` — map it.
+  zed_or_zeditor() {
+    if command -v zeditor >/dev/null 2>&1; then echo zeditor; else echo "$1"; fi
+  }
+  if [[ -f $HOME/.local/state/hexciri/defaults/editor ]]; then
+    e="$(cat "$HOME/.local/state/hexciri/defaults/editor")"
+    [[ $e == zed ]] && e="$(zed_or_zeditor zed)"
+    command -v "$e" >/dev/null 2>&1 || e=""
+  fi
+  if [[ -z $e && -n ${EDITOR:-} ]]; then
+    e="${EDITOR%% *}"
+    [[ $e == zed ]] && e="$(zed_or_zeditor zed)"
+    command -v "$e" >/dev/null 2>&1 || e=""
+  fi
+  if [[ -z $e ]]; then
+    for c in zed zeditor nvim helix nano vi; do
+      command -v "$c" >/dev/null 2>&1 && { e="$c"; break; }
+    done
+  fi
+  if [[ -z $e ]]; then
+    echo "error: no editor found (install zed, nvim, helix or nano)" >&2
+    exit 1
+  fi
+  command -v "$e"
+}
+
+editor="$(resolve)"
+exec xdg-terminal-exec -e "$editor" "$@"

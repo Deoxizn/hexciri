@@ -1,0 +1,7 @@
+#!/bin/bash
+# hexciri:summary=Print the detected touchpad or trackpad device name
+# Detects without libinput/hyprctl by scanning /proc/bus/input/devices.
+set -euo pipefail
+
+grep -i -B4 -A3 'touchpad\|trackpad' /proc/bus/input/devices 2>/dev/null |
+  grep -m1 'Name=' | sed 's/^Name=//'

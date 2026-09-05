@@ -1,0 +1,126 @@
+#!/bin/bash
+# hexciri:summary=Set and show lightweight desktop notification reminders
+# hexciri:args=[show|clear] | <minutes> [message]
+# hexciri:examples=hexciri-reminder 5 | hexciri-reminder 30 "Check the oven" | hexciri-reminder show | hexciri-reminder clear
+set -euo pipefail
+
+format_remaining() {
+  local seconds=$1
+  local minutes=$((seconds / 60))
+  local remainder=$((seconds % 60))
+
+  if ((minutes > 0 && remainder > 0)); then
+    echo "${minutes}m ${remainder}s"
+  elif ((minutes > 0)); then
+    echo "${minutes}m"
+  else
+    echo "${remainder}s"
+  fi
+}
+
+active_reminder_timers() {
+  local now=${1:-$(date +%s)}
+  local timer next
+
+  while IFS=$'\t' read -r timer next; do
+    [[ -z $timer || -z $next ]] && continue
+
+    next=$((next / 1000000))
+    ((next <= now)) && continue
+
+    printf "%s\t%s\n" "$timer" "$next"
+  done < <(systemctl --user list-timers --all --output=json "hexciri-reminder-*.timer" 2>/dev/null | jq -r '.[] | [.unit, .next] | @tsv')
+}
+
+show_reminders() {
+  local timer next remaining reminder reminder_minutes body=""
+  local reminder_dir="${XDG_RUNTIME_DIR:-/tmp}/hexciri-reminders"
+  local reminder_message=""
+  local now=$(date +%s)
+
+  while IFS=$'\t' read -r timer next; do
+    remaining=$((next - now))
+    reminder=${timer%.timer}
+    reminder=${reminder#hexciri-reminder-}
+    reminder_minutes=${reminder%%m-*}
+    reminder_message=""
+    [[ -f $reminder_dir/${timer%.timer}.message ]] && reminder_message=$(<"$reminder_dir/${timer%.timer}.message")
+
+    if [[ -n $reminder_message ]]; then
+      body+="$reminder_message in $(format_remaining $remaining) ($(date -d "@$next" +%-H:%M))"$'\n'
+    else
+      body+="${reminder_minutes}-min reminder in $(format_remaining $remaining) ($(date -d "@$next" +%-H:%M))"$'\n'
+    fi
+  done < <(active_reminder_timers "$now")
+
+  if [[ -z $body ]]; then
+    notify-send -a hexciri "Reminders" "No outstanding reminders" 2>/dev/null || true
+  else
+    notify-send -a hexciri "Reminders" "${body%$'\n'}" 2>/dev/null || true
+  fi
+}
+
+clear_reminders() {
+  local units
+  local reminder_dir="${XDG_RUNTIME_DIR:-/tmp}/hexciri-reminders"
+
+  units=$(systemctl --user list-timers --all --no-legend --no-pager "hexciri-reminder-*.timer" 2>/dev/null | awk '{ print $(NF - 1), $NF }')
+
+  if [[ -n $units ]]; then
+    xargs -r systemctl --user stop <<<"$units" || true
+  fi
+
+  rm -f "$reminder_dir"/hexciri-reminder-*.message 2>/dev/null || true
+  notify-send -a hexciri "Reminders" "All reminders cleared" 2>/dev/null || true
+}
+
+usage() {
+  echo "Usage: hexciri-reminder <minutes> [message]"
+  echo "       hexciri-reminder show"
+  echo "       hexciri-reminder clear"
+}
+
+case ${1:-} in
+show | list)
+  show_reminders
+  exit 0
+  ;;
+clear)
+  clear_reminders
+  exit 0
+  ;;
+esac
+
+minutes=${1:-}
+shift || true
+message="$*"
+custom_message="$message"
+
+if [[ -z $minutes ]] || [[ ! $minutes =~ ^[0-9]+$ ]] || ((minutes == 0)); then
+  usage
+  exit 1
+fi
+
+if [[ -z $message ]]; then
+  message="Your ${minutes} minutes are up"
+fi
+
+set_at=$(date +%s)
+remind_at=$(date -d "+${minutes} minutes" +%H:%M)
+unit="hexciri-reminder-${minutes}m-$set_at"
+reminder_dir="${XDG_RUNTIME_DIR:-/tmp}/hexciri-reminders"
+message_file="$reminder_dir/$unit.message"
+confirmation="You'll be reminded at $remind_at"
+confirmation_title="Reminder set for ${minutes} minutes"
+
+mkdir -p "$reminder_dir"
+
+if [[ -n $custom_message ]]; then
+  printf "%s" "$custom_message" >"$message_file"
+  confirmation_title="$custom_message in ${minutes} minutes"
+fi
+
+systemd-run --user --quiet --collect --on-active="${minutes}m" --unit="$unit" \
+  bash -c 'notify-send -a hexciri "Reminder" "$1"; rm -f "$2"' bash "$message" "$message_file"
+
+notify-send -a hexciri "$confirmation_title" "$confirmation" 2>/dev/null || true

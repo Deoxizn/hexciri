@@ -1,0 +1,17 @@
+# Hexciri preset for the noctalia "yuuto/arch-updater" plugin.
+# install.sh seeds the missing keys of this table into
+# ~/.local/state/noctalia/settings.toml (plugin-level settings are
+# state-dir-owned; GUI overrides win, so existing values are left alone).
+#
+# update_cmd is run inside the plugin's own terminal wrapper
+# (`<terminal> -e bash -c ... tee -a log; read -n 1`), so kitty provides the
+# PTY and no `script -qec`/guard layer is needed. hexciri-update-run does
+# free-space check, `sudo pacman -Syu`, AUR via any installed helper, and a
+# kernel-reboot prompt.
+[plugin_settings."yuuto/arch-updater"]
+aur_helper = "auto"
+auto_check_hours = 1
+flatpak_enabled = false
+terminal = "kitty"
+update_cmd = "hexciri-update-run"
+update_mode = "terminal"

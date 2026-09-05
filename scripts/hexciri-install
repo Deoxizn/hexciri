@@ -1,0 +1,28 @@
+#!/bin/bash
+# hexciri:install=package-installer
+# hexciri:summary=Install submenu: packages, AUR builds, or a web app
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+if [[ $# -gt 0 ]]; then
+  # Direct dispatch from menu search
+  choice="$*"
+else
+choice=$(
+  printf '%s\n' \
+    'Package' \
+    'AUR' \
+    'Web App' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Install: ' --width=26 --lines=3
+) || exec "$SCRIPT_DIR/hexciri-packages"
+fi
+
+case "$choice" in
+  Package)   exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-pkg-install" ;;
+  AUR)       exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-pkg-aur-install" ;;
+  "Web App") exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-webapp-install" ;;
+esac

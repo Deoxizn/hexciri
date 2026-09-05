@@ -1,0 +1,24 @@
+#!/bin/bash
+# hexciri:summary=Pick a file/folder and send it with localsend-cli (zenity-free fallback)
+# hexciri:args=[--folder]
+set -euo pipefail
+
+pick_dir=false
+[[ ${1:-} == "--folder" ]] && pick_dir=true
+
+# Terminal-based picker: prompt for a path (with ~ expansion).
+if $pick_dir; then
+  read -rp "Folder to share (absolute path): " path
+else
+  read -rp "Path(s) to share (space-separated): " path
+fi
+[[ -n $path ]] || { echo "no path given"; exit 1; }
+
+files=()
+for p in $path; do
+  p=${p/#\~/$HOME}
+  if [[ ! -e $p ]]; then echo "not found: $p" >&2; exit 1; fi
+  files+=("$p")
+done
+
+exec localsend-cli -f "${files[@]}"

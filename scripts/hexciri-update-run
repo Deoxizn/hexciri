@@ -1,0 +1,35 @@
+#!/bin/bash
+# hexciri:summary=Safe system update: repo pkgs + AUR + reboot prompt on kernel change
+# usage: hexciri-update [--yes]
+set -euo pipefail
+
+YES=false
+[[ ${1:-} == "--yes" || ${1:-} == "-y" ]] && YES=true
+confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
+
+LOG="$HOME/.local/state/hexciri/update.log"
+mkdir -p "$(dirname "$LOG")"
+
+# ~2G free on / or stop before a half-finished transaction
+avail_kb=$(df -k / --output=avail | tail -n 1)
+(( avail_kb > 2*1024*1024 )) || { echo "hexciri-update: <2G free on / — free space first"; exit 1; }
+
+confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
+
+{
+  echo "=== $(date -Is) channel: $(hexciri-channel-current 2>/dev/null || echo ?) ==="
+  sudo pacman -Syu --noconfirm
+  if command -v yay &>/dev/null && pacman -Qmq 2>/dev/null | grep -qv yay-bin; then
+    yay -Sua --noconfirm
+  fi
+} 2>&1 | tee -a "$LOG"
+
+# reboot offer when the running kernel is no longer the newest installed
+running=$(uname -r)
+newest="$(ls -1 /usr/lib/modules/ 2>/dev/null | sort -V | tail -n 1)"
+if [[ -n $newest && $newest != "$running"* && $running != "$newest"* ]]; then
+  echo "kernel: $running -> $newest"
+  confirm "Reboot now?" && systemctl reboot
+else
+  echo "update complete (kernel $running current)."
+fi

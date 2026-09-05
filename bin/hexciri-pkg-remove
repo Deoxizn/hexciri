@@ -1,0 +1,22 @@
+#!/bin/bash
+# hexciri:summary=Remove explicitly-installed packages (live fuzzy picker, multi-select, pacman -Qi preview)
+# hexciri:requires-sudo=true
+set -euo pipefail
+
+command -v fzf >/dev/null 2>&1 || { echo "fzf not installed yet: sudo pacman -S fzf"; exit 1; }
+
+fzf_args=(
+  --multi
+  --preview 'pacman -Qi {1} | head -25'
+  --preview-label='alt-p: toggle preview, tab: multi-select, alt-j/k: scroll'
+  --preview-label-pos='bottom'
+  --preview-window 'down:60%:wrap'
+  --bind 'alt-p:toggle-preview'
+  --bind 'alt-d:preview-half-page-down,alt-u:preview-half-page-up'
+  --bind 'alt-k:preview-up,alt-j:preview-down'
+)
+
+picked=$(pacman -Qqe 2>/dev/null | LC_ALL=C sort -f | fzf "${fzf_args[@]}") || exit 0
+[[ -n $picked ]] || exit 0
+echo "$picked" | tr '\n' ' ' | xargs sudo pacman -Rns --noconfirm
+notify-send -a hexciri "Packages" "removed $(echo "$picked" | wc -l) package(s)" 2>/dev/null || true

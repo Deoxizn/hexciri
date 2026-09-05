@@ -3,6 +3,11 @@
 # No Limine, no CachyOS, no snapshots. systemd-boot entries only. Stock kernel never removed.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
 declare -A KERNEL_PKGS=(
   [stock]="linux"
   [lts]="linux-lts"
@@ -79,15 +84,20 @@ if [[ ${1:-} == run ]]; then
 fi
 
 # menu mode (fuzzel when available, numbered fallback)
+run_via_terminal() { # <key> — do the action in a visible terminal, hold open for review
+  local key=$1
+  exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" "$0" run "$key"
+}
+
 if command -v hexciri-fuzzel &>/dev/null; then
   choice="$(printf '%s\n' 'Stock — linux' 'LTS — linux-lts' 'Omarchy — linux-omarchy' 'BORE — linux-omarchy-bore' 'MuQSS — linux-omarchy-muqss' 'Status' | hexciri-fuzzel --dmenu --prompt='Kernel: ' --width=32 --lines=6)" || exit 0
   case "$choice" in
-    Stock*)  exec "$0" run stock ;;
-    LTS*)    exec "$0" run lts ;;
-    Omarchy*) exec "$0" run omarchy ;;
-    BORE*)   exec "$0" run bore ;;
-    MuQSS*)  exec "$0" run muqss ;;
-    Status)  exec "$0" run status ;;
+    Stock*)  run_via_terminal stock ;;
+    LTS*)    run_via_terminal lts ;;
+    Omarchy*) run_via_terminal omarchy ;;
+    BORE*)   run_via_terminal bore ;;
+    MuQSS*)  run_via_terminal muqss ;;
+    Status)  run_via_terminal status ;;
   esac
 else
   do_status

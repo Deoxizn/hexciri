@@ -4,14 +4,15 @@
 #   curl -LO https://hexciri.dirty.pizza/hexciri
 #   sh hexciri
 #
-# 7 things are typed, everything else is automatic: username, password,
-# hostname, timezone, filesystem, channel, disk (+wipe confirm).
+# 9 things are typed, everything else is automatic: username, hostname,
+# timezone, filesystem, channel, mode (full/free), disk (+wipe confirm), and a
+# final reboot prompt.
 # Run as root on the Arch ISO live environment. DESTRUCTIVE: wipes $DISK (full mode).
 set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=4   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=5   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 
@@ -234,7 +235,7 @@ cat > /etc/hosts <<HOSTS
 127.0.1.1 $HOSTNAME
 HOSTS
 
-useradd -m -G wheel -s /bin/bash "$USERNAME"
+useradd -m -G wheel,lp,scanner -s /bin/bash "$USERNAME"
 printf '%s:%s' "$USERNAME" "$USERPASS" | chpasswd
 # root shares the user password: single-user/emergency shells stay usable
 printf 'root:%s' "$USERPASS" | chpasswd
@@ -267,15 +268,16 @@ fi
 
 systemctl enable NetworkManager.service power-profiles-daemon.service >/dev/null
 
-cp -r /root/hexciri-install "/home/$USERNAME/hexciri"
-chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/hexciri"
+mkdir -p "/home/$USERNAME/.local/opt"
+cp -r /root/hexciri-install "/home/$USERNAME/.local/opt/hexciri"
+chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.local/opt/hexciri"
 # Split phases: system runs as root (no sudo needed), user runs as the user
 # with zero sudo calls — su(1) sessions have no controlling TTY, so nothing
 # here may ever depend on sudo prompting.
 trap 'rm -f /root/hexciri-stage2.sh' EXIT
 HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
 command -v fish &>/dev/null && chsh -s /usr/bin/fish "$USERNAME" || true
-su - "$USERNAME" -c "cd ~/hexciri && ./install.sh --user-only -y"
+su - "$USERNAME" -c "cd ~/.local/opt/hexciri && ./install.sh --user-only -y"
 STAGE2
 
 info "stage 2 (chroot)..."

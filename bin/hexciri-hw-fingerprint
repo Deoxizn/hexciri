@@ -1,0 +1,45 @@
+#!/bin/bash
+# hexciri:summary=Return true when a fingerprint reader is present
+# Detects straight from sysfs so this works before fprintd/usbutils are
+# installed (the fingerprint setup pulls those in). USB vendor IDs listed here
+# ship fingerprint readers; multi-purpose vendors (e.g. Elan/STMicro, which
+# also make USB touchscreens) are left out to avoid nagging laptops with no
+# reader — those still match on the product string below when present.
+fingerprint_vendors=" 27c6 138a 06cb 08ff 1c7a 147e "
+usb_devices_path="${HEXCIRI_USB_DEVICES_PATH:-/sys/bus/usb/devices}"
+
+# libfprint drives every reader it supports from userspace over libusb, so a
+# real reader sits there with no kernel driver bound to any of its interfaces.
+# The other things these vendors build — Synaptics webcam bridges (usbio-bridge
+# on the Dell XPS 14), touchpads and touchscreens (usbhid), cameras (uvcvideo)
+# — all bind one. Only the vendor-ID guess needs this; a device that names
+# itself a fingerprint reader is trusted outright.
+has_kernel_driver() {
+  local intf driver
+  for intf in "$1"/*:*; do
+    [[ -e $intf/driver ]] || continue
+    # usbfs is the exception: libusb claims an interface through it, so a reader
+    # fprintd is enrolling or verifying against binds a driver for as long as it
+    # holds the claim. That is userspace driving the device — what a reader is
+    # supposed to look like — so it must not read as a kernel driver here.
+    driver=$(readlink -f "$intf/driver")
+    [[ ${driver##*/} == "usbfs" ]] || return 0
+  done
+  return 1
+}
+
+for dev in "$usb_devices_path"/*; do
+  if [[ -r $dev/product ]]; then
+    product=$(<"$dev/product")
+    product=${product,,}
+    [[ $product == *fingerprint* || $product == *biometric* || $product == *elan:arm-m4* || $product == "fpc "* ]] && exit 0
+  fi
+
+  if [[ -r $dev/idVendor ]]; then
+    vendor=$(<"$dev/idVendor")
+    [[ $fingerprint_vendors == *" $vendor "* ]] &&
+      ! has_kernel_driver "$dev" && exit 0
+  fi
+done
+
+exit 1

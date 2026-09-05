@@ -1,0 +1,28 @@
+#!/bin/bash
+# hexciri:menu=reminders
+# hexciri:summary=Reminders submenu: set, quick, clear
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+if [[ $# -gt 0 ]]; then
+  # Direct dispatch from menu search
+  choice="$*"
+else
+choice=$(
+  printf '%s\n' \
+    'Set a reminder' \
+    'Quick reminder' \
+    'Clear all' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Reminders: ' --width=32 --lines=3
+) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
+fi
+
+case "$choice" in
+  "Set a reminder") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" bash -c 'read -rp "Minutes: " m; read -rp "Message (optional): " msg; hexciri-reminder "$m" "$msg"' ;;
+  "Quick reminder") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" bash -c 'read -rp "Minutes: " m; read -rp "Message: " msg; hexciri-reminder "$m" "$msg"' ;;
+  "Clear all")      exec "$bindir/hexciri-reminder" clear ;;
+esac

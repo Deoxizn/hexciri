@@ -1,5 +1,6 @@
 #!/bin/bash
 # hexciri:summary=Default apps: kitty + fish + brave-origin + strata + zed + opencode (xdg-native)
+# Only shows apps that are actually installed; current choice is marked with ✓.
 # usage: hexciri-defaults [Browser|Editor|Terminal|Shell|Files|Agent]
 set -euo pipefail
 
@@ -16,8 +17,39 @@ setv() { printf '%s' "$2" > "$STATE_BASE/$1"; }
 [[ -f $STATE_BASE/editor ]]   || setv editor zed
 [[ -f $STATE_BASE/agent ]]    || setv agent opencode
 
-menu_via_fuzzel() { # <prompt> <items...>
+# available(): only list candidates whose binary exists (browser: via desktop file)
+has_bin() { command -v "$1" >/dev/null 2>&1; }
+has_desktop() {
+  local d
+  for d in "$@"; do
+    [[ -f $HOME/.local/share/applications/$d || -f /usr/local/share/applications/$d || -f /usr/share/applications/$d ]] && return 0
+  done
+  return 1
+}
+available() { # <browser|terminal|...> <current> <candidates...>
+  local type=$1 current=$2; shift 2
+  local c
+  for c in "$@"; do
+    case "$type" in
+      browser) has_desktop "$c.desktop" || continue ;;
+      editor)  # Arch's zed ships as zeditor, not zed
+        if [[ $c == zed ]]; then
+          command -v zeditor >/dev/null 2>&1 || continue
+        else
+          has_bin "$c" || continue
+        fi
+        ;;
+      *) has_bin "$c" || continue ;;
+    esac
+    printf '%s\n' "$c"
+  done | while read -r c; do
+    if [[ $c == "$current" ]]; then printf '✓ %s\n' "$c"; else printf '%s\n' "$c"; fi
+  done
+}
+
+menu_via_fuzzel() { # <prompt> -- <items...>
   local prompt=$1; shift
+  [[ $1 == -- ]] && shift
   if command -v hexciri-fuzzel &>/dev/null; then
     printf '%s\n' "$@" | hexciri-fuzzel --dmenu --prompt="$prompt" --width=30 --lines=8
   else
@@ -27,13 +59,16 @@ menu_via_fuzzel() { # <prompt> <items...>
 
 pick_type="${1:-}"
 if [[ -z $pick_type ]]; then
-  pick_type="$(menu_via_fuzzel 'Defaults: ' Browser Editor Terminal Shell Files Agent)" || exit 0
+  pick_type="$(menu_via_fuzzel 'Defaults: ' -- Browser Editor Terminal Shell Files Agent)" || exit 0
 fi
 
 case "${pick_type,,}" in
   browser)
     current="$(get browser)"
-    choice="$(menu_via_fuzzel 'Browser: ' brave-origin brave-origin-beta brave firefox chromium zen)" || exit 0
+    choice="$(menu_via_fuzzel 'Browser: ' -- "$(available browser "$current" brave-origin brave-origin-beta brave firefox chromium zen)")" || exit 0
+    if [[ -z $(available browser "$current" brave-origin brave-origin-beta brave firefox chromium zen | grep -F "$choice") && $choice != "$current" ]]; then
+      exit 0
+    fi
     setv browser "$choice"
     # map choice -> desktop file for xdg (first existing wins)
     set_browser() {
@@ -54,18 +89,23 @@ case "${pick_type,,}" in
     ;;
   terminal)
     current="$(get terminal)"
-    choice="$(menu_via_fuzzel 'Terminal: ' kitty foot ghostty alacritty)" || exit 0
+    choice="$(menu_via_fuzzel 'Terminal: ' -- "$(available terminal "$current" kitty foot ghostty alacritty)")" || exit 0
+    [[ -n $choice ]] || exit 0
     setv terminal "$choice"
     ;;
   shell)
-    choice="$(menu_via_fuzzel 'Shell: ' fish bash)" || exit 0
+    current="$(get shell)"
+    choice="$(menu_via_fuzzel 'Shell: ' -- "$(available shell "$current" fish bash)")" || exit 0
+    [[ -n $choice ]] || exit 0
     setv shell "$choice"
     if [[ $choice == fish && $SHELL != *fish ]]; then
       echo "run: chsh -s /usr/bin/fish (keeps bash until you do)"
     fi
     ;;
   files)
-    choice="$(menu_via_fuzzel 'Files: ' strata nautilus thunar yazi)" || exit 0
+    current="$(get files)"
+    choice="$(menu_via_fuzzel 'Files: ' -- "$(available files "$current" strata nautilus thunar yazi)")" || exit 0
+    [[ -n $choice ]] || exit 0
     setv files "$choice"
     if [[ $choice == strata ]]; then
       # Strata ships io.github.lgse.Strata.desktop; register as folder handler
@@ -73,11 +113,15 @@ case "${pick_type,,}" in
     fi
     ;;
   editor)
-    choice="$(menu_via_fuzzel 'Editor: ' zed nvim helix code)" || exit 0
+    current="$(get editor)"
+    choice="$(menu_via_fuzzel 'Editor: ' -- "$(available editor "$current" zed nvim helix code)")" || exit 0
+    [[ -n $choice ]] || exit 0
     setv editor "$choice"
     ;;
   agent)
-    choice="$(menu_via_fuzzel 'Agent: ' opencode claude codex)" || exit 0
+    current="$(get agent)"
+    choice="$(menu_via_fuzzel 'Agent: ' -- "$(available agent "$current" opencode claude codex)")" || exit 0
+    [[ -n $choice ]] || exit 0
     setv agent "$choice"
     ;;
   *) exit 0 ;;

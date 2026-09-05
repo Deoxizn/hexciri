@@ -88,12 +88,18 @@ if $SYSTEM_ONLY; then
   # ── packages (all repo packages; Brave built from AUR as the user, installed as root) ──
   PKGS=(base-devel git gnupg
     niri xwayland-satellite noctalia kitty fish fuzzel zed opencode strata
-    grim slurp wl-clipboard cliphist wtype playerctl brightnessctl mpv imv v4l-utils jq ffmpeg
+    grim slurp wl-clipboard cliphist wtype playerctl brightnessctl mpv v4l-utils jq fzf ffmpeg
     gpu-screen-recorder
     mesa vulkan-icd-loader lib32-mesa lib32-vulkan-icd-loader
     libnotify gtk3 xdg-utils desktop-file-utils
     polkit-gnome gnome-keyring xdg-desktop-portal-gtk xdg-desktop-portal-gnome
-    networkmanager openssh sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd)
+    adw-gtk-theme
+    networkmanager openssh sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd
+    gnome-disk-utility imv mupdf libreoffice-fresh
+    cups hplip unzip
+    tesseract zbar qrencode fwupd zenity localsend
+    pipewire pipewire-pulse wireplumber
+    zram-generator pacman-contrib)
   MISSING=()
   for p in "${PKGS[@]}"; do pacman -Q "$p" &>/dev/null || MISSING+=("$p"); done
   if ((${#MISSING[@]})); then
@@ -112,6 +118,58 @@ if $SYSTEM_ONLY; then
     run rm -rf /tmp/hexciri-aur
   fi
 
+  # ── maplemono-nf (vendored PKGBUILD): Maple Mono NF — ligature + Nerd Font
+  #    icons mono. We vendor a single-variant PKGBUILD (aur/maplemono-nf) instead
+  #    of the AUR split base, which would build all 10 subpackages. ──
+  if ! pacman -Q maplemono-nf &>/dev/null; then
+    info "building maplemono-nf (vendored PKGBUILD, as $TARGET_USER)..."
+    run rm -rf /tmp/hexciri-aur
+    run mkdir -p /tmp/hexciri-aur
+    run chown "$TARGET_USER:$TARGET_USER" /tmp/hexciri-aur
+    run cp -r "$REPO_DIR/aur/maplemono-nf" /tmp/hexciri-aur/maplemono-nf
+    run chown -R "$TARGET_USER:$TARGET_USER" /tmp/hexciri-aur/maplemono-nf
+    run chmod -R u+rwX /tmp/hexciri-aur/maplemono-nf
+    as_user "cd /tmp/hexciri-aur/maplemono-nf && makepkg --noconfirm"
+    run pacman -U --noconfirm /tmp/hexciri-aur/maplemono-nf/*.pkg.tar.zst
+    run rm -rf /tmp/hexciri-aur
+  fi
+
+  # ── zram swap: compressed, sized to RAM (no disk swapfile needed) ──
+  run mkdir -p /etc/systemd
+  if [[ ! -f /etc/systemd/zram-generator.conf ]] || ! grep -q '^\[zram0\]' /etc/systemd/zram-generator.conf; then
+    cat > /etc/systemd/zram-generator.conf <<'ZRAM'
+[zram0]
+zram-size = ram
+compression-algorithm = zstd
+ZRAM
+    info "wrote /etc/systemd/zram-generator.conf (zram0 = 100% of RAM, zstd) — active on next boot"
+  else
+    ok "zram already configured"
+  fi
+
+  # ── pacman cache: prune on every transaction (vanilla Arch-wiki hook; no
+  #    omarchy-style pre-update prune step needed) ──
+  run mkdir -p /usr/share/libalpm/hooks
+  if [[ ! -f /usr/share/libalpm/hooks/hexciri-paccache.hook ]] || \
+     ! grep -q 'Exec = /usr/bin/paccache -rk1 -rk0' /usr/share/libalpm/hooks/hexciri-paccache.hook; then
+    cat > /usr/share/libalpm/hooks/hexciri-paccache.hook <<'HOOK'
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Pruning pacman cache (hexciri: paccache -rk1 -rk0)
+When = PostTransaction
+Exec = /usr/bin/paccache -rk1 -rk0
+HOOK
+    info "wrote /usr/share/libalpm/hooks/hexciri-paccache.hook (PostTransaction cache prune)"
+  else
+    ok "paccache hook present"
+  fi
+
   # ── commands → /usr/local/bin (on PATH for SDDM-launched Niri sessions) ──
   info "installing hexciri commands..."
   for f in "$REPO_DIR"/bin/* "$REPO_DIR"/scripts/*; do
@@ -119,10 +177,13 @@ if $SYSTEM_ONLY; then
   done
   ok "commands installed"
 
-  # ── themes → /usr/share/hexciri + branding ──
+  # ── themes → /usr/share/hexciri + branding (clean copy so re-runs never nest) ──
   run mkdir -p /usr/share/hexciri
-  run cp -r "$REPO_DIR/themes" /usr/share/hexciri/themes 2>/dev/null || run cp -r "$REPO_DIR/themes/." /usr/share/hexciri/themes/
-  run cp -r "$REPO_DIR/default/themed" /usr/share/hexciri/default/themed 2>/dev/null || true
+  run rm -rf /usr/share/hexciri/themes
+  run cp -r "$REPO_DIR/themes" /usr/share/hexciri/themes
+  run rm -rf /usr/share/hexciri/default
+  run mkdir -p /usr/share/hexciri/default
+  run cp -r "$REPO_DIR/default/themed" /usr/share/hexciri/default/themed
   run mkdir -p /usr/share/pixmaps
   run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
 
@@ -130,8 +191,21 @@ if $SYSTEM_ONLY; then
   run systemctl enable NetworkManager.service 2>/dev/null || true
   run systemctl enable sshd.service 2>/dev/null || true
   run systemctl enable sddm.service 2>/dev/null || true
+  # ── printing: cups socket activation + HP (hplip); lp/scanner groups let the
+  #    user manage queues/admin and access the HP scanner over sane ──
+  run systemctl enable --now cups.socket 2>/dev/null || true
+  run usermod -aG lp,scanner "$TARGET_USER" 2>/dev/null || true
   # remove any autologin config: no encryption gate means no free pass
   run rm -f /etc/sddm.conf.d/10-hexciri-autologin.conf 2>/dev/null || true
+
+  # ── gnome-keyring: unlock the login keyring at sddm login via pam. Without
+  #    this, the "Unlock Login Keyring" popup appears whenever the first app
+  #    touches secrets. Deploy the full pam stack (backup-first, idempotent). ──
+  if [[ ! -f /etc/pam.d/sddm ]] || ! grep -q 'pam_gnome_keyring.so' /etc/pam.d/sddm; then
+    run cp -f /etc/pam.d/sddm "/etc/pam.d/sddm.bak.$(date +%s)" 2>/dev/null || true
+    run cp -f "$REPO_DIR/default/pam/sddm" /etc/pam.d/sddm
+    info "sddm login: wired pam_gnome_keyring (auto-unlocks 'login' keyring)"
+  fi
 
   # ── SDDM theme (emblem + password greeter, Niri preferred) ──
   if ! $DRY_RUN; then
@@ -229,6 +303,8 @@ deploy config/noctalia/config.toml "$HOME/.config/noctalia/config.toml"
 deploy config/fastfetch/config.jsonc "$HOME/.config/fastfetch/config.jsonc"
 deploy config/starship/starship.toml "$HOME/.config/starship.toml"
 deploy config/fish/conf.d/hexciri-starship.fish "$HOME/.config/fish/conf.d/hexciri-starship.fish"
+deploy config/fish/conf.d/hexciri-aliases.fish "$HOME/.config/fish/conf.d/hexciri-aliases.fish"
+deploy config/fish/conf.d/hexciri-util.fish "$HOME/.config/fish/conf.d/hexciri-util.fish"
 mkdir -p "$HOME/.config/hexciri/hooks/theme-set.d"
 run cp -f "$REPO_DIR/hooks/theme-set.d/noctalia-sync.sh" "$HOME/.config/hexciri/hooks/theme-set.d/noctalia-sync.sh"
 
@@ -245,6 +321,9 @@ fi
 
 # ── defaults state (kitty/fish/brave-origin/strata/zed/opencode) ──
 mkdir -p "$HOME/.local/state/hexciri/defaults"
+# ── where the source repo lives, so hexciri-repo-sync can pull/reinstall it ──
+mkdir -p "$HOME/.local/state/hexciri"
+run bash -c "printf '%s' '$REPO_DIR' > '$HOME/.local/state/hexciri/repo-path'"
 for kv in "terminal=kitty" "shell=fish" "browser=brave-origin" "files=strata" "editor=zed" "agent=opencode"; do
   k="${kv%%=*}"; v="${kv#*=}"
   [[ -f $HOME/.local/state/hexciri/defaults/$k ]] || run bash -c "printf '%s' '$v' > '$HOME/.local/state/hexciri/defaults/$k'"
@@ -256,9 +335,62 @@ for d in brave-origin.desktop com.brave.Origin.desktop brave-origin-beta.desktop
 done
 run xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
 
+# ── Work folder: create and pin in Strata (Strata reads the standard GTK
+#    bookmarks file; entries pointing at missing dirs are dropped, so mkdir first) ──
+mkdir -p "$HOME/Work"
+book="$HOME/.config/gtk-3.0/bookmarks"
+mkdir -p "$(dirname "$book")"
+touch "$book"
+work_uri="file://$HOME/Work"
+if ! grep -qF "$work_uri" "$book"; then
+  printf '%s Work\n' "$work_uri" >> "$book"
+  info "pinned ~/Work in Strata sidebar"
+fi
+
+# ── keyring: a legacy "Default" store (created by the daemon with its own
+#    password before pam was wired in) triggers "unlock keyring" popups.
+#    Drop it so the next login recreates the auto-unlocked "login" keyring via
+#    pam_gnome_keyring (default/pam/sddm). Backed up, not deleted. ──
+kr="$HOME/.local/share/keyrings"
+if [[ -f $kr/Default.keyring ]] && [[ ! -f $kr/login.keyring ]]; then
+  mv "$kr" "$kr.noprompt.bak"
+  info "reset legacy keyring store (Default.keyring); next login recreates auto-unlocked 'login' keyring"
+fi
+
+# ── GTK4/libadwaita dark theming: adw-gtk-theme + the dark color-scheme preference ──
+if command -v gsettings >/dev/null 2>&1 && [[ -d /usr/share/themes/adw-gtk3 ]]; then
+  run gsettings set org.gnome.desktop.interface gtk-theme adw-gtk3 2>/dev/null || true
+  run gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
+  info "gtk: adw-gtk-theme (dark libadwaita)"
+fi
+
+# ── audio: pipewire session via user units (vanilla Arch way; Noctalia pulls the
+#    libs, these are the daemons that make sound actually route) ──
+if command -v pipewire >/dev/null 2>&1; then
+  systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true
+  info "audio: enabled user units (pipewire.socket + pulse + wireplumber)"
+fi
+
 # ── seed maiden theme ──
 if ! $DRY_RUN; then
   HEXCIRI_PATH=/usr/share/hexciri hexciri-theme-set sakurazuki
+fi
+
+# ── noctalia arch-updater plugin presets: plugin-level settings are owned by
+#    the state dir, so seed the missing keys of the preset into settings.toml
+#    (GUI overrides win — existing values are never touched). kitty + the
+#    native update_cmd give a real PTY, so no service.luau patch/guard is
+#    required on any plugin version that honors these keys. ──
+mkdir -p "$HOME/.local/state/noctalia"
+SEED_TMP="$HOME/.local/state/noctalia/settings.hexciri-seed"
+if grep -q '\[plugin_settings."yuuto/arch-updater"\]' "$HOME/.local/state/noctalia/settings.toml" 2>/dev/null; then
+  ok "arch-updater plugin presets present (left untouched)"
+else
+  run bash -c "cp '$REPO_DIR/config/noctalia/arch-updater.toml' '$SEED_TMP'"
+  { printf '\n'; cat "$SEED_TMP"; } >> "$HOME/.local/state/noctalia/settings.toml" 2>/dev/null \
+    || run bash -c "{ printf '\\n'; cat '$SEED_TMP'; } >> '$HOME/.local/state/noctalia/settings.toml'"
+  run rm -f "$SEED_TMP"
+  info "seeded arch-updater plugin presets into ~/.local/state/noctalia/settings.toml"
 fi
 
 echo ""

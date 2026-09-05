@@ -1,0 +1,100 @@
+#!/bin/bash
+# hexciri:summary=Enable, disable, or toggle a Niri input device via config + reload
+# hexciri:args=<touchpad|touchscreen> [on|off|toggle]
+#
+# Niri has no runtime IPC for input devices (feature request still open), so
+# the vanilla way to toggle a device is to flip the `off` flag in the input
+# KDL block and reload the live config.
+set -euo pipefail
+
+KIND="${1:-}"
+ACTION="${2:-toggle}"
+
+usage() {
+  echo "Usage: hexciri-toggle-input-device <touchpad|touchscreen> [on|off|toggle]" >&2
+}
+
+case "$KIND" in
+  touchpad) LABEL="Touchpad" ;;
+  touchscreen) LABEL="Touchscreen" ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac
+
+CONFIG="$HOME/.config/niri/config.kdl"
+[[ -f $CONFIG ]] || { echo "no niri config at $CONFIG" >&2; exit 1; }
+
+STATE_FILE="$HOME/.local/state/hexciri/toggles/$KIND-disabled"
+
+# Pure-python rewrite: flip/ensure the `off` marker inside the input block for
+# $KIND, creating the block if the config lacks one (default ships no touch{}).
+flip() {
+  python3 - "$CONFIG" "$KIND" "$1" <<'EOF'
+import re, sys
+path, block, on = sys.argv[1], sys.argv[2], sys.argv[3] == "on"
+label = block.capitalize()
+marker_key = "off"
+marker_re = re.compile(r"^\s*" + marker_key + r"\s+//\s+" + re.escape(label) + r" disabled \(toggle via menu\)$", re.M)
+src = open(path).read()
+m = re.search(r"input\s*\{", src, re.S)
+if not m:
+    sys.exit(0)
+head, tail = src[:m.end()], src[m.end():]
+depth = 1
+end = i = 0
+while i < len(tail):
+    c = tail[i]
+    if c == "{":
+        depth += 1
+    elif c == "}":
+        depth -= 1
+        if depth == 0:
+            end = i
+            break
+    i += 1
+body, rest = tail[:end], tail[end:]
+bm = re.search(rf"{block}\s*\{{(.*?)\n(\s*)\}}", body, re.S)
+if bm:
+    inner, close_indent = bm.group(1), bm.group(2)
+    if on:
+        inner = marker_re.sub("", inner)
+        if inner.strip() == "":
+            body = body[:bm.start()].rstrip(" \t\n") + "\n" + body[bm.end():].lstrip("\n")
+        else:
+            inner = re.sub(r"[ \t]+$", "", inner, flags=re.M).rstrip("\n")
+            body = body[:bm.start()] + block + " {" + inner + "\n" + close_indent + "}" + body[bm.end():]
+    elif not marker_re.search(inner):
+        inner = inner.rstrip("\n") + "\n" + "        " + marker_key + "                                    // " + label + " disabled (toggle via menu)"
+        body = body[:bm.start()] + block + " {" + inner + "\n" + close_indent + "}" + body[bm.end():]
+elif not on:
+    marker = "        " + marker_key + "                                    // " + label + " disabled (toggle via menu)"
+    body = body.rstrip("\n") + "\n    " + block + " {\n" + marker + "\n    }\n"
+open(path, "w").write(head + body + rest)
+EOF
+}
+
+device_off() { [[ -f $STATE_FILE ]] || grep -q "// $KIND disabled (toggle via menu).*" "$CONFIG" 2>/dev/null; }
+
+enable() {
+  flip on
+  rm -f "$STATE_FILE"
+  niri msg action load-config-file >/dev/null 2>&1 || true
+  notify-send -a hexciri "$LABEL enabled" 2>/dev/null || true
+}
+
+disable() {
+  flip off
+  mkdir -p "$(dirname "$STATE_FILE")"
+  touch "$STATE_FILE"
+  niri msg action load-config-file >/dev/null 2>&1 || true
+  notify-send -a hexciri "$LABEL disabled" 2>/dev/null || true
+}
+
+case "$ACTION" in
+  on) enable ;;
+  off) disable ;;
+  toggle) if device_off; then enable; else disable; fi ;;
+  *) usage; exit 1 ;;
+esac

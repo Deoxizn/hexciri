@@ -1,0 +1,34 @@
+#!/bin/bash
+# hexciri:hardware=hardware-toggles
+# hexciri:summary=Hardware toggles: touchpad, touchscreen, hybrid GPU
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+menu=""
+declare -A cmd_for=()
+
+add() {
+  local label=$1 cond=$2
+  shift 2
+  [[ -n $cond ]] && ! "$cond" >/dev/null 2>&1 && return 0
+  cmd_for[$label]="$*"
+  menu+="$label"$'\n'
+}
+
+add 'Touchpad'    "$bindir/hexciri-hw-touchpad"      "$SCRIPT_DIR/hexciri-toggle-input-device" touchpad toggle
+add 'Touchscreen' "$bindir/hexciri-hw-touchscreen"   "$SCRIPT_DIR/hexciri-toggle-input-device" touchscreen toggle
+add 'Hybrid GPU'  "$bindir/hexciri-hw-hybrid-gpu"    "$SCRIPT_DIR/hexciri-terminal" -e "$bindir/hexciri-toggle-hybrid-gpu"
+
+[[ -n $menu ]] || exit 0
+
+choice=$(
+  printf '%s' "$menu" |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Hardware: ' --width=26 --lines=${#cmd_for[@]}
+) || exec "$SCRIPT_DIR/hexciri-system"
+
+cmd=${cmd_for[$choice]:-}
+[[ -n $cmd ]] && eval exec "$cmd"

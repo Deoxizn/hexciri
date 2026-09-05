@@ -1,0 +1,47 @@
+#!/bin/bash
+# hexciri:summary=Hexciri self-update: git pull the repo + reinstall (user+system) + re-apply theme templates
+set -euo pipefail
+
+REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+if [[ ! -d $REPO ]]; then
+  echo "hexciri repo not found at: $REPO"
+  echo "expected a bootstrap clone at ~/.local/opt/hexciri"
+  exit 1
+fi
+
+run_as_root() { sudo -n "$@" 2>/dev/null || sudo "$@"; }
+head_short=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")
+
+echo "== 1/3 syncing $REPO =="
+if [[ -d $REPO/.git ]]; then
+  git -C "$REPO" fetch --tags origin --quiet 2>/dev/null
+  behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
+  if (( behind == 0 )); then
+    echo "already up to date (HEAD $head_short)"
+  else
+    echo "pulling $behind new commit(s)..."
+    git -C "$REPO" pull --ff-only --quiet
+  fi
+else
+  echo "not a git checkout — skipping pull"
+fi
+
+echo
+echo "== 2/3 reinstalling (user + system phase) =="
+(
+  cd "$REPO"
+  ./install.sh --user-only -y || { echo "user phase failed" >&2; exit 1; }
+  run_as_root env HEXCIRI_USER="$(id -un)" ./install.sh --system-only -y || { echo "system phase failed" >&2; exit 1; }
+)
+
+echo
+echo "== 3/3 re-applying current theme (new templates + gtk css live) =="
+if command -v hexciri-theme-current >/dev/null 2>&1; then
+  t="$(hexciri-theme-current 2>/dev/null || echo sakurazuki)"
+  hexciri-theme-set "$t" >/dev/null 2>&1 || echo "theme re-apply skipped"
+  echo "theme '$t' regenerated"
+fi
+
+head_short=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")
+echo
+echo "hexciri update complete (HEAD $head_short)"
