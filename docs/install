@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=22   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=23   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -23,6 +23,21 @@ err()  { echo -e "\e[0;31m[hexciri:bootstrap]\e[0m $*" >&2; }
 
 (( EUID == 0 )) || { err "run as root on the Arch ISO (curl ... | bash)"; exit 1; }
 command -v pacstrap &>/dev/null || { err "not an Arch ISO (no pacstrap)"; exit 1; }
+
+# ── persistent pacman cache + gpg keyring seed. The ISO root is tmpfs that
+# ── survives across install attempts while the live session is up, so reruns
+# ── after a wipe skip the base re-download AND the in-chroot gpg keygen (the
+# ── slow 'gpg part' after the prompts). ──
+LIVE_CACHE=/root/.hexciri-pkgcache
+LIVE_CONF=/root/pacman-hexciri.conf
+LIVE_KEYRING=/root/.hexciri-gnupg-seed
+mkdir -p "$LIVE_CACHE"
+if [[ ! -f $LIVE_CONF ]]; then
+  sed '0,/^CacheDir = /s|^CacheDir = .*|CacheDir = '"$LIVE_CACHE"'|' /etc/pacman.conf > "$LIVE_CONF"
+  printf 'CacheDir = /var/cache/pacman/pkg/\n' >> "$LIVE_CONF"
+fi
+info "package cache: $LIVE_CACHE (persists across wipe retries)"
+
 for cmd in sfdisk parted mkfs.fat mkfs.ext4 blkid findmnt arch-chroot git curl cryptsetup; do
   command -v "$cmd" &>/dev/null && continue
   case "$cmd" in
@@ -34,7 +49,7 @@ for cmd in sfdisk parted mkfs.fat mkfs.ext4 blkid findmnt arch-chroot git curl c
     *) pkg="$cmd" ;;
   esac
   info "ISO is missing $cmd — installing $pkg..."
-  pacman -Sy --noconfirm "$pkg" || { err "cannot install $pkg (network up?)"; exit 1; }
+  pacman --config "$LIVE_CONF" -Sy --noconfirm "$pkg" || { err "cannot install $pkg (network up?)"; exit 1; }
 done
 
 info "site: $SITE"
@@ -245,9 +260,24 @@ is_legacy_nvidia && info "legacy NVIDIA: base kernel linux-lts"
 UCODE="intel-ucode"
 grep -qi "AuthenticAMD" /proc/cpuinfo && UCODE="amd-ucode"
 info "base install ($STAGE1_KERNEL, $UCODE)..."
-pacstrap -K /mnt base "$STAGE1_KERNEL" linux-firmware "$UCODE" \
+# reuse the seeded gpg keyring when present (a fresh -K burns entropy + refetches
+# keys — the 'gpg hang' after the prompts); -C points downloads at the persistent cache
+if [[ -d $LIVE_KEYRING ]] && [[ -d /mnt/etc ]]; then
+  mkdir -p /mnt/etc/pacman.d
+  cp -a "$LIVE_KEYRING" /mnt/etc/pacman.d/gnupg
+  PACSTRAP_K=()
+  info "reusing seeded gpg keyring (skipping -K)"
+else
+  PACSTRAP_K=(-K)
+fi
+pacstrap "${PACSTRAP_K[@]}" -C "$LIVE_CONF" /mnt base "$STAGE1_KERNEL" linux-firmware "$UCODE" \
   networkmanager sudo git base-devel power-profiles-daemon nano file procps-ng \
   $([[ $FS == btrfs ]] && echo btrfs-progs) >/dev/null
+# persist the fresh keyring so the NEXT attempt skips keygen entirely
+if [[ -d /mnt/etc/pacman.d/gnupg ]]; then
+  rm -rf "$LIVE_KEYRING"
+  cp -a /mnt/etc/pacman.d/gnupg "$LIVE_KEYRING"
+fi
 genfstab -U /mnt >> /mnt/etc/fstab
 [[ $FS == btrfs ]] && sed -i '\| / btrfs |s/relatime/relatime,compress=zstd/' /mnt/etc/fstab
 
@@ -346,6 +376,7 @@ if [[ -f /etc/mkinitcpio.conf.hexciri-changed ]]; then
   info "rebuilt initramfs after mkinitcpio.conf fix"
   mkinitcpio -P >/dev/null 2>&1 || mkinitcpio -P
 fi
+echo "  initramfs: \$(ls -l /boot/initramfs-*.img 2>/dev/null | awk '{print \$NF" ("\$5"B)"}' | tr '\n' ' ' || true)"
 
 systemctl enable NetworkManager.service power-profiles-daemon.service >/dev/null
 
