@@ -7,10 +7,13 @@ Rectangle {
   height: Screen.height
   color: "#0b0911"
 
-  function resolveUser() {
-    // Resolve at submit time: userModel may not be populated when the file is
-    // first evaluated, and a stale property then sends an empty username to
-    // SDDM ("user not known to the underlying authentication module").
+  property bool loginFailed: false
+  property int sessionIndex: 0
+
+  function defaultUser() {
+    // The model can be empty or slow to populate on a fresh SDDM; lastUser is
+    // informative but fall back to scanning the model, then accept manual typed
+    // username as the ultimate fallback (like a pure console prompt).
     var last = userModel.lastUser || ""
     if (last.length > 0) return last
     for (var i = 0; i < userModel.rowCount(); i++) {
@@ -22,17 +25,9 @@ Rectangle {
   }
 
   function attemptLogin() {
-    // Resolve NOW, not from a cached property — an empty username made SDDM
-    // log "user not known to the underlying authentication module" and fail
-    // the password even though it was correct.
-    var user = root.resolveUser()
+    var user = username.text
     if (user.length === 0) {
-      errmsg.text = "no user selected — cannot log in"
-      errmsg.visible = true
-      return
-    }
-    if (!root.sessionOK) {
-      errmsg.text = "cannot find a session — install is broken"
+      errmsg.text = "no username entered"
       errmsg.visible = true
       return
     }
@@ -53,7 +48,7 @@ Rectangle {
 
   Column {
     anchors.centerIn: parent
-    spacing: Math.round(root.height * 0.035)
+    spacing: Math.round(root.height * 0.03)
 
     Image {
       id: logo
@@ -64,37 +59,51 @@ Rectangle {
       anchors.horizontalCenter: parent.horizontalCenter
     }
 
-    Text {
-      text: root.resolveUser()
-      color: "#D8D0DC"
-      font.family: "JetBrainsMono Nerd Font"
-      font.pixelSize: Math.max(18, Math.round(root.height * 0.034))
+    Rectangle {
+      width: Math.min(root.width * 0.34, 320)
+      height: Math.max(46, Math.round(root.height * 0.06))
+      radius: 8
+      color: "#14111A"
+      border.color: "#43384C"
+      border.width: 1
       anchors.horizontalCenter: parent.horizontalCenter
+
+      TextInput {
+        id: username
+        anchors.fill: parent
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        verticalAlignment: TextInput.AlignVCenter
+        font.family: "JetBrainsMono Nerd Font"
+        font.pixelSize: 20
+        color: "#D8D0DC"
+        text: root.defaultUser()
+        selectionColor: "#43384C"
+        focus: true
+
+        Keys.onPressed: {
+          if (event.key === Qt.Key_Tab || event.key === Qt.Key_Down ||
+              event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+              root.attemptLogin()
+              event.accepted = true
+            } else {
+              password.forceActiveFocus()
+              event.accepted = true
+            }
+          }
+        }
+      }
     }
 
     Rectangle {
-      width: Math.min(root.width * 0.34, 400)
-      height: Math.max(50, Math.round(root.height * 0.065))
+      width: Math.min(root.width * 0.34, 320)
+      height: Math.max(46, Math.round(root.height * 0.06))
       radius: 8
       color: "#14111A"
       border.color: root.loginFailed ? "#f7768e" : "#43384C"
       border.width: 1
       anchors.horizontalCenter: parent.horizontalCenter
-
-      Row {
-        anchors.centerIn: parent
-        spacing: 8
-        Repeater {
-          model: Math.min(password.text.length, 16)
-          Rectangle {
-            width: 9
-            height: 9
-            radius: 4.5
-            color: root.loginFailed ? "#f7768e" : "#B6849D"
-            anchors.verticalCenter: parent.verticalCenter
-          }
-        }
-      }
 
       TextInput {
         id: password
@@ -110,7 +119,6 @@ Rectangle {
         selectionColor: "transparent"
         selectedTextColor: "transparent"
         cursorDelegate: Item {}
-        focus: true
 
         onTextChanged: root.loginFailed = false
 
@@ -135,12 +143,10 @@ Rectangle {
   }
 
   Component.onCompleted: {
-    // pick the first usable session (niri preferred) and confirm we found one
     for (var i = 0; i < sessionModel.rowCount(); i++) {
       var n = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString().toLowerCase()
       if (n.indexOf("niri") !== -1) { root.sessionIndex = i; break }
+      root.sessionIndex = i
     }
-    root.sessionOK = sessionModel.rowCount() > 0
-    password.forceActiveFocus()
   }
 }
