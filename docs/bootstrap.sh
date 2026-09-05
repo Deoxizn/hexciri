@@ -327,7 +327,7 @@ chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/hexciri"
 # with zero sudo calls — su(1) sessions have no controlling TTY, so nothing
 # here may ever depend on sudo prompting.
 trap 'rm -f /root/hexciri-stage2.sh' EXIT
-HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
+HEXCIRI_USER="$USERNAME" HEXCIRI_LUKS="$LUKS" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
 command -v fish &>/dev/null && chsh -s /usr/bin/fish "$USERNAME" || true
 su - "$USERNAME" -c "cd ~/hexciri && ./install.sh --user-only -y"
 STAGE2
