@@ -307,6 +307,17 @@ for img in /boot/vmlinuz-*; do
   } > "/boot/loader/entries/hexciri-\$k.conf"
 done
 echo -e "default hexciri-$STAGE1_KERNEL.conf\ntimeout 3" > /boot/loader/loader.conf
+# one-shot insurance: a malformed options line boots to a timeout with no
+# useful error, so refuse to continue if spacing or an empty UUID slipped in
+if grep -qE '(cryptdevice|root|options) +=' /boot/loader/entries/hexciri-*.conf; then
+  err "boot entry malformed (spaced key=value) — aborting before install"
+  grep -H . /boot/loader/entries/hexciri-*.conf >&2 || true
+  exit 1
+fi
+if [[ "\$LUKSFLAG" == yes && \$LUKSUUID != ????????-????-????-????-???????????? ]]; then
+  err "LUKS UUID did not resolve (\$LUKSUUID) — aborting before install"
+  exit 1
+fi
 
 systemctl enable NetworkManager.service power-profiles-daemon.service >/dev/null
 
