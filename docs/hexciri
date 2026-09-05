@@ -96,6 +96,10 @@ read -rp "channel [stable/bleeding, default stable]: " CHANNEL </dev/tty
 CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
 info "channel: $CHANNEL"
+LUKS=no
+read -rp "encrypt disk with LUKS? [y/N]: " luks_ans </dev/tty
+[[ $luks_ans =~ ^[Yy]$ ]] && LUKS=yes || LUKS=no
+[[ $LUKS == yes ]] && LUKSPASS="$USERPASS"
 
 # ── kernel: default auto (flag silently preselects); installer enforces the LTS pin on GTX 1xxx or older ──
 if [[ -z $KERNEL_PICK ]]; then
@@ -120,14 +124,6 @@ fi
 info "kernel: ${KERNEL_PICK:-auto}"
 
 
-# ── encryption choice, then disk (destructive choices last) ──
-LUKS=no
-read -rp "encrypt disk with LUKS? [y/N]: " luks_ans </dev/tty
-[[ $luks_ans =~ ^[Yy]$ ]] && LUKS=yes || LUKS=no
-if [[ $LUKS == yes ]]; then
-  # disk unlock reuses the user password (one password to remember)
-  LUKSPASS="$USERPASS"
-fi
 
 # ── disk goes last: destructive choices right before partitioning.
 # full mode wipes; free mode shares (reuses the ESP, touches nothing else) ──
@@ -159,7 +155,7 @@ printf '  %-10s %s\n' \
   "username" "$USERNAME" \
   "password" "(set, hidden)" \
   "timezone" "$TIMEZONE" \
-  "luks"     "$LUKS (unlocks with user password)"
+  "luks"     "$LUKS" \
 echo ""
 if [[ $MODE == full ]]; then
   read -rp "WIPE /dev/$DISK and install? [y/N]: " GO </dev/tty
@@ -216,9 +212,8 @@ fi
 if [[ $LUKS == yes ]]; then
   printf '%s' "$LUKSPASS" | cryptsetup luksFormat --batch-mode --type luks2 "$ROOT" -
   printf '%s' "$LUKSPASS" | cryptsetup open "$ROOT" cryptroot -
-  ROOTMAP="/dev/mapper/cryptroot"
-  mkfs_root "$ROOTMAP"
-  mount "$ROOTMAP" /mnt
+  mkfs_root /dev/mapper/cryptroot
+  mount /dev/mapper/cryptroot /mnt
 else
   mkfs_root "$ROOT"
   mount "$ROOT" /mnt
@@ -284,12 +279,8 @@ printf 'root:%s' "$USERPASS" | chpasswd
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 bootctl install --esp-path=/boot >/dev/null
-LUKSFLAG="$LUKS"
-ROOTDEV="$ROOT"
-if [[ "\$LUKSFLAG" == yes ]]; then
+if [[ "$LUKS" == yes ]]; then
   LUKSUUID="\$(blkid -s UUID -o value $ROOT)"
-  # encrypt/plymouth hooks are owned by install.sh (runs next, same chroot);
-  # entries just need the cryptdevice line + splash here.
   ROOTOPTS="cryptdevice=UUID=\$LUKSUUID:cryptroot root=/dev/mapper/cryptroot rw quiet splash"
 else
   ROOTUUID="\$(findmnt -no UUID /)"
@@ -309,13 +300,13 @@ done
 echo -e "default hexciri-$STAGE1_KERNEL.conf\ntimeout 3" > /boot/loader/loader.conf
 # one-shot insurance: a malformed options line boots to a timeout with no
 # useful error, so refuse to continue if spacing or an empty UUID slipped in
+if [[ "$LUKS" == yes && \${#LUKSUUID} -ne 36 ]]; then
+  err "LUKS UUID did not resolve — aborting before install"
+  exit 1
+fi
 if grep -qE '(cryptdevice|root|options) +=' /boot/loader/entries/hexciri-*.conf; then
   err "boot entry malformed (spaced key=value) — aborting before install"
   grep -H . /boot/loader/entries/hexciri-*.conf >&2 || true
-  exit 1
-fi
-if [[ "\$LUKSFLAG" == yes && \$LUKSUUID != ????????-????-????-????-???????????? ]]; then
-  err "LUKS UUID did not resolve (\$LUKSUUID) — aborting before install"
   exit 1
 fi
 

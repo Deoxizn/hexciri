@@ -124,8 +124,7 @@ if $SYSTEM_ONLY; then
   run mkdir -p /usr/share/pixmaps
   run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
 
-  # ── services + SDDM autologin (LUKS passphrase is the gate
-  # when encrypted, otherwise straight to Niri — no greeter stop) ──
+  # ── services + SDDM autologin (straight to Niri — no greeter stop) ──
   run systemctl enable NetworkManager.service 2>/dev/null || true
   run systemctl enable sddm.service 2>/dev/null || true
   if ! $DRY_RUN; then
@@ -147,7 +146,7 @@ if $SYSTEM_ONLY; then
     printf '[Theme]\nCurrent=hexciri\n' | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
   fi
 
-  # ── Plymouth splash (emblem two-step; LUKS prompt renders graphically) ──
+  # ── Plymouth splash (emblem two-step) ──
   if ! $DRY_RUN; then
     pacman -Q plymouth &>/dev/null || run pacman -S --noconfirm plymouth
     run mkdir -p /usr/share/plymouth/themes/hexciri
@@ -159,11 +158,10 @@ if $SYSTEM_ONLY; then
       printf '[Daemon]\nTheme=hexciri\n' | run tee /etc/plymouth/plymouthd.conf >/dev/null
     fi
     # mkinitcpio: plymouth after udev for splash; stock encrypt hook for LUKS
-    # (Arch has no plymouth-encrypt hook — plymouth + encrypt is the pair)
+    # (classic udev+encrypt pair per upstream guides — no phantom hooks)
     if ! grep -q ' plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
       run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
       if [[ ${HEXCIRI_LUKS:-no} == yes || $(findmnt -no SOURCE / 2>/dev/null) == /dev/mapper/* ]]; then
-        # LUKS root (stock HOOKS have no encrypt hook): add encrypt after block
         grep -q ' encrypt' /etc/mkinitcpio.conf || run sed -i 's/\(HOOKS=([^)]*block\)/\1 encrypt/' /etc/mkinitcpio.conf
       fi
       run sed -i 's/\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
