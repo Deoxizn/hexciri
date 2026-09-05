@@ -378,77 +378,8 @@ run cp -f "$REPO_DIR/branding/"*.png ~/.config/hexciri/branding/
 # ── configs (backup-first) ──
 deploy config/niri/config.kdl "$HOME/.config/niri/config.kdl"
 
-# ── monitor auto-detect: fill in `output` blocks if none exist yet ──
-# Reads connected outputs from the live compositor (preferred mode + refresh
-# rate), or sysfs/EDID as a fallback pre-session, and derives a sensible scale
-# from the physical size. Never touches outputs that are already configured,
-# and leaves user edits alone.
-detect_monitors() {
-  local sock="" nm mode ph wm hm wpx hpx scale vrr section="" line
-  command -v niri >/dev/null 2>&1 && sock="$(ls "/run/user/$(id -u)"/niri.*.sock 2>/dev/null | head -1)"
-  if [[ -n $sock ]]; then
-    while read -r line; do
-      case "$line" in
-        Output*) nm="$(sed -n 's/.*(\([^()]*\)).*/\1/p' <<<"$line")" ;;
-        *"Current mode:"*)
-          mode="$(sed -n 's/.*Current mode: \([0-9]*x[0-9]*\) @ \([0-9.]*\).*/\1@\2/p' <<<"$line")" ;;
-        *"Variable refresh rate: supported"*) vrr=1 ;;
-        *"Variable refresh rate: not supported"*) vrr=0 ;;
-        *"Physical size:"*)
-          ph="$(sed -n 's/.*Physical size: \([0-9]*\)x\([0-9]*\).*/\1 \2/p' <<<"$line")"
-          wm="${ph% *}"; hm="${ph#* }"
-          wpx="${mode%%x*}"; hpx="${mode%@*}"; hpx="${hpx#*x}"
-          scale=1
-          if (( wpx > 0 && hpx > 0 && wm > 0 && hm > 0 )); then
-            scale="$(awk -v W="$wpx" -v H="$hpx" -v WM="$wm" -v HM="$hm" \
-              'BEGIN{ ppi=sqrt(W*W+H*H)*25.4/sqrt(WM*WM+HM*HM); s=ppi/160; if(s<1)s=1; if(s>2)s=2;
-                      printf "%.2f", int(s*4+0.5)/4 }')"
-          fi
-          if [[ -n $nm && -n $mode ]] && ! grep -q "^output \"$nm\"" "$niri_cfg"; then
-            section+="output \"$nm\" {\n    mode \"$mode\"\n    scale $scale"
-            (( vrr == 1 )) && section+="\n    variable-refresh-rate"
-            section+="\n}\n\n"
-          fi
-          vrr=0
-          ;;
-      esac
-    done < <(NIRI_SOCKET="$sock" niri msg outputs 2>/dev/null)
-  else
-    # fallback: sysfs/EDID (no refresh rates before the compositor is up)
-    for line in /sys/class/drm/card*-*; do
-      [[ -f $line/status ]] || continue
-      [[ "$(cat "$line/status" 2>/dev/null)" == connected ]] || continue
-      nm="${line##*/}"; nm="${nm#card*-}"
-      grep -q "^output \"$nm\"" "$niri_cfg" && continue
-      mode="$(sed -n '1s/^ *//;1s/[[:space:]].*//p' "$line/modes" 2>/dev/null)"
-      [[ -n $mode ]] || continue
-      wpx="${mode%@*}"; hpx="${wpx#*x}"; wpx="${wpx%x*}"
-      read -r wm hm < <(od -An -tu1 -j21 -N2 "$line/edid" 2>/dev/null)
-      (( wm *= 10; hm *= 10 )) 2>/dev/null || { wm=0; hm=0; }
-      scale=1
-      if (( wpx > 0 && hpx > 0 && wm > 0 && hm > 0 )); then
-        scale="$(awk -v W="$wpx" -v H="$hpx" -v WM="$wm" -v HM="$hm" \
-          'BEGIN{ ppi=sqrt(W*W+H*H)*25.4/sqrt(WM*WM+HM*HM); s=ppi/160; if(s<1)s=1; if(s>2)s=2;
-                  printf "%.2f", int(s*4+0.5)/4 }')"
-      fi
-      section+="output \"$nm\" {\n    mode \"$mode\"\n    scale $scale\n}\n\n"
-    done
-  fi
-  printf "%b" "$section"
-}
-niri_cfg="$HOME/.config/niri/config.kdl"
-if [[ -f $niri_cfg ]] && ! grep -q '^output ' "$niri_cfg"; then
-  gen="$(detect_monitors)"
-  if [[ -n $gen ]]; then
-    printf '\n%s' "$gen" >> "$niri_cfg"
-    info "monitor auto-detect: appended output block(s) to $niri_cfg"
-  else
-    # No niri socket + no /sys/class/drm (typical fresh install inside the
-    # chroot): nothing to detect here. hexciri-niri-monitors runs at first login
-    # via spawn-at-startup and appends live output blocks then.
-    info "monitor auto-detect: nothing connected yet — deferred to hexciri-niri-monitors at first login"
-  fi
-fi
+# Monitor scaling ships preconfigured in config/niri/config.kdl (eDP-1 scale 2,
+# mode/VRR commented) — no runtime detection, nothing to discover in a chroot.
 
 deploy config/noctalia/config.toml "$HOME/.config/noctalia/config.toml"
 run mkdir -p "$HOME/.config/fastfetch"

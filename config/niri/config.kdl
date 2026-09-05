@@ -10,30 +10,33 @@
 
 // ──────────────────────────────────────────────
 // Output / Monitor config
-// Lives here: niri scales/resizes to your actual displays. On a fresh install
-// hexciri-niri-monitors fills this section with one block per detected output
-// (mode, scale, VRR) — then it's yours to tweak.
-// Find output names + current modes/scale:  niri msg outputs
-// Per-output settings you can set (delete any you don't care about):
+// The active block below is the default for this machine's laptop panel
+// (eDP-1, 2880x1920@120, 2x HiDPI — the same default omarchy ships). On a
+// desktop, or if your panel has a different name, run:  niri msg outputs
+// then rename the output line and set your values. Commented alternatives
+// show the options; uncomment the lines you want.
+// Per-output settings you can set:
 //   mode "2880x1920@120"        // WIDTHxHEIGHT@REFRESH — resolution + refresh rate
 //   scale 2                     // UI scaling: 1.0 native, 1.25/1.5/2 for sharper/fractional
 //   variable-refresh-rate       // VRR: match refresh to content (reduces tearing)
 //   position x=0 y=0            // Arrange multi-monitor layout
 //   transform "90"              // Rotation: "90"/"180"/"270" (e.g. portrait second screen)
-// Example laptop panel (2880x1920@120 with 2x HiDPI scaling):
-//   output "eDP-1" {
-//       mode "2880x1920@120"
-//       scale 2
-//       variable-refresh-rate
-//   }
-//   Save → niri live-reloads (or: niri msg action load-config-file). Scale is
+// ──────────────────────────────────────────────
+output "eDP-1" {
+    scale 2
+    // mode "2880x1920@120"
+    // variable-refresh-rate
+    // position x=0 y=0
+}
+// Desktop / second monitor example (commented — enable by editing):
+// output "DP-1" {
+//     scale 1
+//     // mode "2560x1440@144"
+//     // variable-refresh-rate
+// }
+// Save → niri live-reloads (or: niri msg action load-config-file). Scale is
 // fractional; VRR only kicks in if the panel + cable support it.
 // ──────────────────────────────────────────────
-// The block(s) between the two markers below are managed by hexciri-niri-monitors
-// on login: added for newly-connected outputs, refreshed as mode/scale change,
-// removed when a display goes away. Your own edits elsewhere are left untouched.
-// >>> hexciri-monitors:start <<<
-// >>> hexciri-monitors:end <<<
 
 // ──────────────────────────────────────────────
 // Environment variables
@@ -532,7 +535,6 @@ layer-rule {
 // Programs that start automatically when you log in.
 // ──────────────────────────────────────────────
 
-spawn-at-startup "hexciri-niri-monitors"   // First login: auto-append output blocks (install-time detect can't see monitors in chroot)
 spawn-at-startup "hexciri-theme-ensure"    // First login: re-apply the active theme if the chroot seed left it dormant
 spawn-sh-at-startup "hexciri-strata-install --check >/dev/null 2>&1"   // Keep per-user Strata current with upstream's near-daily releases (in-app Updates does the rest)
 spawn-at-startup "noctalia"                 // Noctalia shell (bar, notifications, idle/lock, etc.)
