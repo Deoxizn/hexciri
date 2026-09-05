@@ -50,7 +50,7 @@ Press `Mod+K` for the searchable keybinding list.
 | bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |
 | channel | `stable` | `hexciri-channel-set` |
-| boot | systemd-boot, plymouth splash, SDDM password greeter | — |
+| boot | systemd-boot, SDDM password/fingerprint greeter | — |
 | prompt/fetch | starship + fastfetch w/ emblem | `~/.config/starship.toml`, `~/.config/fastfetch/config.jsonc` |
 
 ## Channels

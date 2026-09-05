@@ -2,14 +2,14 @@
 
 ## 2026-09-05 — hexciri v0.1.2
 
-- **hexciriv2 brand refresh**: new emblem (2000×1828) now ships everywhere — SDDM theme, plymouth theme, README, and the docs/website logo — and the old banner emblems are gone. A clean unbranded variant is the fastfetch logo.
+- **hexciriv2 brand refresh**: new emblem (2000×1828) now ships on the SDDM theme, README, and the docs/website logo — and the old banner emblems are gone. A clean unbranded variant is the fastfetch logo.
 - **Greeter, finally right**: the panel's DPI no longer scales the greeter layout (was ~4× on the 2880×1920 Framework), so the emblem renders at true size (716px) with a slim 150px entry; the logo PNG is right-sized (800px) so the greeter paints instantly instead of a long black wait; the fingerprint flow is a single friendly prompt — no retry timers, no phantom red "authentication failed".
 - **fastfetch**: unbranded logo installed to `~/.config/fastfetch/hexciri-nb.png`, box 70×31 with 3px top padding; the installer drops the asset + config in place.
 - **Keyring, quiesced**: fingerprint-first now lives in `system-auth` (supersedes the SDDM-local copy — one place covers sddm/sudo/su/login, no double prompt at the greeter), while SDDM's PAM keeps the gnome-keyring unlock lines so fingerprint logins never hit "Unlock Login Keyring"; gnome-keyring is pinned at 48.0 via `IgnorePkg` in both pacman channels (50.0 crashes — SIGABRT on concurrent Secret Service OpenSession/PKCS11), with a hexciri-menu shortcut to downgrade if it ever slips in.
-- **Plymouth**: hexciri moves to the script module with emblem, entry pill, lock, and progress art; the splash only engages where a boot-time prompt exists to brand — installs that boot straight to the greeter no longer sit on a black splash.
 - **hexciri-security**: the Fingerprint menu entry appears only when a reader is actually present.
 - **hexciri-update-run**: the post-update reboot offer follows the pinned boot default (hexciri-kernel pin, else loader default) instead of the newest module dir, so a second staged kernel no longer spoofs a reboot.
 - **hexciri-sync**: PAM restoration rebalanced around `system-auth` + the keyring pin; SDDM theme deploy expanded to the full greeter asset set.
+- **LUKS/plymouth removed**: disk encryption forced the boot into a plymouth unlock flow whose initramfs glue kept failing intermittently on fresh installs. hexciri is now plain-root only — no encrypt hook, no splash, fastest boot — and the login gate is the SDDM password/fingerprint greeter. The installer still repairs + canonicalizes `mkinitcpio.conf` HOOKS (self-healing) and force-erases any leftover `crypto_LUKS` signature on wipe.
 
 ## 2026-09-05 — hexciri v0.1.1
 
@@ -23,7 +23,6 @@
 - **Share pickers**: Qt-first kdialog file/folder dialogs (in-process under Niri, no desktop-portal dependency), zenity fallback.
 - **fastfetch**: logo 66x36, `user @ host` title, new `hexciri-fastfetch` command + `ff` alias; documented that fastfetch 2.68 has no true logo centering.
 - **Install URL**: bootstrap published at `https://hexciri.dirty.pizza/install` (rev 7; the old `/hexciri` path still works). One-liner is `curl -L -o hexciri https://hexciri.dirty.pizza/install && sh hexciri`.
-- **Plymouth splash fix**: install anchored the HOOKS edit to the live `HOOKS=` line (was matching commented examples and skipping the real one) so plymouth runs on first boot; rebuild verified to embed the hexciri theme.
 - **Bash login shell**: login shell stays `bash` (scripting-safe everywhere); `fish` is interactive-only via kitty `shell fish`. `hexciri-defaults` → Shell writes the kitty config rather than `chsh`; no more fish-only login shell to fight quoting in.
 - **Greeter password-only**: when the installer stamps `Username=` (always the case), the SDDM greeter shows only the password field — no username box to trip over — with the row layout kept for unknown-user fallback. PasswordOTS/asterisks draw correctly.
 - **Choose your app menus**: install.sh hides utility-only launcher entries (`avahi-discover`, `bssh`, `bvnc`, `lstopo`, `qv4l2`, `qvidcap`, `qt6ct`) by appending `NoDisplay=true`, so the game list and first-party apps are what the menu surfaces.

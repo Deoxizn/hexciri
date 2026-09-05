@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=26   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=27   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -46,14 +46,13 @@ if [[ ! -f $LIVE_CONF ]]; then
 fi
 info "package cache: $LIVE_CACHE (persists across wipe retries)"
 
-for cmd in sfdisk parted mkfs.fat mkfs.ext4 blkid findmnt arch-chroot git curl cryptsetup; do
+for cmd in sfdisk parted mkfs.fat mkfs.ext4 blkid findmnt arch-chroot git curl; do
   command -v "$cmd" &>/dev/null && continue
   case "$cmd" in
     sfdisk|findmnt|blkid) pkg=util-linux ;;
     mkfs.fat) pkg=dosfstools ;;
     mkfs.ext4) pkg=e2fsprogs ;;
     arch-chroot) pkg=arch-install-scripts ;;
-    cryptsetup) pkg=cryptsetup ;;
     *) pkg="$cmd" ;;
   esac
   info "ISO is missing $cmd — installing $pkg..."
@@ -131,14 +130,6 @@ else
 fi
 [[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
 if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
-# ── encryption: the LUKS passphrase is the SINGLE install password (same one
-# keyed in above for user/root). Omarchy-style: the boot entry keys off the
-# partition's GPT PARTUUID — stable across re-formats, unlike the LUKS
-# superblock UUID which is re-randomized on every cryptsetup luksFormat and is
-# the classic "uuid mismatch" reinstall trap. ──
-read -rp "encrypt the system partition with LUKS? [y/N]: " ENCRYPT </dev/tty
-ENCRYPT="${ENCRYPT,,}"
-[[ $ENCRYPT == y || $ENCRYPT == yes ]] && ENCRYPT=yes || ENCRYPT=no
 # ── clear stale state from previous runs (lingering mounts) ──
 umount -R /mnt 2>/dev/null || true
 
@@ -149,7 +140,6 @@ printf '  %-10s %s\n' \
   "mode"     "$MODE" \
   "disk"     "/dev/$DISK" \
   "fs"       "$FS" \
-  "encrypt"  "$ENCRYPT" \
   "channel"  "$CHANNEL" \
   "kernel"   "auto" \
   "hostname" "$HOSTNAME" \
@@ -213,14 +203,17 @@ fi
 # residual-signature guard: a partition node still carrying an old signature (a
 # leftover LUKS container reads as crypto_LUKS and any mount fails) is force-
 # wiped here, before mkfs. blkid serves from the udev database, so re-settle
-# after each wipe and re-check; three tries cover LUKS header copies.
+# after each wipe and re-check. A persisted LUKS2 container hides multiple
+# header copies + keyslots, so once one shows up we also zero the first 16MiB —
+# guaranteed no stale crypto_LUKS can gate the disk again.
 for d in "$ESP" "$ROOT"; do
   [[ $d == "$ESP" && $FORMAT_ESP != yes ]] && continue   # reused ESP: never touch
-  for try in 1 2 3; do
+  for try in 1 2 3 4 5; do
     t="$(blkid -s TYPE -o value "$d" 2>/dev/null || true)"
     [[ -n $t ]] || break
     info "residual $t signature on $d (try $try) — force-wiping"
     wipefs -af "$d" >/dev/null 2>&1 || true
+    [[ $t == crypto_LUKS ]] && dd if=/dev/zero of="$d" bs=1M count=16 status=none 2>/dev/null || true
     udevadm settle 2>/dev/null || sleep 1
   done
   t="$(blkid -s TYPE -o value "$d" 2>/dev/null || true)"
@@ -229,19 +222,7 @@ done
 # format AFTER the guard: rev 16 mkfs'd the ESP before wiping, and the guard
 # then erased the fresh FAT → bare node probing → squashfs superblock error.
 [[ $FORMAT_ESP == yes ]] && { info "formatting ESP $ESP (vfat)"; mkfs.fat -F32 "$ESP" >/dev/null; }
-if [[ $ENCRYPT == yes ]]; then
-  info "creating LUKS2 container on $ROOT (passphrase: the install password)..."
-  printf '%s\n' "$USERPASS" | cryptsetup luksFormat --batch-mode -q --type luks2 --key-file - "$ROOT"
-  printf '%s\n' "$USERPASS" | cryptsetup open --key-file - "$ROOT" root
-  cryptsetup status root >/dev/null || { err "LUKS container did not open — aborting"; exit 1; }
-  ROOTDEV="/dev/mapper/root"
-  ROOTPARTUUID="$(blkid -s PARTUUID -o value "$ROOT")"
-  [[ -n $ROOTPARTUUID ]] || { err "could not read PARTUUID of $ROOT — aborting"; exit 1; }
-  info "opened $ROOT as /dev/mapper/root (PARTUUID=$ROOTPARTUUID)"
-else
-  ROOTDEV="$ROOT"
-  ROOTPARTUUID=""
-fi
+ROOTDEV="$ROOT"
 mkfs_root "$ROOTDEV"
 mount -t "$FS" "$ROOTDEV" /mnt
 mkdir -p /mnt/boot
@@ -303,11 +284,9 @@ git clone --depth 1 "$REPO" /mnt/root/hexciri-install
 
 # ── stage 2 runs inside the new system ──
 # boot-time HOOKS line is managed by lib/initramfs.sh (deterministic +
-# self-healing). Here we only REPAIR + rebuild the stock initramfs: plymouth and
-# cryptsetup (whose initcpio hooks back the plymouth/encrypt words) are not in
-# the base pacstrap, so adding those words now would fail the rebuild with
-# "ERROR hook plymouth cannot be found". install.sh enables them later, after
-# the packages land. ──
+# self-healing). We only REPAIR + rebuild the stock initramfs so a corrupted
+# leftover from a previous install can never ship ("mkinitcpio.conf line 55:
+# syntax error" / "failed to generate ramfs"). ──
 IR_CMD="repair /etc/mkinitcpio.conf"
 cat > /mnt/root/hexciri-stage2.sh <<STAGE2
 set -euo pipefail
@@ -345,18 +324,9 @@ done
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 bootctl install --esp-path=/boot >/dev/null
-# LUKS root: mark the install (install.sh keeps boot-time autologin + the
-# encrypt hook only when this marker exists; no-LUKS installs remove autologin
-# and skip plymouth). cryptdevice keys off the GPT PARTUUID captured on the ISO
-# side — stable across re-formats, no regenerated-LUKS-UUID mismatch.
-mkdir -p /etc/hexciri
-if [[ $ENCRYPT == yes ]]; then
-  echo yes > /etc/hexciri/encrypt
-  ROOTOPTS="cryptdevice=PARTUUID=$ROOTPARTUUID:root root=/dev/mapper/root rw quiet splash"
-else
-  ROOTUUID="\$(findmnt -no UUID /)"
-  ROOTOPTS="root=UUID=\$ROOTUUID rw quiet splash"
-fi
+# root=UUID via findmnt — plain root, no encryption layer, quickest possible boot
+ROOTUUID="\$(findmnt -no UUID /)"
+ROOTOPTS="root=UUID=\$ROOTUUID rw quiet"
 MICRO="\$(ls /boot/*-ucode.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null || true)"
 # stale entries from previous installs carry dead UUIDs — remove our own first
 rm -f /boot/loader/entries/hexciri-*.conf
@@ -373,7 +343,7 @@ done
 echo -e "default hexciri-$STAGE1_KERNEL.conf\ntimeout 3" > /boot/loader/loader.conf
 # one-shot insurance: a malformed options line boots to a timeout with no
 # useful error, so refuse to continue if spacing or an empty key value slipped in
-if grep -qE '(root|options|cryptdevice) +=' /boot/loader/entries/hexciri-*.conf; then
+if grep -qE '(root|options) +=' /boot/loader/entries/hexciri-*.conf; then
   err "boot entry malformed (spaced key=value) — aborting before install"
   grep -H . /boot/loader/entries/hexciri-*.conf >&2 || true
   exit 1

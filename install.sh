@@ -72,13 +72,6 @@ if $SYSTEM_ONLY; then
   [[ -n $TARGET_USER && $TARGET_USER != root ]] || { err "--system-only needs HEXCIRI_USER set to a non-root user"; exit 1; }
   id "$TARGET_USER" &>/dev/null || { err "user $TARGET_USER does not exist"; exit 1; }
   as_user() { run su - "$TARGET_USER" -c "$*"; }
-  # disk-encryption gate: bootstrap writes /etc/hexciri/encrypt on LUKS installs.
-  # Encryption is treated as the login (boot unlock → straight to the desktop via
-  # sddm autologin, plymouth brands the unlock); no-LUKS installs skip both and
-  # keep the password greeter as the login gate.
-  ENCRYPT_LUKS=false
-  [[ -f /etc/hexciri/encrypt ]] && ENCRYPT_LUKS=true
-  $ENCRYPT_LUKS && info "LUKS root detected (marker /etc/hexciri/encrypt)"
 
   # ── channel + keyring ──
   info "deploying pacman channel..."
@@ -108,7 +101,7 @@ if $SYSTEM_ONLY; then
     bluez bluez-utils
     tesseract zbar qrencode fwupd zenity kdialog qt6ct localsend
     pipewire pipewire-pulse wireplumber
-    zram-generator pacman-contrib cryptsetup)
+    zram-generator pacman-contrib)
   MISSING=()
   for p in "${PKGS[@]}"; do pacman -Q "$p" &>/dev/null || MISSING+=("$p"); done
   if ((${#MISSING[@]})); then
@@ -224,14 +217,11 @@ HOOK
   run rm -rf /usr/share/hexciri/default
   run mkdir -p /usr/share/hexciri/default
   run cp -r "$REPO_DIR/default/themed" /usr/share/hexciri/default/themed
-  run mkdir -p /usr/share/hexciri/lib
-  run cp -f "$REPO_DIR/lib/initramfs.sh" /usr/share/hexciri/lib/initramfs.sh
   run mkdir -p /usr/share/pixmaps
   run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
 
   # ── services + SDDM (no disk encryption → the login gate lives at the sddm
-  #    prompt itself; encryption → the unlock at boot IS the login, so sddm
-  #    autologins straight to the desktop) ──
+  #    password/fingerprint prompt itself) ──
   run systemctl enable NetworkManager.service 2>/dev/null || true
   run systemctl enable sshd.service 2>/dev/null || true
   run systemctl enable sddm.service 2>/dev/null || true
@@ -253,16 +243,6 @@ HOOK
   run usermod -aG lp,scanner "$TARGET_USER" 2>/dev/null || true
   # ── bluetooth: bluez stack + rfkill; bar widget + pairing need bluetoothd ──
   run systemctl enable --now bluetooth.service 2>/dev/null || true
-  if $ENCRYPT_LUKS; then
-    # encryption gate = the login: LUKS unlock at boot, then straight to desktop
-    run mkdir -p /etc/sddm.conf.d
-    printf '[Autologin]\nSession=niri.desktop\nUser=%s\n' "$TARGET_USER" \
-      | run tee /etc/sddm.conf.d/10-hexciri-autologin.conf >/dev/null
-    info "LUKS install: sddm autologin as $TARGET_USER (login gate is the boot unlock)"
-  else
-    # no encryption gate means no free pass — greeter login with a password
-    run rm -f /etc/sddm.conf.d/10-hexciri-autologin.conf 2>/dev/null || true
-  fi
 
   # ── gnome-keyring: unlock the login keyring at sddm login via pam. Without
   #    this, the "Unlock Login Keyring" popup appears whenever the first app
@@ -317,50 +297,6 @@ HOOK
     printf '\nUsername=%s\n' "${TARGET_USER:-}" | run tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null
     run mkdir -p /etc/sddm.conf.d
     printf '[Theme]\nCurrent=hexciri\n' | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
-  fi
-
-  # ── Plymouth splash (hexciri script theme, provably rendered on this box).
-  #    Only meaningful on encrypted installs: LUKS gives the boot an unlock
-  #    moment to brand (plymouth shows the password dialog), and with no LUKS
-  #    the splash flashes for ~1s on a fast NVMe and reads as a black screen —
-  #    skip it entirely there. ──
-  if $ENCRYPT_LUKS && ! $DRY_RUN; then
-    pacman -Q plymouth &>/dev/null || run pacman -S --noconfirm plymouth
-    run mkdir -p /usr/share/plymouth/themes/hexciri
-    for f in hexciri.plymouth hexciri.script logo.png lock.png entry.png bullet.png progress_bar.png progress_box.png; do
-      run cp -f "$REPO_DIR/branding/plymouth/$f" /usr/share/plymouth/themes/hexciri/$f
-    done
-    if ! grep -q '^Theme=hexciri' /etc/plymouth/plymouthd.conf 2>/dev/null; then
-      run mkdir -p /etc/plymouth
-      printf '[Daemon]\nTheme=hexciri\n' | run tee /etc/plymouth/plymouthd.conf >/dev/null
-    fi
-    # mkinitcpio CONFIG is deterministic + self-healing now (lib/initramfs.sh):
-    # the chain-sed approach could mangle the HOOKS line, and a mangled config
-    # then got re-inherited by every later install (pacman never overwrites a
-    # modified config), which read as 'mkinitcpio.conf line 55: syntax error' /
-    # 'failed to generate ramfs'. This rewrites one canonical line + repairs any
-    # malformed one; plymouth lands after systemd/udev, encrypt before filesystems.
-    run "$REPO_DIR/lib/initramfs.sh" ensure --plymouth --encrypt /etc/mkinitcpio.conf
-    if [[ -f /etc/mkinitcpio.conf.hexciri-changed ]]; then
-      rm -f /etc/mkinitcpio.conf.hexciri-changed
-      run mkinitcpio -P
-    fi
-    # theme-packaged proof: if hexciri isn't in the initramfs, plymouth falls
-    # back to the stock arch theme ('ARCH LINUX' wordmark) at boot. Fail loudly
-    # before reboot instead of shipping a silent fallback.
-    for img in /boot/initramfs-*.img; do
-      [[ -f $img ]] || continue
-      if lsinitcpio -l "$img" 2>/dev/null | grep -qE 'themes/hexciri/hexciri\.plymouth'; then
-        ok "plymouth ${img##*/}: hexciri theme packaged"
-      else
-        warn "hexciri theme missing from ${img##*/} — boot will show the stock arch splash (re-run: mkinitcpio -P)"
-      fi
-    done
-    # splash flag on hexciri-owned boot entries
-    for e in /boot/loader/entries/hexciri-*.conf; do
-      [[ -f $e ]] || continue
-      grep -q 'splash' "$e" || run sed -i 's/^options \(.*\)/options \1 splash/' "$e"
-    done
   fi
 
   # ── version stamp (hexciri-version reads this on installed systems) ──

@@ -3,8 +3,6 @@
 # Package upgrades routinely clobber hexciri's bits:
 #   * kernels install + mkinitcpio builds the initramfs, but systemd-boot gets no
 #     new entry — the box keeps booting the old default (see: linux-omarchy-bore)
-#   * mkinitcpio repackages /etc/mkinitcpio.conf, dropping the 'plymouth' HOOKS
-#     word and quietly killing the splash
 #   * sddm heals /etc/pam.d/sddm, losing pam_gnome_keyring + pam_fprintd
 #   * avahi/hwloc/v4l-utils/qt6ct restore their stock .desktop files, so the
 #     NoDisplay curation reverts and the menu cruft returns
@@ -14,31 +12,10 @@ set -euo pipefail
 
 log() { echo "hexciri-sync: $*"; }
 
-# LUKS root? bootstrap/install leave /etc/hexciri/encrypt only on encrypted
-# installs. drives boot-entry cmdline (PARTUUID) + encrypt hook + plymouth.
-ENCRYPT_LUKS=false
-[[ -f /etc/hexciri/encrypt ]] && ENCRYPT_LUKS=true
-
 # ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
 if [[ -d /boot/loader ]]; then
   ROOTUUID="$(findmnt -no UUID / 2>/dev/null || true)"
-  ROOTOPTS="root=UUID=$ROOTUUID rw quiet splash"
-  if $ENCRYPT_LUKS; then
-    # LUKS: cryptdevice keys off the backing partition's GPT PARTUUID (stable
-    # across re-formats, unlike the LUKS superblock UUID which is re-randomized
-    # on every cryptsetup luksFormat — the reinstall "uuid mismatch" trap).
-    MAP_SRC="$(findmnt -no SOURCE / 2>/dev/null || true)"
-    ROOTPARTUUID=""
-    if [[ $MAP_SRC == /dev/mapper/* ]]; then
-      BACKING="$(lsblk -nro PKNAME "$MAP_SRC" 2>/dev/null || true)"
-      [[ -n $BACKING ]] && ROOTPARTUUID="$(blkid -s PARTUUID -o value "/dev/$BACKING" 2>/dev/null || true)"
-    fi
-    if [[ -n $ROOTPARTUUID ]]; then
-      ROOTOPTS="cryptdevice=PARTUUID=$ROOTPARTUUID:root root=/dev/mapper/root rw quiet splash"
-    else
-      log "warning: LUKS marker set but no PARTUUID resolvable — keeping root=UUID (next run re-checks)"
-    fi
-  fi
+  ROOTOPTS="root=UUID=$ROOTUUID rw quiet"
   MICRO="$(ls /boot/*-ucode.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null || true)"
   if [[ -z $ROOTUUID ]]; then
     log "warning: no root UUID resolvable, skipping loader entries"
@@ -70,32 +47,6 @@ if [[ -d /boot/loader ]]; then
     fi
     echo -e "default $default\ntimeout 3" > /boot/loader/loader.conf
     log "systemd-boot entries regenerated (default: $default)"
-  fi
-fi
-
-# ── 2. plymouth: only on LUKS installs (see installer; a no-LUKS box has no
-# ── unlock to brand and skips plymouth entirely). Keep the HOOKS word + splash
-# ── theme, rebuild only when changed. HOOKS handling lives in
-# ── lib/initramfs.sh: deterministic + self-healing (the old chain-sed could
-# ── mangle the line, and the mangled config was then inherited by every later
-# ── install — 'mkinitcpio.conf line 55: syntax error' / 'failed to generate
-# ── ramfs'). ──
-IR_HELPER="/usr/share/hexciri/lib/initramfs.sh"
-[[ -f $IR_HELPER ]] || IR_HELPER="$(cd "$(dirname "$0")/.." && pwd)/lib/initramfs.sh"
-if $ENCRYPT_LUKS && pacman -Q plymouth &>/dev/null; then
-  bash "$IR_HELPER" ensure --plymouth --encrypt /etc/mkinitcpio.conf
-  if [[ -f /etc/mkinitcpio.conf.hexciri-changed ]]; then
-    rm -f /etc/mkinitcpio.conf.hexciri-changed
-    log "mkinitcpio HOOKS ensured (plymouth + encrypt) — rebuilding initramfs"
-    mkinitcpio -P
-  fi
-
-  # ── 2b. plymouth theme: re-assert hexciri (upgrades reset plymouthd.defaults) ──
-  if command -v plymouth-set-default-theme >/dev/null 2>&1; then
-    if [[ "$(plymouth-set-default-theme 2>/dev/null || true)" != "hexciri" ]]; then
-      plymouth-set-default-theme -R hexciri >/dev/null 2>&1 || plymouth-set-default-theme hexciri >/dev/null 2>&1 || true
-      log "re-applied hexciri plymouth theme"
-    fi
   fi
 fi
 
