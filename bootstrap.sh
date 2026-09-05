@@ -121,9 +121,9 @@ info "kernel: ${KERNEL_PICK:-auto}"
 
 
 # ── encryption choice, then disk (destructive choices last) ──
-LUKS="${LUKS:-no}"
-read -rp "encrypt disk with LUKS? [y/N]: " luks_ans </dev/tty
-[[ $luks_ans =~ ^[Yy]$ ]] && LUKS=yes || LUKS=no
+LUKS=no
+# LUKS disabled until the plain path boots clean (prompt was here).
+# cryptsetup/encrypt-hook/plymouth-encrypt code below stays for its return.
 if [[ $LUKS == yes ]]; then
   # disk unlock reuses the user password (one password to remember)
   LUKSPASS="$USERPASS"
