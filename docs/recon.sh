@@ -34,13 +34,15 @@ mount /dev/mapper/cryptroot /mnt/rootfs
 mount "$ESP" /mnt/rootfs/boot 2>/dev/null || true
 echo "--- hooks ---"
 grep HOOKS /mnt/rootfs/etc/mkinitcpio.conf 2>/dev/null || verdict "NO MKINITCPIO.CONF"
-echo "--- encrypt in images ---"
+echo "--- encrypt files in images (want >0) ---"
 for img in /mnt/rootfs/boot/initramfs-*.img; do
   [[ -f $img ]] || continue
-  c=$(lsinitcpio "$img" 2>/dev/null | grep -icE "encrypt|plymouth" || true)
-  echo "$(basename "$img"): encrypt-related files=$c"
-  (( c > 0 )) || verdict "NO ENCRYPT HOOK in $(basename "$img")"
+  echo "$(basename "$img"): encrypt=$(lsinitcpio "$img" 2>/dev/null | grep -c encrypt || true) plymouth=$(lsinitcpio "$img" 2>/dev/null | grep -c plymouth || true)"
 done
+echo "--- hooks line ---"
+grep HOOKS /mnt/rootfs/etc/mkinitcpio.conf 2>/dev/null || verdict "NO MKINITCPIO.CONF"
+echo "--- entries (title + options only) ---"
+grep -hE "^(title|options)" /mnt/loader/entries/hexciri-*.conf 2>/dev/null || verdict "NO HEXCIRI ENTRIES"
 echo "--- uuid match ---"
 want=$(grep -hoE 'cryptdevice=UUID=[^ :]+' /mnt/recon/loader/entries/hexciri-*.conf 2>/dev/null | head -n 1 | cut -d= -f3)
 have=$(blkid -s UUID -o value "$LUKSDEV")
