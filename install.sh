@@ -229,10 +229,15 @@ deploy config/fish/conf.d/hexciri-starship.fish "$HOME/.config/fish/conf.d/hexci
 mkdir -p "$HOME/.config/hexciri/hooks/theme-set.d"
 run cp -f "$REPO_DIR/hooks/theme-set.d/noctalia-sync.sh" "$HOME/.config/hexciri/hooks/theme-set.d/noctalia-sync.sh"
 
-# ── kitty include → hexciri state (backup-first) ──
-if [[ -f $HOME/.config/kitty/kitty.conf ]] && grep -q "state/omarchy/current/theme/kitty.conf" "$HOME/.config/kitty/kitty.conf"; then
+# ── kitty: default config on fresh installs, include migration on converts ──
+if [[ ! -f $HOME/.config/kitty/kitty.conf ]]; then
+  deploy config/kitty/kitty.conf "$HOME/.config/kitty/kitty.conf"
+elif grep -q "state/omarchy/current/theme/kitty.conf" "$HOME/.config/kitty/kitty.conf"; then
   mkdir -p "$bak"; cp -f "$HOME/.config/kitty/kitty.conf" "$bak/kitty.conf"
   run sed -i 's|state/omarchy/current/theme/kitty.conf|state/hexciri/current/theme/kitty.conf|' "$HOME/.config/kitty/kitty.conf"
+elif ! grep -q "state/hexciri/current/theme/kitty.conf" "$HOME/.config/kitty/kitty.conf"; then
+  mkdir -p "$bak"; cp -f "$HOME/.config/kitty/kitty.conf" "$bak/kitty.conf"
+  run sed -i '1i include ~/.local/state/hexciri/current/theme/kitty.conf' "$HOME/.config/kitty/kitty.conf"
 fi
 
 # ── defaults state (kitty/fish/brave-origin/strata/zed/opencode) ──

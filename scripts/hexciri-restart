@@ -1,0 +1,30 @@
+#!/bin/bash
+# hexciri:summary=Restart menu: reload Niri, restart Noctalia, refresh theme
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+note() { notify-send "Hexciri" "$1" 2>/dev/null || true; }
+
+if [[ $# -gt 0 ]]; then
+  choice="$*"
+else
+  choice=$(printf '%s\n' "Reload Niri" "Restart Noctalia" "Refresh theme" |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Restart: ' --width=24 --lines=3)
+  [[ -z ${choice:-} ]] && exit 0
+fi
+
+case "$choice" in
+  "Reload Niri")
+    niri msg action load-config-file 2>/dev/null && note "Niri config reloaded" || note "Niri reload failed"
+    ;;
+  "Restart Noctalia")
+    pkill -x noctalia 2>/dev/null || true
+    sleep 1
+    if pgrep -x noctalia >/dev/null; then note "Noctalia still running"; exit 0; fi
+    niri msg action spawn -- noctalia 2>/dev/null && note "Noctalia restarted" || note "Noctalia restart failed"
+    ;;
+  "Refresh theme")
+    theme="$(cat ~/.local/state/hexciri/current/theme.name 2>/dev/null || true)"
+    if [[ -n $theme ]]; then hexciri-theme-set "$theme" >/dev/null 2>&1 && note "Theme refreshed"; else note "No theme set"; fi
+    ;;
+esac

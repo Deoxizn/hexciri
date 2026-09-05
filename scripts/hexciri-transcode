@@ -1,0 +1,28 @@
+#!/bin/bash
+# hexciri:summary=Transcode media with ffmpeg (pick file + preset, runs in terminal)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SRC_DIR="${1:-$HOME/Videos}"
+
+pick_file() {
+  local f
+  f=$(find "$SRC_DIR" "$HOME/Videos" "$HOME/Downloads" -maxdepth 2 -type f \
+    \( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.webm' -o -iname '*.mov' -o -iname '*.avi' \) 2>/dev/null |
+    sort -u | "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='File: ' --width=60 --lines=10) || exit 0
+  printf '%s' "$f"
+}
+
+src="$(pick_file)"
+[[ -n $src && -f $src ]] || { echo "no file picked"; exit 0; }
+preset=$(printf '%s\n' 'mp4-h264' 'webm-vp9' 'gif' 'mp3-audio' |
+  "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Preset: ' --width=24 --lines=4) || exit 0
+out="${src%.*}-hexciri"
+case "$preset" in
+  mp4-h264) ffmpeg -y -i "$src" -c:v libx264 -preset medium -crf 20 -c:a aac "$out.mp4" ;;
+  webm-vp9) ffmpeg -y -i "$src" -c:v libvpx-vp9 -crf 30 -b:v 0 -c:a libopus "$out.webm" ;;
+  gif)      ffmpeg -y -i "$src" -vf "fps=12,scale=640:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "$out.gif" ;;
+  mp3-audio) ffmpeg -y -i "$src" -vn -c:a libmp3lame -q:a 2 "$out.mp3" ;;
+esac
+echo "done."
+read -rp "press Enter to close" _

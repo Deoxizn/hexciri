@@ -151,4 +151,11 @@ if fuzzel_src.is_file():
     fz.write_text(fuzzel_src.read_text())
     print(f"hexciri-templates: fuzzel -> {fz}")
 
+# 6. live-push kitty colors (new windows pick them up regardless)
+import subprocess
+kitty_conf = theme_dir / "kitty.conf"
+if kitty_conf.is_file():
+    subprocess.run(["kitty", "@", "set-colors", str(kitty_conf)],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
 print("hexciri-templates: done (brave: follows GTK dark, hookable; opencode: tui theme=system follows kitty)")
