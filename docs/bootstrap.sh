@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=12   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=13   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 
@@ -316,7 +316,9 @@ systemctl enable NetworkManager.service power-profiles-daemon.service >/dev/null
 
 mkdir -p "/home/$USERNAME/.local/opt"
 cp -r /root/hexciri-install "/home/$USERNAME/.local/opt/hexciri"
-chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.local/opt/hexciri"
+# .local is created root-owned here — hand the whole tree to the user or the
+# user phase (state/share subdirs) and fish's history dir fail with EACCES
+chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.local"
 # Split phases: system runs as root (no sudo needed), user runs as the user
 # with zero sudo calls — su(1) sessions have no controlling TTY, so nothing
 # here may ever depend on sudo prompting.
