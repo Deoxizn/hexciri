@@ -137,6 +137,9 @@ else
 fi
 [[ -b /dev/$DISK ]] || { err "no such disk: /dev/$DISK"; exit 1; }
 if [[ $DISK == nvme* ]]; then P=p; else P=""; fi
+# ── clear stale state from previous runs (lingering mounts, open mappers) ──
+umount -R /mnt 2>/dev/null || true
+command -v cryptsetup &>/dev/null && cryptsetup close cryptroot 2>/dev/null || true
 
 # ── summary + final confirm (nothing touched until this passes) ──
 echo ""
