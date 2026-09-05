@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-04 — install ironing
+
+- Privilege boundary: installer split into a root system phase and a sudoless user phase, so nothing depends on sudo prompting without a terminal; AUR builds as the user with root installing the finished package; dropped the NOPASSWD window entirely ([`be85d91`](https://github.com/Deoxizn/hexciri/commit/be85d91), [`af3b6b5`](https://github.com/Deoxizn/hexciri/commit/af3b6b5))
+- Kernel policy: exactly one kernel on fresh installs — custom picks replace the staged base (entries generated per installed kernel); custom kernels refused unless in configured repos, hard LTS pin on GTX 1xxx or older ([`d7b2eb9`](https://github.com/Deoxizn/hexciri/commit/d7b2eb9), [`41200f6`](https://github.com/Deoxizn/hexciri/commit/41200f6))
+- Prompts: `/dev/tty` reads for piped runs, password confirm, GeoIP timezone chain, disk questions last with a pre-wipe summary gate, archfi-style file-first flow (`sh hexciri`)
+- GPU setup baked into the install (auto-detect, `--kernel` preselect); mesa stack in the base set
+
 ## 2026-09-04
 
 - hexciri v0.1.0: own Arch-based Niri + Noctalia distro.
