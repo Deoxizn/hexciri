@@ -124,17 +124,11 @@ if $SYSTEM_ONLY; then
   run mkdir -p /usr/share/pixmaps
   run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
 
-  # ── services + SDDM autologin (straight to Niri — no greeter stop) ──
+  # ── services + SDDM (greeter login; autologin returns with LUKS) ──
   run systemctl enable NetworkManager.service 2>/dev/null || true
   run systemctl enable sddm.service 2>/dev/null || true
-  if ! $DRY_RUN; then
-    if [[ -f /etc/sddm.conf.d/10-hexciri-autologin.conf ]]; then
-      run cp -f /etc/sddm.conf.d/10-hexciri-autologin.conf "/etc/sddm.conf.d/10-hexciri-autologin.conf.bak.$(date +%s)"
-    else
-      run mkdir -p /etc/sddm.conf.d
-    fi
-    printf '[Autologin]\nUser=%s\nSession=niri.desktop\n' "$TARGET_USER" | run tee /etc/sddm.conf.d/10-hexciri-autologin.conf >/dev/null
-  fi
+  # remove any autologin config: no encryption gate means no free pass
+  run rm -f /etc/sddm.conf.d/10-hexciri-autologin.conf 2>/dev/null || true
 
   # ── SDDM theme (emblem + password greeter, Niri preferred) ──
   if ! $DRY_RUN; then
@@ -262,4 +256,4 @@ fi
 echo ""
 ok "hexciri installed (channel: $CHANNEL, theme: sakurazuki)"
 info "configs: ~/.config/niri/config.kdl ~/.config/noctalia/config.toml (backups in $bak)"
-info "reboot → autologin straight into Niri → Mod+K for the keybinding list"
+info "reboot → SDDM greeter → password → Niri (Mod+K for keybindings)"
