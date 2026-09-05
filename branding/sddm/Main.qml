@@ -3,8 +3,8 @@ import SddmComponents 2.0
 
 Rectangle {
   id: root
-  width: 640
-  height: 480
+  width: Screen.width
+  height: Screen.height
   color: "#0b0911"
 
   property string currentUser: userModel.lastUser
@@ -34,25 +34,16 @@ Rectangle {
     }
   }
 
-  Text {
-    anchors.top: parent.top
-    anchors.topMargin: 30
-    anchors.horizontalCenter: parent.horizontalCenter
-    color: "#6B5E72"
-    font.family: "JetBrainsMono Nerd Font"
-    font.pixelSize: 22
-    text: Qt.formatDateTime(new Date(), "HH:mm")
-  }
-
   Column {
     anchors.centerIn: parent
-    spacing: 22
+    spacing: Math.round(root.height * 0.03)
 
     Image {
       id: logo
       source: "logo.png"
-      width: Math.min(sourceSize.width, 280)
-      height: sourceSize.width > 0 ? Math.round(width * sourceSize.height / sourceSize.width) : 0
+      sourceSize: Qt.size(1024, 1024)
+      width: Math.min(root.width * 0.4, 460)
+      height: sourceSize.height > 0 ? Math.round(width * sourceSize.height / sourceSize.width) : 0
       fillMode: Image.PreserveAspectFit
       anchors.horizontalCenter: parent.horizontalCenter
     }
@@ -61,7 +52,7 @@ Rectangle {
       text: "H E X C I R I"
       color: "#B6849D"
       font.family: "JetBrainsMono Nerd Font"
-      font.pixelSize: 26
+      font.pixelSize: Math.max(28, Math.round(root.height * 0.055))
       anchors.horizontalCenter: parent.horizontalCenter
     }
 
@@ -69,13 +60,13 @@ Rectangle {
       text: root.currentUser
       color: "#D8D0DC"
       font.family: "JetBrainsMono Nerd Font"
-      font.pixelSize: 18
+      font.pixelSize: Math.max(18, Math.round(root.height * 0.034))
       anchors.horizontalCenter: parent.horizontalCenter
     }
 
     Rectangle {
-      width: 300
-      height: 46
+      width: Math.min(root.width * 0.34, 400)
+      height: Math.round(root.height * 0.085)
       radius: 8
       color: "#14111A"
       border.color: root.loginFailed ? "#f7768e" : "#43384C"
@@ -129,7 +120,7 @@ Rectangle {
       text: "authentication failed"
       color: "#f7768e"
       font.family: "JetBrainsMono Nerd Font"
-      font.pixelSize: 14
+      font.pixelSize: Math.max(14, Math.round(root.height * 0.026))
       anchors.horizontalCenter: parent.horizontalCenter
     }
   }
