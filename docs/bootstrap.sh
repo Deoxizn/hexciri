@@ -287,6 +287,8 @@ else
   ROOTOPTS="root=UUID=\$ROOTUUID rw quiet splash"
 fi
 MICRO="\$(ls /boot/*-ucode.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null || true)"
+# stale entries from previous installs carry dead UUIDs — remove our own first
+rm -f /boot/loader/entries/hexciri-*.conf
 for img in /boot/vmlinuz-*; do
   k="\${img#/boot/vmlinuz-}"
   {
