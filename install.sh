@@ -193,6 +193,15 @@ HOOK
   run systemctl enable NetworkManager.service 2>/dev/null || true
   run systemctl enable sshd.service 2>/dev/null || true
   run systemctl enable sddm.service 2>/dev/null || true
+  # ── session: sddm rejects login pre-PAM when no session is selectable,
+  #    which reads exactly like a wrong password on first try. niri ships its
+  #    desktop file; guarantee one exists as a fallback minimal entry ──
+  run mkdir -p /usr/share/wayland-sessions
+  if [[ ! -f /usr/share/wayland-sessions/niri.desktop ]]; then
+    printf '[Desktop Entry]\nName=Niri\nComment=Scrollable-tiling Wayland compositor\nExec=/usr/bin/niri\nType=Application\n' \
+      | run tee /usr/share/wayland-sessions/niri.desktop >/dev/null
+    ok "niri session file missing — created fallback /usr/share/wayland-sessions/niri.desktop"
+  fi
   # ── printing: cups socket activation + HP (hplip); lp/scanner groups let the
   #    user manage queues/admin and access the HP scanner over sane ──
   run systemctl enable --now cups.socket 2>/dev/null || true
@@ -240,6 +249,17 @@ HOOK
       grep -q ' plymouth' /etc/mkinitcpio.conf || run sed -i 's/\(HOOKS=(base\)/\1 plymouth/' /etc/mkinitcpio.conf
       run mkinitcpio -P
     fi
+    # theme-packaged proof: if hexciri isn't in the initramfs, plymouth falls
+    # back to the stock arch theme ('ARCH LINUX' wordmark) at boot. Fail loudly
+    # before reboot instead of shipping a silent fallback.
+    for img in /boot/initramfs-*.img; do
+      [[ -f $img ]] || continue
+      if lsinitcpio -l "$img" 2>/dev/null | grep -qE 'themes/hexciri/hexciri\.plymouth'; then
+        ok "plymouth ${img##*/}: hexciri theme packaged"
+      else
+        warn "hexciri theme missing from ${img##*/} — boot will show the stock arch splash (re-run: mkinitcpio -P)"
+      fi
+    done
     # splash flag on hexciri-owned boot entries
     for e in /boot/loader/entries/hexciri-*.conf; do
       [[ -f $e ]] || continue

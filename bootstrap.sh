@@ -256,6 +256,17 @@ useradd -m -G wheel,lp,scanner -s /bin/bash "$USERNAME"
 printf '%s:%s' "$USERNAME" "$USERPASS" | chpasswd
 # root shares the user password: single-user/emergency shells stay usable
 printf 'root:%s' "$USERPASS" | chpasswd
+# prove the captured password actually authenticates BOTH users before the
+# install continues — a stored-but-wrong password surfaced as a greeter
+# rejection on first try and cost a re-install; no longer shipable.
+for _u in "$USERNAME" root; do
+  if printf '%s\\n' "$USERPASS" | su -s /bin/sh "$_u" -c true >/dev/null 2>&1; then
+    ok "password verified for $_u"
+  else
+    err "password did NOT take for $_u — aborting (re-run with a clean password)"
+    exit 1
+  fi
+done
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 bootctl install --esp-path=/boot >/dev/null
