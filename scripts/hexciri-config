@@ -16,17 +16,19 @@ choice=$(
   printf '%s\n' \
     'Niri config' \
     'Noctalia config' \
+    'Fastfetch config' \
     'Palettes' \
     'Hooks' \
     'Scripts' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=24 --lines=5
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=24 --lines=6
 ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
 case "$choice" in
-  'Niri config')     "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/niri/config.kdl" ;;
-  'Noctalia config') "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/config.toml" ;;
-  'Palettes')        "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/palettes/" ;;
-  'Hooks')           "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/hooks/" ;;
-  'Scripts')         "$bindir/hexciri-edit-file" "${HEXCIRI_PATH:-/usr/share/hexciri}/scripts/" ;;
+  'Niri config')        "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/niri/config.kdl" ;;
+  'Noctalia config')    "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/config.toml" ;;
+  'Fastfetch config')   "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/fastfetch/config.jsonc" ;;
+  'Palettes')           "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/palettes/" ;;
+  'Hooks')              "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/hooks/" ;;
+  'Scripts')            "$bindir/hexciri-edit-file" "${HEXCIRI_PATH:-/usr/share/hexciri}/scripts/" ;;
 esac
