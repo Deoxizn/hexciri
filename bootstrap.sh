@@ -324,4 +324,11 @@ arch-chroot /mnt bash /root/hexciri-stage2.sh </dev/tty
 rm -f /mnt/root/hexciri-stage2.sh
 
 umount -R /mnt
-ok "done. reboot → autologin straight into Niri. ($HOSTNAME / $USERNAME / $CHANNEL)"
+ok "install complete ($HOSTNAME / $USERNAME / $CHANNEL)"
+echo ""
+read -rp "Reboot now? [Y/n]: " RB </dev/tty
+if [[ $RB =~ ^[Nn]$ ]]; then
+  info "not rebooting — run reboot whenever ready"
+else
+  systemctl reboot
+fi
