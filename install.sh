@@ -6,7 +6,8 @@
 #   --user-only    run as USER   (configs, state, theme seed — zero sudo calls)
 #   no flags       Already-on-Arch: system via sudo (real terminal), then user.
 #
-# usage: ./install.sh [-y] [--dry-run] [--channel stable|bleeding] [--kernel stock|lts|omarchy|bore|muqss]
+# usage: ./install.sh [-y] [--dry-run] [--channel stable|bleeding] [--kernel stock|lts]
+# (kernel defaults to auto: stock, or LTS pinned on legacy NVIDIA; custom kernels are post-install)
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -92,7 +93,7 @@ if $SYSTEM_ONLY; then
     mesa vulkan-icd-loader lib32-mesa lib32-vulkan-icd-loader
     libnotify gtk3 xdg-utils desktop-file-utils
     polkit-gnome gnome-keyring xdg-desktop-portal-gtk xdg-desktop-portal-gnome
-    networkmanager sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd)
+    networkmanager openssh sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd)
   MISSING=()
   for p in "${PKGS[@]}"; do pacman -Q "$p" &>/dev/null || MISSING+=("$p"); done
   if ((${#MISSING[@]})); then
@@ -121,11 +122,13 @@ if $SYSTEM_ONLY; then
   # ── themes → /usr/share/hexciri + branding ──
   run mkdir -p /usr/share/hexciri
   run cp -r "$REPO_DIR/themes" /usr/share/hexciri/themes 2>/dev/null || run cp -r "$REPO_DIR/themes/." /usr/share/hexciri/themes/
+  run cp -r "$REPO_DIR/default/themed" /usr/share/hexciri/default/themed 2>/dev/null || true
   run mkdir -p /usr/share/pixmaps
   run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
 
   # ── services + SDDM (greeter login; autologin returns with LUKS) ──
   run systemctl enable NetworkManager.service 2>/dev/null || true
+  run systemctl enable sshd.service 2>/dev/null || true
   run systemctl enable sddm.service 2>/dev/null || true
   # remove any autologin config: no encryption gate means no free pass
   run rm -f /etc/sddm.conf.d/10-hexciri-autologin.conf 2>/dev/null || true

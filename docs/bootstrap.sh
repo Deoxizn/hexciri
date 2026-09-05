@@ -4,32 +4,16 @@
 #   curl -LO https://hexciri.dirty.pizza/hexciri
 #   sh hexciri
 #
-# 8 things are typed, everything else is automatic: username, password,
+# 7 things are typed, everything else is automatic: username, password,
 # hostname, timezone, filesystem, channel, disk (+wipe confirm).
 # Run as root on the Arch ISO live environment. DESTRUCTIVE: wipes $DISK (full mode).
 set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=3   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=4   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
-KERNEL_PICK=""         # set by the kernel prompt below (empty = auto-detect in installer)
-while (($#)); do
-  case "$1" in
-    --) shift ;;
-    *) shift ;;
-  esac
-done
-# accept short keys or full package names (linux-omarchy-bore -> bore)
-case "${KERNEL_PICK,,}" in
-  ""|"auto") KERNEL_PICK="" ;;
-  stock|linux) KERNEL_PICK=stock ;;
-  lts|linux-lts) KERNEL_PICK=lts ;;
-  omarchy|linux-omarchy) KERNEL_PICK=omarchy ;;
-  bore|linux-omarchy-bore) KERNEL_PICK=bore ;;
-  muqss|linux-omarchy-muqss) KERNEL_PICK=muqss ;;
-esac
-[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { echo "kernel must be stock|lts|omarchy|bore|muqss"; exit 1; }
+KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
 
 info() { echo -e "\e[0;36m[hexciri:bootstrap]\e[0m $*"; }
 ok()   { echo -e "\e[0;32m[hexciri:bootstrap]\e[0m $*"; }
@@ -101,27 +85,7 @@ CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
 info "channel: $CHANNEL"
 
-# ── kernel: default auto (flag silently preselects); installer enforces the LTS pin on GTX 1xxx or older ──
-if [[ -z $KERNEL_PICK ]]; then
-  read -rp "kernel [stock/lts/omarchy/bore/muqss, default auto]: " KERNEL_PICK </dev/tty
-  KERNEL_PICK="${KERNEL_PICK,,}"
-fi
-# accept short keys or full package names (linux-omarchy-bore -> bore)
-case "${KERNEL_PICK,,}" in
-  ""|"auto") KERNEL_PICK="" ;;
-  stock|linux) KERNEL_PICK=stock ;;
-  lts|linux-lts) KERNEL_PICK=lts ;;
-  omarchy|linux-omarchy) KERNEL_PICK=omarchy ;;
-  bore|linux-omarchy-bore) KERNEL_PICK=bore ;;
-  muqss|linux-omarchy-muqss) KERNEL_PICK=muqss ;;
-esac
-[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { err "kernel must be stock|lts|omarchy|bore|muqss (or empty for auto)"; exit 1; }
-# custom kernels live in edge pkgs today (stable lacks them); relax if that changes
-if [[ $KERNEL_PICK == omarchy || $KERNEL_PICK == bore || $KERNEL_PICK == muqss ]] && [[ $CHANNEL != bleeding ]]; then
-  err "custom kernels ($KERNEL_PICK) need the bleeding channel — restart and pick bleeding at the channel prompt"
-  exit 1
-fi
-info "kernel: ${KERNEL_PICK:-auto}"
+info "kernel: auto (stock; LTS pinned on legacy NVIDIA by the installer)"
 
 
 
@@ -153,7 +117,7 @@ printf '  %-10s %s\n' \
   "disk"     "/dev/$DISK" \
   "fs"       "$FS" \
   "channel"  "$CHANNEL" \
-  "kernel"   "${KERNEL_PICK:-auto}" \
+  "kernel"   "auto" \
   "hostname" "$HOSTNAME" \
   "username" "$USERNAME" \
   "password" "(set, hidden)" \

@@ -51,7 +51,9 @@ C = {
 }
 
 repo = Path(__file__).resolve().parent.parent
-tpl_dir = repo / "default" / "themed"
+tpl_dir = Path(os.environ.get("HEXCIRI_PATH", "")) / "default" / "themed"
+if not tpl_dir.is_dir():  # dev tree: script.py lives in <repo>/bin
+    tpl_dir = repo / "default" / "themed"
 C["selection_background"] = C["selection"]  # kitty.conf.tpl compat
 
 # 1. generic {{key}} templates -> theme dir (strip .tpl); must be writable
