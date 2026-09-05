@@ -1,6 +1,6 @@
 #!/bin/bash
-# hexciri:summary=Gaming setup: Steam/Heroic/Lutris/RetroArch, GPU lib32 drivers, Xbox controllers
-# usage: hexciri-gaming [run <steam|heroic|lutris|retroarch|drivers|xbox>]
+# hexciri:summary=Gaming setup: Steam/Heroic/Lutris/RetroArch/Minecraft/Battle.net/GeForce NOW/Xbox Cloud, GPU lib32 drivers, Xbox controllers
+# usage: hexciri-gaming [run <steam|heroic|lutris|retroarch|minecraft|battlenet|geforcenow|xboxcloud|drivers|xbox>]
 # gaming setup for vanilla Arch: launchers, drivers, controllers.
 set -euo pipefail
 
@@ -153,25 +153,107 @@ do_xbox() {
   info "pair your controller over Bluetooth."
 }
 
+do_minecraft() {
+  info "installing Minecraft..."
+  pkg minecraft-launcher
+  info "starting Minecraft (first run downloads the launcher client)..."
+  setsid gtk-launch minecraft-launcher >/dev/null 2>&1 &
+}
+
+do_battlenet() {
+  info "installing Battle.net via umu-launcher + GE-Proton (no Steam/Lutris/Heroic)..."
+  pkg umu-launcher
+  do_drivers
+  local PREFIX="$HOME/Games/battlenet"
+  local LAUNCHER="$PREFIX/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
+  if [[ -d $PREFIX && ! -f $LAUNCHER ]]; then
+    info "found a partial Battle.net prefix (no Launcher.exe) — its installer can't resume from this state"
+    read -rp "wipe the partial prefix and start fresh? [y/N] " wipe </dev/tty
+    if [[ $wipe =~ ^[Yy]$ ]]; then
+      pkill -f "$PREFIX" 2>/dev/null || true
+      sleep 1
+      rm -rf "$PREFIX"
+    else
+      err "aborting — re-run when ready to wipe"
+      exit 1
+    fi
+  fi
+  mkdir -p "$PREFIX"
+  if [[ -f $LAUNCHER ]]; then
+    info "Battle.net is already installed at $PREFIX"
+  else
+    local CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/hexciri"
+    mkdir -p "$CACHE"
+    info "downloading installer..."
+    curl --fail --location --retry 3 -o "$CACHE/Battle.net-Setup.exe" \
+      "https://downloader.battle.net/download/getInstallerForGame?os=win&gameProgram=BATTLENET_APP&version=Live"
+    info "launching setup wizard — click through; log: /tmp/hexciri-battlenet-installer.log"
+    setsid -f sh -c "WINEPREFIX=\"$PREFIX\" PROTONPATH=GE-Proton GAMEID=umu-battlenet PROTON_VERB=run umu-run \"$CACHE/Battle.net-Setup.exe\" >/tmp/hexciri-battlenet-installer.log 2>&1" </dev/null >/dev/null 2>&1
+  fi
+  mkdir -p "$HOME/.local/share/applications"
+  cat > "$HOME/.local/share/applications/hexciri-battlenet.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Battle.net
+GenericName=Game Launcher
+Comment=Blizzard game launcher (umu-launcher + GE-Proton)
+Exec=hexciri-launch-battlenet
+Icon=battle-net
+Terminal=false
+Categories=Game;
+StartupNotify=true
+StartupWMClass=battle.net.exe
+EOF
+  update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+  info "done — open with 'hexciri-launch-battlenet' or 'hexciri-gaming run battlenet'"
+}
+
+do_geforcenow() {
+  info "installing NVIDIA GeForce NOW..."
+  pkg flatpak
+  local CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/hexciri"
+  mkdir -p "$CACHE"
+  curl --fail --location --retry 3 -o "$CACHE/GeForceNOWSetup.bin" \
+    "https://international.download.nvidia.com/GFNLinux/GeForceNOWSetup.bin"
+  chmod +x "$CACHE/GeForceNOWSetup.bin"
+  info "launching GeForce NOW installer..."
+  setsid "$CACHE/GeForceNOWSetup.bin" >/dev/null 2>&1 &
+  info "opening a browser tab so GeForce NOW doesn't hang on login..."
+  (setsid xdg-open "https://play.geforcenow.com" >/dev/null 2>&1 &)
+}
+
+do_xboxcloud() {
+  info "installing Xbox Cloud Gaming as a web app..."
+  "$SCRIPT_DIR/hexciri-webapp-install" "Xbox Cloud Gaming" "https://www.xbox.com/en-US/play" \
+    "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/xbox.png"
+  "$SCRIPT_DIR/hexciri-launch-webapp" "https://www.xbox.com/en-US/play" >/dev/null 2>&1 &
+}
+
 if [[ ${1:-} == run ]]; then
   shift
   case ${1:-} in
     steam) do_steam ;; heroic) do_heroic ;; lutris) do_lutris ;;
-    retroarch) do_retroarch ;; drivers) do_drivers ;; xbox) do_xbox ;;
-    *) err "unknown: $1 (steam|heroic|lutris|retroarch|drivers|xbox)"; exit 1 ;;
+    retroarch) do_retroarch ;; minecraft) do_minecraft ;;
+    battlenet) do_battlenet ;; geforcenow) do_geforcenow ;;
+    xboxcloud) do_xboxcloud ;; drivers) do_drivers ;; xbox) do_xbox ;;
+    *) err "unknown: $1"; exit 1 ;;
   esac
   exit 0
 fi
 
 choice=$(
-  printf '%s\n' 'Steam' 'Heroic' 'Lutris' 'RetroArch' 'GPU setup' 'Xbox controllers' |
-    "$FUZZEL" --dmenu --prompt='Gaming: ' --width=28 --lines=6
+  printf '%s\n' 'Steam' 'Heroic' 'Lutris' 'RetroArch' 'Minecraft' 'Battle.net' 'GeForce NOW' 'Xbox Cloud' 'GPU setup' 'Xbox controllers' |
+    "$FUZZEL" --dmenu --prompt='Gaming: ' --width=30 --lines=10
 ) || exit 0
 case "$choice" in
   Steam) exec "$0" run steam ;;
   Heroic) exec "$0" run heroic ;;
   Lutris) exec "$0" run lutris ;;
   RetroArch) exec "$0" run retroarch ;;
+  Minecraft) exec "$0" run minecraft ;;
+  "Battle.net") exec "$0" run battlenet ;;
+  "GeForce NOW") exec "$0" run geforcenow ;;
+  "Xbox Cloud") exec "$0" run xboxcloud ;;
   "GPU setup") exec hexciri-gpu ;;
   "Xbox controllers") exec "$0" run xbox ;;
 esac

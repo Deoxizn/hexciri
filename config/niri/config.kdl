@@ -9,6 +9,17 @@
 // After editing, run: niri msg action load-config-file  (or reload from Noctalia)
 
 // ──────────────────────────────────────────────
+// Monitor scale (where to make your laptop/external display sharper or larger)
+// Find output names + current scale with: niri msg outputs
+// Then edit (or add) a block for your output, e.g. for a 2880x1920 laptop panel:
+//   output "eDP-1" {
+//       scale 1.25        // 1.0 = native logical size; 1.25/1.5/2 sharpen; adjust to taste
+//   }
+// Save → niri live-reloads (or: niri msg action load-config-file). Scale can be
+// fractional; mode/refresh stay whatever the connector prefers.
+// ──────────────────────────────────────────────
+
+// ──────────────────────────────────────────────
 // Environment variables
 // These are passed to every app you launch. They tell Qt, Electron, Java, GTK,
 // Firefox, etc. to use Wayland instead of falling back to X11.
@@ -90,18 +101,17 @@ layout {
 
     // Focus ring — thin highlight around the active window
     focus-ring {
-        width 2
-        active-color "#b59790"              // Color of the focused window's ring
-        inactive-color "#584e51"            // Color of unfocused windows' ring
+        off                                 // No focus ring: it renders as a solid rectangle behind
+                                            // the window and shows through semitransparent terminals
+                                            // (hiding blur + covering them in a flat color)
     }
 
-    // Border — thicker outline around all windows
+    // Border — off. niri draws border & focus ring as a solid rectangle behind
+    // the window (niri FAQ), so any niri-drawn border covers semitransparent
+    // windows and hides the blur behind them. To keep terminals see-through,
+    // both border and focus-ring must stay off.
     border {
-        on                                  // Enable borders (set to "off" to disable)
-        width 1
-        active-color "#b59790"              // Focused window border color
-        inactive-color "#584e51"            // Unfocused window border color
-        urgent-color "#f87171"              // Urgent window border color (e.g. notification)
+        off
     }
 
     // Drop shadow behind windows
@@ -396,9 +406,14 @@ window-rule {
 }
 
 // Default terminal — opens at half screen width (whichever picker default is active)
+// background-effect blurs the wallpaper behind the terminal so its reduced
+// background_opacity reads as soft translucency instead of a flat color.
 window-rule {
     match app-id="kitty"
     default-column-width { proportion 0.5; }
+    background-effect {
+        blur true
+    }
 }
 
 window-rule {

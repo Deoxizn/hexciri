@@ -144,6 +144,56 @@ mode = "{"dark" if mode == "dark" else "light"}\""""
     noctalia_cfg.write_text(cfg)
     print(f"noctalia-sync: patched config.toml → custom palette 'hexciri'")
 
+# ── 3b. Qt theming (qt6ct): QPalette color scheme from theme colors ──
+qt6_dir = Path.home() / ".config" / "qt6ct"
+(qt6_dir / "colors").mkdir(parents=True, exist_ok=True)
+
+def arr(c):
+    return "#ff" + c.lstrip("#")
+
+# 21 roles per line. Live-verified against qt6ct: tokens map by the REAL
+# QPalette enum index order (0=WindowText, 9=Base, 10=Window, 12=Highlight,
+# 13=HighlightedText, 16=AlternateBase, 18=ToolTipBase, 20=PlaceholderText).
+roles = [
+    foreground,              # 0  WindowText
+    background,              # 1  Button
+    lighter_bg,              # 2  Light
+    lighter_bg,              # 3  Midlight
+    darker_bg,               # 4  Dark
+    dark_background,         # 5  Mid
+    foreground,              # 6  Text
+    bright_fg,               # 7  BrightText
+    foreground,              # 8  ButtonText
+    dark_background,         # 9  Base       (list/field background)
+    background,              # 10 Window     (dialog background)
+    darker_bg,               # 11 Shadow
+    accent,                  # 12 Highlight
+    background,              # 13 HighlightedText
+    accent,                  # 14 Link
+    muted,                   # 15 LinkVisited
+    darker_bg,               # 16 AlternateBase
+    background,              # 17 NoRole
+    dark_background,         # 18 ToolTipBase
+    foreground,              # 19 ToolTipText
+    muted,                   # 20 PlaceholderText
+]
+active = ", ".join(arr(c) for c in roles)
+disabled = ", ".join("#80" + c.lstrip("#") for c in roles)
+(qt6_dir / "colors" / "hexciri.conf").write_text(
+    "[ColorScheme]\n"
+    f"active_colors={active}\n"
+    f"disabled_colors={disabled}\n"
+    f"inactive_colors={active}\n"
+)
+(qt6_dir / "qt6ct.conf").write_text(
+    "[Appearance]\n"
+    "style=Fusion\n"
+    "custom_palette=true\n"
+    f"color_scheme_path={qt6_dir / 'colors' / 'hexciri.conf'}\n"
+    "standard_dialogs=0\n"
+)
+print(f"noctalia-sync: wrote Qt color scheme → {(qt6_dir / 'colors' / 'hexciri.conf')}")
+
 # ── 3. Patch Niri config.kdl borders ──
 if niri_cfg.exists():
     kdl = niri_cfg.read_text()

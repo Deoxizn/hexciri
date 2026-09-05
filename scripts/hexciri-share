@@ -38,20 +38,32 @@ case "$choice" in
     share_via_cli "$tmp"
     ;;
   "File")
-    if command -v zenity >/dev/null 2>&1; then
+    files=()
+    if command -v kdialog >/dev/null 2>&1; then
+      # Qt in-process dialog (Noctalia/niri): no desktop-portal dependency
+      [[ -f "$HOME/.config/qt6ct/qt6ct.conf" ]] && export QT_QPA_PLATFORMTHEME=qt6ct
+      out=$(kdialog --getopenfilename --multiple --separate-output "$HOME" 2>/dev/null) || exit 0
+      while IFS= read -r p; do [[ -n $p ]] && files+=("$p"); done <<<"$out"
+    elif command -v zenity >/dev/null 2>&1; then
       picked=$(zenity --file-selection --title "Share files" --multiple 2>/dev/null) || exit 0
       # zenity --multiple returns "|"-separated paths
-      pick=()
-      while IFS= read -r p; do pick+=("$p"); done < <(tr '|' '\n' <<<"$picked")
-      share_via_cli "${pick[@]}"
+      while IFS= read -r p; do files+=("$p"); done < <(tr '|' '\n' <<<"$picked")
+    fi
+    if ((${#files[@]})); then
+      share_via_cli "${files[@]}"
     else
       exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-share-pick"
     fi
     ;;
   "Folder")
-    if command -v zenity >/dev/null 2>&1; then
-      picked=$(zenity --file-selection --directory --title "Share folder" 2>/dev/null) || exit 0
-      share_via_cli "$picked"
+    dir=""
+    if command -v kdialog >/dev/null 2>&1; then
+      dir=$(kdialog --getexistingdirectory "$HOME/Work" 2>/dev/null) || exit 0
+    elif command -v zenity >/dev/null 2>&1; then
+      dir=$(zenity --file-selection --directory --title "Share folder" 2>/dev/null) || exit 0
+    fi
+    if [[ -n $dir ]]; then
+      share_via_cli "$dir"
     else
       exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-share-pick" --folder
     fi

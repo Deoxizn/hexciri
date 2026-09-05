@@ -1,0 +1,4 @@
+#!/bin/bash
+# hexciri:summary=fastfetch (logo placement left/right/top — see logo-position; no true centering in fastfetch 2.68)
+set -euo pipefail
+exec /usr/bin/fastfetch "$@"

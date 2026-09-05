@@ -3,8 +3,8 @@
   "logo": {
     "type": "auto",
     "source": "$HOME/.config/hexciri/branding/hexciri-nt.png",
-    "width": 92,
-    "height": 38,
+    "width": 66,
+    "height": 36,
     "padding": { "top": 4 },
   },
   "display": {
@@ -41,7 +41,7 @@
     },
     {
       "type": "title",
-      "format": "\u001b[1m\u001b[38;2;153;206;239m{user-name} > \u001b[38;2;153;206;239m{host-name}",
+      "format": "\u001b[1m\u001b[38;2;153;206;239m{user-name} @ \u001b[38;2;153;206;239m{host-name}",
     },
     {
       "type": "custom",

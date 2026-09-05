@@ -1,0 +1,14 @@
+#!/bin/bash
+# hexciri:summary=Launch installed Battle.net via umu-launcher + GE-Proton
+# usage: hexciri-launch-battlenet
+set -euo pipefail
+
+PREFIX="$HOME/Games/battlenet"
+LAUNCHER="$PREFIX/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
+
+[[ -f $LAUNCHER ]] || {
+  echo "hexciri-launch-battlenet: Battle.net not installed — run 'hexciri-gaming run battlenet' first" >&2
+  exit 1
+}
+
+exec env WINEPREFIX="$PREFIX" PROTONPATH=GE-Proton GAMEID=umu-battlenet PROTON_VERB=run umu-run "$LAUNCHER"

@@ -10,11 +10,13 @@
 # Widget IDs are v5 names (spacer, active_window, ...). Per-widget settings
 # live in [widget.<name>] tables below.
 #
-# Deliberate composition: this mimics a typical daily bar but WITHOUT the fun
-# extras (bongo-cat) and system-monitor widgets (cpu/mem/disk/temperature) —
-# clutter that duplicates what system monitors already show. Volume is kept
-# (everyone needs it) and brightness is kept (laptops). Feel free to add
-# sysmon back under [widget.sysmon] if you want resource use in the bar.
+# Composition: mirrors the daily bar (launcher, wallpaper, workspaces,
+# active_window, clock, notifications, clipboard, tray, network, bluetooth,
+# volume, brightness, battery, arch-updater, control-center/settings owl).
+# Deliberately removed: bongo-cat and the sysmon stack (cpu/ram/temp/disk/net)
+# — clutter that duplicates system monitors. Volume stays (everyone needs it),
+# brightness stays (laptops). Edit freely; install.sh never overwrites a file
+# you've modified (repo default lands alongside as <file>.hexciri).
 # ──────────────────────────────────────────────
 
 [bar.default]
@@ -22,9 +24,14 @@ position = "top"
 thickness = 40                        # Bar height in pixels
 background_opacity = 0.95             # 0.0 = transparent, 1.0 = opaque
 reserve_space = true                  # Reserve screen space (don't overlap windows)
-start  = ["workspaces", "spacer", "active_window"]
-center = ["clock"]
-end    = ["network", "bluetooth", "battery", "volume", "brightness", "yuuto/arch-updater:widget", "tray", "media"]
+start  = ["launcher", "wallpaper", "workspaces", "spacer", "media"]
+center = ["active_window", "spacer_2", "clock"]
+end    = ["notifications", "clipboard", "tray", "network", "bluetooth", "volume", "brightness", "battery", "yuuto/arch-updater:widget", "control-center"]
+
+[widget.workspaces]
+hide_when_empty = true                 # Only show workspaces that have windows/apps
+                                       # (workspaces are global per-monitor, so this keeps
+                                       # every output's bar tidy)
 
 [widget.clock]
 format = "{:%I:%M %p}"                 # 12-hour time, e.g. 02:30 PM (see date-format-tokens in Noctalia docs)
@@ -33,6 +40,9 @@ tooltip_format = "{:%A, %d %B %Y}"    # Full date on hover
 [widget.spacer]
 type = "spacer"
 length = 8                            # Gap in pixels between workspaces and window title
+
+[widget.spacer_2]
+type = "spacer"
 
 [widget.active_window]
 show_empty_label = true               # Show placeholder when no window is focused
@@ -45,6 +55,7 @@ display = "icon_and_text"             # App icon + title (alternatives: icon, te
 [shell]
 clipboard_enabled = true
 clipboard_history_max_entries = 100
+time_format = "{:%I:%M %p}"           # 12-hour time (Control Center / dashboard headers)
 
 # ──────────────────────────────────────────────
 # Notifications
@@ -64,18 +75,18 @@ enabled = true
 timeout = 300.0                       # Seconds idle before locking
 
 # ──────────────────────────────────────────────
-# Wallpaper (rotates every 5 minutes)
+# Wallpaper (picker + rotation use the active theme's backgrounds)
 # ──────────────────────────────────────────────
 
 [wallpaper]
 enabled = true
-directory = "~/Pictures/Wallpapers"
+directory = "~/.local/state/hexciri/current/theme/backgrounds"
 fill_mode = "crop"                    # Fill screen, cropping overflow
 transition = ["fade"]                 # Transition effect between wallpapers
 
 [wallpaper.automation]
-enabled = true
-interval_seconds = 300                # Rotate on this interval
+enabled = false                   # Rotation off — wallpaper changes only via the bar picker
+interval_seconds = 3600           # Unused while automation is disabled
 order = "random"
 
 # ──────────────────────────────────────────────

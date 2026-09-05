@@ -97,7 +97,8 @@ if $SYSTEM_ONLY; then
     networkmanager openssh sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd
     gnome-disk-utility imv mupdf libreoffice-fresh
     cups hplip unzip
-    tesseract zbar qrencode fwupd zenity localsend
+    bluez bluez-utils
+    tesseract zbar qrencode fwupd zenity kdialog qt6ct localsend
     pipewire pipewire-pulse wireplumber
     zram-generator pacman-contrib)
   MISSING=()
@@ -195,6 +196,8 @@ HOOK
   #    user manage queues/admin and access the HP scanner over sane ──
   run systemctl enable --now cups.socket 2>/dev/null || true
   run usermod -aG lp,scanner "$TARGET_USER" 2>/dev/null || true
+  # ── bluetooth: bluez stack + rfkill; bar widget + pairing need bluetoothd ──
+  run systemctl enable --now bluetooth.service 2>/dev/null || true
   # remove any autologin config: no encryption gate means no free pass
   run rm -f /etc/sddm.conf.d/10-hexciri-autologin.conf 2>/dev/null || true
 
@@ -228,12 +231,35 @@ HOOK
       run mkdir -p /etc/plymouth
       printf '[Daemon]\nTheme=hexciri\n' | run tee /etc/plymouth/plymouthd.conf >/dev/null
     fi
+    # mkinitcpio: encrypt after block on LUKS roots (classic hook; plymouth +
+    # encrypt is the working pair — Arch has no plymouth-encrypt hook)
+    mkinitcpio_backed_up=0
+    if [[ ${HEXCIRI_LUKS:-no} == yes || $(findmnt -no SOURCE / 2>/dev/null) == /dev/mapper/* ]]; then
+      grep -q ' encrypt' /etc/mkinitcpio.conf || {
+        run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
+        mkinitcpio_backed_up=1
+        run sed -i 's/\(HOOKS=([^)]*block\)/\1 encrypt/' /etc/mkinitcpio.conf
+      }
+    fi
     # mkinitcpio: plymouth after udev for splash
     if ! grep -q ' plymouth' /etc/mkinitcpio.conf 2>/dev/null; then
-      run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
+      (( mkinitcpio_backed_up )) || run cp -f /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$(date +%s)"
       run sed -i 's/\(HOOKS=([^)]*udev\)/\1 plymouth/' /etc/mkinitcpio.conf
       grep -q ' plymouth' /etc/mkinitcpio.conf || run sed -i 's/\(HOOKS=(base\)/\1 plymouth/' /etc/mkinitcpio.conf
       run mkinitcpio -P
+    fi
+    # LUKS insurance: fail loudly (pre-reboot) if cryptsetup is missing from
+    # the generated initramfs — the hours-long failure mode was discovering
+    # a phantom/absent hook only at the first boot
+    if [[ ${HEXCIRI_LUKS:-no} == yes || $(findmnt -no SOURCE / 2>/dev/null) == /dev/mapper/* ]]; then
+      for img in /boot/initramfs-*.img; do
+        [[ -f $img ]] || continue
+        if lsinitcpio -l "$img" 2>/dev/null | grep -q cryptsetup; then
+          ok "initramfs ${img##*/}: encrypt/cryptsetup present"
+        else
+          warn "cryptsetup missing from ${img##*/} — LUKS boot will fail (re-run: mkinitcpio -P)"
+        fi
+      done
     fi
     # splash flag on hexciri-owned boot entries
     for e in /boot/loader/entries/hexciri-*.conf; do
@@ -285,12 +311,30 @@ fi
 # ── USER phase: runs as the user, makes zero sudo calls ──
 (( EUID != 0 )) || { err "--user-only must not run as root"; exit 1; }
 bak="$HOME/.config/hexciri-backup/$(date +%Y%m%d%H%M%S)"
-deploy() { # <repo-rel> <dest>
-  if [[ -f $2 ]] && ! cmp -s "$REPO_DIR/$1" "$2"; then
-    mkdir -p "$bak/$(dirname "$2")"; cp -f "$2" "$bak/$2"
+deploy() { # <repo-rel> <dest> — never clobber local edits (sha-tracked)
+  local src="$REPO_DIR/$1" dest="$2" rel="$1" sf dyn_now dyn_prev=""
+  mkdir -p "$(dirname "$dest")"
+  local state="$HOME/.local/state/hexciri/configs"
+  mkdir -p "$state"
+  sf="$state/$(printf '%s' "$rel" | tr '/' '_').sha"
+  [[ -f $sf ]] && read -r dyn_prev < "$sf" || true
+  dyn_now="$(sha256sum "$dest" 2>/dev/null | cut -d' ' -f1 || true)"
+  if [[ -f $dest ]] && ! cmp -s "$src" "$dest"; then
+    mkdir -p "$bak/$(dirname "$dest")"; cp -f "$dest" "$bak/$dest"
+    if [[ -n $dyn_prev && -n $dyn_now && $dyn_now == "$dyn_prev" ]]; then
+      # untouched since our last deploy → safe to update in place
+      run cp -f "$src" "$dest"
+    else
+      # user-modified (or modified by a tool) → keep theirs, ship repo default alongside;
+      # hash NOT recorded, so every future run keeps their version too
+      run cp -f "$src" "$dest.hexciri"
+      info "kept your $dest; repo default written to $dest.hexciri (backup in $bak)"
+      return 0
+    fi
+  else
+    run cp -f "$src" "$dest"
   fi
-  mkdir -p "$(dirname "$2")"
-  run cp -f "$REPO_DIR/$1" "$2"
+  sha256sum "$dest" | cut -d' ' -f1 > "$sf"
 }
 
 # user branding art (system branding lives in /usr/share)
@@ -299,6 +343,74 @@ run cp -f "$REPO_DIR/branding/"*.png ~/.config/hexciri/branding/
 
 # ── configs (backup-first) ──
 deploy config/niri/config.kdl "$HOME/.config/niri/config.kdl"
+
+# ── monitor auto-detect: fill in `output` blocks if none exist yet ──
+# Reads connected outputs from the live compositor (preferred mode + refresh
+# rate), or sysfs/EDID as a fallback pre-session, and derives a sensible scale
+# from the physical size. Never touches outputs that are already configured,
+# and leaves user edits alone.
+detect_monitors() {
+  local sock="" nm mode ph wm hm wpx hpx scale vrr section="" line
+  command -v niri >/dev/null 2>&1 && sock="$(ls "/run/user/$(id -u)"/niri.*.sock 2>/dev/null | head -1)"
+  if [[ -n $sock ]]; then
+    while read -r line; do
+      case "$line" in
+        Output*) nm="$(sed -n 's/.*(\([^()]*\)).*/\1/p' <<<"$line")" ;;
+        *"Current mode:"*)
+          mode="$(sed -n 's/.*Current mode: \([0-9]*x[0-9]*\) @ \([0-9.]*\).*/\1@\2/p' <<<"$line")" ;;
+        *"Variable refresh rate: supported"*) vrr=1 ;;
+        *"Variable refresh rate: not supported"*) vrr=0 ;;
+        *"Physical size:"*)
+          ph="$(sed -n 's/.*Physical size: \([0-9]*\)x\([0-9]*\).*/\1 \2/p' <<<"$line")"
+          wm="${ph% *}"; hm="${ph#* }"
+          wpx="${mode%%x*}"; hpx="${mode%@*}"; hpx="${hpx#*x}"
+          scale=1
+          if (( wpx > 0 && hpx > 0 && wm > 0 && hm > 0 )); then
+            scale="$(awk -v W="$wpx" -v H="$hpx" -v WM="$wm" -v HM="$hm" \
+              'BEGIN{ ppi=sqrt(W*W+H*H)*25.4/sqrt(WM*WM+HM*HM); s=ppi/160; if(s<1)s=1; if(s>2)s=2;
+                      printf "%.2f", int(s*4+0.5)/4 }')"
+          fi
+          if [[ -n $nm && -n $mode ]] && ! grep -q "^output \"$nm\"" "$niri_cfg"; then
+            section+="output \"$nm\" {\n    mode \"$mode\"\n    scale $scale"
+            (( vrr == 1 )) && section+="\n    variable-refresh-rate"
+            section+="\n}\n\n"
+          fi
+          vrr=0
+          ;;
+      esac
+    done < <(NIRI_SOCKET="$sock" niri msg outputs 2>/dev/null)
+  else
+    # fallback: sysfs/EDID (no refresh rates before the compositor is up)
+    for line in /sys/class/drm/card*-*; do
+      [[ -f $line/status ]] || continue
+      [[ "$(cat "$line/status" 2>/dev/null)" == connected ]] || continue
+      nm="${line##*/}"; nm="${nm#card*-}"
+      grep -q "^output \"$nm\"" "$niri_cfg" && continue
+      mode="$(sed -n '1s/^ *//;1s/[[:space:]].*//p' "$line/modes" 2>/dev/null)"
+      [[ -n $mode ]] || continue
+      wpx="${mode%@*}"; hpx="${wpx#*x}"; wpx="${wpx%x*}"
+      read -r wm hm < <(od -An -tu1 -j21 -N2 "$line/edid" 2>/dev/null)
+      (( wm *= 10; hm *= 10 )) 2>/dev/null || { wm=0; hm=0; }
+      scale=1
+      if (( wpx > 0 && hpx > 0 && wm > 0 && hm > 0 )); then
+        scale="$(awk -v W="$wpx" -v H="$hpx" -v WM="$wm" -v HM="$hm" \
+          'BEGIN{ ppi=sqrt(W*W+H*H)*25.4/sqrt(WM*WM+HM*HM); s=ppi/160; if(s<1)s=1; if(s>2)s=2;
+                  printf "%.2f", int(s*4+0.5)/4 }')"
+      fi
+      section+="output \"$nm\" {\n    mode \"$mode\"\n    scale $scale\n}\n\n"
+    done
+  fi
+  printf "%b" "$section"
+}
+niri_cfg="$HOME/.config/niri/config.kdl"
+if [[ -f $niri_cfg ]] && ! grep -q '^output ' "$niri_cfg"; then
+  gen="$(detect_monitors)"
+  if [[ -n $gen ]]; then
+    printf '\n%s' "$gen" >> "$niri_cfg"
+    info "monitor auto-detect: appended output block(s) to $niri_cfg"
+  fi
+fi
+
 deploy config/noctalia/config.toml "$HOME/.config/noctalia/config.toml"
 deploy config/fastfetch/config.jsonc "$HOME/.config/fastfetch/config.jsonc"
 deploy config/starship/starship.toml "$HOME/.config/starship.toml"

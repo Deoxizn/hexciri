@@ -8,12 +8,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 choice=$(
   printf '%s\n' \
     'Install >' \
-    'Remove >' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Packages: ' --width=26 --lines=2
+    'Remove >' \
+    'Gaming >' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Packages: ' --width=26 --lines=3
 ) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
 choice=${choice%' >'}
 
 case "$choice" in
   Install) exec "$SCRIPT_DIR/hexciri-install" ;;
   Remove)  exec "$SCRIPT_DIR/hexciri-remove" ;;
+  Gaming)  exec "$SCRIPT_DIR/hexciri-gaming" ;;
 esac
