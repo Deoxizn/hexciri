@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Hexciri self-update: git pull + deploy only changed files (no reinstall, no re-seeding, kernels/services/configs untouched). Up to date → says so and stops.
+# hexciri:summary=Hexciri repo sync: pull newer commits + quietly deploy changed files. Nothing new → says up to date and stops.
 set -euo pipefail
 
 REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
@@ -10,32 +10,32 @@ if [[ ! -d $REPO ]]; then
 fi
 
 run_as_root() { sudo -n "$@" 2>/dev/null || sudo "$@"; }
-head_short=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")
 
-echo "== 1/2 syncing $REPO =="
-if [[ -d $REPO/.git ]]; then
-  git -C "$REPO" fetch --tags origin --quiet 2>/dev/null
-  behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
-  if (( behind == 0 )); then
-    echo "hexciri is up to date (HEAD $head_short) — nothing to deploy"
-    exit 0
-  fi
-  echo "pulling $behind new commit(s)..."
-  git -C "$REPO" pull --ff-only --quiet
-else
-  echo "not a git checkout — skipping pull"
+echo "syncing $REPO ..."
+git -C "$REPO" fetch --tags origin --quiet 2>/dev/null || true
+behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
+head_before=$(git -C "$REPO" rev-parse --short HEAD)
+
+if (( behind == 0 )); then
+  echo "up to date (HEAD $head_before) — nothing to deploy"
+  exit 0
 fi
 
-echo
-echo "== 2/2 deploying only what changed (user + system files) =="
-current="$(hexciri-channel-current 2>/dev/null || echo stable)"
-echo "channel in use: $current"
-(
-  cd "$REPO"
-  ./install.sh --user-only --update -y --channel "$current" || { echo "user phase failed" >&2; exit 1; }
-  run_as_root env HEXCIRI_USER="$(id -un)" ./install.sh --system-only --update -y --channel "$current" || { echo "system phase failed" >&2; exit 1; }
-)
+echo "pulling $behind new commit(s)..."
+git -C "$REPO" pull --ff-only --quiet
 
-head_short=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")
-echo
-echo "hexciri update complete (HEAD $head_short)"
+current="$(hexciri-channel-current 2>/dev/null || echo stable)"
+user_out=""; system_out=""
+if ! user_out=$("$REPO/install.sh" --channel "$current" --user-only --update -y 2>&1); then
+  echo "user phase failed — output:" >&2
+  echo "$user_out" >&2
+  exit 1
+fi
+if ! system_out=$(run_as_root env HEXCIRI_USER="$(id -un)" "$REPO/install.sh" --channel "$current" --system-only --update -y 2>&1); then
+  echo "system phase failed — output:" >&2
+  echo "$system_out" >&2
+  exit 1
+fi
+
+head_after=$(git -C "$REPO" rev-parse --short HEAD)
+echo "repo updated to $head_after ($behind commit(s)); scripts/hooks/configs deployed"

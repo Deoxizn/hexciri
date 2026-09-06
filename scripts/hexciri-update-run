@@ -66,5 +66,5 @@ if [[ -n $expected && $expected != "$running" ]]; then
   echo "kernel: $running -> $expected (a different kernel is now the boot default)"
   confirm "Reboot now?" && systemctl reboot
 else
-  echo "update complete (kernel $running current)."
+  echo "update complete."
 fi
