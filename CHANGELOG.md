@@ -2,7 +2,7 @@
 
 ## 2026-09-06
 
-- **Discord theme un-branded**: the ClearVision-based Hexciri theme stripped of ClearVision's own on-screen branding — the guild-header logo text and `7.0.1` tag (`leading_*::before/after`) and the settings-About label (`info_*::after`) — so only the palette/wallpaper from `colors.toml` shows. Also fixed the hook reinstalling a stale cached file: the dynamic theme now regenerates on every run unless a theme ships its own `vencord.theme.css`.
+- **Discord theme regenerates correctly**: the dynamic theme no longer reinstalls a stale cached file — it regenerates on every hook run unless a theme ships its own `vencord.theme.css`.
 - **Nautilus follows the theme**: `theme-set.d/10-gtk.sh` stamps omarchy-nautilus-theme overrides (flat corners, themed headerbar/sidebar/pathbar/scrollbars/inputs, `@headerbar_border_color`) plus the system font into `gtk-4.0/gtk.css` and restarts `nautilus` on theme switch; a new `font-set.d/10-nautilus.sh` re-stamps the font when `hexciri-font` changes it (`install.sh` deploys `font-set.d`).
 - **Discord picks up two themes**: the hook set now ships a ClearVision-based "Hexciri" theme (`vencord.theme.css`, colors + wallpaper live from the active palette/state) that coexists with the System24 one (`11-discord-system24` now writes `vencord-system24.theme.css`) — toggling either in Vesktop no longer clobbers the other.
 - **Icons that exist on Arch**: real 512px `imv`/`imv-dir` icons are bundled under `branding/`, deployed to hicolor (`gtk-update-icon-cache`), and the media entries point at them; HP Scan's stock entry is shadowed with an icon Arch actually ships. `image/*` is pinned to imv so pictures open in the viewer, not a browser.
