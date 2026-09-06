@@ -44,6 +44,23 @@ create_dynamic_theme() {
         bg_image="url(\"file://$(readlink -f "$background_link" 2>/dev/null || printf '%s' "$background_link")\")"
     fi
 
+    color_luma() {
+        local hex_input="$1"
+        local r=$((16#${hex_input:0:2}))
+        local g=$((16#${hex_input:2:2}))
+        local b=$((16#${hex_input:4:2}))
+        echo $(((299 * r + 587 * g + 114 * b) / 1000))
+    }
+
+    # The selected channel sits on the main-color pill. ClearVision's white text
+    # is unreadable on pastel accents, so flip to dark text when the accent is
+    # light and keep white on dark accents.
+    if (( $(color_luma "$bright_blue") >= 150 )); then
+        channel_selected="$normal_black"
+    else
+        channel_selected="$bright_white"
+    fi
+
     cat > "$output_file" << EOF
 /**
  * @name Hexciri
@@ -93,12 +110,20 @@ create_dynamic_theme() {
   --channel-normal: #${primary_foreground};
   --channel-muted: #${bright_black};
   --channel-hover: #${bright_white};
-  --channel-selected: #${bright_white};
+  --channel-selected: #${channel_selected};
   --channel-selected-bg: var(--main-color);
   --channel-unread: var(--main-color);
   --channel-unread-hover: var(--hover-color);
   /* ACCESSIBILITY */
   --focus-color: var(--main-color);
+}
+
+/* ClearVision colors the invite/action icons with --hsl-main-color, so on a
+   selected channel the light icon stays light on the main-color pill. Keep it
+   readable by tying it to the (already contrast-flipped) selected text. */
+:is([class*="modeSelected_"]) [class*="addButtonIcon_"],
+:is([class*="modeSelected_"]) [class*="actionIcon_"] {
+  color: var(--channel-selected) !important;
 }
 
 /* Remove ClearVision branding (guild list header + settings About) */

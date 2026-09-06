@@ -1,6 +1,6 @@
 #!/bin/bash
 # hexciri:menu=system-update
-# hexciri:summary=Maintenance: clock sync, system cleaner, user password.
+# hexciri:summary=Maintenance: clock sync, cleaner, user password, boot/tmux config reset.
 # Notably no snapshot/tmux rows (hexciri is deliberately minimal).
 set -euo pipefail
 
@@ -14,8 +14,10 @@ choice=$(
   printf '%s\n' \
     'Sync system clock' \
     'System Cleaner' \
-    'User password' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Maintenance: ' --width=30 --lines=3
+    'User password' \
+    'Reset boot config' \
+    'Reset tmux config' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Maintenance: ' --width=32 --lines=5
 ) || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
 fi
 
@@ -23,4 +25,6 @@ case "$choice" in
   "Sync system clock") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" bash -c 'sudo timedatectl set-ntp false; sudo timedatectl set-ntp true; timedatectl status' ;;
   "System Cleaner")    exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-cleaner" ;;
   "User password")     exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" passwd ;;
+  "Reset boot config") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-refresh-boot" ;;
+  "Reset tmux config") exec "$SCRIPT_DIR/hexciri-refresh-tmux" ;;
 esac

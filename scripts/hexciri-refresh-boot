@@ -1,0 +1,19 @@
+#!/bin/bash
+# hexciri:summary=Reset boot config: re-apply systemd-boot entries, PAM and menu curation (hexciri-sync)
+# hexciri no longer ships plymouth; the equivalent "reset the boot-time config to
+# shipped defaults" is the same post-package-transaction sync that keeps
+# systemd-boot entries, PAM (keyring + fingerprint) and app-menu hiding curated.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN_DIR="$(dirname "$SCRIPT_DIR")/bin"
+
+if [[ -x "$BIN_DIR/hexciri-sync" ]]; then
+  sync_cmd="$BIN_DIR/hexciri-sync"
+else
+  sync_cmd="hexciri-sync"
+fi
+
+echo "Re-asserting hexciri boot state (systemd-boot entries, PAM, menu curation)..."
+sudo "$sync_cmd"
+echo "Boot config reset — your chosen default boot entry is preserved."

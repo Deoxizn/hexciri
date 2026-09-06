@@ -1,0 +1,48 @@
+#!/bin/bash
+# hexciri:summary=Reset defaults: reinstall hexciri packages + configs, then reset owned configs to shipped defaults
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cat "$HOME/.local/state/hexciri/repo-path" 2>/dev/null || true)"
+[[ -n $REPO && -x "$REPO/install.sh" ]] || REPO="$(dirname "$SCRIPT_DIR")"
+
+if [[ $# -gt 0 ]]; then
+  choice="$*"
+else
+  choice="$("$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Reset defaults: ' --width=50 --lines=2 \
+    <<<$'Reinstall hexciri (packages + configs)\nCancel')" || exit 0
+fi
+[[ $choice == "Reinstall hexciri (packages + configs)" ]] || exit 0
+
+echo "This will reinstall all default hexciri packages and reset hexciri's configs"
+echo "to shipped defaults. Changes to hexciri-owned configs (niri, noctalia,"
+echo "fastfetch, starship, fish, kitty) will be overwritten; backups are kept in"
+echo "~/.config/hexciri-backup. Your theme and app defaults stay as they are."
+confirmation="$("$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Reinstall? ' --width=22 --lines=2 \
+  <<<$'Confirm\nCancel')" || exit 0
+[[ $confirmation == Confirm ]] || exit 0
+
+current="$(hexciri-channel-current 2>/dev/null || echo stable)"
+"$REPO/install.sh" --channel "$current" -y
+
+src="$REPO/config"
+if [[ -d $src ]]; then
+  bak="$HOME/.config/hexciri-backup/$(date +%Y%m%d%H%M%S)"
+  while IFS= read -r f; do
+    rel="${f#"$src"/}"
+    dest="$HOME/.config/$rel"
+    mkdir -p "$(dirname "$dest")"
+    if [[ -f $dest ]]; then
+      mkdir -p "$bak/$(dirname "$dest")"
+      cp -a "$dest" "$bak/$dest"
+    fi
+    cp -a "$f" "$dest"
+  done < <(find "$src" -type f)
+  rm -f "$HOME/.local/state/hexciri/configs/"*.sha 2>/dev/null || true
+  echo "hexciri configs reset to shipped defaults (backup: $bak)"
+fi
+
+echo "Reinstall complete."
+reboot_choice="$("$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Reboot now? ' --width=22 --lines=2 \
+  <<<$'Reboot now\nNot now')" || true
+[[ $reboot_choice == "Reboot now" ]] && systemctl reboot
