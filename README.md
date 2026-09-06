@@ -21,8 +21,8 @@ Arch × Niri × Noctalia
   blur behind it, so your wallpaper shows through.
 - **Gaming, ready** — Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net,
   GeForce NOW, Xbox Cloud, controllers, GPU setup.
-- **A minimal Arch experience** — your system starts clean: Arch, Niri, and a
-  themed shell — nothing you didn't ask for; add the rest on demand.
+- **A minimal Arch experience** — your system starts clean: Arch, Niri, and
+  the Noctalia shell — nothing you didn't ask for; add the rest on demand.
 - **Everything's just files** — the theming engine is literally two text lists
   you can read and edit: `theme-sources/extra.list` (extra themes) and
   `wallpaper-sources/extra.list` (extra wallpaper folders). Easy to tweak, back

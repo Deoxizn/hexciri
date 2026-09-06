@@ -83,7 +83,7 @@ a { color: var(--rose); }
     <div class="card"><h3>One-click theme engine</h3><p>A single click (or <code>hexciri-theme-set &lt;name&gt;</code>) recolors the whole desktop. 22 themes ship included; extras are one line each in a list, no technical tinkering.</p></div>
     <div class="card"><h3>Transparent terminals</h3><p>kitty at reduced background opacity with niri window-effect blur behind it — see your wallpaper through the terminal.</p></div>
     <div class="card"><h3>Gaming, ready</h3><p>Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net, GeForce NOW, Xbox Cloud — GPU setup and controllers handled.</p></div>
-    <div class="card"><h3>A minimal Arch experience</h3><p>Your system starts clean: Arch, Niri, and a themed shell — nothing you didn't ask for; add the rest on demand.</p></div>
+    <div class="card"><h3>A minimal Arch experience</h3><p>Your system starts clean: Arch, Niri, and the Noctalia shell — nothing you didn't ask for; add the rest on demand.</p></div>
     <div class="card"><h3>Everything's just files</h3><p>The theming engine is literally two text lists you can read and edit: <code>theme-sources/extra.list</code> (extra themes) and <code>wallpaper-sources/extra.list</code> (extra wallpaper folders). Updates never overwrite your edits — an edited config stays yours, the new default saved alongside.</p></div>
   </div>
 </section>
@@ -95,6 +95,27 @@ a { color: var(--rose); }
     <li>Reboot → straight into Niri. Press <code>Mod+K</code> for the keybinding list.</li>
   </ol>
   <p style="margin-top:14px;">No prompts to answer — kernel, GPU, and channel are all decided for you. The disk is left unencrypted; login is the SDDM password screen.</p>
+</section>
+<section>
+  <h2>Defaults</h2>
+  <table>
+    <tr><th>slot</th><th>default</th><th>change it</th></tr>
+    <tr><td>terminal</td><td><code>kitty</code></td><td><code>hexciri-defaults</code> → Terminal</td></tr>
+    <tr><td>shell</td><td><code>bash</code> (login) · <code>fish</code> (kitty)</td><td><code>hexciri-defaults</code> → Shell</td></tr>
+    <tr><td>browser</td><td><code>brave-origin</code></td><td><code>hexciri-defaults</code> → Browser</td></tr>
+    <tr><td>files</td><td><code>strata</code></td><td><code>hexciri-defaults</code> → Files</td></tr>
+    <tr><td>editor</td><td><code>zed</code></td><td><code>hexciri-defaults</code> → Editor</td></tr>
+    <tr><td>agent</td><td><code>opencode</code> (<code>Mod+`</code>)</td><td><code>hexciri-defaults</code> → Agent</td></tr>
+    <tr><td>kernel</td><td>auto: <code>linux</code> (stock), <code>linux-lts</code> pinned on legacy NVIDIA</td><td><code>hexciri-kernel</code> (custom post-install)</td></tr>
+    <tr><td>gpu</td><td>autodetect (mesa / nvidia-open / 580xx+LTS pin)</td><td><code>hexciri-gpu</code></td></tr>
+    <tr><td>monitors</td><td>preconfigured (laptop panel <code>eDP-1</code>, scale 2; desktops name their output)</td><td><code>~/.config/niri/config.kdl</code></td></tr>
+    <tr><td>bluetooth</td><td>on (bluez + bar widget)</td><td>—</td></tr>
+    <tr><td>theme</td><td><code>sakurazuki</code></td><td><code>hexciri-theme-set</code></td></tr>
+    <tr><td>channel</td><td><code>stable</code></td><td><code>hexciri-channel-set</code></td></tr>
+    <tr><td>boot</td><td>systemd-boot, SDDM password/fingerprint greeter</td><td>—</td></tr>
+    <tr><td>prompt/fetch</td><td>starship + fastfetch w/ emblem</td><td><code>~/.config/starship.toml</code>, <code>~/.config/fastfetch/config.jsonc</code></td></tr>
+  </table>
+  <p style="margin-top:10px;"><code>stable</code> is month-held pkgs; <code>bleeding</code> is normal Arch rolling release.</p>
 </section>
 <section>
   <h2>Themes</h2>
@@ -111,21 +132,6 @@ OldJobobo/dracula</code></pre>
   <pre class="curl" style="margin:10px 0;"><code>~/Pictures/Wallpapers
 /mnt/Photos/wallpapers</code></pre>
   <p style="margin-top:10px;">Not a list person? The plain <code>~/.config/hexciri/wallpapers</code> folder works too — drop files in and they're picked up, no list entry needed, and they stay across theme changes.</p>
-</section>
-<section>
-  <h2>Defaults</h2>
-  <table>
-    <tr><th>slot</th><th>default</th></tr>
-    <tr><td>terminal / shell</td><td><code>kitty</code> / <code>fish</code> in-kitty, <code>bash</code> login shell + starship</td></tr>
-    <tr><td>browser / files / editor</td><td><code>brave-origin</code> / <code>strata</code> / <code>zed</code></td></tr>
-    <tr><td>agent</td><td><code>opencode</code> (<code>Mod+`</code>)</td></tr>
-    <tr><td>kernel</td><td>auto: <code>linux</code> (stock), <code>linux-lts</code> pinned on legacy NVIDIA</td></tr>
-    <tr><td>gpu</td><td>autodetect (mesa / nvidia-open / 580xx+LTS pin)</td></tr>
-    <tr><td>monitors</td><td>preconfigured (laptop panel <code>eDP-1</code>, scale 2; desktops name their output)</td></tr>
-    <tr><td>bluetooth</td><td>on (bluez + bar widget)</td></tr>
-    <tr><td>theme / channel</td><td><code>sakurazuki</code> / <code>stable</code></td></tr>
-  </table>
-  <p style="margin-top:10px;"><code>stable</code> is month-held pkgs; <code>bleeding</code> is normal Arch rolling release.</p>
 </section>
 </div>
 <footer>
