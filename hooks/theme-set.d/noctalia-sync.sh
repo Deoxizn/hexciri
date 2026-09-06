@@ -129,20 +129,29 @@ palette_path.write_text(json.dumps(palette, indent=2) + "\n")
 print(f"noctalia-sync: wrote palette → {palette_path}")
 
 # ── 2. Patch Noctalia config.toml to use custom palette ──
+# Palette source is the user's independent choice (Themes menu → Palette
+# source): a wallpaper/stock palette is preserved — we only force "custom"
+# when the section is unset or already on the hexciri custom palette.
 if noctalia_cfg.exists():
     cfg = noctalia_cfg.read_text()
     mode = data.get("mode", "dark")
-    # Replace [theme] section
-    theme_block = f"""[theme]
+    cur_src = ""
+    if '[theme]' in cfg:
+        m = re.search(r'^source\s*=\s*"([^"]+)"', cfg.split('[theme]', 1)[1], flags=re.MULTILINE)
+        cur_src = m.group(1) if m else ""
+    if cur_src in ("", "custom"):
+        theme_block = f"""[theme]
 source = "custom"
 custom_palette = "hexciri"
 mode = "{"dark" if mode == "dark" else "light"}\""""
-    if '[theme]' in cfg:
-        cfg = re.sub(r'\[theme\].*?(?=\n\[|\Z)', theme_block, cfg, flags=re.DOTALL)
+        if '[theme]' in cfg:
+            cfg = re.sub(r'\[theme\].*?(?=\n\[|\Z)', theme_block, cfg, flags=re.DOTALL)
+        else:
+            cfg = theme_block + "\n\n" + cfg
+        noctalia_cfg.write_text(cfg)
+        print(f"noctalia-sync: patched config.toml → custom palette 'hexciri'")
     else:
-        cfg = theme_block + "\n\n" + cfg
-    noctalia_cfg.write_text(cfg)
-    print(f"noctalia-sync: patched config.toml → custom palette 'hexciri'")
+        print(f"noctalia-sync: preserving palette source '{cur_src}' (user choice)")
 
 # ── 3b. Qt theming (qt6ct): QPalette color scheme from theme colors ──
 qt6_dir = Path.home() / ".config" / "qt6ct"

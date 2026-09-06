@@ -26,14 +26,11 @@ if [[ ! -d "$state/theme" || ! -f "$state/theme/colors.toml" ]]; then
   need_apply=true
 fi
 
-if grep -q 'source = "custom"' "$noctalia_cfg" 2>/dev/null; then
-  :
-else
-  need_apply=true
-fi
-
+# Palette source (Theme vs Wallpaper/stock) is the user's independent choice
+# via the Themes menu — never force it back to custom at login. If the theme
+# tree is live, we're done.
 if $need_apply; then
-  echo "hexciri-theme-ensure: $(<"$name_file") theme not live — re-applying $name"
+  echo "hexciri-theme-ensure: $name theme not live — re-applying $name"
   hexciri-theme-set "$name"
 else
   echo "hexciri-theme-ensure: theme '$name' is live, nothing to do"

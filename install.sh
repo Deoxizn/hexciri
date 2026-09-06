@@ -412,12 +412,21 @@ for kv in "terminal=kitty" "shell=fish" "browser=brave-origin" "files=strata" "e
   k="${kv%%=*}"; v="${kv#*=}"
   [[ -f $HOME/.local/state/hexciri/defaults/$k ]] || run bash -c "printf '%s' '$v' > '$HOME/.local/state/hexciri/defaults/$k'"
 done
-for d in brave-origin.desktop com.brave.Origin.desktop brave-origin-beta.desktop; do
-  if [[ -f /usr/share/applications/$d || -f ~/.local/share/applications/$d ]]; then
-    run xdg-settings set default-web-browser "$d" 2>/dev/null || true; break
-  fi
-done
-run xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
+# UI defaults are a FIRST-INSTALL-ONLY setup (like the theme seed): afterwards
+# they are user-controlled preferences, so updates must never re-assert them.
+# Marker → set once at first run; a user who re-runs install.sh to wipe state
+# starts fresh again.
+UI_MARKER="$HOME/.local/state/hexciri/ui-defaults-applied"
+
+if [[ ! -f $UI_MARKER ]]; then
+  for d in brave-origin.desktop com.brave.Origin.desktop brave-origin-beta.desktop; do
+    if [[ -f /usr/share/applications/$d || -f ~/.local/share/applications/$d ]]; then
+      run xdg-settings set default-web-browser "$d" 2>/dev/null || true; break
+    fi
+  done
+  run xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
+  run touch "$UI_MARKER"
+fi
 
 # ── Strata: per-user GitHub release install (~/.local/bin) instead of the
 #    [omarchy] repo package (which lags upstream's near-daily releases).
@@ -452,7 +461,9 @@ if [[ -f $kr/Default.keyring ]] && [[ ! -f $kr/login.keyring ]]; then
 fi
 
 # ── GTK4/libadwaita dark theming: adw-gtk-theme + the dark color-scheme preference ──
-if command -v gsettings >/dev/null 2>&1 && [[ -d /usr/share/themes/adw-gtk3 ]]; then
+# First-install-only (see UI_MARKER above) — re-asserting gtk-theme /
+# color-scheme on every update would stomp a user's light-mode / theme choice.
+if [[ ! -f $UI_MARKER ]] && command -v gsettings >/dev/null 2>&1 && [[ -d /usr/share/themes/adw-gtk3 ]]; then
   run gsettings set org.gnome.desktop.interface gtk-theme adw-gtk3 2>/dev/null || true
   run gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
   info "gtk: adw-gtk-theme (dark libadwaita)"
@@ -470,7 +481,10 @@ fi
 # up, so it can die partway (theme tree or noctalia palette patch missing).
 # hexciri-theme-ensure re-applies it at first login; a failure here must never
 # abort the rest of the user phase.
-if ! $DRY_RUN; then
+# First install only: once a theme is applied (theme.name exists), updates must
+# NOT re-seed — that would reset a user's chosen theme/personalization. Theme
+# changes go through the Themes menu (hexciri-theme-set), like noctarchy.
+if ! $DRY_RUN && [[ ! -e $HOME/.local/state/hexciri/current/theme.name ]]; then
   HEXCIRI_PATH=/usr/share/hexciri hexciri-theme-set sakurazuki \
     || warn "theme seed incomplete — hexciri-theme-ensure will re-apply at first login"
 fi

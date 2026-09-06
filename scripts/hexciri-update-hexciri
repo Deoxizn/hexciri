@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Hexciri self-update: git pull the repo + reinstall (user+system) + re-apply theme templates
+# hexciri:summary=Hexciri self-update: git pull the repo + reinstall (user+system). Never re-applies the theme — theme changes only via the Themes menu, so personalization survives updates.
 set -euo pipefail
 
 REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
@@ -12,7 +12,7 @@ fi
 run_as_root() { sudo -n "$@" 2>/dev/null || sudo "$@"; }
 head_short=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")
 
-echo "== 1/3 syncing $REPO =="
+echo "== 1/2 syncing $REPO =="
 if [[ -d $REPO/.git ]]; then
   git -C "$REPO" fetch --tags origin --quiet 2>/dev/null
   behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
@@ -27,7 +27,7 @@ else
 fi
 
 echo
-echo "== 2/3 reinstalling (user + system phase) =="
+echo "== 2/2 reinstalling (user + system phase) =="
 current="$(hexciri-channel-current 2>/dev/null || echo stable)"
 echo "channel in use: $current"
 (
@@ -35,14 +35,6 @@ echo "channel in use: $current"
   ./install.sh --user-only -y --channel "$current" || { echo "user phase failed" >&2; exit 1; }
   run_as_root env HEXCIRI_USER="$(id -un)" ./install.sh --system-only -y --channel "$current" || { echo "system phase failed" >&2; exit 1; }
 )
-
-echo
-echo "== 3/3 re-applying current theme (new templates + gtk css live) =="
-if command -v hexciri-theme-current >/dev/null 2>&1; then
-  t="$(hexciri-theme-current 2>/dev/null || echo sakurazuki)"
-  hexciri-theme-set "$t" >/dev/null 2>&1 || echo "theme re-apply skipped"
-  echo "theme '$t' regenerated"
-fi
 
 head_short=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")
 echo
