@@ -108,14 +108,4 @@ cd ~/hexciri
 
 ## Sources
 
-- [Omarchy](https://github.com/omacom/omarchy)
-- [Niri](https://github.com/YaLTeR/niri)
-- [Noctalia](https://github.com/)
-- [Quickshell](https://github.com/outfoxxed/quickshell)
-- [theme-hook-plugin-manager](https://github.com/OldJobobo/theme-hook-plugin-manager)
-- [base16-Discord](https://github.com/imbypass/base16-discord)
-- [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7)
-- [system24](https://github.com/refact0r/system24)
-- [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme)
-- [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme)
-- [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam)
+[Omarchy](https://github.com/omacom/omarchy) × [Niri](https://github.com/YaLTeR/niri) × [Noctalia](https://github.com/) × [Quickshell](https://github.com/outfoxxed/quickshell) × [theme-hook-plugin-manager](https://github.com/OldJobobo/theme-hook-plugin-manager) × [base16-Discord](https://github.com/imbypass/base16-discord) × [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7) × [system24](https://github.com/refact0r/system24) × [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme) × [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) × [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam)
