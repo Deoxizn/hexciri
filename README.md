@@ -107,8 +107,11 @@ links and never stomps the wallpaper you're currently using.
 - **Never-clobber config deploy** — install.sh sha-tracks configs: untouched
   ones update in place; if you've edited one, yours stays and the repo default
   lands as `<file>.hexciri` alongside (backups in `~/.config/hexciri-backup/`).
-- **Floating maintenance** — repo syncs and wallpaper rescans open in their own
-  blur-floated terminal window instead of taking over a workspace.
+- **List-driven everything** — themes and wallpapers are just lists: extra
+  themes are one `<owner>/<name>` per line in `extra.list` (**Update ▸ Themes**
+  clones, pulls and prunes to match), and wallpaper dirs are one path per line
+  in `config/wallpaper-sources/extra.list` — remove a line and it's gone on the
+  next refresh.
 
 ## Already on Arch?
 Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:
