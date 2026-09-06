@@ -25,7 +25,8 @@ dest="$HOME/.config/hexciri/themes/$name"
 # or the raw URL for nonconforming ones so a fresh sync re-clones correctly.
 override="$HOME/.config/hexciri/theme-sources/extra.list"
 mkdir -p "$(dirname "$override")"
-shipped="${HEXCIRI_PATH:-/usr/share/hexciri}/theme-sources/extra.list"
+here="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+shipped="${HEXCIRI_PATH:-$(dirname "$(dirname "$here")")}/theme-sources/extra.list"
 if [[ ! -f $override && -f $shipped ]]; then
   sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' "$shipped" | rg -v '^$' > "$override"
 fi

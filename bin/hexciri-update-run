@@ -16,10 +16,15 @@ avail_kb=$(df -k / --output=avail | tail -n 1)
 
 confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
 
+# Validate sudo up front (the pacman transaction needs it anyway) so the repo
+# sync's one-time legacy /usr/local/bin purge (sudo -n) succeeds here, where
+# root is already granted.
+sudo -v || { echo "sudo needed for the system update"; exit 1; }
+
 # Pull + apply framework commits first, so a system update also delivers git
 # changes (scripts, menu, configs). Non-fatal so the update proceeds if the
 # repo is dirty or the self-update hits a snag.
-echo "== framework self-update (repo + scripts) =="
+echo "== framework self-update (repo pull) =="
 hexciri-update-hexciri || echo "framework self-update skipped/failed (continuing)" 
 
 {

@@ -99,12 +99,16 @@ borders, and drives Qt theming (qt6ct Fusion palette).
 Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:
 
 ```bash
-git clone https://github.com/Deoxizn/hexciri.git ~/hexciri
-cd ~/hexciri
-./install.sh                     # stable channel
-./install.sh --channel bleeding  # Rolling Release
-./install.sh --kernel bore       # preselect GPU kernel (else auto-detect)
+git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
+~/.local/opt/hexciri/install.sh  # stable channel
+~/.local/opt/hexciri/install.sh --channel bleeding  # Rolling Release
+~/.local/opt/hexciri/install.sh --kernel bore       # preselect GPU kernel (else auto-detect)
 ```
+
+The clone is the runtime — install.sh symlinks its commands into `~/.local/bin`
+and wires the configs, once at bootstrap. Updating is just a pull (**Update ▸
+Repo**, or `hxup`'s system update pulls the repo as part of `pacman -Syu`); the
+repo is never reinstalled on an update, so no reinstall ever needs sudo.
 
 ## Sources
 

@@ -1,13 +1,10 @@
 #!/bin/bash
-# hexciri:summary=Print the installed hexciri version (no git required on targets)
-# tier 1: git describe (dev checkout with tags) → tier 2: installer stamp
-# (/usr/share/hexciri/VERSION "<ver> <channel>") → tier 3: state file → unknown
+# hexciri:summary=Print the installed hexciri version (git describe from the repo checkout)
+# tier 1: git describe (repo checkout) → tier 2: local state file → unknown
 set -euo pipefail
 here="$(readlink -f "$0" 2>/dev/null || echo "$0")"
 if git -C "$(dirname "$(dirname "$here")")" describe --tags --always --dirty 2>/dev/null; then
   exit 0
 fi
-for f in /usr/share/hexciri/VERSION "$HOME/.local/state/hexciri/VERSION"; do
-  if [[ -f $f ]]; then cat "$f"; exit 0; fi
-done
+if [[ -f $HOME/.local/state/hexciri/VERSION ]]; then cat "$HOME/.local/state/hexciri/VERSION"; exit 0; fi
 echo "unknown"

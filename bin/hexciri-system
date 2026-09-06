@@ -25,7 +25,7 @@ case "$choice" in
   "Default Apps") exec "$SCRIPT_DIR/hexciri-defaults" ;;
   "Fonts")        exec "$SCRIPT_DIR/hexciri-font" ;;
   "Kernel")       exec "$SCRIPT_DIR/hexciri-kernel" ;;
-  "Maintenance")  exec "$SCRIPT_DIR/hexciri-system-update" ;;
+  "Maintenance")  exec "$SCRIPT_DIR/hexciri-maintenance" ;;
   "Windows product key") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-windows-key" ;;
   "Reset defaults") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-reinstall" ;;
   "Network")      exec "$SCRIPT_DIR/hexciri-network" ;;

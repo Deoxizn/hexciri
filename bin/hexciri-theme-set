@@ -6,7 +6,8 @@ set -euo pipefail
 [[ -n ${1:-} ]] || { echo "Usage: hexciri-theme-set <theme-name>"; exit 1; }
 THEME_INPUT="$1"
 THEME_NAME="$(printf '%s' "$THEME_INPUT" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
-HEXCIRI_PATH="${HEXCIRI_PATH:-/usr/share/hexciri}"
+here="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+HEXCIRI_PATH="${HEXCIRI_PATH:-$(dirname "$(dirname "$here")")}"
 
 resolve_dir() {
   for base in "$HOME/.config/hexciri/themes/$THEME_NAME" "$HEXCIRI_PATH/themes/$THEME_NAME"; do

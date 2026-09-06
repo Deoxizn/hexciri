@@ -8,6 +8,11 @@ bindir="${HEXCIRI_BIN_DIR:-}"
 if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
 bindir="${bindir:-$SCRIPT_DIR}"
 
+# Shipped catalog = the repo checkout the command symlinks into (HEXCIRI_PATH
+# overrides when run outside the repo, e.g. bootstrap seeding).
+here="$(readlink -f "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")"
+shipped_base="${HEXCIRI_PATH:-$(dirname "$here")}"
+
 if [[ $# -gt 0 ]]; then
   # Direct dispatch from menu search
   choice="$*"
@@ -34,14 +39,14 @@ case "$choice" in
     dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/theme-sources"
     mkdir -p "$dir"
     list="$dir/extra.list"
-    shipped="${HEXCIRI_PATH:-/usr/share/hexciri}/theme-sources/extra.list"
+    shipped="$shipped_base/theme-sources/extra.list"
     [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
     "$bindir/hexciri-edit-file" "$list" ;;
   'Omarchy themes list')
     dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/theme-sources"
     mkdir -p "$dir"
     list="$dir/omarchy.list"
-    shipped="${HEXCIRI_PATH:-/usr/share/hexciri}/theme-sources/omarchy.list"
+    shipped="$shipped_base/theme-sources/omarchy.list"
     [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
     "$bindir/hexciri-edit-file" "$list" ;;
   'Hooks')              "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/hooks/" ;;

@@ -8,7 +8,8 @@ bindir="${HEXCIRI_BIN_DIR:-}"
 if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
 bindir="${bindir:-$SCRIPT_DIR}"
 
-HEXCIRI_PATH="${HEXCIRI_PATH:-/usr/share/hexciri}"
+here="$(readlink -f "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")"
+HEXCIRI_PATH="${HEXCIRI_PATH:-$(dirname "$here")}"
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/hexciri/theme-selector/previews"
 mkdir -p "$cache_dir"
 

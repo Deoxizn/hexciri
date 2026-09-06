@@ -55,8 +55,8 @@ confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
 
 [[ -f /etc/arch-release ]] || { err "not Arch — run on a fresh minimal Arch install"; exit 1; }
 
-export HEXCIRI_PATH="${HEXCIRI_PATH:-/usr/share/hexciri}"
-export PATH="/usr/local/bin:$REPO_DIR/bin:$REPO_DIR/scripts:$PATH"
+export HEXCIRI_PATH="${HEXCIRI_PATH:-$REPO_DIR}"
+export PATH="$REPO_DIR/bin:$PATH"
 
 # ── dispatcher: plain invocation on a live system does system (via sudo) then user ──
 if ! $SYSTEM_ONLY && ! $USER_ONLY; then
@@ -219,6 +219,16 @@ HOOK
   fi
   fi # ! $UPDATE_MODE
 
+  # ── legacy purge: pre-symlink installs hard-copied every command to
+  #    /usr/local/bin and mirrored themes/catalog/default into /usr/share/hexciri.
+  #    The runtime is the repo now (~/.local/bin → repo/bin), so clear the stale
+  #    root copies; the only /usr/local/bin entry kept is the single hexciri-sync
+  #    symlink re-created below for the alpm hook. /usr/share/hexciri survives
+  #    only for the root-owned boot-pin file. ──
+  run rm -f /usr/local/bin/hexciri-*
+  run rm -rf /usr/share/hexciri/themes /usr/share/hexciri/theme-sources \
+    /usr/share/hexciri/default /usr/share/hexciri/VERSION
+
   # ── hexciri system sync: keep boot entries/plymouth/PAM/menu curated across
   #    package upgrades, which routinely clobber them (kernels land with no
   #    systemd-boot entry; mkinitcpio drops 'plymouth' from HOOKS; sddm heals
@@ -227,24 +237,17 @@ HOOK
   #    without a TTY or user env — it runs as root inside the transaction. ──
   run mkdir -p /usr/share/libalpm/hooks
   run install -m644 "$REPO_DIR/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook
+  # The one command the system runs itself (as root, no user env): keep a single
+  # /usr/local/bin symlink into the repo checkout so it follows the runtime.
+  run mkdir -p /usr/local/bin
+  run ln -sfn "$REPO_DIR/bin/hexciri-sync" /usr/local/bin/hexciri-sync
   info "wrote /usr/share/libalpm/hooks/hexciri-sync.hook (PostTransaction hexciri sync)"
 
-  # ── commands → /usr/local/bin (on PATH for SDDM-launched Niri sessions) ──
-  info "installing hexciri commands..."
-  for f in "$REPO_DIR"/bin/* "$REPO_DIR"/scripts/*; do
-    [[ -f $f ]] && run install -m755 "$f" "/usr/local/bin/$(basename "$f")"
-  done
-  ok "commands installed"
-
-  # ── themes → /usr/share/hexciri + branding (clean copy so re-runs never nest) ──
+  # ── /usr/share/hexciri stays ONLY as the root-owned boot-pin location
+  #    (hexciri-kernel / hexciri-gpu record the chosen boot default here; the
+  #    alpm hook + updater read it back). The command runtime and theme catalog
+  #    live in the repo clone + ~/.local/bin now — no mirror to keep in sync. ──
   run mkdir -p /usr/share/hexciri
-  run rm -rf /usr/share/hexciri/themes
-  run cp -r "$REPO_DIR/themes" /usr/share/hexciri/themes
-  run rm -rf /usr/share/hexciri/theme-sources
-  run cp -r "$REPO_DIR/config/theme-sources" /usr/share/hexciri/theme-sources
-  run rm -rf /usr/share/hexciri/default
-  run mkdir -p /usr/share/hexciri/default
-  run cp -r "$REPO_DIR/default/themed" /usr/share/hexciri/default/themed
   run mkdir -p /usr/share/pixmaps
   run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
 
@@ -330,12 +333,8 @@ HOOK
     printf '[Theme]\nCurrent=hexciri\n' | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
   fi
 
-  # ── version stamp (hexciri-version reads this on installed systems) ──
-  if ! $DRY_RUN; then
-    v="$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo unknown)"
-    run mkdir -p /usr/share/hexciri
-    printf '%s %s\n' "$v" "$CHANNEL" | run tee /usr/share/hexciri/VERSION >/dev/null
-  fi
+  # ── version stamp (hexciri-version uses git describe from the repo; the
+  #    /usr/share/hexciri mirror is gone, so no brand is written here) ──
 
   # ── GPU autodetect + single-kernel policy (first-install only) ──
   #    Updates never touch the kernel: the boot kernel you chose is preserved;
@@ -345,7 +344,7 @@ HOOK
   # ── GPU autodetect (runs as root here; installer reboots at the end, not mid-run) ──
   if ! $DRY_RUN; then
     # shellcheck disable=SC2086
-    HEXCIRI_NO_REBOOT=1 /usr/local/bin/hexciri-gpu -y ${KERNEL_PICK:+--kernel $KERNEL_PICK} \
+    HEXCIRI_NO_REBOOT=1 hexciri-gpu -y ${KERNEL_PICK:+--kernel $KERNEL_PICK} \
       || warn "GPU setup needs attention — re-run: hexciri-gpu"
   fi
 
@@ -408,6 +407,20 @@ deploy() { # <repo-rel> <dest> — never clobber local edits (sha-tracked)
   sha256sum "$dest" | cut -d' ' -f1 > "$sf"
 }
 
+# ── commands → ~/.local/bin symlinks to the repo checkout being configured.
+#    The repo clone IS the runtime: a later `git pull` (hexciri-update-hexciri /
+#    hexciri-update-run) makes script + theme updates live immediately, so repo
+#    sync never re-runs install.sh and needs no sudo. ln -sfn also sweeps up
+#    renamed/removed commands and replaces any stale /usr/local/bin hard-copy
+#    from a pre-symlink install (hexciri-util.fish already puts ~/.local/bin on
+#    PATH). ──
+run mkdir -p "$HOME/.local/bin"
+info "linking hexciri commands → ~/.local/bin"
+for f in "$REPO_DIR"/bin/*; do
+  [[ -f $f ]] && run ln -sfn "$REPO_DIR/bin/$(basename "$f")" "$HOME/.local/bin/$(basename "$f")"
+done
+ok "commands linked"
+
 # user branding art (system branding lives in /usr/share)
 mkdir -p ~/.config/hexciri/branding
 run cp -f "$REPO_DIR/branding/"*.png ~/.config/hexciri/branding/
@@ -444,7 +457,7 @@ fi
 
 # ── defaults state (kitty/fish/brave-origin/strata/zed/opencode) ──
 mkdir -p "$HOME/.local/state/hexciri/defaults"
-# ── where the source repo lives, so hexciri-repo-sync can pull/reinstall it ──
+# ── where the source repo lives (hexciri-reinstall / hexciri-update-hexciri) ──
 mkdir -p "$HOME/.local/state/hexciri"
 run bash -c "printf '%s' '$REPO_DIR' > '$HOME/.local/state/hexciri/repo-path'"
 for kv in "terminal=kitty" "shell=fish" "browser=brave-origin" "files=strata" "editor=zed" "agent=opencode" "images=imv"; do
@@ -548,20 +561,20 @@ fi
 # NOT re-seed — that would reset a user's chosen theme/personalization. Theme
 # changes go through the Themes menu (hexciri-theme-set), like noctarchy.
 if ! $DRY_RUN && [[ ! -e $HOME/.local/state/hexciri/current/theme.name ]]; then
-  HEXCIRI_PATH=/usr/share/hexciri hexciri-theme-set sakurazuki \
+  HEXCIRI_PATH="$REPO_DIR" hexciri-theme-set sakurazuki \
     || warn "theme seed incomplete — hexciri-theme-ensure will re-apply at first login"
 fi
 
 # ── seed the shipped Omarchy theme set ──
 # First install only: clone the Omarchy monorepo subsettee into the state dir
 # and symlink the 22 default themes into ~/.config/hexciri/themes. Updates via
-# the Repo sync / Hexciri updater keep it current; the extras list is seeded
-# separately by the user via the Extra themes menu. Non-fatal on failure. ──
-if [[ -f /usr/share/hexciri/theme-sources/omarchy.conf ]]; then
+# the Update ▸ Themes menu keep it current; the extras list is seeded separately
+# by the user via the Extra themes menu. Non-fatal on failure. ──
+if [[ -f "$REPO_DIR/config/theme-sources/omarchy.conf" ]]; then
   if ! command -v hexciri-theme-extras >/dev/null 2>&1; then
     warn "hexciri-theme-extras not on PATH — Omarchy theme set not seeded; use the Extra themes menu"
   elif [[ ! -e $HOME/.local/state/hexciri/current/theme.name ]]; then
-    HEXCIRI_PATH=/usr/share/hexciri hexciri-theme-extras --run install omarchy \
+    HEXCIRI_PATH="$REPO_DIR" hexciri-theme-extras --run install omarchy \
       || warn "Omarchy theme set not seeded — use the Extra themes menu"
   fi
 fi

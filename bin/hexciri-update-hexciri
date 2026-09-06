@@ -1,0 +1,64 @@
+#!/bin/bash
+# hexciri:summary=Hexciri repo sync: pull newer commits. Nothing new → says up to date and stops.
+# The repo clone is the runtime (commands/configs/catalog live in it, ~/.local/bin
+# symlinks into it), so a pull IS the deployment — no install.sh required. Re-links
+# the bin dir so renamed/new commands land immediately, and one-time-clears the
+# legacy root copies a pre-symlink install left in /usr/local/bin + /usr/share/hexciri.
+set -euo pipefail
+
+REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+if [[ ! -d $REPO ]]; then
+  echo "hexciri repo not found at: $REPO"
+  echo "expected the bootstrap clone at ~/.local/opt/hexciri"
+  exit 1
+fi
+
+relink() {
+  mkdir -p "$HOME/.local/bin"
+  for f in "$REPO"/bin/*; do
+    [[ -f $f ]] && ln -sfn "$REPO/bin/$(basename "$f")" "$HOME/.local/bin/$(basename "$f")"
+  done
+}
+
+# One-time legacy migration: pre-symlink installs hard-copied every command to
+# /usr/local/bin and mirrored catalog/themes/default into /usr/share/hexciri.
+# The runtime is the repo now (~/.local/bin → repo/bin), so clear the stale
+# root copies and re-point the alpm hook. Uses sudo -n deliberately: the normal
+# path runs a sync with no root at all (the Repo menu / plain pull), and the
+# rare third-party box reaches this through the system update (hexciri-update-run)
+# which has already validated sudo. Silent skip when no root is available.
+legacy_purge() {
+  local stale=false f
+  for f in /usr/local/bin/hexciri-*; do
+    [[ -f $f && ! -L $f ]] && stale=true && break
+  done
+  $stale || return 0
+  echo "legacy root command copies found — clearing /usr/local/bin + /usr/share/hexciri (one-time)"
+  if sudo -n rm -f /usr/local/bin/hexciri-* 2>/dev/null; then
+    sudo -n ln -sfn "$REPO/bin/hexciri-sync" /usr/local/bin/hexciri-sync 2>/dev/null || true
+    sudo -n rm -rf /usr/share/hexciri/themes /usr/share/hexciri/theme-sources \
+      /usr/share/hexciri/default /usr/share/hexciri/VERSION 2>/dev/null || true
+    echo "legacy /usr/local/bin copies + /usr/share/hexciri mirror removed (hook relinked to the repo)"
+  else
+    echo "note: stale /usr/local/bin/hexciri-* remain (no sudo session) — a system update will clear them"
+  fi
+}
+
+echo "syncing $REPO ..."
+git -C "$REPO" fetch --tags origin --quiet 2>/dev/null || true
+behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
+
+relink
+
+if (( behind == 0 )); then
+  echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"
+  legacy_purge
+  exit 0
+fi
+
+echo "pulling $behind new commit(s)..."
+git -C "$REPO" pull --ff-only --quiet
+relink
+legacy_purge
+
+echo "repo updated to $(git -C "$REPO" rev-parse --short HEAD) — updates are already live (commands/configs/themes read straight from this repo)"

@@ -7,16 +7,20 @@ THEMES_DIR="$HOME/.config/hexciri/themes"
 SRC_BASE="$HOME/.local/state/hexciri/theme-src"
 mkdir -p "$THEMES_DIR" "$SRC_BASE"
 
-# Resolve where the shipped catalog lives: prefer the repo checkout (live
-# editing), fall back to the deployed /usr/share/hexciri copy.
+# Resolve where the shipped catalog lives: the repo clone IS the runtime (this
+# script runs readlink-resolved out of /usr/local/bin → repo/bin), so the
+# catalog is always read straight from the repo checkout. HEXCIRI_PATH only
+# overrides when something runs it in isolation.
 resolve_catalog() {
-  local repo="$SCRIPT_DIR/../config/theme-sources"
-  local shipped="${HEXCIRI_PATH:-/usr/share/hexciri}/theme-sources"
+  local here repo shipped
+  here="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+  repo="$(dirname "$(dirname "$here")")/config/theme-sources"
+  shipped="${HEXCIRI_PATH:-}/theme-sources"
   if [[ -d $repo && -f $repo/extra.conf ]]; then printf '%s\n' "$repo"; return 0; fi
-  if [[ -d $shipped ]]; then printf '%s\n' "$shipped"; return 0; fi
+  if [[ -n $HEXCIRI_PATH && -d $shipped ]]; then printf '%s\n' "$shipped"; return 0; fi
   return 1
 }
-CATALOG="$(resolve_catalog)" || { echo "theme-sources catalog not found (no config/theme-sources in repo or /usr/share/hexciri)" >&2; exit 1; }
+CATALOG="$(resolve_catalog)" || { echo "theme-sources catalog not found (repo clone missing or no config/theme-sources)" >&2; exit 1; }
 
 # A <source>.list is user-overridable: ~/.config/hexciri/theme-sources/<src>.list
 # beats the shipped copy, so on-device curation never needs the repo.

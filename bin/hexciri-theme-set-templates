@@ -56,7 +56,7 @@ def mix(c1, c2, t):
     return "#" + "".join(f"{round(a[i] + (b[i] - a[i]) * t):02X}" for i in range(3))
 
 repo = Path(__file__).resolve().parent.parent
-tpl_dir = Path(os.environ.get("HEXCIRI_PATH", "/usr/share/hexciri")) / "default" / "themed"
+tpl_dir = Path(os.environ.get("HEXCIRI_PATH", str(repo))) / "default" / "themed"
 if not tpl_dir.is_dir():  # dev tree: script.py lives in <repo>/bin
     tpl_dir = repo / "default" / "themed"
 C["selection_background"] = C["selection"]  # kitty.conf.tpl compat

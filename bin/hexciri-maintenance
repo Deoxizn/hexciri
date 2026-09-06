@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:menu=system-update
+# hexciri:menu=maintenance
 # hexciri:summary=Maintenance: clock sync, cleaner, user password, boot config reset.
 # Notably no snapshot/tmux rows (hexciri is deliberately minimal).
 set -euo pipefail
