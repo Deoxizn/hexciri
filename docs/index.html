@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hexciri — Arch-based Niri + Noctalia distro</title>
-<meta name="description" content="Hexciri is a minimal Arch-based distro: Niri scrollable tiling, Noctalia shell, month-held stable or rolling bleeding channels, GPU autodetect, one-file theme engine. One curl line from the Arch ISO to a themed desktop.">
+<meta name="description" content="Hexciri is a minimal Arch-based distro: Niri scrollable tiling, Noctalia shell, month-held stable or rolling bleeding channels, GPU autodetect, list-driven theme engine with wallpapers that survive theme changes. One curl line from the Arch ISO to a themed desktop.">
 <meta name="author" content="Deoxizn">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://hexciri.dirty.pizza/">
@@ -13,11 +13,11 @@
 <meta property="og:site_name" content="Hexciri">
 <meta property="og:url" content="https://hexciri.dirty.pizza/">
 <meta property="og:title" content="Hexciri — Arch-based Niri + Noctalia distro">
-<meta property="og:description" content="Niri scrollable tiling + Noctalia shell on Arch. Stable or bleeding channels, GPU autodetect, one-file theme engine, one curl to install.">
+<meta property="og:description" content="Niri scrollable tiling + Noctalia shell on Arch. Stable or bleeding channels, GPU autodetect, list-driven themes with wallpapers that survive changes, one curl to install.">
 <meta property="og:image" content="https://hexciri.dirty.pizza/brand.png">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Hexciri — Arch-based Niri + Noctalia distro">
-<meta name="twitter:description" content="Niri + Noctalia on Arch. Stable or bleeding, GPU autodetect, one-file themes, one curl to install.">
+<meta name="twitter:description" content="Niri + Noctalia on Arch. Stable or bleeding, GPU autodetect, list-driven themes, one curl to install.">
 <meta name="twitter:image" content="https://hexciri.dirty.pizza/brand.png">
 <link rel="icon" type="image/png" href="brand.png">
 <style>
@@ -72,7 +72,7 @@
     <li>Run the line above.</li>
     <li>Reboot → straight into Niri. Press <code>Mod+K</code> for the keybinding list.</li>
   </ol>
-  <p style="margin-top:14px;">The disk is left unencrypted — login is the SDDM password prompt (minimal themed greeter), no disk-encryption step to answer.</p>
+  <p style="margin-top:14px;">The kernel is chosen automatically — stock <code>linux</code>, or <code>linux-lts</code> pinned on legacy NVIDIA; custom kernels are a post-install choice via <code>hexciri-kernel</code>. The disk is left unencrypted — login is the SDDM password greeter.</p>
 </section>
 <section>
   <h2>Defaults</h2>
@@ -81,7 +81,7 @@
     <tr><td>terminal / shell</td><td><code>kitty</code> / <code>fish</code> in-kitty, <code>bash</code> login shell + starship</td></tr>
     <tr><td>browser / files / editor</td><td><code>brave-origin</code> / <code>strata</code> / <code>zed</code></td></tr>
     <tr><td>agent</td><td><code>opencode</code> (<code>Mod+`</code>)</td></tr>
-    <tr><td>kernel</td><td><code>linux</code> + <code>lts</code> fallback</td></tr>
+    <tr><td>kernel</td><td>auto: <code>linux</code> (stock), <code>linux-lts</code> pinned on legacy NVIDIA</td></tr>
     <tr><td>gpu</td><td>autodetect (mesa / nvidia-open / 580xx+LTS pin)</td></tr>
     <tr><td>monitors</td><td>auto-detect output blocks + scale from physical size</td></tr>
     <tr><td>bluetooth</td><td>on (bluez + bar widget)</td></tr>
@@ -94,14 +94,18 @@
 </section>
 <section>
   <h2>Theme engine</h2>
-  <p>One <code>colors.toml</code> recolors kitty, fuzzel, Strata, fish, Zed, Noctalia, Niri borders, and Qt (qt6ct Fusion palette) via <code>hexciri-theme-set</code>. Drop-ins live in <code>~/.config/hexciri/hooks/theme-set.d/</code>.</p>
+  <p>One <code>colors.toml</code> recolors the whole desktop — Noctalia + Niri borders, kitty, fish, GTK, Qt, Discord, Spotify, Zed, Firefox, Steam and more — through a drop-in hook set. Themes are list-driven: Omarchy defaults ride the repo sync, extras are one <code>owner/name</code> per line in an editable list. Update ▸ Themes clones, pulls and prunes to match; the repo sync keeps the default set current.</p>
+  <p style="margin-top:10px;">Your wallpapers survive theme changes — a persistent user store merges into the active theme's backgrounds as symlinks, so the picker shows theme images <em>and</em> your set, and a theme swap keeps your current wallpaper. Strata follows the theme live, no reopen needed.</p>
 </section>
 <section>
   <h2>Highlights</h2>
   <ul>
-    <li><strong>Transparent terminals</strong> — kitty at reduced background opacity with niri window-effect blur behind it. No focus ring / border: niri draws those as a solid rectangle behind the window, which would cover the translucency.</li>
+    <li><strong>Your wallpapers survive theme changes</strong> — personal images merge into the active theme's backgrounds as symlinks and stay put across swaps.</li>
+    <li><strong>Theme engine</strong> — one <code>colors.toml</code> + a 29-hook set recolors 30+ apps; themes are list-driven and Strata follows live.</li>
+    <li><strong>Transparent terminals</strong> — kitty at reduced background opacity with niri window-effect blur behind it (no focus ring/border, which niri paints as a solid rectangle over the translucency).</li>
     <li><strong>Gaming</strong> — <code>hexciri-gaming</code>: Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net (umu + GE-Proton), GeForce NOW, Xbox Cloud, GPU setup, Xbox controllers.</li>
-    <li><strong>Never-clobber config deploy</strong> — install.sh sha-tracks configs: untouched ones update in place; edited ones stay with the repo default landing as <code>&lt;file&gt;.hexciri</code> alongside.</li>
+    <li><strong>Never-clobber config deploy</strong> — install.sh sha-tracks configs: untouched ones update in place; edited ones stay with the repo default as <code>&lt;file&gt;.hexciri</code> alongside.</li>
+    <li><strong>Floating maintenance</strong> — repo syncs and wallpaper rescans open in their own blur-floated terminal window.</li>
   </ul>
 </section>
 </div>

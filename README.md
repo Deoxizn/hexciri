@@ -19,16 +19,11 @@ curl -LO https://hexciri.dirty.pizza/hexciri && sh hexciri
 
 Pipe works identically: `curl -fsSL https://hexciri.dirty.pizza/hexciri | bash`.
 
-Kernel prompt (default auto):
+The kernel is chosen automatically — stock `linux`, or `linux-lts` pinned on
+legacy NVIDIA. Custom kernels (`omarchy` / `bore` / `muqss`) are a post-install
+choice via `hexciri-kernel`, not a first-run decision.
 
-| input | installs |
-|---|---|
-| `stock`, `lts` | `linux`, `linux-lts` |
-| `omarchy`, `bore`, `muqss` | `linux-omarchy*` (bleeding) |
-
-Full package names (`linux-omarchy-bore`) work too.
-
-The disk is left unencrypted — the login gate is the SDDM password prompt
+The disk is left unencrypted — the login gate is the SDDM password screen
 (minimal themed greeter), there is no disk-encryption step to answer.
 
 3. Reboot → straight into Niri
@@ -44,7 +39,7 @@ Press `Mod+K` for the searchable keybinding list.
 | files | `strata` | `hexciri-defaults` → Files |
 | editor | `zed` | `hexciri-defaults` → Editor |
 | agent | `opencode` (`Mod+`` `) | `hexciri-defaults` → Agent |
-| kernel | your pick, `linux` if auto (+`linux-lts` fallback on custom/legacy) | `hexciri-kernel` (bore/muqss on bleeding) |
+| kernel | auto: `linux` (stock), `linux-lts` pinned on legacy NVIDIA | `hexciri-kernel` (custom post-install) |
 | gpu | autodetect (mesa / nvidia-open / 580xx+LTS pin) | `hexciri-gpu` |
 | monitors | auto-detect (output blocks + scale from physical size) | `~/.config/niri/config.kdl` |
 | bluetooth | on (bluez + bar widget) | — |
@@ -71,19 +66,44 @@ on NVIDIA GTX 1xxx or older cards). To change later, re-run `hexciri-gpu`.
 
 ## Theme engine (colors.toml)
 
+One `colors.toml` recolors the whole desktop. Themes are list-driven — there is
+no manual catalog:
+
+- **Omarchy defaults** (22) ride along with the repo sync.
+- **Extra themes** are one `<owner>/<name>` per line in an `extra.list` (or a
+  full URL when the repo doesn't follow the naming); **Update ▸ Themes** clones,
+  pulls and prunes extras to match the list, so removing a line removes a theme.
+
 ```bash
-hexciri-theme-list
-hexciri-theme-set <name>
-hexciri-theme-install <git-url> | hexciri-theme-remove <name>
+hexciri-theme-list                  # installed themes
+hexciri-theme-set <name>            # apply a theme
+hexciri-theme-install <git-url>     # one-off install (joins the extras list)
+hexciri-theme-extras --list         # edit your extra themes list
 ```
 
 State: `~/.local/state/hexciri/current/{theme,theme.name,background}`.
-Hook: `~/.config/hexciri/hooks/theme-set.d/` → `noctalia-sync.sh` writes
-`~/.config/noctalia/palettes/hexciri.json`, patches `config.toml` + Niri
-borders, and drives Qt theming (qt6ct Fusion palette).
+Hooks: `~/.config/hexciri/hooks/theme-set.d/` — 29 drop-ins that push the active
+palette into 30+ apps (Noctalia + Niri borders, kitty, fish, GTK, Qt/qt6ct,
+Discord/Vesktop, Spotify, Zed, VS Code, Firefox, Steam, tmux, zellij, …). The
+`noctalia-sync.sh` hook writes `~/.config/noctalia/palettes/hexciri.json` and
+patches the shell's config; Strata follows the theme live, no reopen needed.
+
+**Your wallpapers survive theme changes.** A persistent user store —
+`~/.config/hexciri/wallpapers` — is merged into the active theme's backgrounds
+as `zz-user-*` symlinks, alongside whatever the theme ships. Extra directories
+(a `~/Pictures/Wallpapers`, NFS mounts, …) go in `config/wallpaper-sources/extra.list`.
+**Update ▸ Wallpaper** re-runs the merge on demand; a theme swap preserves your
+links and never stomps the wallpaper you're currently using.
 
 ## Highlights
 
+- **Your wallpapers survive theme changes** — personal images merge into the
+  active theme's backgrounds as symlinks and stay put across swaps; the picker
+  shows theme images AND your set, and theme switches keep your current
+  wallpaper.
+- **Theme engine** — one `colors.toml` recolors the desktop via a 29-hook set;
+  themes are list-driven (Omarchy defaults ride the sync, extras live in one
+  editable list), and Strata follows the theme live.
 - **Transparent terminals** — kitty runs at reduced background opacity with
   niri window-effect blur behind it. No focus ring / border: niri draws those
   as a solid rectangle behind the window (per its FAQ), which would cover the
@@ -94,6 +114,8 @@ borders, and drives Qt theming (qt6ct Fusion palette).
 - **Never-clobber config deploy** — install.sh sha-tracks configs: untouched
   ones update in place; if you've edited one, yours stays and the repo default
   lands as `<file>.hexciri` alongside (backups in `~/.config/hexciri-backup/`).
+- **Floating maintenance** — repo syncs and wallpaper rescans open in their own
+  blur-floated terminal window instead of taking over a workspace.
 
 ## Already on Arch?
 Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:
@@ -102,7 +124,6 @@ Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:
 git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
 ~/.local/opt/hexciri/install.sh  # stable channel
 ~/.local/opt/hexciri/install.sh --channel bleeding  # Rolling Release
-~/.local/opt/hexciri/install.sh --kernel bore       # preselect GPU kernel (else auto-detect)
 ```
 
 The clone is the runtime — install.sh symlinks its commands into `~/.local/bin`
