@@ -89,12 +89,8 @@ a { color: var(--rose); }
 </section>
 <section>
   <h2>Install</h2>
-  <ol>
-    <li>Flash the Arch ISO, boot UEFI, connect network (<code>iwctl</code> for wifi).</li>
-    <li>Run the line above.</li>
-    <li>Reboot → straight into Niri. Press <code>Mod+K</code> for the keybinding list.</li>
-  </ol>
-  <p style="margin-top:14px;">No prompts to answer — kernel, GPU, and channel are all decided for you. The disk is left unencrypted; login is the SDDM password screen.</p>
+  <p>Boot the Arch ISO, then run:</p>
+  <pre class="curl" style="margin:10px 0;">curl -LO https://hexciri.dirty.pizza/hexciri &amp;&amp; sh hexciri</pre>
 </section>
 <section>
   <h2>Defaults</h2>

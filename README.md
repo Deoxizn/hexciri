@@ -31,17 +31,11 @@ Arch × Niri × Noctalia
 
 ## Install
 
-1. Flash the Arch ISO, boot it (UEFI), connect network (`iwctl` for wifi).
-2. Run it
+Boot the Arch ISO, then run:
 
 ```bash
 curl -LO https://hexciri.dirty.pizza/hexciri && sh hexciri
 ```
-
-3. Reboot → straight into Niri. Press `Mod+K` for the searchable keybinding list.
-
-No prompts to answer — kernel, GPU, and channel are all decided for you. The
-disk is left unencrypted; the login gate is the SDDM password screen.
 
 ## Themes
 
