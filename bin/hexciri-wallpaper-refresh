@@ -81,7 +81,7 @@ else
   list=""
 fi
 if [[ -n $list ]]; then
-  while IFS= read -r dir; do
+  while IFS= read -r dir || [[ -n $dir ]]; do
     dir="${dir%%#*}"                             # strip # comments
     dir="$(printf '%s' "$dir" | tr -d '[:space:]')"   # trim
     [[ -z $dir ]] && continue
@@ -97,3 +97,6 @@ if [[ -n $list ]]; then
     fi
   done < "$list"
 fi
+
+count="$(find "$BG_DIR" -maxdepth 1 -name 'zz-user-*' | wc -l | tr -d ' ')"
+echo "wallpaper refresh: $count user wallpaper(s) linked into the active theme"

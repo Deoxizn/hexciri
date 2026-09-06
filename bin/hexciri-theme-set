@@ -24,21 +24,31 @@ NEXT_DIR="$STATE_BASE/next-theme"
 DEST_LINK="$STATE_BASE/theme"
 mkdir -p "$STATE_BASE"
 
+# Preserve user wallpaper links across the swap: theme-set only replaces
+# theme-owned files, so zz-user-* symlinks (store + extra dirs) survive
+# theme changes without a re-scan of the (possibly slow NFS) sources.
+PRESERVE="$STATE_BASE/.zz-user-snap"
+: > "$PRESERVE"
+if [[ -d $DEST_LINK/backgrounds ]]; then
+  while IFS= read -r -d '' lk; do
+    tgt="$(readlink "$lk")"                     # works for dangling links too
+    [[ -n $tgt ]] && printf '%s\0%s\0' "$lk" "$tgt" >> "$PRESERVE"
+  done < <(find "$DEST_LINK/backgrounds" -maxdepth 1 -name 'zz-user-*' -print0)
+fi
+
 rm -rf "$NEXT_DIR"
 cp -rL "$SRC_DIR" "$NEXT_DIR"
 rm -rf "$DEST_LINK"
 cp -rL "$NEXT_DIR" "$DEST_LINK"
 printf '%s' "$THEME_NAME" > "$STATE_BASE/theme.name"
 
-# Merge personal wallpapers (store + extra dirs list) into the active
-# backgrounds dir as read-only zz-user-* symlinks. The sources are the
-# source of truth and are never copied or deleted; this generated dir is
-# wiped on every change. Noctalia's picker reads this dir, so it sees the
-# theme's shipped set plus all user wallpapers simultaneously.
-REPO_BIN="$(cd "$(dirname "$0")" && pwd)"
-if [[ -x $REPO_BIN/hexciri-wallpaper-refresh ]]; then
-  "$REPO_BIN/hexciri-wallpaper-refresh" "$DEST_LINK" || true
+# restore preserved zz-user-* links (dangling as-is, so NFS mounts resolve later)
+if [[ -s $PRESERVE ]]; then
+  while IFS= read -r -d '' lk && IFS= read -r -d '' tgt; do
+    [[ -e $lk || -L $lk ]] || ln -s "$tgt" "$lk" 2>/dev/null || true
+  done < "$PRESERVE"
 fi
+rm -f "$PRESERVE"
 
 # background: first image in backgrounds/, prefer name match, skip user links
 BG_LINK="$STATE_BASE/background"
@@ -53,6 +63,7 @@ fi
 
 export HEXCIRI_CURRENT_THEME="$DEST_LINK"
 export HEXCIRI_THEME_NAME="$THEME_NAME"
+REPO_BIN="$(cd "$(dirname "$0")" && pwd)"
 if [[ -x $REPO_BIN/hexciri-theme-set-templates ]]; then
   "$REPO_BIN/hexciri-theme-set-templates" "$DEST_LINK"
 elif command -v hexciri-theme-set-templates &>/dev/null; then
