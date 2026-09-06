@@ -120,6 +120,20 @@ if $SYSTEM_ONLY; then
     run rm -rf /tmp/hexciri-aur
   fi
 
+  # ── yay (AUR helper): the AUR menu entries (hexciri-pkg-aur-install, the
+  #    arch-updater AUR pass, hexciri-gaming's on-demand AUR pulls) all expect
+  #    yay present, so fresh installs build yay-bin (prebuilt binary, no Rust
+  #    rebuild) as the user and install as root — same boundary as brave. ──
+  if ! pacman -Q yay-bin &>/dev/null; then
+    info "building yay-bin (AUR, as $TARGET_USER)..."
+    run rm -rf /tmp/hexciri-aur
+    run mkdir -p /tmp/hexciri-aur
+    run chown "$TARGET_USER:$TARGET_USER" /tmp/hexciri-aur
+    as_user "cd /tmp/hexciri-aur && git clone -q https://aur.archlinux.org/yay-bin.git && cd yay-bin && makepkg --noconfirm"
+    run pacman -U --noconfirm /tmp/hexciri-aur/yay-bin/*.pkg.tar.zst
+    run rm -rf /tmp/hexciri-aur
+  fi
+
   # ── hide noisy utility desktop entries (avahi UI, hwloc, qt/v4l tooling) ──
   # avahi-discover, bssh, bvnc are LAN-discovery tools the average desktop user
   # never opens; lstopo is hwloc's hardware-topology viewer; qv4l2/qvidcap are

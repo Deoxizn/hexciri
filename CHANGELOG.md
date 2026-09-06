@@ -2,6 +2,8 @@
 
 ## 2026-09-05 — hexciri post-0.1.2 hardening
 
+- **yay ships by default**: fresh installs build `yay-bin` (prebuilt AUR binary, as the managed user) so the AUR menu entry (`hexciri-packages` → Install → AUR), the arch-updater AUR pass, and `hexciri-gaming`'s on-demand AUR pulls all just work out of the box instead of printing "install yay first".
+
 - **Plain-root, LUKS/plymouth gone**: dropped the LUKS + plymouth splash entirely — plain-root boots fastest, the SDDM password/fingerprint greeter is the login gate. plymouth theme, initramfs encrypt plumbing, and `hexciri-splash` removed with them.
 - **mkinitcpio is deterministic now**: install seeds a pristine `mkinitcpio.conf` before pacstrap (so kernel hook builds can't abort it), enables only hooks whose initcpio hook file actually exists, and guarantees an initramfs rebuild — self-healing HOOKS management instead of hand-editing.
 - **Bootstrap revs 20–29**: `$_u` escaped in stage2 (set -u crash); persistent pacman cache + gpg keyring seed so wipe retries skip re-download/keygen; `CacheDir` emitted inside `[options]` (rev 26) then the package cache staged in `/tmp` not `/root` (archiso pacman hits EPERM on 0700 `/root`, rev 28); pacman conf regenerated per run with the cache dropped wholesale (rev 29); loud failure on pacstrap errors.
