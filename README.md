@@ -14,7 +14,8 @@ Arch × Niri × Noctalia
   recolors the whole desktop, 30+ apps in all. 22 themes ship included; extras
   are one line each in a list.
 - **Your wallpapers survive theme changes** — drop your own images into
-  `~/.config/hexciri/wallpapers` and they show up in the picker and stay across
+  `~/.config/hexciri/wallpapers`, or point it at your own folder via
+  `wallpaper-sources/extra.list`, and they show up in the picker and stay across
   every theme swap.
 - **Transparent terminals** — kitty at reduced background opacity with niri
   blur behind it, so your wallpaper shows through.
@@ -22,10 +23,11 @@ Arch × Niri × Noctalia
   GeForce NOW, Xbox Cloud, controllers, GPU setup.
 - **A minimal Arch experience** — your system starts clean: Arch, Niri, and a
   themed shell — nothing you didn't ask for; add the rest on demand.
-- **Everything's just files** — theming and state live in plain, readable lists
-  and configs in your home, so they're easy to tweak, back up, and version. And
-  updates never overwrite your edits — an edited config stays yours, with the
-  new default saved alongside as `<file>.hexciri`.
+- **Everything's just files** — the theming engine is literally two text lists
+  you can read and edit: `theme-sources/extra.list` (extra themes) and
+  `wallpaper-sources/extra.list` (extra wallpaper folders). Easy to tweak, back
+  up, and version. And updates never overwrite your edits — an edited config
+  stays yours, with the new default saved alongside as `<file>.hexciri`.
 
 ## Install
 
