@@ -2,6 +2,8 @@
 
 ## 2026-09-06
 
+- **Learn menu**: new `Learn >` submenu in the root menu — official docs for the tools Hexciri ships (Hexciri site, Niri wiki, Noctalia docs, kitty, fish, Zed, OpenCode, Arch wiki, Starship), each opened in the default browser via `hexciri-launch-webapp`. Root menu reordered: Learn, Packages, Share, Capture, Reminders, Hardware, Themes, System, Restart, System Update.
+
 - **Discord theme regenerates correctly**: the dynamic theme no longer reinstalls a stale cached file — it regenerates on every hook run unless a theme ships its own `vencord.theme.css`.
 - **Nautilus follows the theme**: `theme-set.d/10-gtk.sh` stamps omarchy-nautilus-theme overrides (flat corners, themed headerbar/sidebar/pathbar/scrollbars/inputs, `@headerbar_border_color`) plus the system font into `gtk-4.0/gtk.css` and restarts `nautilus` on theme switch; a new `font-set.d/10-nautilus.sh` re-stamps the font when `hexciri-font` changes it (`install.sh` deploys `font-set.d`).
 - **Discord picks up two themes**: the hook set now ships a ClearVision-based "Hexciri" theme (`vencord.theme.css`, colors + wallpaper live from the active palette/state) that coexists with the System24 one (`11-discord-system24` now writes `vencord-system24.theme.css`) — toggling either in Vesktop no longer clobbers the other.
