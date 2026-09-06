@@ -5,19 +5,24 @@ set -euo pipefail
 [[ -n ${1:-} ]] || { echo "Usage: hexciri-theme-install <git-url>"; exit 1; }
 
 url="$1"
-[[ $url =~ ^https://github.com/([^/]+)/(.+)\.git$ ]] || { echo "url must be github.com/<owner>/<repo>.git" >&2; exit 1; }
+[[ $url =~ ^https://github.com/([^/]+)/(.+?)(\.git)?$ ]] || { echo "url must be github.com/<owner>/<repo>[.git]" >&2; exit 1; }
 owner="${BASH_REMATCH[1]}"
 reponame="${BASH_REMATCH[2]}"
-name="${reponame#omarchy-}"
-name="${name%-theme}"
+# For the dest name: keep the repo slug as-is (no omarchy-/ -theme stripping
+# for nonconforming repos); only derive the short name from a convention repo.
+if [[ $reponame =~ ^omarchy-(.+)-theme$ ]]; then
+  name="${BASH_REMATCH[1]}"
+else
+  name="$reponame"
+fi
 name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
 [[ -n $name ]] || { echo "bad theme name" >&2; exit 1; }
 
 dest="$HOME/.config/hexciri/themes/$name"
 [[ -e $dest ]] && { echo "already exists: $dest"; exit 1; }
 
-# Track in the user's extras list: merge the shipped list into the override,
-# then append — so the theme becomes part of the list-managed Extra themes set.
+# Track in the extras list: append owner/name shorthand for convention repos,
+# or the raw URL for nonconforming ones so a fresh sync re-clones correctly.
 override="$HOME/.config/hexciri/theme-sources/extra.list"
 mkdir -p "$(dirname "$override")"
 shipped="${HEXCIRI_PATH:-/usr/share/hexciri}/theme-sources/extra.list"
@@ -25,8 +30,14 @@ if [[ ! -f $override && -f $shipped ]]; then
   sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' "$shipped" | rg -v '^$' > "$override"
 fi
 touch "$override"
-grep -qE "^$owner/$name([[:space:]]|$)" "$override" 2>/dev/null || printf '%s\n' "$owner/$name" >> "$override"
+if [[ $reponame =~ ^omarchy-.*-theme$ ]]; then
+  entry="$owner/$name"
+  grep -qE "^$owner/$name([[:space:]]|$)" "$override" 2>/dev/null || printf '%s\n' "$entry" >> "$override"
+else
+  entry="https://github.com/$owner/$reponame"
+  grep -qF "$entry" "$override" 2>/dev/null || printf '%s\n' "$entry" >> "$override"
+fi
 
 mkdir -p "$HOME/.config/hexciri/themes"
 git clone "$url" "$dest"
-echo "installed $name (added $owner/$name to the extras list — delete that line to uninstall)"
+echo "installed $name (added $entry to the extras list — delete that line to uninstall)"

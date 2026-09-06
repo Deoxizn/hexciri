@@ -68,8 +68,16 @@ op_sync_extra() {
   echo "Syncing Extra themes from $(basename "$(list_for extra)") ..."
   while read -r line; do
     [[ -z $line ]] && continue
-    set -- $(split_line "$line"); owner="$1"; name="$2"
-    [[ -n $owner && -n $name ]] || continue
+    # Lines starting with http:// or https:// are explicit repo URLs;
+    # everything else is the owner/name convention (omarchy-<name>-theme).
+    if [[ $line =~ ^https?:// ]]; then
+      url="$(sed 's/\.git$//' <<< "$line").git"
+      name="$(basename "$url" .git)"
+    else
+      set -- $(split_line "$line"); owner="$1"; name="$2"
+      [[ -n $owner && -n $name ]] || continue
+      url="https://github.com/$owner/omarchy-$name-theme.git"
+    fi
     if is_default "$name"; then
       echo "- skip $name (ships in the Omarchy defaults)"; skipped=$((skipped+1)); continue
     fi
