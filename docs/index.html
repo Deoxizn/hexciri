@@ -55,7 +55,18 @@
   li { margin: 6px 0; }
   footer { text-align: center; padding: 40px 24px 64px; color: var(--muted); border-top: 1px solid var(--line); }
   footer a { color: var(--rose); }
-  a { color: var(--rose); }
+a { color: var(--rose); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 1.3rem 1.4rem; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  .card:hover {
+    transform: translateY(-4px); border-color: rgba(182, 132, 157, 0.40);
+    box-shadow: 0 10px 30px rgba(183, 65, 80, 0.18);
+  }
+  .card h3 { font-size: 1.02rem; color: var(--rose); margin-bottom: 0.4rem; }
+  .card p { font-size: 0.94rem; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -65,6 +76,17 @@
   <pre class="curl">curl -LO https://hexciri.dirty.pizza/hexciri &amp;&amp; sh hexciri</pre>
 </header>
 <div class="wrap">
+<section>
+  <h2>Why Hexciri</h2>
+  <div class="grid">
+    <div class="card"><h3>Your wallpapers survive theme changes</h3><p>Drop your own images into <code>~/.config/hexciri/wallpapers</code> — they show up in the picker beside the theme's own, and stay put across every theme swap.</p></div>
+    <div class="card"><h3>One-click theme engine</h3><p>A single click (or <code>hexciri-theme-set &lt;name&gt;</code>) recolors the whole desktop. 22 themes ship included; extras are one line each in a list, no technical tinkering.</p></div>
+    <div class="card"><h3>Transparent terminals</h3><p>kitty at reduced background opacity with niri window-effect blur behind it — see your wallpaper through the terminal.</p></div>
+    <div class="card"><h3>Gaming, ready</h3><p>Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net, GeForce NOW, Xbox Cloud — GPU setup and controllers handled.</p></div>
+    <div class="card"><h3>Never-clobber config deploy</h3><p>Untouched configs update in place; edited ones stay yours, with the repo default saved alongside as <code>&lt;file&gt;.hexciri</code>.</p></div>
+    <div class="card"><h3>List-driven theming</h3><p>Themes and wallpapers are just lists — add a line to install, remove a line to uninstall. Drop files in a folder, no list needed.</p></div>
+  </div>
+</section>
 <section>
   <h2>Install</h2>
   <ol>
@@ -93,36 +115,23 @@
   <p><code>stable</code> is month-held pkgs; <code>bleeding</code> is normal Arch rolling release. GPU setup runs at install: Turing+ gets <code>nvidia-open</code> 6xx, NVIDIA GTX 1xxx or older gets <code>580xx</code> pinned to LTS, everything else gets mesa/vulkan.</p>
 </section>
 <section>
-  <h2>Theme engine</h2>
-  <p>One <code>colors.toml</code> recolors the whole desktop — Noctalia + Niri borders, kitty, fish, GTK, Qt, Discord, Spotify, Zed, Firefox, Steam and more — through a drop-in hook set. 22 Omarchy themes ship by default; extras are one <code>owner/name</code> per line in an editable list. Update ▸ Themes clones, pulls and prunes to match.</p>
-  <p style="margin-top:10px;">Your wallpapers survive theme changes — a persistent user store merges into the active theme's backgrounds as symlinks, so the picker shows theme images <em>and</em> your set, and a theme swap keeps your current wallpaper. Strata follows the theme live, no reopen needed.</p>
+  <h2>Themes</h2>
+  <p>Switch the whole look of your desktop whenever you like — colors, windows, terminals and apps all change together. Pick a theme from the Themes menu or run <code>hexciri-theme-set &lt;name&gt;</code>.</p>
+  <p style="margin-top:10px;">22 themes ship included, and you can add more any time — extra themes are one line each (<code>owner/name</code>) in a simple list. Add a line, run Update ▸ Themes, done; remove the line and it's gone.</p>
+  <p style="margin-top:10px;">A theme recolors practically everything: the bar and desktop shell, terminals (kitty, fish, fzf, foot, cava), browsers (Firefox, Zen, qutebrowser), editors (Zed, VS Code, Cursor, Windsurf, Typora, Obsidian), Discord/Vesktop, Spotify, Steam, Heroic, tmux, zellij and more — 30+ apps in all.</p>
+  <p style="margin-top:10px;"><strong>Your wallpapers stick around.</strong> Drop your own images into <code>~/.config/hexciri/wallpapers</code> — they show up in the wallpaper picker beside the theme's own, survive every theme change, and a theme swap never overwrites the wallpaper you're currently using.</p>
 </section>
 <section>
   <h2>Lists, with examples</h2>
-  <p>Both systems are plain text — edit a list, run Update ▸ Themes / Update ▸ Wallpaper, done.</p>
+  <p>Both lists are plain text files — add a line, run Update ▸ Themes (for themes) or Update ▸ Wallpaper (for wallpapers), done.</p>
   <p style="margin-top:10px;"><strong>Extra themes</strong> — <code>~/.config/hexciri/theme-sources/extra.list</code>, one <code>owner/name</code> per line:</p>
-  <pre class="curl" style="margin:10px 0;"><code># one theme per line, &lt;owner&gt;/&lt;name&gt; form
+  <pre class="curl" style="margin:10px 0;"><code># one theme per line, owner/name form
 HANCORE-linux/aamis
-OldJobobo/dracula
-
-# full URL works for repos that don't follow the naming
-https://github.com/someone/not-an-omarchy-theme</code></pre>
-  <p style="margin-top:10px;"><strong>Extra wallpaper directories</strong> — <code>~/.config/hexciri/wallpaper-sources/extra.list</code>, one path per line:</p>
-  <pre class="curl" style="margin:10px 0;"><code># one directory per line; ~/ expands
-~/Pictures/Wallpapers
+OldJobobo/dracula</code></pre>
+  <p style="margin-top:10px;"><strong>Extra wallpaper folders</strong> — <code>~/.config/hexciri/wallpaper-sources/extra.list</code>, one folder per line (<code>~</code> means your home):</p>
+  <pre class="curl" style="margin:10px 0;"><code>~/Pictures/Wallpapers
 /mnt/Photos/wallpapers</code></pre>
-  <p style="margin-top:10px;">Removing a line removes that theme or directory's wallpapers on the next sync — nothing is ever copied or deleted, extras are just symlinks. Not a list person? Drop files straight into <code>~/.config/hexciri/wallpapers</code> and they merge at Update ▸ Wallpaper, persisting across theme changes.</p>
-</section>
-<section>
-  <h2>Highlights</h2>
-  <ul>
-    <li><strong>Your wallpapers survive theme changes</strong> — personal images merge into the active theme's backgrounds as symlinks and stay put across swaps.</li>
-    <li><strong>Theme engine</strong> — one <code>colors.toml</code> + a 29-hook set recolors 30+ apps; themes are list-driven and Strata follows live.</li>
-    <li><strong>Transparent terminals</strong> — kitty at reduced background opacity with niri window-effect blur behind it (no focus ring/border, which niri paints as a solid rectangle over the translucency).</li>
-    <li><strong>Gaming</strong> — <code>hexciri-gaming</code>: Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net (umu + GE-Proton), GeForce NOW, Xbox Cloud, GPU setup, Xbox controllers.</li>
-    <li><strong>Never-clobber config deploy</strong> — install.sh sha-tracks configs: untouched ones update in place; edited ones stay with the repo default as <code>&lt;file&gt;.hexciri</code> alongside.</li>
-    <li><strong>List-driven everything</strong> — themes and wallpapers are just lists: extra themes are one <code>owner/name</code> per line in <code>extra.list</code> (Update ▸ Themes clones, pulls and prunes to match), and wallpaper dirs are one path per line in <code>wallpaper-sources/extra.list</code> — remove a line and it's gone on the next refresh.</li>
-  </ul>
+  <p style="margin-top:10px;">Not a list person? The plain <code>~/.config/hexciri/wallpapers</code> folder works too — drop files in and they're picked up, no list entry needed, and they stay across theme changes.</p>
 </section>
 </div>
 <footer>

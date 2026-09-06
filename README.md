@@ -8,6 +8,30 @@ Arch × Niri × Noctalia
 
 </div>
 
+## Highlights
+
+- **Your wallpapers survive theme changes** — drop your own images into
+  `~/.config/hexciri/wallpapers`, and they show up in the picker beside the
+  theme's own and stay put across theme swaps.
+- **Theme engine** — one click (or `hexciri-theme-set <name>`) recolors the
+  whole desktop; 22 themes ship included and extras are one line each in a list,
+  no technical tinkering.
+- **Transparent terminals** — kitty runs at reduced background opacity with
+  niri window-effect blur behind it. No focus ring / border: niri draws those
+  as a solid rectangle behind the window (per its FAQ), which would cover the
+  translucency.
+- **Gaming** — `hexciri-gaming`: Steam, Heroic, Lutris, RetroArch, Minecraft,
+  Battle.net (umu-launcher + GE-Proton), GeForce NOW, Xbox Cloud, GPU setup,
+  Xbox controllers. `hexciri-packages` → Gaming for launchers.
+- **Never-clobber config deploy** — install.sh sha-tracks configs: untouched
+  ones update in place; if you've edited one, yours stays and the repo default
+  lands as `<file>.hexciri` alongside (backups in `~/.config/hexciri-backup/`).
+- **List-driven everything** — themes and wallpapers are just lists: extra
+  themes are one `<owner>/<name>` per line in `extra.list` (**Update ▸ Themes**
+  clones, pulls and prunes to match), and wallpaper dirs are one path per line
+  in `config/wallpaper-sources/extra.list` — remove a line and it's gone on the
+  next refresh.
+
 ## Install
 
 1. Flash the Arch ISO, boot it (UEFI), connect network (`iwctl` for wifi).
@@ -64,83 +88,54 @@ Autodetected at install (mesa / `nvidia-open` / `580xx` with a hard LTS pin
 on NVIDIA GTX 1xxx or older cards). To change later, re-run `hexciri-gpu`.
 
 
-## Theme engine (colors.toml)
+## Themes
 
-One `colors.toml` recolors the whole desktop. 22 Omarchy themes ship by default;
-**extra themes** are one `<owner>/<name>` per line in an `extra.list` (or a
-full URL when the repo doesn't follow the naming); **Update ▸ Themes** clones,
-pulls and prunes extras to match the list, so removing a line removes a theme.
+Switch the whole look of your desktop whenever you like — colors, windows,
+terminals and apps all change together. Pick a theme from the **Themes** menu
+or run `hexciri-theme-set <name>`.
 
-State: `~/.local/state/hexciri/current/{theme,theme.name,background}`.
-Hooks: `~/.config/hexciri/hooks/theme-set.d/` — 29 drop-ins that push the active
-palette into 30+ apps (Noctalia + Niri borders, kitty, fish, GTK, Qt/qt6ct,
-Discord/Vesktop, Spotify, Zed, VS Code, Firefox, Steam, tmux, zellij, …). The
-`noctalia-sync.sh` hook writes `~/.config/noctalia/palettes/hexciri.json` and
-patches the shell's config; Strata follows the theme live, no reopen needed.
+**22 themes ship with Hexciri**, and you can add more any time — extra themes
+are just one line each (`owner/name`) in a simple list. Add a line, run
+**Update ▸ Themes**, and it's installed. Remove the line and it's gone.
 
-**Your wallpapers survive theme changes.** A persistent user store —
-`~/.config/hexciri/wallpapers` — is merged into the active theme's backgrounds
-as `zz-user-*` symlinks, alongside whatever the theme ships. Extra directories
-(a `~/Pictures/Wallpapers`, NFS mounts, …) go in `config/wallpaper-sources/extra.list`.
-**Update ▸ Wallpaper** re-runs the merge on demand; a theme swap preserves your
-links and never stomps the wallpaper you're currently using.
+A theme recolors practically everything you touch:
+
+- the **bar** and desktop shell
+- the **terminal** (kitty, fish, fzf, foot, and the cava visualization)
+- your **browser** (Firefox, Zen, qutebrowser, hermes)
+- your **editor** (Zed, VS Code, Cursor, Windsurf, Typora, Obsidian)
+- **Discord/Vesktop, Spotify, Steam, Heroic, tmux, zellij**, GTK and Qt apps,
+  supefile and more — 30+ apps in all.
+
+**Your wallpapers stick around.** Drop your own images into
+`~/.config/hexciri/wallpapers` — they show up in the wallpaper picker beside
+the theme's own, survive every theme change, and a theme swap doesn't overwrite
+the wallpaper you're currently using.
 
 ## Lists, with examples
 
-Both systems are plain text — edit a list, run **Update ▸ Themes** / **Update ▸
-Wallpaper**, done.
+Both lists are plain text files — add a line, run **Update ▸ Themes** (for
+themes) or **Update ▸ Wallpaper** (for wallpapers), done.
 
 **Extra themes** — `~/.config/hexciri/theme-sources/extra.list`:
 
 ```text
-# one theme per line, <owner>/<name> form
+# one theme per line, owner/name form
 HANCORE-linux/aamis
 OldJobobo/dracula
-
-# full URL works for repos that don't follow the naming convention
-https://github.com/someone/not-an-omarchy-theme
 ```
 
-**Extra wallpaper directories** — `~/.config/hexciri/wallpaper-sources/extra.list`:
+**Extra wallpaper folders** — `~/.config/hexciri/wallpaper-sources/extra.list`:
 
 ```text
-# one directory per line; ~/ expands; each merges as zz-user-<dirname>-<name>
+# one folder per line; ~ means your home
 ~/Pictures/Wallpapers
 /mnt/Photos/wallpapers
 ```
 
-Removing a line removes that theme or directory's wallpapers on the next sync.
-No file is ever copied or deleted — extras are just symlinks into the theme's
-backgrounds.
-
-Not a list person? The wallpaper store is the plain `~/.config/hexciri/wallpapers`
-folder — drop files in and they merge at **Update ▸ Wallpaper**, no list entry
-needed, and they persist across theme changes.
-
-## Highlights
-
-- **Your wallpapers survive theme changes** — personal images merge into the
-  active theme's backgrounds as symlinks and stay put across swaps; the picker
-  shows theme images AND your set, and theme switches keep your current
-  wallpaper.
-- **Theme engine** — one `colors.toml` recolors the desktop via a 29-hook set;
-  themes are list-driven (22 ship by default, extras live in one editable
-  list), and Strata follows the theme live.
-- **Transparent terminals** — kitty runs at reduced background opacity with
-  niri window-effect blur behind it. No focus ring / border: niri draws those
-  as a solid rectangle behind the window (per its FAQ), which would cover the
-  translucency.
-- **Gaming** — `hexciri-gaming`: Steam, Heroic, Lutris, RetroArch, Minecraft,
-  Battle.net (umu-launcher + GE-Proton), GeForce NOW, Xbox Cloud, GPU setup,
-  Xbox controllers. `hexciri-packages` → Gaming for launchers.
-- **Never-clobber config deploy** — install.sh sha-tracks configs: untouched
-  ones update in place; if you've edited one, yours stays and the repo default
-  lands as `<file>.hexciri` alongside (backups in `~/.config/hexciri-backup/`).
-- **List-driven everything** — themes and wallpapers are just lists: extra
-  themes are one `<owner>/<name>` per line in `extra.list` (**Update ▸ Themes**
-  clones, pulls and prunes to match), and wallpaper dirs are one path per line
-  in `config/wallpaper-sources/extra.list` — remove a line and it's gone on the
-  next refresh.
+Not a list person? The plain `~/.config/hexciri/wallpapers` folder works too —
+drop files in and they're picked up, no list entry needed, and they stay across
+theme changes.
 
 ## Already on Arch?
 Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:
