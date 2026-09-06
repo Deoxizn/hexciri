@@ -1,6 +1,6 @@
 #!/bin/bash
 # hexciri:themes=theme-submenu
-# hexciri:summary=Themes: browse the theme list, switch palette source, sync/remove themes, open backgrounds
+# hexciri:summary=Themes: browse the theme list, switch palette source, open backgrounds
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,17 +17,13 @@ choice=$(
   printf '%s\n' \
     'Theme list' \
     'Palette source' \
-    'Sync themes' \
-    'Remove extra themes' \
     'Backgrounds' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=30 --lines=5
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=30 --lines=3
 ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
 case "$choice" in
   "Theme list")         exec "$SCRIPT_DIR/hexciri-themes-list" ;;
-  "Sync themes")         exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run sync ;;
-  "Remove extra themes") exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run remove extra ;;
   "Backgrounds")
     dir=""
     if [[ -f "$NOCTALIA_CFG" ]]; then

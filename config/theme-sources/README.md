@@ -26,8 +26,8 @@ Two lists, both edited from **Config**:
 - `config/theme-sources/omarchy.list` — the shipped **Omarchy defaults**. Editing
   your copy lets you prune or add to the default set.
 
-Everything is list-driven. **Sync themes** (Themes menu) — the same action as
-**Update ▸ Update themes** — does the whole job for both lists:
+Everything is list-driven. **Update ▸ Update themes** is the one action and
+does the whole job for both lists:
 
 - **Omarchy defaults**: pulls the sparse source clone, links anything new,
   unlinks any symlink whose name you removed from the omarchy list.
@@ -35,7 +35,10 @@ Everything is list-driven. **Sync themes** (Themes menu) — the same action as
   every installed one, and removes any locally-cloned extra whose line was
   deleted from the list.
 
-**Remove extra themes** (Themes menu) tears down all installed extras in one go.
+To uninstall extras entirely, empty their `extra.list` and run it again.
+
+The repo sync (Hexciri updater) also keeps the Omarchy sparse clone current, so
+defaults stay pinned even if you never touch this.
 
 ## Per-theme-repo convention
 
