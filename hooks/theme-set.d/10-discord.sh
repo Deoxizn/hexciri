@@ -103,7 +103,9 @@ create_dynamic_theme() {
 
 /* Remove ClearVision branding (guild list header + settings About) */
 :is(.theme-dark, .theme-light):not(.platform-osx) .leading_c38106::before,
-:is(.theme-dark, .theme-light):not(.platform-osx) [class*="guilds_"] [class*="leading_"]::before {
+:is(.theme-dark, .theme-light):not(.platform-osx) .leading_c38106::after,
+:is(.theme-dark, .theme-light):not(.platform-osx) [class*="guilds_"] [class*="leading_"]::before,
+:is(.theme-dark, .theme-light):not(.platform-osx) [class*="guilds_"] [class*="leading_"]::after {
   content: none !important;
 }
 .info__2debe::after {
