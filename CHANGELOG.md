@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-05 — hexciri post-0.1.2 hardening
+
+- **Plain-root, LUKS/plymouth gone**: dropped the LUKS + plymouth splash entirely — plain-root boots fastest, the SDDM password/fingerprint greeter is the login gate. plymouth theme, initramfs encrypt plumbing, and `hexciri-splash` removed with them.
+- **mkinitcpio is deterministic now**: install seeds a pristine `mkinitcpio.conf` before pacstrap (so kernel hook builds can't abort it), enables only hooks whose initcpio hook file actually exists, and guarantees an initramfs rebuild — self-healing HOOKS management instead of hand-editing.
+- **Bootstrap revs 20–29**: `$_u` escaped in stage2 (set -u crash); persistent pacman cache + gpg keyring seed so wipe retries skip re-download/keygen; `CacheDir` emitted inside `[options]` (rev 26) then the package cache staged in `/tmp` not `/root` (archiso pacman hits EPERM on 0700 `/root`, rev 28); pacman conf regenerated per run with the cache dropped wholesale (rev 29); loud failure on pacstrap errors.
+- **Site**: full hexciriv2 emblem in the hero, unbranded variant, logo served as `brand.png` (busts the stale-logo edge cache), spacing/cache polish.
+- **Menus & file editing**: `hexciri-config` gains a Fastfetch entry; `hexciri-edit-file` opens directories via xdg-open (fixes empty Config>Hooks/Scripts/Palettes); `hexciri-themes` adds a Backgrounds entry opening the noctalia wallpaper dir.
+- **Install/update split**: first-install-only seeds (theme, browser/file-manager defaults, GTK dark theming) gated by `theme.name` + a `ui-defaults-applied` marker — updates only deploy artifacts and never reset user state. `hexciri-update` repo sync runs the full self-update so git commits actually land; `hexciri-update-run` runs the framework self-update before pacman. `hexciri-theme-ensure` stopped forcing `source=custom` (palette source is a user choice, preserved at login) and noctalia-sync only patches to the custom palette when unset/already custom.
+
 ## 2026-09-05 — hexciri v0.1.2
 
 - **hexciriv2 brand refresh**: new emblem (2000×1828) now ships on the SDDM theme, README, and the docs/website logo — and the old banner emblems are gone. A clean unbranded variant is the fastfetch logo.
@@ -9,6 +18,8 @@
 - **hexciri-security**: the Fingerprint menu entry appears only when a reader is actually present.
 - **hexciri-update-run**: the post-update reboot offer follows the pinned boot default (hexciri-kernel pin, else loader default) instead of the newest module dir, so a second staged kernel no longer spoofs a reboot.
 - **hexciri-sync**: PAM restoration rebalanced around `system-auth` + the keyring pin; SDDM theme deploy expanded to the full greeter asset set.
+- **opencode / TUI floats follow the terminal theme**: the `TUI.float` niri window rule (used by `hexciri-agent` → `xdg-terminal-exec --app-id=TUI.float -e opencode`, plus kernel/defaults menus) now carries `background-effect { blur true }` — the same treatment the `app-id="kitty"` rule gets. OpenCode previously rendered in a TUI.float kitty with no blur, so its reduced `background_opacity` read as flat color instead of soft translucency; theme colors (via the kitty include + SIGUSR1 poke) were already flowing.
+- **Wallpaper directory actually holds on fresh installs**: hexciri could only point Noctalia's wallpaper picker at the active theme via `config.toml` `[wallpaper] directory`, but Noctalia's GUI overrides (`settings.toml`) win over user config — so a fresh box picked its builtin folder. install.sh now seeds `directory = ~/.local/state/hexciri/current/theme/backgrounds` into `settings.toml` (first-seed-only, never re-asserted; the path is stable across theme switches since `current/theme` is re-copied in place).
 
 ## 2026-09-05 — hexciri v0.1.1
 

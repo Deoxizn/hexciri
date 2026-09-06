@@ -507,6 +507,24 @@ else
   info "seeded arch-updater plugin presets into ~/.local/state/noctalia/settings.toml"
 fi
 
+# ── noctalia wallpaper directory: point the wallpaper picker at the active
+#    theme's backgrounds. Noctalia's settings.toml (GUI overrides) wins over
+#    config.toml, so the repo's config.toml `directory` alone never holds on a
+#    fresh box — seed the key so the default actually sticks. Once present it
+#    is never re-asserted (the user re-picking a folder is their choice).
+#    The path is stable across theme switches (current/theme is re-copied in
+#    place by hexciri-theme-set), so no per-theme re-sync is needed. ──
+WP_SEED_DIR="$HOME/.local/state/noctalia/settings.toml"
+if [[ $DRY_RUN == true ]]; then
+  info "[dry-run] seed noctalia wallpaper directory → active theme's backgrounds"
+elif grep -q '^directory[[:space:]]*=' "$WP_SEED_DIR" 2>/dev/null; then
+  ok "noctalia wallpaper directory present (left untouched)"
+else
+  printf '\n[wallpaper]\nenabled = true\ndirectory = "%s"\n' \
+    "$HOME/.local/state/hexciri/current/theme/backgrounds" >> "$WP_SEED_DIR"
+  info "seeded noctalia wallpaper directory → active theme's backgrounds"
+fi
+
 echo ""
 ok "hexciri installed (channel: $CHANNEL, theme: sakurazuki)"
 info "configs: ~/.config/niri/config.kdl ~/.config/noctalia/config.toml (backups in $bak)"

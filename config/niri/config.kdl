@@ -452,11 +452,17 @@ window-rule {
 
 // TUI apps — float at 1000x720, centered
 // Used by hexciri-agent, hexciri-kernel, hexciri-defaults, etc.
+// background-effect blurs the wallpaper behind the host terminal (opencode etc.
+// spawn via xdg-terminal-exec --app-id=TUI.float) so its reduced
+// background_opacity reads as soft translucency — same as the kitty rule.
 window-rule {
     match app-id="TUI\\.float"             // Matches apps launched with --app-id=TUI.float
     open-floating true
     default-column-width { fixed 1000; }    // Fixed width in pixels
     default-window-height { fixed 720; }    // Fixed height in pixels
+    background-effect {
+        blur true
+    }
 }
 
 // File manager — Strata tiles with the rest (no float rule)
