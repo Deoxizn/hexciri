@@ -80,7 +80,7 @@ theme changes.
 | agent | `opencode` (`Mod+`` `) | `hexciri-defaults` → Agent |
 | kernel | auto: `linux` (stock), `linux-lts` pinned on legacy NVIDIA | `hexciri-kernel` (custom post-install) |
 | gpu | autodetect (mesa / nvidia-open / 580xx+LTS pin) | `hexciri-gpu` |
-| monitors | preconfigured (laptop panel `eDP-1`, scale 2; desktops name their output) | `~/.config/niri/config.kdl` |
+| monitors | preconfigured (scale 2, laptop panel) | `~/.config/niri/config.kdl` |
 | bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |
 | channel | `stable` | `hexciri-channel-set` |
