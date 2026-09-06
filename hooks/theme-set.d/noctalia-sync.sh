@@ -212,9 +212,17 @@ if niri_cfg.exists():
     print(f"noctalia-sync: patched config.kdl borders accent={accent} inactive={muted}")
 
 # ── 4. Wallpaper sync ──
+# If the user has custom wallpapers merged (zz-user-* links from the store or
+# extra dirs list), leave the wallpaper alone — a theme switch must not stomp
+# their choice. Without customs, apply the new theme's default background.
 if os.environ.get("NOCTALIA_SYNC_NO_WALLPAPER") != "1":
     wp_dir = theme_dir / "backgrounds"
+    has_custom = False
     if wp_dir.is_dir():
+        has_custom = any(p.name.startswith("zz-user-") for p in wp_dir.iterdir())
+    if has_custom:
+        print("noctalia-sync: custom user wallpapers present — keeping the current wallpaper")
+    elif wp_dir.is_dir():
         imgs = sorted(
             p for p in wp_dir.iterdir()
             if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
