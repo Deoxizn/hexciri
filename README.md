@@ -66,13 +66,10 @@ on NVIDIA GTX 1xxx or older cards). To change later, re-run `hexciri-gpu`.
 
 ## Theme engine (colors.toml)
 
-One `colors.toml` recolors the whole desktop. Themes are list-driven — there is
-no manual catalog:
-
-- **Omarchy defaults** (22) ride along with the repo sync.
-- **Extra themes** are one `<owner>/<name>` per line in an `extra.list` (or a
-  full URL when the repo doesn't follow the naming); **Update ▸ Themes** clones,
-  pulls and prunes extras to match the list, so removing a line removes a theme.
+One `colors.toml` recolors the whole desktop. 22 Omarchy themes ship by default;
+**extra themes** are one `<owner>/<name>` per line in an `extra.list` (or a
+full URL when the repo doesn't follow the naming); **Update ▸ Themes** clones,
+pulls and prunes extras to match the list, so removing a line removes a theme.
 
 State: `~/.local/state/hexciri/current/{theme,theme.name,background}`.
 Hooks: `~/.config/hexciri/hooks/theme-set.d/` — 29 drop-ins that push the active
@@ -127,8 +124,8 @@ needed, and they persist across theme changes.
   shows theme images AND your set, and theme switches keep your current
   wallpaper.
 - **Theme engine** — one `colors.toml` recolors the desktop via a 29-hook set;
-  themes are list-driven (Omarchy defaults ride the sync, extras live in one
-  editable list), and Strata follows the theme live.
+  themes are list-driven (22 ship by default, extras live in one editable
+  list), and Strata follows the theme live.
 - **Transparent terminals** — kitty runs at reduced background opacity with
   niri window-effect blur behind it. No focus ring / border: niri draws those
   as a solid rectangle behind the window (per its FAQ), which would cover the
