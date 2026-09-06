@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# hexciri:summary=Launch a URL as a web app, or focus it if it is already open
+# hexciri:args=<window-pattern> <url-and-flags...>
+
+# niri-flavored port of omarchy-launch-or-focus-webapp: keybinds for web apps
+# (Gemini, Photopea, Messenger, ...) call this so a second press focus-switches
+# to the already-open web app instead of stacking another window.
+
+if (($# == 0)); then
+  echo "Usage: hexciri-launch-or-focus-webapp [window-pattern] [url-and-flags...]"
+  exit 1
+fi
+
+WINDOW_PATTERN="$1"
+shift
+
+# existing window whose app-id or title matches the pattern (substring, case-insensitive)
+id=$(niri msg --json windows 2>/dev/null | jq -r --arg p "$WINDOW_PATTERN" \
+  '.[] | select((.app_id|test($p;"i")) or (.title|test($p;"i"))) | .id' | head -n1) || true
+
+if [[ -n $id ]]; then
+  niri msg action focus-window --id "$id"
+else
+  exec hexciri-launch-webapp "$@"
+fi

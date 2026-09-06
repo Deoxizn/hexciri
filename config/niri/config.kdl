@@ -239,6 +239,13 @@ binds {
     Mod+Shift+E { spawn "zeditor"; }                            // Open editor (zed)
     Mod+Shift+F { spawn "~/.local/bin/strata"; }                // Open file manager (Strata, per-user install)
 
+    // ── Web apps (via hexciri-launch-or-focus-webapp: reuse the default
+    //    Chromium-family browser, and focus an already-open web app instead of
+    //    stacking another window) ──
+    Mod+Ctrl+M { spawn "hexciri-launch-or-focus-webapp" "messenger" "https://www.messenger.com"; }    // Messenger webapp
+    XF86Launch5 { spawn "hexciri-launch-or-focus-webapp" "gemini" "https://gemini.google.com/app"; }  // Gemini webapp
+    XF86Launch6 { spawn "hexciri-launch-or-focus-webapp" "photopea" "https://photopea.com"; }         // Photopea webapp
+
     // ── Close & quit ──
     Mod+Q { close-window; }                                     // Close focused window
 
@@ -450,16 +457,13 @@ window-rule {
     default-column-width { proportion 0.5; }
 }
 
-// TUI apps — float at 1000x720, centered
-// Used by hexciri-agent, hexciri-kernel, hexciri-defaults, etc.
-// background-effect blurs the wallpaper behind the host terminal (opencode etc.
-// spawn via xdg-terminal-exec --app-id=TUI.float) so its reduced
-// background_opacity reads as soft translucency — same as the kitty rule.
+// TUI apps (kitty hosts launched via xdg-terminal-exec --app-id=TUI.float):
+// opencode (hexciri-agent), hexciri-kernel, hexciri-defaults, install menus, etc.
+// They tile like any other terminal; background-effect blurs the wallpaper behind
+// the host so their reduced background_opacity reads as soft translucency,
+// same as the kitty rule.
 window-rule {
     match app-id="TUI\\.float"             // Matches apps launched with --app-id=TUI.float
-    open-floating true
-    default-column-width { fixed 1000; }    // Fixed width in pixels
-    default-window-height { fixed 720; }    // Fixed height in pixels
     background-effect {
         blur true
     }
@@ -486,6 +490,25 @@ window-rule {
 window-rule {
     match app-id="brave-browser-beta"
     open-on-workspace "browser"
+}
+
+// Chromium web apps (hexciri-launch-webapp) — full width, maximized
+window-rule {
+    match app-id="brave-www\\.messenger\\.com__-Default"
+    default-column-width { proportion 1.0; }
+    open-maximized true
+}
+
+window-rule {
+    match app-id="brave-gemini\\.google\\.com__app-Default"
+    default-column-width { proportion 1.0; }
+    open-maximized true
+}
+
+window-rule {
+    match app-id="brave-photopea\\.com__-Default"
+    default-column-width { proportion 1.0; }
+    open-maximized true
 }
 
 // Code editors — always opens on the "code" named workspace

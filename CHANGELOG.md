@@ -2,6 +2,8 @@
 
 ## 2026-09-05 — hexciri post-0.1.2 hardening
 
+- **Web-app keybinds actually work**: Messenger/Gemini/Photopea binds (Mod+Ctrl+M, XF86Launch5/6) are back as a `hexciri-launch-or-focus-webapp` port of Omarchy's script — they reuse the default Chromium browser and focus an already-open web app instead of stacking a second window. Also fixed `hexciri-launch-webapp`, whose desktop-file Exec lookup died (`set -e`) whenever the browser's `.desktop` file only existed in `/usr/share/applications` — the exact case on fresh installs.
+- **opencode/hexciri TUI helpers tile now**: the `TUI.float` window rule dropped `open-floating` + fixed 1000x720 (kept the `background-effect` blur) so the kitty-hosted TUIs behave like normal terminals under niri's scrollable tiling.
 - **yay ships by default**: fresh installs build `yay-bin` (prebuilt AUR binary, as the managed user) so the AUR menu entry (`hexciri-packages` → Install → AUR), the arch-updater AUR pass, and `hexciri-gaming`'s on-demand AUR pulls all just work out of the box instead of printing "install yay first".
 
 - **Plain-root, LUKS/plymouth gone**: dropped the LUKS + plymouth splash entirely — plain-root boots fastest, the SDDM password/fingerprint greeter is the login gate. plymouth theme, initramfs encrypt plumbing, and `hexciri-splash` removed with them.
