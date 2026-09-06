@@ -1,6 +1,6 @@
 #!/bin/bash
 # hexciri:themes=theme-submenu
-# hexciri:summary=Themes: browse the theme list, switch palette source, sync/update/remove extra themes, open backgrounds
+# hexciri:summary=Themes: browse the theme list, switch palette source, sync/remove extra themes, open backgrounds
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,17 +18,15 @@ choice=$(
     'Theme list' \
     'Palette source' \
     'Sync extra themes' \
-    'Update extra themes' \
     'Remove extra themes' \
     'Backgrounds' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=30 --lines=6
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=30 --lines=5
 ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
 case "$choice" in
   "Theme list")         exec "$SCRIPT_DIR/hexciri-themes-list" ;;
   "Sync extra themes")  exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run sync ;;
-  "Update extra themes") exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run update ;;
   "Remove extra themes") exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run remove extra ;;
   "Backgrounds")
     dir=""
