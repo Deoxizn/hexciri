@@ -441,12 +441,17 @@ if [[ ! -f $UI_MARKER ]]; then
   done
   run xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
   # imv ships NoDisplay=true, which hides it (and Brave wins image defaults by
-  # default). Ship a displayable user-level override and pin image/* to imv so
-  # files open in the image viewer instead of the browser.
+  # default). Ship a displayable user-level override with a bundled icon (imv's
+  # own Icon=multimedia-photo-viewer doesn't exist on Arch) and pin image/* to
+  # imv so files open in the image viewer instead of the browser.
   if [[ -f /usr/share/applications/imv.desktop || -f ~/.local/share/applications/imv.desktop ]]; then
     mkdir -p "$HOME/.local/share/applications"
-    run awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv.desktop | sed 's|^Icon=.*|Icon=image-x-generic|' > "$HOME/.local/share/applications/imv.desktop" 2>/dev/null || true
-    run awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv-dir.desktop | sed 's|^Icon=.*|Icon=image-x-generic|' > "$HOME/.local/share/applications/imv-dir.desktop" 2>/dev/null || true
+    mkdir -p "$HOME/.local/share/icons/hicolor/256x256/apps"
+    run cp -f "$REPO_DIR/branding/imv.png" "$HOME/.local/share/icons/hicolor/256x256/apps/imv.png" 2>/dev/null || true
+    run cp -f "$REPO_DIR/branding/imv-dir.png" "$HOME/.local/share/icons/hicolor/256x256/apps/imv-dir.png" 2>/dev/null || true
+    run gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" &>/dev/null || true
+    run awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv.desktop | sed 's|^Icon=.*|Icon=imv|' > "$HOME/.local/share/applications/imv.desktop" 2>/dev/null || true
+    run awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv-dir.desktop | sed 's|^Icon=.*|Icon=imv-dir|' > "$HOME/.local/share/applications/imv-dir.desktop" 2>/dev/null || true
     for mt in image/png image/x-png image/jpeg image/jpg image/pjpeg image/gif image/bmp image/x-bmp image/webp image/avif image/heif image/tiff image/tiff-fx image/svg+xml image/x-farbfeld image/jxl image/qoi image/*; do
       run xdg-mime default imv.desktop "$mt" 2>/dev/null || true
     done

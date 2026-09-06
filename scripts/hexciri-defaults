@@ -129,12 +129,19 @@ case "${pick_type,,}" in
     [[ -n $choice ]] || exit 0
     setv images "$choice"
     # imv ships NoDisplay=true, so it never wins as a hidden default; a
-    # displayable user-level override makes it visible and defaultable.
+    # displayable user-level override makes it visible and defaultable. Imv's
+    # own Icon=multimedia-photo-viewer doesn't exist on Arch, so deploy the
+    # bundled viewer/folder icons into hicolor and point the entries at them.
     if [[ $choice == imv ]]; then
       if [[ -f /usr/share/applications/imv.desktop || -f ~/.local/share/applications/imv.desktop ]]; then
+        local REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
         mkdir -p "$HOME/.local/share/applications"
-        awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv.desktop | sed 's|^Icon=.*|Icon=image-x-generic|' > "$HOME/.local/share/applications/imv.desktop" 2>/dev/null || true
-        awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv-dir.desktop | sed 's|^Icon=.*|Icon=image-x-generic|' > "$HOME/.local/share/applications/imv-dir.desktop" 2>/dev/null || true
+        mkdir -p "$HOME/.local/share/icons/hicolor/256x256/apps"
+        cp -f "$REPO/branding/imv.png" "$HOME/.local/share/icons/hicolor/256x256/apps/imv.png" 2>/dev/null || true
+        cp -f "$REPO/branding/imv-dir.png" "$HOME/.local/share/icons/hicolor/256x256/apps/imv-dir.png" 2>/dev/null || true
+        gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" &>/dev/null || true
+        awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv.desktop | sed 's|^Icon=.*|Icon=imv|' > "$HOME/.local/share/applications/imv.desktop" 2>/dev/null || true
+        awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv-dir.desktop | sed 's|^Icon=.*|Icon=imv-dir|' > "$HOME/.local/share/applications/imv-dir.desktop" 2>/dev/null || true
         for mt in image/png image/x-png image/jpeg image/jpg image/pjpeg image/gif image/bmp image/x-bmp image/webp image/avif image/heif image/tiff image/tiff-fx image/svg+xml image/x-farbfeld image/jxl image/qoi image/*; do
           xdg-mime default imv.desktop "$mt" 2>/dev/null || true
         done
