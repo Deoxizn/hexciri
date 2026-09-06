@@ -1,0 +1,43 @@
+#!/bin/bash
+# hexciri:summary=Print the OEM Windows product key stored in firmware (MSDM ACPI table or OA3 EFI variable)
+set -euo pipefail
+
+extract_key() {
+  grep -aoEm1 '[A-Z0-9]{5}(-[A-Z0-9]{5}){4}'
+}
+
+read_source() { # <reader> <path> — sudo when the source is root-only
+  local reader="$1" path="$2"
+  if [[ -r $path ]]; then
+    "$reader" "$path"
+  else
+    sudo "$reader" "$path"
+  fi
+}
+
+# Modern boards park the key in the OA3 EFI variable instead of (or alongside)
+# the MSDM ACPI table — check both so a "no table here" board still matches.
+sources=("${HEXCIRI_MSDM_PATH:-/sys/firmware/acpi/tables/MSDM}")
+if compgen -G '/sys/firmware/efi/efivars/OA3MSDMvariable-*' >/dev/null; then
+  for v in /sys/firmware/efi/efivars/OA3MSDMvariable-*; do
+    sources+=("$v")
+  done
+fi
+
+key=""
+for path in "${sources[@]}"; do
+  [[ -e $path ]] || continue
+  if command -v strings >/dev/null 2>&1; then
+    key=$(read_source strings "$path" | extract_key || true)
+  else
+    key=$(read_source cat "$path" | extract_key || true)
+  fi
+  [[ -n $key ]] && break
+done
+
+if [[ -z $key ]]; then
+  echo "No Windows license key found in firmware (no MSDM table or OA3 MSDM variable)." >&2
+  exit 1
+fi
+
+printf '%s\n' "$key"
