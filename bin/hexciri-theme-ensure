@@ -28,10 +28,13 @@ fi
 
 # Palette source (Theme vs Wallpaper/stock) is the user's independent choice
 # via the Themes menu — never force it back to custom at login. If the theme
-# tree is live, we're done.
+# tree is live, refresh the wallpaper merge (pruning links for store files
+# that have been deleted since the last theme set) and we're done.
+SELF_BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if $need_apply; then
   echo "hexciri-theme-ensure: $name theme not live — re-applying $name"
   hexciri-theme-set "$name"
 else
-  echo "hexciri-theme-ensure: theme '$name' is live, nothing to do"
+  "$SELF_BIN/hexciri-wallpaper-refresh" "$state/theme" || true
+  echo "hexciri-theme-ensure: theme '$name' is live, wallpaper merge refreshed"
 fi

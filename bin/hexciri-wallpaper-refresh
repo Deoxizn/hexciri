@@ -1,0 +1,99 @@
+#!/bin/bash
+# hexciri:summary=Refresh the active theme's backgrounds: re-merge the user wallpaper store + extra dirs (prune + re-link)
+# hexciri:args=[theme-dir]
+#
+# Rebuilds the zz-user-* symlinks inside an active theme's backgrounds dir.
+# Sources: the persistent store at ~/.config/hexciri/wallpapers, plus every
+# directory named in the extra dirs list (~/.config/hexciri/wallpaper-sources/
+# extra.list, user-overridable, seeded from the shipped copy). Deleted files
+# lose their (dangling) links here, so the picker stops showing blank
+# placeholders — no theme switch needed. Safe to run any time; sources are
+# never copied or deleted, only read. Each source entry may be a file OR a
+# directory (plain or symlinked, e.g. an NFS mount): directories are walked
+# and every image inside gets its own zz-user-* link, parent name flattened
+# in so sub-folder structure survives.
+set -euo pipefail
+
+THEME_DIR="${1:-$HOME/.local/state/hexciri/current/theme}"
+USER_WALL="${HEXCIRI_WALLPAPER_DIR:-$HOME/.config/hexciri/wallpapers}"
+BG_DIR="$THEME_DIR/backgrounds"
+LIST_USER="$HOME/.config/hexciri/wallpaper-sources/extra.list"
+
+[[ -d $BG_DIR ]] || { echo "hexciri-wallpaper-refresh: no backgrounds dir ($BG_DIR) — nothing to refresh"; exit 0; }
+[[ -d $USER_WALL ]] || { echo "hexciri-wallpaper-refresh: no user wallpaper store ($USER_WALL)"; exit 0; }
+
+# Shipped list lives in the repo checkout (the repo clone IS the runtime).
+resolve_list() {
+  local here repo shipped
+  here="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+  repo="$(dirname "$(dirname "$here")")/config/wallpaper-sources/extra.list"
+  shipped="${HEXCIRI_PATH:-}/config/wallpaper-sources/extra.list"
+  if [[ -f $repo ]]; then printf '%s\n' "$repo"; return 0; fi
+  if [[ -n ${HEXCIRI_PATH:-} && -f $shipped ]]; then printf '%s\n' "$shipped"; return 0; fi
+  return 1
+}
+
+# prune every zz-user-* link (ours only — theme-owned files are untouched)
+find "$BG_DIR" -maxdepth 1 -name 'zz-user-*' -delete
+
+# Link by path only, never dereference: a source entry pointing at an NFS
+# mount that isn't up yet still links now and resolves when the mount appears.
+link_file() { # <source-path> <link-name>
+  local src="$1"; local name="$2"
+  local dest="$BG_DIR/zz-user-$name"
+  [[ -e $src || -L $src ]] || return 0
+  [[ -e $dest || -L $dest ]] && return 0   # keep first on collision
+  ln -s "$src" "$dest"
+}
+
+# Flatten a directory source: every image inside becomes zz-user-<dir>-<flat>.
+# -L lets a symlinked dir (e.g. an NFS mount) be walked as its real target.
+merge_dir() { # <dir> <link-prefix>
+  local d="$1" pfx="$2" f rel flat
+  while IFS= read -r -d '' f; do
+    rel="${f#"$d"/}"
+    flat="$(printf '%s' "$rel" | tr '/' '-')"
+    link_file "$f" "$pfx$flat"
+  done < <(find -L "$d" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) -print0 2>/dev/null || true)
+}
+
+# primary store
+shopt -s nullglob
+for entry in "$USER_WALL"/*; do
+  [[ -e $entry || -L $entry ]] || continue
+  base="$(basename "$entry")"
+  if [[ -d $entry ]]; then
+    merge_dir "$entry" "$base-"
+  else
+    case "$base" in
+      *.jpg|*.jpeg|*.png|*.webp) link_file "$entry" "$base" ;;
+    esac
+  fi
+done
+
+# extra dirs list (Enter extra wallpaper dirs; # comments and blanks ignored)
+SHIPPED="$(resolve_list)" || true
+if [[ -f $LIST_USER ]]; then
+  list="$LIST_USER"
+elif [[ -n $SHIPPED && -f $SHIPPED ]]; then
+  list="$SHIPPED"
+else
+  list=""
+fi
+if [[ -n $list ]]; then
+  while IFS= read -r dir; do
+    dir="${dir%%#*}"                             # strip # comments
+    dir="$(printf '%s' "$dir" | tr -d '[:space:]')"   # trim
+    [[ -z $dir ]] && continue
+    [[ $dir == \~/* ]] && dir="$HOME/${dir#\~/}"      # ~/ prefix
+    [[ -e $dir || -L $dir ]] || continue
+    base="$(basename "$dir")"
+    if [[ -d $dir ]]; then
+      merge_dir "$dir" "$base-"
+    else
+      case "$base" in
+        *.jpg|*.jpeg|*.png|*.webp) link_file "$dir" "$base" ;;
+      esac
+    fi
+  done < "$list"
+fi

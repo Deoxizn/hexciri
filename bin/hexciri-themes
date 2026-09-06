@@ -27,6 +27,7 @@ case "$choice" in
   "Backgrounds")
     dir="$HOME/.config/hexciri/wallpapers"
     mkdir -p "$dir"
+    "$bindir/hexciri-wallpaper-refresh" "$HOME/.local/state/hexciri/current/theme" >/dev/null 2>&1 || true
     echo "Opening $dir (drop wallpapers here; they merge into the active theme)"
     exec xdg-open "$dir" ;;
   "Palette source")

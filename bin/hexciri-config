@@ -24,9 +24,9 @@ choice=$(
     'Fastfetch config' \
     'Palettes' \
     'Extra themes list' \
-    'Omarchy themes list' \
+    'Wallpaper dirs list' \
     'Hooks' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=26 --lines=7
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=26 --lines=6
 ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
@@ -42,11 +42,11 @@ case "$choice" in
     shipped="$shipped_base/theme-sources/extra.list"
     [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
     "$bindir/hexciri-edit-file" "$list" ;;
-  'Omarchy themes list')
-    dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/theme-sources"
+  'Wallpaper dirs list')
+    dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/wallpaper-sources"
     mkdir -p "$dir"
-    list="$dir/omarchy.list"
-    shipped="$shipped_base/theme-sources/omarchy.list"
+    list="$dir/extra.list"
+    shipped="$shipped_base/wallpaper-sources/extra.list"
     [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
     "$bindir/hexciri-edit-file" "$list" ;;
   'Hooks')              "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/hooks/" ;;
