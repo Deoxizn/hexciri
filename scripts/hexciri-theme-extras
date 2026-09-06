@@ -102,7 +102,9 @@ op_update() {  # --run update [omarchy] — extras by default, omarchy for the r
   local src="${1:-extra}" n src_dir total=0
   if [[ $src == omarchy ]]; then
     src_dir="$SRC_BASE/omarchy"
-    if [[ -d $src_dir/.git ]]; then
+    if [[ ! -d $src_dir/.git ]]; then
+      op_install_omarchy
+    else
       echo "updating Omarchy defaults ..."
       git -C "$src_dir" pull --ff-only && total=$((total+1))
       # re-link anything in the list not yet linked (new additions)
