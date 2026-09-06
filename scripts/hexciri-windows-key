@@ -1,42 +1,57 @@
 #!/bin/bash
-# hexciri:summary=Print the OEM Windows product key stored in firmware (MSDM ACPI table or OA3 EFI variable)
+# hexciri:summary=Print the OEM Windows product key from firmware (MSDM ACPI/OA3 EFI, older-BIOS fallback sweep)
 set -euo pipefail
 
 extract_key() {
   grep -aoEm1 '[A-Z0-9]{5}(-[A-Z0-9]{5}){4}'
 }
 
-read_source() { # <reader> <path> — sudo when the source is root-only
-  local reader="$1" path="$2"
+scan_file() { # <path> — strings first, cat fallback; sudo for root-only files
+  local path="$1" reader=strings
+  command -v strings >/dev/null 2>&1 || reader=cat
   if [[ -r $path ]]; then
-    "$reader" "$path"
+    "$reader" "$path" 2>/dev/null | extract_key
   else
-    sudo "$reader" "$path"
+    sudo "$reader" "$path" 2>/dev/null | extract_key
   fi
 }
 
-# Modern boards park the key in the OA3 EFI variable instead of (or alongside)
-# the MSDM ACPI table — check both so a "no table here" board still matches.
+# Modern boards: MSDM ACPI table (most legacy/early-UEFI BIoses) and the OA3
+# MSDM EFI variable (Win8+ UEFI). SMBIOS OEM strings sometimes carry it too.
 sources=("${HEXCIRI_MSDM_PATH:-/sys/firmware/acpi/tables/MSDM}")
-if compgen -G '/sys/firmware/efi/efivars/OA3MSDMvariable-*' >/dev/null; then
+if compgen -G '/sys/firmware/efi/efivars/OA3MSDMvariable-*' >/dev/null 2>&1; then
   for v in /sys/firmware/efi/efivars/OA3MSDMvariable-*; do
-    sources+=("$v")
+    [[ -e $v ]] && sources+=("$v")
   done
 fi
+sources+=("/sys/class/dmi/id/oem_strings")
+
+# Older/odd BIOS builds park the key inside a non-MSDM ACPI table (or only in
+# SLIC) — sweep every table as a last resort so those boards still match.
+sweep_acpi_tables() {
+  local cmd
+  if command -v strings >/dev/null 2>&1; then
+    cmd='for f in /sys/firmware/acpi/tables/*; do [ -f "$f" ] && cat "$f" 2>/dev/null; done | strings'
+  else
+    cmd='for f in /sys/firmware/acpi/tables/*; do [ -f "$f" ] && cat "$f" 2>/dev/null; done'
+  fi
+  sudo bash -c "$cmd" 2>/dev/null | extract_key
+}
 
 key=""
 for path in "${sources[@]}"; do
   [[ -e $path ]] || continue
-  if command -v strings >/dev/null 2>&1; then
-    key=$(read_source strings "$path" | extract_key || true)
-  else
-    key=$(read_source cat "$path" | extract_key || true)
-  fi
+  [[ -f $path ]] || continue
+  key="$(scan_file "$path" || true)"
   [[ -n $key ]] && break
 done
 
+if [[ -z $key ]] && compgen -G '/sys/firmware/acpi/tables/*' >/dev/null 2>&1; then
+  key="$(sweep_acpi_tables || true)"
+fi
+
 if [[ -z $key ]]; then
-  echo "No Windows license key found in firmware (no MSDM table or OA3 MSDM variable)." >&2
+  echo "No Windows license key found in firmware (checked MSDM/OA3/SMBIOS + all ACPI tables)." >&2
   exit 1
 fi
 
