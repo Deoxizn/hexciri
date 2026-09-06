@@ -78,7 +78,11 @@ op_sync_extra() {
       echo "- $name already present"; continue
     fi
     url="https://github.com/$owner/omarchy-$name-theme.git"
-    git clone "$url" "$dest" && { count=$((count+1)); echo "- installed $name"; }
+    if git clone "$url" "$dest" 2>/dev/null; then
+      count=$((count+1)); echo "- installed $name"
+    else
+      echo "- FAILED $name: no omarchy-format repo at $url (typo? or a repo that doesn't follow the omarchy-<name>-theme naming)"
+    fi
   done < <(names_in "$(list_for extra)")
 
   # Reconcile: drop any locally-cloned extra whose line was deleted from the
