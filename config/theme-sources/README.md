@@ -8,25 +8,34 @@ Two kinds of theme set exist in hexciri:
 - **Extra themes** — everything else. One flat list, `extra.list`, of
   `<owner>/<name>` lines. This is the bit you handpick.
 
-## The extras list
+## The lists
 
-`config/theme-sources/extra.list` is the source of truth for the "Extra themes"
-feature. One theme per line, owner/name form, `#`-commented lines ignored:
+Two lists, both edited from **Config**:
 
-```
-HANCORE-linux/aamis
-HANCORE-linux/sapphire
-OldJobobo/dracula
-```
+- `config/theme-sources/extra.list` — handpicked **Extra themes**. One line per
+  theme, `<owner>/<name>` form, `#`-commented lines ignored:
 
-Everything is list-driven — **Sync extra themes** (Themes menu) is the whole
-job and runs from **Update ▸ Extra themes** too:
+  ```
+  HANCORE-linux/aamis
+  HANCORE-linux/sapphire
+  OldJobobo/dracula
+  ```
 
-- clones every line into `~/.config/hexciri/themes/` that isn't there yet,
-- `git pull`s every line that's already installed,
-- removes any locally-cloned extra whose line was deleted from the list (the
-  list is the source of truth). A name already in the Omarchy defaults is never
-  touched.
+  A line can also be a full `https://github.com/<owner>/<repo>` URL when the
+  repo doesn't follow the `omarchy-<name>-theme` convention.
+- `config/theme-sources/omarchy.list` — the shipped **Omarchy defaults**. Editing
+  your copy lets you prune or add to the default set.
+
+Everything is list-driven. **Sync themes** (Themes menu) — the same action as
+**Update ▸ Update themes** — does the whole job for both lists:
+
+- **Omarchy defaults**: pulls the sparse source clone, links anything new,
+  unlinks any symlink whose name you removed from the omarchy list.
+- **Extra themes**: clones every listed line that isn't installed, `git pull`s
+  every installed one, and removes any locally-cloned extra whose line was
+  deleted from the list.
+
+**Remove extra themes** (Themes menu) tears down all installed extras in one go.
 
 ## Per-theme-repo convention
 
@@ -40,14 +49,16 @@ so a one-off install becomes part of the same list-managed set.
 
 ## Curation on your own machine
 
-The list ships read-only at `/usr/share/hexciri/theme-sources/extra.list`. To
-handpick without touching the repo, keep your own copy under
-`~/.config/hexciri/theme-sources/extra.list` — it overrides the shipped one.
-**Config ▸ Extra themes list** opens that override for editing (seeding it from
-the shipped copy the first time).
+The lists ship read-only at `/usr/share/hexciri/theme-sources/`. To handpick
+without touching the repo, keep your own copies under
+`~/.config/hexciri/theme-sources/` (`extra.list`, `omarchy.list`) — they
+override the shipped ones. **Config ▸ Extra themes list** and **Config ▸
+Omarchy themes list** open those overrides for editing, seeding them from the
+shipped copies the first time.
 
 ## Omarchy defaults catalog
 
 `omarchy.conf`/`omarchy.list` describe the shipped set (monorepo sparse clone of
-`omacom/omarchy`, `themes/` subtree). They are bookkeeping only — the **Hexciri
-updater** / **Repo sync** seeds them if missing and keeps them current.
+`omacom/omarchy`, `themes/` subtree). The **Hexciri updater** / **Repo sync**
+seeds them if missing and keeps the sparse clone current; editing your own
+`omarchy.list` override prunes/adjusts what actually gets symlinked.

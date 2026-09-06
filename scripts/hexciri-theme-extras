@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Extra-theme actions: sync/update/remove handpicked non-shipped themes (called inline by the Themes menu)
+# hexciri:summary=Theme actions: one full sync (Omarchy defaults + extras, list-driven) + extras teardown
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -114,22 +114,34 @@ op_sync_extra() {
   echo "extras: installed $count, updated $pulled, skipped $skipped, removed $removed"
 }
 
-op_update() {  # --run update omarchy — used by the repo sync to keep Omarchy defaults fresh
-  local src_dir total=0
-  if [[ ${1:-} != omarchy ]]; then
-    echo "usage: --run update omarchy (extra theme updates happen during sync)" >&2
-    return 1
-  fi
+op_sync_omarchy() {  # pull/seed the defaults, relink, prune unlisted links (honors an on-device omarchy.list override)
+  local branch subtree src_dir n removed=0 link tgt
+  branch="$(conf_val omarchy branch)"; subtree="$(conf_val omarchy subtree)"
   src_dir="$SRC_BASE/omarchy"
   if [[ ! -d $src_dir/.git ]]; then
     op_install_omarchy
-  else
-    echo "updating Omarchy defaults ..."
-    git -C "$src_dir" pull --ff-only && total=$((total+1))
-    # re-link anything in the list not yet linked (new additions)
-    op_install_omarchy >/dev/null
+    return 0
   fi
-  echo "Omarchy defaults: updated $total source clone(s)"
+  echo "updating Omarchy defaults ..."
+  git -C "$src_dir" pull --ff-only >/dev/null 2>&1 || true
+  # prune any symlink into the omarchy subtree whose name is no longer in the list
+  for link in "$THEMES_DIR"/*; do
+    [[ -L $link ]] || continue
+    tgt="$(readlink "$link")"
+    [[ $tgt == "$src_dir/$subtree/"* ]] || continue
+    n="$(basename "$link")"
+    if ! names_in "$(list_for omarchy)" | rg -qx "$n"; then
+      rm -f "$link"; removed=$((removed+1)); echo "- unlinked $n (no longer in omarchy list)"
+    fi
+  done
+  # relink anything new from the list
+  op_install_omarchy >/dev/null
+  echo "omarchy: pulled, relinked, unlinked $removed"
+}
+
+op_sync() {  # the one themes action: keep every theme in line with its list
+  op_sync_omarchy
+  op_sync_extra
 }
 
 op_remove() {  # <omarchy|extra>
@@ -160,9 +172,9 @@ if [[ ${1:-} == --run ]]; then
   case "$op" in
     install) [[ $src == omarchy ]] || { echo "usage: --run install <omarchy>"; exit 1; }
              op_install_omarchy ;;
-    sync)    op_sync_extra ;;
+    sync)    op_sync ;;
     update)  [[ $src == omarchy ]] || { echo "usage: --run update <omarchy>"; exit 1; }
-             op_update "$src" ;;
+             op_sync_omarchy ;;
     remove)  [[ -n $src ]] || { echo "usage: --run remove <omarchy|extra>"; exit 1; }
              op_remove "$src" ;;
     *) echo "usage: --run install|sync|update|remove [source]"; exit 1 ;;

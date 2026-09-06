@@ -19,8 +19,8 @@ choice=$(
     'Fastfetch config' \
     'Palettes' \
     'Extra themes list' \
-    'Hooks' \
-    'Scripts' |
+    'Omarchy themes list' \
+    'Hooks' |
     "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=26 --lines=7
 ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
@@ -37,6 +37,12 @@ case "$choice" in
     shipped="${HEXCIRI_PATH:-/usr/share/hexciri}/theme-sources/extra.list"
     [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
     "$bindir/hexciri-edit-file" "$list" ;;
+  'Omarchy themes list')
+    dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/theme-sources"
+    mkdir -p "$dir"
+    list="$dir/omarchy.list"
+    shipped="${HEXCIRI_PATH:-/usr/share/hexciri}/theme-sources/omarchy.list"
+    [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
+    "$bindir/hexciri-edit-file" "$list" ;;
   'Hooks')              "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/hooks/" ;;
-  'Scripts')            "$bindir/hexciri-edit-file" "${HEXCIRI_PATH:-/usr/share/hexciri}/scripts/" ;;
 esac
