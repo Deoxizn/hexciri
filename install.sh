@@ -445,8 +445,8 @@ if [[ ! -f $UI_MARKER ]]; then
   # files open in the image viewer instead of the browser.
   if [[ -f /usr/share/applications/imv.desktop || -f ~/.local/share/applications/imv.desktop ]]; then
     mkdir -p "$HOME/.local/share/applications"
-    run awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv.desktop > "$HOME/.local/share/applications/imv.desktop" 2>/dev/null || true
-    run awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv-dir.desktop > "$HOME/.local/share/applications/imv-dir.desktop" 2>/dev/null || true
+    run awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv.desktop | sed 's|^Icon=.*|Icon=image-x-generic|' > "$HOME/.local/share/applications/imv.desktop" 2>/dev/null || true
+    run awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv-dir.desktop | sed 's|^Icon=.*|Icon=image-x-generic|' > "$HOME/.local/share/applications/imv-dir.desktop" 2>/dev/null || true
     for mt in image/png image/x-png image/jpeg image/jpg image/pjpeg image/gif image/bmp image/x-bmp image/webp image/avif image/heif image/tiff image/tiff-fx image/svg+xml image/x-farbfeld image/jxl image/qoi image/*; do
       run xdg-mime default imv.desktop "$mt" 2>/dev/null || true
     done
