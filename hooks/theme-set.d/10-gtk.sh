@@ -21,6 +21,57 @@ system_font() {
 }
 
 create_dynamic_theme() {
+# Nautilus-only state rules (flat squares, accent-filled checked buttons, thin
+# selection). These are scoped to nautilus-window and only emitted when
+# Nautilus is installed so no other GTK app -- e.g. the Strata file manager --
+# has its own checked/selected styling flattened by them.
+local nautilus_rules=""
+if command -v nautilus >/dev/null 2>&1; then
+    nautilus_rules="$(cat <<'NAUTILUS'
+
+    nautilus-window flowboxchild:hover,
+    nautilus-window gridview child:hover,
+    nautilus-window columnview row:hover,
+    nautilus-window listview row:hover,
+    nautilus-window .view item:hover {
+        background-color: alpha(@headerbar_border_color, 0.2);
+        border-radius: 0;
+    }
+
+    nautilus-window flowboxchild:selected,
+    nautilus-window gridview child:selected,
+    nautilus-window treeview:selected,
+    nautilus-window columnview row:selected,
+    nautilus-window listview row:selected,
+    nautilus-window .view item:selected {
+        background-color: alpha(@accent_bg_color, 0.15);
+        color: @window_fg_color;
+        border-radius: 0;
+        outline: none;
+        box-shadow: none;
+    }
+
+    nautilus-window button:not(.flat):not(.suggested-action):not(.destructive-action) {
+        background-color: @card_bg_color;
+        color: @window_fg_color;
+        border: 1px solid @headerbar_border_color;
+        border-radius: 0;
+    }
+    nautilus-window button:hover:not(.flat) {
+        background-color: shade(@card_bg_color, 1.5);
+        color: @window_fg_color;
+        border-radius: 0;
+    }
+    nautilus-window button:checked,
+    nautilus-window button:active {
+        background-color: @accent_bg_color;
+        color: @accent_fg_color;
+        border-radius: 0;
+    }
+NAUTILUS
+)"
+fi
+
 cat > "$output_file" << EOF
     @define-color background     #${primary_background};
     @define-color foreground     #${primary_foreground};
@@ -257,51 +308,13 @@ cat > "$output_file" << EOF
         border-radius: 0;
     }
 
-    window flowboxchild:hover,
-    window gridview child:hover,
-    window columnview row:hover,
-    window listview row:hover,
-    window .view item:hover {
-        background-color: alpha(@headerbar_border_color, 0.2);
-        border-radius: 0;
-    }
-
-    window flowboxchild:selected,
-    window gridview child:selected,
-    window treeview:selected,
-    window columnview row:selected,
-    window listview row:selected,
-    window .view item:selected {
-        background-color: alpha(@accent_bg_color, 0.15);
-        color: @window_fg_color;
-        border-radius: 0;
-        outline: none;
-        box-shadow: none;
-    }
-
     rubberband, .rubberband {
         background-color: alpha(@accent_bg_color, 0.20);
         border: 1px solid @accent_bg_color;
         border-radius: 0;
     }
 
-    window button:not(.flat):not(.suggested-action):not(.destructive-action) {
-        background-color: @card_bg_color;
-        color: @window_fg_color;
-        border: 1px solid @headerbar_border_color;
-        border-radius: 0;
-    }
-    window button:hover:not(.flat) {
-        background-color: shade(@card_bg_color, 1.5);
-        color: @window_fg_color;
-        border-radius: 0;
-    }
-    window button:checked,
-    window button:active {
-        background-color: @accent_bg_color;
-        color: @accent_fg_color;
-        border-radius: 0;
-    }
+    $nautilus_rules
 
     window entry {
         background-color: @sidebar_bg_color;
