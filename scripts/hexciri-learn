@@ -1,0 +1,32 @@
+#!/bin/bash
+# hexciri:menu=learn
+# hexciri:summary=Learn submenu — official docs for the tools Hexciri ships.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+choice=$(
+  printf '%s\n' \
+    'Hexciri' \
+    'Niri wiki' \
+    'Noctalia docs' \
+    'kitty docs' \
+    'fish docs' \
+    'Zed docs' \
+    'OpenCode docs' \
+    'Arch wiki' \
+    'Starship docs' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Learn: ' --width=26 --lines=9
+) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
+
+case "$choice" in
+  "Hexciri")       exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://hexciri.dirty.pizza' ;;
+  "Niri wiki")     exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://github.com/YaLTeR/niri/wiki' ;;
+  "Noctalia docs") exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://docs.noctalia.dev/noctalia/' ;;
+  "kitty docs")    exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://sw.kovidgoyal.net/kitty/' ;;
+  "fish docs")     exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fishshell.com/docs/current/' ;;
+  "Zed docs")      exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://zed.dev/docs' ;;
+  "OpenCode docs") exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://opencode.ai/docs' ;;
+  "Arch wiki")     exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://wiki.archlinux.org/title/Main_page' ;;
+  "Starship docs") exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://starship.rs' ;;
+esac
