@@ -423,7 +423,7 @@ mkdir -p "$HOME/.local/state/hexciri/defaults"
 # ── where the source repo lives, so hexciri-repo-sync can pull/reinstall it ──
 mkdir -p "$HOME/.local/state/hexciri"
 run bash -c "printf '%s' '$REPO_DIR' > '$HOME/.local/state/hexciri/repo-path'"
-for kv in "terminal=kitty" "shell=fish" "browser=brave-origin" "files=strata" "editor=zed" "agent=opencode"; do
+for kv in "terminal=kitty" "shell=fish" "browser=brave-origin" "files=strata" "editor=zed" "agent=opencode" "images=imv"; do
   k="${kv%%=*}"; v="${kv#*=}"
   [[ -f $HOME/.local/state/hexciri/defaults/$k ]] || run bash -c "printf '%s' '$v' > '$HOME/.local/state/hexciri/defaults/$k'"
 done
@@ -440,6 +440,17 @@ if [[ ! -f $UI_MARKER ]]; then
     fi
   done
   run xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
+  # imv ships NoDisplay=true, which hides it (and Brave wins image defaults by
+  # default). Ship a displayable user-level override and pin image/* to imv so
+  # files open in the image viewer instead of the browser.
+  if [[ -f /usr/share/applications/imv.desktop || -f ~/.local/share/applications/imv.desktop ]]; then
+    mkdir -p "$HOME/.local/share/applications"
+    run awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv.desktop > "$HOME/.local/share/applications/imv.desktop" 2>/dev/null || true
+    run awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv-dir.desktop > "$HOME/.local/share/applications/imv-dir.desktop" 2>/dev/null || true
+    for mt in image/png image/x-png image/jpeg image/jpg image/pjpeg image/gif image/bmp image/x-bmp image/webp image/avif image/heif image/tiff image/tiff-fx image/svg+xml image/x-farbfeld image/jxl image/qoi image/*; do
+      run xdg-mime default imv.desktop "$mt" 2>/dev/null || true
+    done
+  fi
   run touch "$UI_MARKER"
 fi
 
