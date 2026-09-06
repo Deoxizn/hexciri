@@ -1,6 +1,6 @@
 #!/bin/bash
-# hexciri:summary=Add ~/.local/bin to the niri config's PATH (legacy v1→v2 one-time migration)
-# v1 installs hard-copied commands to /usr/local/bin (always on PATH) and shipped a
+# hexciri:summary=Add ~/.local/bin to the niri config's PATH (pre-0.1.3 one-time migration)
+# pre-0.1.3 installs hard-copied commands to /usr/local/bin (always on PATH) and shipped a
 # niri config.kdl with no PATH line. v2 symlinks commands into ~/.local/bin instead,
 # so a legacy config left behind makes every `spawn "hexciri-*"` keybind fail with
 # "command not found". This injects the same PATH the stock config ships, only when

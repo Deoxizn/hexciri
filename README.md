@@ -116,16 +116,19 @@ repo is never reinstalled on an update, so no reinstall ever needs sudo.
 >
 > ```bash
 > git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
-> ~/.local/opt/hexciri/install.sh
+> ~/.local/opt/hexciri/install.sh --update
 > ```
 >
-> That pull + bootstrap clears the stale `/usr/local/bin/hexciri-*` copies, links
-> the commands into `~/.local/bin`, and re-wires the one `hexciri-sync` hook —
-> afterwards the normal pull-based updates work as described above. v1 configs
-> are kept as-is (install.sh never clobbers edits), so the migration also adds
-> the `~/.local/bin` PATH entry your old niri config was missing — without it,
-> every `hexciri-*` keybind fails silently once the old /usr/local copies are
-> gone.
+> (`--update` deploys the files and links the commands without re-running
+> first-install system work — packages, kernels, services and the pacman
+> channel, i.e. stable vs bleeding, are your existing state and are left
+> untouched.) The bootstrap clears the stale `/usr/local/bin/hexciri-*` copies,
+> links the commands into `~/.local/bin`, and re-wires the one `hexciri-sync`
+> hook — afterwards the normal pull-based updates work as described above.
+> pre-0.1.3 configs are kept as-is (install.sh never clobbers edits), so the
+> migration also adds the `~/.local/bin` PATH entry your old niri config was
+> missing — without it, every `hexciri-*` keybind fails silently once the old
+> /usr/local copies are gone.
 
 ## Sources
 

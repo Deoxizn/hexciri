@@ -436,7 +436,7 @@ run cp -f "$REPO_DIR/branding/"*.png ~/.config/hexciri/branding/
 
 # ── configs (backup-first) ──
 deploy config/niri/config.kdl "$HOME/.config/niri/config.kdl"
-# v1→v2 one-time: a kept legacy config.kdl has no environment PATH line, so niri
+# pre-0.1.3 one-time: a kept legacy config.kdl has no environment PATH line, so niri
 # can't find the ~/.local/bin hexciri-* commands the install just linked (the old
 # /usr/local/bin copies are gone). Inject the PATH only if missing; idempotent.
 run "$REPO_DIR/bin/hexciri-migrate-niri-path" 2>/dev/null || true
@@ -593,7 +593,7 @@ fi
 
 # ── Strata bridge + user wallpaper store ──
 # These are state kept live by the login-time hexciri-theme-ensure, but a box
-# that upgrades without a fresh session (or a v1→v2 convert whose sync only
+# that upgrades without a fresh session (or a pre-0.1.3 convert whose sync only
 # re-links commands) never gets them. Reconcile now and on every update:
 #   * hexciri-theme-ensure symlinks ~/.local/state/omarchy/current → our state
 #     so Strata's "Follow Omarchy" mode sees the live theme after a swap;

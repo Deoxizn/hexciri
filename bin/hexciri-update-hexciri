@@ -42,7 +42,7 @@ legacy_purge() {
   else
     echo "note: stale /usr/local/bin/hexciri-* remain (no sudo session) — a system update will clear them"
   fi
-  # v1→v2 one-time: legacy configs have no environment PATH line, so niri can't
+  # pre-0.1.3 one-time: legacy configs have no environment PATH line, so niri can't
   # find the ~/.local/bin hexciri-* commands after the stale root copies go away.
   # Inject ~/.local/bin PATH only if missing; idempotent. (Deletion already happened
   # at this point, so run the guard regardless of sudo success above.)
@@ -72,7 +72,7 @@ sync_themes
 # deploy a repo-runtime project does, so this is the deploy):
 #   * Strata bridge: omarchy/current symlink → our state (Follow Omarchy mode)
 #   * user wallpaper store merged into the active theme's backgrounds
-#   * legacy niri config PATH migration (so a kept v1 config can't kill keybinds)
+#   * legacy niri config PATH migration (so a kept pre-0.1.3 config can't kill keybinds)
 "$REPO/bin/hexciri-theme-ensure" >/dev/null 2>&1 || true
 mkdir -p "$HOME/.config/hexciri/wallpapers"
 "$REPO/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
