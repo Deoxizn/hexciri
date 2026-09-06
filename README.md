@@ -45,27 +45,9 @@ disk is left unencrypted; the login gate is the SDDM password screen.
 
 ## Themes
 
-Switch the whole look of your desktop whenever you like — colors, windows,
-terminals and apps all change together. Pick a theme from the **Themes** menu
-or run `hexciri-theme-set <name>`.
-
-**22 themes ship with Hexciri**, and you can add more any time — extra themes
-are just one line each (`owner/name`) in a simple list. Add a line, run
-**Update ▸ Themes**, and it's installed. Remove the line and it's gone.
-
-A theme recolors practically everything you touch:
-
-- the **bar** and desktop shell
-- the **terminal** (kitty, fish, fzf, foot, and the cava visualization)
-- your **browser** (Firefox, Zen, qutebrowser, hermes)
-- your **editor** (Zed, VS Code, Cursor, Windsurf, Typora, Obsidian)
-- **Discord/Vesktop, Spotify, Steam, Heroic, tmux, zellij**, GTK and Qt apps,
-  superfile and more — 30+ apps in all.
-
-**Your wallpapers stick around.** Drop your own images into
-`~/.config/hexciri/wallpapers` — they show up in the wallpaper picker beside
-the theme's own, survive every theme change, and a theme swap doesn't overwrite
-the wallpaper you're currently using.
+Switch themes from the **Themes** menu or `hexciri-theme-set <name>` — colors,
+windows, terminals and apps (30+) all change together. 22 ship included; pick
+up extras and keep your own wallpapers with the list below.
 
 ## Extra themes & wallpapers
 
