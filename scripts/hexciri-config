@@ -18,9 +18,10 @@ choice=$(
     'Noctalia config' \
     'Fastfetch config' \
     'Palettes' \
+    'Extra themes list' \
     'Hooks' \
     'Scripts' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=24 --lines=6
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=26 --lines=7
 ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
@@ -29,6 +30,13 @@ case "$choice" in
   'Noctalia config')    "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/config.toml" ;;
   'Fastfetch config')   "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/fastfetch/config.jsonc" ;;
   'Palettes')           "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/palettes/" ;;
+  'Extra themes list')
+    dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/theme-sources"
+    mkdir -p "$dir"
+    list="$dir/extra.list"
+    shipped="${HEXCIRI_PATH:-/usr/share/hexciri}/theme-sources/extra.list"
+    [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
+    "$bindir/hexciri-edit-file" "$list" ;;
   'Hooks')              "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/hooks/" ;;
   'Scripts')            "$bindir/hexciri-edit-file" "${HEXCIRI_PATH:-/usr/share/hexciri}/scripts/" ;;
 esac

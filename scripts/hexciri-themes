@@ -1,6 +1,6 @@
 #!/bin/bash
 # hexciri:themes=theme-submenu
-# hexciri:summary=Themes submenu: browse the theme list, switch palette source, or install a new theme
+# hexciri:summary=Themes: browse the theme list, switch palette source, sync/update/remove extra themes, open backgrounds
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,17 +17,19 @@ choice=$(
   printf '%s\n' \
     'Theme list' \
     'Palette source' \
-    'Extra themes' \
-    'Install theme' \
+    'Sync extra themes' \
+    'Update extra themes' \
+    'Remove extra themes' \
     'Backgrounds' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=26 --lines=5
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=30 --lines=6
 ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
 case "$choice" in
-  "Theme list")    exec "$SCRIPT_DIR/hexciri-themes-list" ;;
-  "Extra themes")  exec "$SCRIPT_DIR/hexciri-theme-extras" ;;
-  "Install theme") exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'read -rp "Theme git URL: " url; hexciri-theme-install "$url"; read -rp "press enter to close"' ;;
+  "Theme list")         exec "$SCRIPT_DIR/hexciri-themes-list" ;;
+  "Sync extra themes")  exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run sync ;;
+  "Update extra themes") exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run update ;;
+  "Remove extra themes") exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run remove extra ;;
   "Backgrounds")
     dir=""
     if [[ -f "$NOCTALIA_CFG" ]]; then

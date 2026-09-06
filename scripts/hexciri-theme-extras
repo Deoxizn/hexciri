@@ -1,6 +1,5 @@
 #!/bin/bash
-# hexciri:themes=theme-submenu
-# hexciri:summary=Extra themes submenu: sync/update/remove handpicked non-shipped themes from config/theme-sources/extra.list
+# hexciri:summary=Extra-theme actions: sync/update/remove handpicked non-shipped themes (called inline by the Themes menu)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -163,25 +162,6 @@ if [[ ${1:-} == --run ]]; then
   exit 0
 fi
 
-# ── menu mode ──
-choice=$(
-  printf '%s\n' \
-    'Sync extra themes (from list)' \
-    'Update extra themes' \
-    'Remove extra themes' \
-    'Remove Omarchy defaults' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Extra themes: ' --width=34 --lines=4
-) || exec "$SCRIPT_DIR/hexciri-themes"
-[[ -n $choice ]] || exit 0
-
-case "$choice" in
-  "Sync extra themes (from list)")
-    exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run sync ;;
-  "Update extra themes")
-    exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run update ;;
-  "Remove extra themes")
-    exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run remove extra ;;
-  "Remove Omarchy defaults")
-    exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run remove omarchy ;;
-  *) exec "$SCRIPT_DIR/hexciri-themes" ;;
-esac
+# no-op if invoked without --run (the menu dispatches with --run ops directly)
+echo "usage: hexciri-theme-extras --run <install|sync|update|remove> [omarchy|extra]" >&2
+exit 1

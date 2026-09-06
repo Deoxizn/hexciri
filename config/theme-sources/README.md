@@ -21,13 +21,12 @@ OldJobobo/dracula
 
 Everything is list-driven:
 
-- **Sync extra themes** clones every line into `~/.config/hexciri/themes/`.
+- **Sync extra themes** (Themes menu) clones every line into `~/.config/hexciri/themes/`.
 - **Removing a line** uninstalls that theme on the next sync (the list is the
   truth, so anything locally present but not listed gets dropped) — subject to
   the exception that a name already in the Omarchy defaults is never touched.
-- **Update ▸ Extra themes** `git pull`s every listed theme.
-- **Install theme** (Themes menu) appends `owner/name` to your override list, so
-  a one-off install becomes part of the same list-managed set.
+- **Update extra themes** (Themes menu) and **Update ▸ Extra themes** `git pull`
+  every listed theme.
 - Any theme whose name is also in the Omarchy defaults is skipped and never
   installed or removed from this list.
 
@@ -37,16 +36,20 @@ An extra theme is cloned from `https://github.com/<owner>/omarchy-<name>-theme.g
 (the same naming the shipped Omarchy set uses). Adding a new creator is just
 adding their `owner/name` lines — no new config files.
 
+`hexciri-theme-install <git-url>` also adds a theme: it validates the URL,
+sanitizes the name, appends `owner/name` to your override list, and clones it —
+so a one-off install becomes part of the same list-managed set.
+
 ## Curation on your own machine
 
 The list ships read-only at `/usr/share/hexciri/theme-sources/extra.list`. To
 handpick without touching the repo, keep your own copy under
 `~/.config/hexciri/theme-sources/extra.list` — it overrides the shipped one.
-`hexciri-theme-install` seeds that override for you automatically.
+**Config ▸ Extra themes list** opens that override for editing (seeding it from
+the shipped copy the first time).
 
 ## Omarchy defaults catalog
 
 `omarchy.conf`/`omarchy.list` describe the shipped set (monorepo sparse clone of
-`omacom/omarchy`, `themes/` subtree). They are bookkeeping only — use the
-**Hexciri updater** to update those themes, and the **Remove Omarchy defaults**
-entry under Extra themes to drop them.
+`omacom/omarchy`, `themes/` subtree). They are bookkeeping only — the **Hexciri
+updater** / **Repo sync** seeds them if missing and keeps them current.
