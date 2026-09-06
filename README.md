@@ -94,7 +94,7 @@ theme changes.
 | `stable` (default) | `stable-mirror.omarchy.org` | `pkgs.omarchy.org/stable` | `linux`, `linux-lts` |
 | `bleeding` | `mirror.omarchy.org` | `pkgs.omarchy.org/edge` | + `linux-omarchy`, `-bore`, `-muqss` |
 
-Stable is month-held pkgs; bleeding is normal Arch rolling release.
+Stable — month-held packages; bleeding — normal Arch rolling release.
 
 ## Already on Arch?
 Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:
