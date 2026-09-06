@@ -13,6 +13,17 @@ state="$HOME/.local/state/hexciri/current"
 name_file="$state/theme.name"
 noctalia_cfg="$HOME/.config/noctalia/config.toml"
 
+# Strata's "Follow Omarchy" theme mode watches this path for live changes.
+# Hexciri keeps its own current-theme state, so bridge it through a symlink
+# (idempotent; a stray real dir is moved aside first).
+omarchy_state="$HOME/.local/state/omarchy"
+omarchy_current="$omarchy_state/current"
+if [[ -d $omarchy_current && ! -L $omarchy_current ]]; then
+  mv "$omarchy_current" "$omarchy_current.pre-strata"
+fi
+mkdir -p "$omarchy_state"
+ln -sfn "$state" "$omarchy_current"
+
 need_apply=false
 
 if [[ -f $name_file ]]; then
