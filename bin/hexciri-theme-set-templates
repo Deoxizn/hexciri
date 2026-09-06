@@ -50,6 +50,11 @@ C = {
   "bright_magenta": hexc("bright_magenta", data, [hexc("magenta", data, ["#bb9af7"])]),
 }
 
+def mix(c1, c2, t):
+    a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(a[i] + (b[i] - a[i]) * t):02X}" for i in range(3))
+
 repo = Path(__file__).resolve().parent.parent
 tpl_dir = Path(os.environ.get("HEXCIRI_PATH", "/usr/share/hexciri")) / "default" / "themed"
 if not tpl_dir.is_dir():  # dev tree: script.py lives in <repo>/bin
@@ -85,7 +90,7 @@ text = "{C['foreground']}"
 accent = "{C['accent']}"
 danger = "{C['red']}"
 muted = "{C['muted']}"
-highlight = "{C['selection']}"
+highlight = "{mix(C['selection'], C['accent'], 0.22)}"
 border = "{C['lighter_background']}"
 dim_text = "{C['dark_foreground']}"
 """
