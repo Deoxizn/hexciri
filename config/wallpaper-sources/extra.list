@@ -1,11 +1,14 @@
-# Extra wallpaper directories — one absolute path per line.
-# Each listed directory is merged into the active theme's backgrounds as
-# read-only symlinks (zz-user-<dirname>-<name>), so Noctalia's picker shows
-# them alongside the theme's shipped wallpapers. Your files are never
-# copied or deleted — only linked. Lines starting with ~/ are expanded;
-# # comments and blank lines are ignored.
+# Extra wallpaper directories — one directory per line, either form works:
+#   ~/Pictures/Wallpapers            (tilde expands to your home)
+#   /home/user/Pictures/Wallpapers   (absolute)
+#   /mnt/Photos/wallpapers           (other mounts, NFS, etc.)
 #
-# Examples:
-#   ~/Pictures/Wallpapers
-#   /mnt/Photos/wallpapers
-#   /mnt/nfs/wallpapers
+# Each directory is merged into the active theme's backgrounds as read-only
+# symlinks (zz-user-<dirname>-<name>), so Noctalia's picker shows them beside
+# the theme's shipped wallpapers. Your files are never copied or deleted —
+# only linked. Lines starting with ~/ expand to $HOME; # comments and blank
+# lines are ignored. Removing a directory prunes its links on the next refresh.
+#
+# Examples (uncomment to use):
+# ~/Pictures/Wallpapers
+# /mnt/Photos/wallpapers
