@@ -43,7 +43,7 @@ find_preview() {
   [[ -n $src ]] || return 0
 
   ext=${src##*.}
-  ln -s "$src" "$cache_dir/$dir.${ext,,}" 2>/dev/null
+  ln -sfn "$src" "$cache_dir/$dir.${ext,,}"
   printf '%s\n' "$cache_dir/$dir.${ext,,}"
 }
 
