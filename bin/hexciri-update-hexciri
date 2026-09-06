@@ -44,11 +44,24 @@ legacy_purge() {
   fi
 }
 
+# The shorthand Omarchy default set is part of the framework, so it rides along
+# with the repo sync: seed the sparse clone if missing, otherwise git-pull and
+# re-link. hexciri-theme-extras only touches the handpicked extras list (the
+# explicit "Update ▸ Themes" menu action). Non-fatal so a sync proceeds even if
+# the theme clone/sync hits a snag.
+sync_themes() {
+  if [[ -x "$REPO/bin/hexciri-theme-omarchy" ]]; then
+    HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-omarchy" </dev/null 2>&1 || \
+      echo "omarchy themes sync skipped/failed (continuing)" >&2
+  fi
+}
+
 echo "syncing $REPO ..."
 git -C "$REPO" fetch --tags origin --quiet 2>/dev/null || true
 behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
 
 relink
+sync_themes
 
 if (( behind == 0 )); then
   echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"

@@ -567,15 +567,14 @@ fi
 
 # ── seed the shipped Omarchy theme set ──
 # First install only: clone the Omarchy monorepo subsettee into the state dir
-# and symlink the 22 default themes into ~/.config/hexciri/themes. Updates via
-# the Update ▸ Themes menu keep it current; the extras list is seeded separately
-# by the user via the Extra themes menu. Non-fatal on failure. ──
+# and symlink the 22 default themes into ~/.config/hexciri/themes. Kept current
+# by the repo sync (hexciri-update-hexciri → hexciri-theme-omarchy); the extras
+# list is seeded separately by the user via the Extra themes menu
+# (hexciri-theme-extras — it never touches Omarchy defaults). Non-fatal. ──
 if [[ -f "$REPO_DIR/config/theme-sources/omarchy.conf" ]]; then
-  if ! command -v hexciri-theme-extras >/dev/null 2>&1; then
-    warn "hexciri-theme-extras not on PATH — Omarchy theme set not seeded; use the Extra themes menu"
-  elif [[ ! -e $HOME/.local/state/hexciri/current/theme.name ]]; then
-    HEXCIRI_PATH="$REPO_DIR" hexciri-theme-extras --run install omarchy \
-      || warn "Omarchy theme set not seeded — use the Extra themes menu"
+  if [[ ! -e $HOME/.local/state/hexciri/current/theme.name ]]; then
+    HEXCIRI_PATH="$REPO_DIR" "$REPO_DIR/bin/hexciri-theme-omarchy" \
+      || warn "Omarchy theme set not seeded — the repo sync will seed it on the next update"
   fi
 fi
 

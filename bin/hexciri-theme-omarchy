@@ -1,0 +1,67 @@
+#!/bin/bash
+# hexciri:summary=Sync the shipped Omarchy default theme set (sparse clone + re-link + prune)
+# The Omarchy defaults are a first-class part of hexciri, so they ride along with
+# the repo sync (hexciri-update-hexciri) and the installer bootstrap — they are
+# NOT managed by hexciri-theme-extras, which only touches the extras list. This
+# script seeds the sparse clone if it's missing, otherwise git-pulls it, then
+# re-links every theme named in omarchy.list and prunes stale symlinks.
+set -euo pipefail
+
+here="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+REPO="$(dirname "$(dirname "$here")")"
+CATALOG="${HEXCIRI_PATH:-$REPO}/config/theme-sources"
+
+THEMES_DIR="$HOME/.config/hexciri/themes"
+SRC_BASE="$HOME/.local/state/hexciri/theme-src"
+mkdir -p "$THEMES_DIR" "$SRC_BASE"
+
+[[ -f "$CATALOG/omarchy.conf" ]] || { echo "theme-sources/omarchy.conf not found" >&2; exit 1; }
+[[ -f "$CATALOG/omarchy.list" ]] || { echo "theme-sources/omarchy.list not found" >&2; exit 1; }
+
+# A <source>.list is user-overridable: ~/.config/hexciri/theme-sources/<src>.list
+# beats the shipped copy, so on-device curation never needs the repo.
+list_file() {
+  local user="$HOME/.config/hexciri/theme-sources/omarchy.list"
+  if [[ -f $user ]]; then printf '%s\n' "$user"; else printf '%s\n' "$CATALOG/omarchy.list"; fi
+}
+
+names_in() {  # strip # comments, empty lines
+  sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' "$1" | rg -v '^$'
+}
+
+branch="$(rg '^branch[[:space:]]*=' "$CATALOG/omarchy.conf" | head -n1 | cut -d= -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+subtree="$(rg '^subtree[[:space:]]*=' "$CATALOG/omarchy.conf" | head -n1 | cut -d= -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+src_dir="$SRC_BASE/omarchy"
+LIST="$(list_file)"
+
+if [[ ! -d $src_dir/.git ]]; then
+  echo "seeding Omarchy default themes ..."
+  git clone --depth 1 --branch "$branch" --sparse --filter=blob:none \
+    "https://github.com/omacom/omarchy.git" "$src_dir"
+  git -C "$src_dir" sparse-checkout set "$subtree"
+else
+  echo "updating Omarchy defaults ..."
+  git -C "$src_dir" pull --ff-only >/dev/null 2>&1 || true
+fi
+
+# prune any symlink into the omarchy subtree whose name is no longer in the list
+removed=0
+for link in "$THEMES_DIR"/*; do
+  [[ -L $link ]] || continue
+  tgt="$(readlink "$link")"
+  [[ $tgt == "$src_dir/$subtree/"* ]] || continue
+  n="$(basename "$link")"
+  if ! names_in "$LIST" | rg -qx "$n"; then
+    rm -f "$link"; removed=$((removed+1)); echo "- unlinked $n (no longer in omarchy list)"
+  fi
+done
+
+# relink anything named in the list
+count=0
+while read -r n; do
+  [[ -n $n ]] || continue
+  ln -sfn "$src_dir/$subtree/$n" "$THEMES_DIR/$n"
+  count=$((count+1))
+done < <(names_in "$LIST")
+
+echo "omarchy: linked $count theme(s); pruned $removed stale link(s)"

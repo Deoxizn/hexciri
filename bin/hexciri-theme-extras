@@ -1,5 +1,9 @@
 #!/bin/bash
-# hexciri:summary=Theme actions: one full sync (Omarchy defaults + extras, list-driven) + extras teardown
+# hexciri:summary=Theme extras: sync/install/remove themes from the extras list only (not Omarchy defaults)
+# The Omarchy default set rides with the repo sync (hexciri-theme-omarchy); this
+# script manages ONLY the handpicked extras list (~/.config/hexciri/theme-sources/
+# extra.list, seeded from the shipped copy). It never touches Omarchy defaults,
+# which is_default() only *references* so an extra can't clobber one.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,11 +38,6 @@ names_in() {  # strip # comments, empty lines
   sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' "$1" | rg -v '^$'
 }
 
-conf_val() { rg "^${2}[[:space:]]*=" "$CATALOG/$1.conf" | head -n1 | cut -d= -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
-
-# Owner/name split for extras lines ("HANCORE-linux/blackgold").
-split_line() { printf '%s\n' "$1" | sed 's|^\(.*\)/\([^/]*\)$|\1 \2|'; }
-
 # Names that already ship with the Omarchy defaults — an extra must never
 # install over or remove one of these.
 is_default() {
@@ -47,24 +46,6 @@ is_default() {
     [[ $m == "$n" ]] && return 0
   done < <(names_in "$(list_for omarchy)")
   return 1
-}
-
-op_install_omarchy() {
-  local branch subtree src_dir n count=0
-  branch="$(conf_val omarchy branch)"; subtree="$(conf_val omarchy subtree)"
-  src_dir="$SRC_BASE/omarchy"
-  echo "Seeding Omarchy default themes ..."
-  if [[ ! -d $src_dir/.git ]]; then
-    git clone --depth 1 --branch "$branch" --sparse --filter=blob:none \
-      "https://github.com/omacom/omarchy.git" "$src_dir"
-    git -C "$src_dir" sparse-checkout set "$subtree"
-  fi
-  while read -r n; do
-    [[ -z $n ]] && continue
-    ln -sfn "$src_dir/$subtree/$n" "$THEMES_DIR/$n"
-    count=$((count+1))
-  done < <(names_in "$(list_for omarchy)")
-  echo "linked $count Omarchy theme(s); keep up to date via Repo sync/Hexciri updater"
 }
 
 op_sync_extra() {
@@ -118,75 +99,34 @@ op_sync_extra() {
   echo "extras: installed $count, updated $pulled, skipped $skipped, removed $removed"
 }
 
-op_sync_omarchy() {  # pull/seed the defaults, relink, prune unlisted links (honors an on-device omarchy.list override)
-  local branch subtree src_dir n removed=0 link tgt
-  branch="$(conf_val omarchy branch)"; subtree="$(conf_val omarchy subtree)"
-  src_dir="$SRC_BASE/omarchy"
-  if [[ ! -d $src_dir/.git ]]; then
-    op_install_omarchy
-    return 0
-  fi
-  echo "updating Omarchy defaults ..."
-  git -C "$src_dir" pull --ff-only >/dev/null 2>&1 || true
-  # prune any symlink into the omarchy subtree whose name is no longer in the list
-  for link in "$THEMES_DIR"/*; do
-    [[ -L $link ]] || continue
-    tgt="$(readlink "$link")"
-    [[ $tgt == "$src_dir/$subtree/"* ]] || continue
-    n="$(basename "$link")"
-    if ! names_in "$(list_for omarchy)" | rg -qx "$n"; then
-      rm -f "$link"; removed=$((removed+1)); echo "- unlinked $n (no longer in omarchy list)"
-    fi
-  done
-  # relink anything new from the list
-  op_install_omarchy >/dev/null
-  echo "omarchy: pulled, relinked, unlinked $removed"
-}
+# Owner/name split for extras lines ("HANCORE-linux/blackgold").
+split_line() { printf '%s\n' "$1" | sed 's|^\(.*\)/\([^/]*\)$|\1 \2|'; }
 
-op_sync() {  # the one themes action: keep every theme in line with its list
-  op_sync_omarchy
-  op_sync_extra
-}
-
-op_remove() {  # <omarchy|extra>
-  local src="$1" n count=0
-  if [[ $src == omarchy ]]; then
-    echo "Removing Omarchy defaults ..."
-    while read -r n; do
-      [[ -z $n ]] && continue
-      if [[ -L $THEMES_DIR/$n || -e $THEMES_DIR/$n ]]; then rm -rf "$THEMES_DIR/$n"; count=$((count+1)); fi
-    done < <(names_in "$(list_for omarchy)")
-    rm -rf "$SRC_BASE/omarchy"
-  else
-    echo "Removing Extra themes ..."
-    while read -r line; do
-      [[ -z $line ]] && continue
-      n="$(printf '%s\n' "$line" | sed -E 's|^.*/||')"
-      [[ -n $n ]] || continue
-      is_default "$n" && continue
-      if [[ -e $THEMES_DIR/$n ]]; then rm -rf "$THEMES_DIR/$n"; count=$((count+1)); fi
-    done < <(names_in "$(list_for extra)")
-  fi
+op_remove_extra() {
+  local line n count=0
+  echo "Removing Extra themes ..."
+  while read -r line; do
+    [[ -z $line ]] && continue
+    n="$(printf '%s\n' "$line" | sed -E 's|^.*/||')"
+    [[ -n $n ]] || continue
+    is_default "$n" && continue
+    if [[ -e $THEMES_DIR/$n ]]; then rm -rf "$THEMES_DIR/$n"; count=$((count+1)); fi
+  done < <(names_in "$(list_for extra)")
   echo "removed $count theme(s)"
 }
 
 # ── --run mode: executed inside a held terminal by the menu dispatch ──
 if [[ ${1:-} == --run ]]; then
-  op="${2:-}"; src="${3:-}"
+  op="${2:-}"
   case "$op" in
-    install) [[ $src == omarchy ]] || { echo "usage: --run install <omarchy>"; exit 1; }
-             op_install_omarchy ;;
-    sync)    op_sync ;;
-    update)  [[ $src == omarchy ]] || { echo "usage: --run update <omarchy>"; exit 1; }
-             op_sync_omarchy ;;
-    remove)  [[ -n $src ]] || { echo "usage: --run remove <omarchy|extra>"; exit 1; }
-             op_remove "$src" ;;
-    *) echo "usage: --run install|sync|update|remove [source]"; exit 1 ;;
+    sync)   op_sync_extra ;;
+    remove) op_remove_extra ;;
+    *) echo "usage: hexciri-theme-extras --run <sync|remove>"; exit 1 ;;
   esac
   [[ -t 0 ]] && read -rp "press enter to close"
   exit 0
 fi
 
 # no-op if invoked without --run (the menu dispatches with --run ops directly)
-echo "usage: hexciri-theme-extras --run <install|sync|update|remove> [omarchy|extra]" >&2
+echo "usage: hexciri-theme-extras --run <sync|remove>" >&2
 exit 1
