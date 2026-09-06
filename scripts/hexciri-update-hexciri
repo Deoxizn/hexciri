@@ -31,6 +31,14 @@ if ! user_out=$("$REPO/install.sh" --channel "$current" --user-only --update -y 
   echo "$user_out" >&2
   exit 1
 fi
+
+# Omarchy default themes ride along with the repo sync: pull newer themes from
+# the monorepo sparse clone (and re-link any new ones in the list).
+if command -v hexciri-theme-extras >/dev/null 2>&1; then
+  HEXCIRI_PATH="$REPO" HEXCIRI_BIN_DIR="$REPO/bin" hexciri-theme-extras --run update omarchy </dev/null 2>&1 || \
+    echo "extra themes: omarchy update skipped/failed" >&2
+fi
+
 if ! system_out=$(run_as_root env HEXCIRI_USER="$(id -un)" "$REPO/install.sh" --channel "$current" --system-only --update -y 2>&1); then
   echo "system phase failed — output:" >&2
   echo "$system_out" >&2

@@ -1,0 +1,9 @@
+# Sample extras — one line per theme: <owner>/<name>.
+# Add more to taste, e.g.:
+#   HANCORE-linux/blackgold
+#   OldJobobo/gruvbox
+# Removing a line uninstalls that theme on the next sync.
+HANCORE-linux/aamis
+HANCORE-linux/sapphire
+OldJobobo/dracula
+OldJobobo/everpuccin

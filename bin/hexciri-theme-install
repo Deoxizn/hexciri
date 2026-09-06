@@ -1,10 +1,32 @@
 #!/bin/bash
-# hexciri:summary=Install a theme from a git repo into ~/.config/hexciri/themes
+# hexciri:summary=Install a theme from a git URL and track it in the extras list (list-managed: delete the line to uninstall)
 # hexciri:args=<git-url>
 set -euo pipefail
 [[ -n ${1:-} ]] || { echo "Usage: hexciri-theme-install <git-url>"; exit 1; }
-dest="$HOME/.config/hexciri/themes/$(basename "$1" .git)"
+
+url="$1"
+[[ $url =~ ^https://github.com/([^/]+)/(.+)\.git$ ]] || { echo "url must be github.com/<owner>/<repo>.git" >&2; exit 1; }
+owner="${BASH_REMATCH[1]}"
+reponame="${BASH_REMATCH[2]}"
+name="${reponame#omarchy-}"
+name="${name%-theme}"
+name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
+[[ -n $name ]] || { echo "bad theme name" >&2; exit 1; }
+
+dest="$HOME/.config/hexciri/themes/$name"
 [[ -e $dest ]] && { echo "already exists: $dest"; exit 1; }
+
+# Track in the user's extras list: merge the shipped list into the override,
+# then append — so the theme becomes part of the list-managed Extra themes set.
+override="$HOME/.config/hexciri/theme-sources/extra.list"
+mkdir -p "$(dirname "$override")"
+shipped="${HEXCIRI_PATH:-/usr/share/hexciri}/theme-sources/extra.list"
+if [[ ! -f $override && -f $shipped ]]; then
+  sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' "$shipped" | rg -v '^$' > "$override"
+fi
+touch "$override"
+grep -qE "^$owner/$name([[:space:]]|$)" "$override" 2>/dev/null || printf '%s\n' "$owner/$name" >> "$override"
+
 mkdir -p "$HOME/.config/hexciri/themes"
-git clone "$1" "$dest"
-echo "installed: $dest"
+git clone "$url" "$dest"
+echo "installed $name (added $owner/$name to the extras list — delete that line to uninstall)"

@@ -17,14 +17,16 @@ choice=$(
   printf '%s\n' \
     'Theme list' \
     'Palette source' \
+    'Extra themes' \
     'Install theme' \
     'Backgrounds' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=26 --lines=4
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=26 --lines=5
 ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
 case "$choice" in
   "Theme list")    exec "$SCRIPT_DIR/hexciri-themes-list" ;;
+  "Extra themes")  exec "$SCRIPT_DIR/hexciri-theme-extras" ;;
   "Install theme") exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'read -rp "Theme git URL: " url; hexciri-theme-install "$url"; read -rp "press enter to close"' ;;
   "Backgrounds")
     dir=""

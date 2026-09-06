@@ -24,9 +24,9 @@ DEST_LINK="$STATE_BASE/theme"
 mkdir -p "$STATE_BASE"
 
 rm -rf "$NEXT_DIR"
-cp -r "$SRC_DIR" "$NEXT_DIR"
+cp -rL "$SRC_DIR" "$NEXT_DIR"
 rm -rf "$DEST_LINK"
-cp -r "$NEXT_DIR" "$DEST_LINK"
+cp -rL "$NEXT_DIR" "$DEST_LINK"
 printf '%s' "$THEME_NAME" > "$STATE_BASE/theme.name"
 
 # background: first image in backgrounds/, prefer name match

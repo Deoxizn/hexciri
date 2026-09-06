@@ -240,6 +240,8 @@ HOOK
   run mkdir -p /usr/share/hexciri
   run rm -rf /usr/share/hexciri/themes
   run cp -r "$REPO_DIR/themes" /usr/share/hexciri/themes
+  run rm -rf /usr/share/hexciri/theme-sources
+  run cp -r "$REPO_DIR/config/theme-sources" /usr/share/hexciri/theme-sources
   run rm -rf /usr/share/hexciri/default
   run mkdir -p /usr/share/hexciri/default
   run cp -r "$REPO_DIR/default/themed" /usr/share/hexciri/default/themed
@@ -548,6 +550,20 @@ fi
 if ! $DRY_RUN && [[ ! -e $HOME/.local/state/hexciri/current/theme.name ]]; then
   HEXCIRI_PATH=/usr/share/hexciri hexciri-theme-set sakurazuki \
     || warn "theme seed incomplete — hexciri-theme-ensure will re-apply at first login"
+fi
+
+# ── seed the shipped Omarchy theme set ──
+# First install only: clone the Omarchy monorepo subsettee into the state dir
+# and symlink the 22 default themes into ~/.config/hexciri/themes. Updates via
+# the Repo sync / Hexciri updater keep it current; the extras list is seeded
+# separately by the user via the Extra themes menu. Non-fatal on failure. ──
+if [[ -f /usr/share/hexciri/theme-sources/omarchy.conf ]]; then
+  if ! command -v hexciri-theme-extras >/dev/null 2>&1; then
+    warn "hexciri-theme-extras not on PATH — Omarchy theme set not seeded; use the Extra themes menu"
+  elif [[ ! -e $HOME/.local/state/hexciri/current/theme.name ]]; then
+    HEXCIRI_PATH=/usr/share/hexciri hexciri-theme-extras --run install omarchy \
+      || warn "Omarchy theme set not seeded — use the Extra themes menu"
+  fi
 fi
 
 # ── noctalia arch-updater plugin presets: plugin-level settings are owned by
