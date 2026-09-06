@@ -451,6 +451,13 @@ if [[ ! -f $UI_MARKER ]]; then
       run xdg-mime default imv.desktop "$mt" 2>/dev/null || true
     done
   fi
+  # hplip's HP Scan entry points Icon at the Ubuntu-only Humanity theme, which
+  # vanilla Arch doesn't have — shadow it with a user-level copy that uses an
+  # icon that actually exists (Adwaita scanner svg).
+  if [[ -f /usr/share/applications/hp-uiscan.desktop ]]; then
+    mkdir -p "$HOME/.local/share/applications"
+    run sed 's|^Icon=.*|Icon=/usr/share/icons/Adwaita/scalable/devices/scanner.svg|' /usr/share/applications/hp-uiscan.desktop > "$HOME/.local/share/applications/hp-uiscan.desktop" 2>/dev/null || true
+  fi
   run touch "$UI_MARKER"
 fi
 
