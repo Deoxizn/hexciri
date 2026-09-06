@@ -17,12 +17,14 @@ YES=false
 DRY_RUN=false
 SYSTEM_ONLY=false
 USER_ONLY=false
+UPDATE_MODE=false
 while (($#)); do
   case "$1" in
     -y|--yes) YES=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     --system-only) SYSTEM_ONLY=true; shift ;;
     --user-only) USER_ONLY=true; shift ;;
+    --update) UPDATE_MODE=true; shift ;;
     --channel=*) CHANNEL="${1#*=}"; shift ;;
     --channel) CHANNEL="${2:-}"; shift 2 ;;
     --kernel=*) KERNEL_PICK="${1#*=}"; shift ;;
@@ -62,8 +64,13 @@ if ! $SYSTEM_ONLY && ! $USER_ONLY; then
   info "channel: $CHANNEL"
   confirm "Install hexciri ($CHANNEL) on this machine?" || exit 0
   sudo -v || exit 1
-  sudo HEXCIRI_USER="$USER" "$0" --system-only ${YES:+ -y} ${DRY_RUN:+--dry-run} --channel "$CHANNEL" ${KERNEL_PICK:+--kernel "$KERNEL_PICK"}
-  exec "$0" --user-only ${YES:+ -y} ${DRY_RUN:+--dry-run} --channel "$CHANNEL"
+  # forward boolean flags verbatim: ${VAR:+word} fires on ANY non-empty VAR
+  # ("false" included), so build them explicitly to avoid always-forwarding.
+re_exec_flags=""
+$DRY_RUN && re_exec_flags+=" --dry-run"
+$UPDATE_MODE && re_exec_flags+=" --update"
+sudo HEXCIRI_USER="$USER" "$0" --system-only ${YES:+ -y} $re_exec_flags --channel "$CHANNEL" ${KERNEL_PICK:+--kernel "$KERNEL_PICK"}
+exec "$0" --user-only ${YES:+ -y} $re_exec_flags --channel "$CHANNEL"
 fi
 
 if $SYSTEM_ONLY; then
@@ -73,6 +80,10 @@ if $SYSTEM_ONLY; then
   id "$TARGET_USER" &>/dev/null || { err "user $TARGET_USER does not exist"; exit 1; }
   as_user() { run su - "$TARGET_USER" -c "$*"; }
 
+  # ── update mode skips first-install system work (channel/keyring/pacman/
+  #    curated packages/AUR/zram/cache hook): those are personal state and must
+  #    never be re-asserted on an update. Updates deploy files only. ──
+  if ! $UPDATE_MODE; then
   # ── channel + keyring ──
   info "deploying pacman channel..."
   cp -f /etc/pacman.conf "/etc/pacman.conf.bak.$(date +%s)"
@@ -206,6 +217,7 @@ HOOK
   else
     ok "paccache hook present"
   fi
+  fi # ! $UPDATE_MODE
 
   # ── hexciri system sync: keep boot entries/plymouth/PAM/menu curated across
   #    package upgrades, which routinely clobber them (kernels land with no
@@ -234,6 +246,7 @@ HOOK
   run mkdir -p /usr/share/pixmaps
   run cp -f "$REPO_DIR/branding/logo.png" /usr/share/pixmaps/hexciri.png
 
+  if ! $UPDATE_MODE; then
   # ── services + SDDM (no disk encryption → the login gate lives at the sddm
   #    password/fingerprint prompt itself) ──
   run systemctl enable NetworkManager.service 2>/dev/null || true
@@ -295,9 +308,11 @@ HOOK
     run sed -i '/^\[options\]/a IgnorePkg = gnome-keyring' /etc/pacman.conf
     info "parked gnome-keyring via IgnorePkg"
   fi
+  fi # ! $UPDATE_MODE
 
   # ── SDDM theme (emblem + password greeter, Niri preferred) ──
-  if ! $DRY_RUN; then
+  #    (update mode keeps your installed greeter — user-facing personalization)
+  if ! $UPDATE_MODE && ! $DRY_RUN; then
     run mkdir -p /usr/share/sddm/themes/hexciri
     for f in Main.qml metadata.desktop theme.conf; do
       run cp -f "$REPO_DIR/branding/sddm/$f" /usr/share/sddm/themes/hexciri/$f
@@ -320,6 +335,11 @@ HOOK
     printf '%s %s\n' "$v" "$CHANNEL" | run tee /usr/share/hexciri/VERSION >/dev/null
   fi
 
+  # ── GPU autodetect + single-kernel policy (first-install only) ──
+  #    Updates never touch the kernel: the boot kernel you chose is preserved;
+  #    nothing reinstalls linux/linux-headers over a custom kernel or reasserts
+  #    driver setup. ──
+  if ! $UPDATE_MODE; then
   # ── GPU autodetect (runs as root here; installer reboots at the end, not mid-run) ──
   if ! $DRY_RUN; then
     # shellcheck disable=SC2086
@@ -351,6 +371,7 @@ HOOK
       warn "$custom_pkg did not install (custom kernels need bleeding) — keeping staged kernel"
     fi
   fi
+  fi # ! $UPDATE_MODE
 
   ok "system phase complete (channel: $CHANNEL)"
   exit 0
@@ -469,9 +490,9 @@ fi
 
 # ── Strata: per-user GitHub release install (~/.local/bin) instead of the
 #    [omarchy] repo package (which lags upstream's near-daily releases).
-#    Dry-run/offline: skip cleanly; hexciri-strata-install --check re-runs at
-#    every login via spawn-at-startup, so a fresh box self-heals on first boot. ──
-if (( $(id -u) != 0 )) && [[ $DRY_RUN == false ]]; then
+#    First-install-only — updates leave it alone; hexciri-strata-install
+#    re-checks at every login via spawn-at-startup. ──
+if ! $UPDATE_MODE && (( $(id -u) != 0 )) && [[ $DRY_RUN == false ]]; then
   if ! (hexciri-strata-install 2>/dev/null); then
     warn "strata install deferred (offline?) — will run again at first login"
   fi
@@ -502,15 +523,16 @@ fi
 # ── GTK4/libadwaita dark theming: adw-gtk-theme + the dark color-scheme preference ──
 # First-install-only (see UI_MARKER above) — re-asserting gtk-theme /
 # color-scheme on every update would stomp a user's light-mode / theme choice.
-if [[ ! -f $UI_MARKER ]] && command -v gsettings >/dev/null 2>&1 && [[ -d /usr/share/themes/adw-gtk3 ]]; then
+if ! $UPDATE_MODE && [[ ! -f $UI_MARKER ]] && command -v gsettings >/dev/null 2>&1 && [[ -d /usr/share/themes/adw-gtk3 ]]; then
   run gsettings set org.gnome.desktop.interface gtk-theme adw-gtk3 2>/dev/null || true
   run gsettings set org.gnome.desktop.interface color-scheme prefer-dark 2>/dev/null || true
   info "gtk: adw-gtk-theme (dark libadwaita)"
 fi
 
-# ── audio: pipewire session via user units (vanilla Arch way; Noctalia pulls the
-#    libs, these are the daemons that make sound actually route) ──
-if command -v pipewire >/dev/null 2>&1; then
+# ── audio: pipewire session via user units (vanilla Arch way; Noctalia pulls
+#    the libs, these are the daemons that make sound actually route). Update
+#    mode leaves your audio enablement alone (personal state). ──
+if ! $UPDATE_MODE && command -v pipewire >/dev/null 2>&1; then
   systemctl --user enable --now pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true
   info "audio: enabled user units (pipewire.socket + pulse + wireplumber)"
 fi
@@ -532,7 +554,9 @@ fi
 #    the state dir, so seed the missing keys of the preset into settings.toml
 #    (GUI overrides win — existing values are never touched). kitty + the
 #    native update_cmd give a real PTY, so no service.luau patch/guard is
-#    required on any plugin version that honors these keys. ──
+#    required on any plugin version that honors these keys.
+#    First-install-only: once seeded it is never touched again. ──
+if ! $UPDATE_MODE; then
 mkdir -p "$HOME/.local/state/noctalia"
 SEED_TMP="$HOME/.local/state/noctalia/settings.hexciri-seed"
 run mkdir -p "$HOME/.local/state/noctalia"
@@ -545,6 +569,7 @@ else
   run rm -f "$SEED_TMP"
   info "seeded arch-updater plugin presets into ~/.local/state/noctalia/settings.toml"
 fi
+fi # ! $UPDATE_MODE
 
 # ── noctalia wallpaper directory: point the wallpaper picker at the active
 #    theme's backgrounds. Noctalia's settings.toml (GUI overrides) wins over
@@ -553,6 +578,7 @@ fi
 #    is never re-asserted (the user re-picking a folder is their choice).
 #    The path is stable across theme switches (current/theme is re-copied in
 #    place by hexciri-theme-set), so no per-theme re-sync is needed. ──
+if ! $UPDATE_MODE; then
 WP_SEED_DIR="$HOME/.local/state/noctalia/settings.toml"
 if [[ $DRY_RUN == true ]]; then
   info "[dry-run] seed noctalia wallpaper directory → active theme's backgrounds"
@@ -563,8 +589,14 @@ else
     "$HOME/.local/state/hexciri/current/theme/backgrounds" >> "$WP_SEED_DIR"
   info "seeded noctalia wallpaper directory → active theme's backgrounds"
 fi
+fi # ! $UPDATE_MODE
 
 echo ""
-ok "hexciri installed (channel: $CHANNEL, theme: sakurazuki)"
-info "configs: ~/.config/niri/config.kdl ~/.config/noctalia/config.toml (backups in $bak)"
-info "reboot → SDDM greeter → password → Niri (Mod+K for keybindings)"
+if $UPDATE_MODE; then
+  ok "hexciri update applied (channel: $CHANNEL)"
+  info "deployed new/changed files — packages, kernels, services and personal config left untouched"
+else
+  ok "hexciri installed (channel: $CHANNEL, theme: sakurazuki)"
+  info "configs: ~/.config/niri/config.kdl ~/.config/noctalia/config.toml (backups in $bak)"
+  info "reboot → SDDM greeter → password → Niri (Mod+K for keybindings)"
+fi

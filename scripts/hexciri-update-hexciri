@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Hexciri self-update: git pull the repo + reinstall (user+system). Never re-applies the theme — theme changes only via the Themes menu, so personalization survives updates.
+# hexciri:summary=Hexciri self-update: git pull + deploy only changed files (no reinstall, no re-seeding, kernels/services/configs untouched). Up to date → says so and stops.
 set -euo pipefail
 
 REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
@@ -17,23 +17,23 @@ if [[ -d $REPO/.git ]]; then
   git -C "$REPO" fetch --tags origin --quiet 2>/dev/null
   behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
   if (( behind == 0 )); then
-    echo "already up to date (HEAD $head_short)"
-  else
-    echo "pulling $behind new commit(s)..."
-    git -C "$REPO" pull --ff-only --quiet
+    echo "hexciri is up to date (HEAD $head_short) — nothing to deploy"
+    exit 0
   fi
+  echo "pulling $behind new commit(s)..."
+  git -C "$REPO" pull --ff-only --quiet
 else
   echo "not a git checkout — skipping pull"
 fi
 
 echo
-echo "== 2/2 reinstalling (user + system phase) =="
+echo "== 2/2 deploying only what changed (user + system files) =="
 current="$(hexciri-channel-current 2>/dev/null || echo stable)"
 echo "channel in use: $current"
 (
   cd "$REPO"
-  ./install.sh --user-only -y --channel "$current" || { echo "user phase failed" >&2; exit 1; }
-  run_as_root env HEXCIRI_USER="$(id -un)" ./install.sh --system-only -y --channel "$current" || { echo "system phase failed" >&2; exit 1; }
+  ./install.sh --user-only --update -y --channel "$current" || { echo "user phase failed" >&2; exit 1; }
+  run_as_root env HEXCIRI_USER="$(id -un)" ./install.sh --system-only --update -y --channel "$current" || { echo "system phase failed" >&2; exit 1; }
 )
 
 head_short=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")

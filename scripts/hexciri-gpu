@@ -131,9 +131,29 @@ fi
 
 if $NVIDIA; then
   info "modern NVIDIA card detected (Turing+, GSP)."
-  KERNEL_PICK="${KERNEL_PICK:-stock}"
-  confirm "Install nvidia-open 6xx drivers (kernel: $KERNEL_PICK)?" || exit 0
-  use_kernel "$KERNEL_PICK"
+  # Respect whatever hexciri kernel is already the boot default — never swap a
+  # user's chosen kernel for stock on a re-run/update. Only when no --kernel
+  # was passed AND no hexciri kernel is pinned does stock get picked (fresh).
+  if [[ -z $KERNEL_PICK ]]; then
+    cur="$(awk '$1=="default"{print $2; exit}' /boot/loader/loader.conf 2>/dev/null || true)"
+    case "$cur" in
+      hexciri-linux-lts.conf)            KERNEL_PICK=lts ;;
+      hexciri-linux-omarchy.conf)        KERNEL_PICK=omarchy ;;
+      hexciri-linux-omarchy-bore.conf)   KERNEL_PICK=bore ;;
+      hexciri-linux-omarchy-muqss.conf)  KERNEL_PICK=muqss ;;
+      hexciri-linux.conf)                KERNEL_PICK=stock ;;
+      *) : ;;
+    esac
+    if [[ -n $KERNEL_PICK ]]; then
+      info "kernel -> $KERNEL_PICK (kept existing boot default)"
+    else
+      info "no hexciri kernel pinned — leaving boot kernel untouched"
+    fi
+  fi
+  confirm "Install nvidia-open 6xx drivers (kernel: ${KERNEL_PICK:-unchanged})?" || exit 0
+  if [[ -n $KERNEL_PICK ]]; then
+    use_kernel "$KERNEL_PICK"
+  fi
   headers=()
   for k in linux linux-lts linux-omarchy linux-omarchy-bore linux-omarchy-muqss; do
     pacman -Q "$k" &>/dev/null && headers+=("$k-headers")
