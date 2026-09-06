@@ -95,7 +95,7 @@ if $SYSTEM_ONLY; then
     gtk4 gtksourceview5 poppler-glib bubblewrap ffmpegthumbnailer gst-libav gst-plugins-good graphene xdg-terminal-exec
     polkit-gnome gnome-keyring xdg-desktop-portal-gtk xdg-desktop-portal-gnome
     adw-gtk-theme
-    networkmanager openssh sddm fastfetch starship noto-fonts ttf-jetbrains-mono-nerd inetutils
+    networkmanager openssh sddm fastfetch starship noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd inetutils
     gnome-disk-utility imv mupdf libreoffice-fresh
     cups hplip unzip fprintd
     bluez bluez-utils
