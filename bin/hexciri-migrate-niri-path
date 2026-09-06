@@ -1,0 +1,49 @@
+#!/bin/bash
+# hexciri:summary=Add ~/.local/bin to the niri config's PATH (legacy v1→v2 one-time migration)
+# v1 installs hard-copied commands to /usr/local/bin (always on PATH) and shipped a
+# niri config.kdl with no PATH line. v2 symlinks commands into ~/.local/bin instead,
+# so a legacy config left behind makes every `spawn "hexciri-*"` keybind fail with
+# "command not found". This injects the same PATH the stock config ships, only when
+# it's missing, and backs the config up first. Idempotent; safe to run any time.
+set -euo pipefail
+
+CFG="${NIRI_CONFIG:-$HOME/.config/niri/config.kdl}"
+HEXCIRI_BIN="${HEXCIRI_BIN:-$HOME/.local/bin}"
+STOCK_PATH="$HEXCIRI_BIN:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"
+
+[[ -f $CFG ]] || { echo "hexciri-migrate-niri-path: no niri config at $CFG — skipping"; exit 0; }
+
+# Is the exact stock PATH already present in the environment block?
+probe=$(
+  awk -v path="$STOCK_PATH" '
+    /^environment[[:space:]]*\{[[:space:]]*$/ { in_env=1; next }
+    in_env && /^[[:space:]]*\}/ { in_env=0; next }
+    in_env && $0 ~ /PATH[[:space:]]*"/ && $0 ~ path { found=1 }
+    END { exit found ? 0 : 1 }
+  ' "$CFG"
+) && { echo "hexciri-migrate-niri-path: ~/.local/bin already on PATH in $CFG — nothing to do"; exit 0; }
+
+# Rewrite: drop any PATH line inside the environment block, then insert the stock
+# PATH (which leads with ~/.local/bin) right after `environment {`.
+TMP="${CFG}.tmp.$$"
+awk -v path="$STOCK_PATH" '
+  /^environment[[:space:]]*\{[[:space:]]*$/ { in_env=1; print; print "    PATH \"" path "\""; next }
+  in_env && /^[[:space:]]*\}/ { in_env=0; print; next }
+  in_env && $1 == "PATH" { next }   # stale/legacy PATH line — replaced by the stock one
+  { print }
+' "$CFG" > "$TMP"
+
+if cmp -s "$CFG" "$TMP"; then
+  rm -f "$TMP"
+  echo "hexciri-migrate-niri-path: no change needed for $CFG"
+  exit 0
+fi
+
+cp -f "$CFG" "$CFG.bak.$(date +%s)"
+mv -f "$TMP" "$CFG"
+echo "hexciri-migrate-niri-path: injected ~/.local/bin PATH into $CFG (backup saved)"
+
+# Reload niri so the fix is live immediately (no-op outside a session)
+if [[ -n ${NIRI_SOCKET:-} || -S /run/user/$(id -u)/$(ls /run/user/$(id -u)/ 2>/dev/null | rg '^niri\..+\.sock$' | head -1 || true) ]]; then
+  niri msg action load-config-file >/dev/null 2>&1 && echo "hexciri-migrate-niri-path: niri config reloaded"
+fi

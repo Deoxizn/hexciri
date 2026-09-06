@@ -85,10 +85,19 @@ if $SYSTEM_ONLY; then
   #    never be re-asserted on an update. Updates deploy files only. ──
   if ! $UPDATE_MODE; then
   # ── channel + keyring ──
-  info "deploying pacman channel..."
-  cp -f /etc/pacman.conf "/etc/pacman.conf.bak.$(date +%s)"
-  cp -f "$REPO_DIR/default/pacman/pacman-$CHANNEL.conf" /etc/pacman.conf
-  cp -f "$REPO_DIR/default/pacman/mirrorlist-$CHANNEL" /etc/pacman.d/mirrorlist
+  # The pacman channel is first-install-only personal state: on an existing
+  # install (detected by the [[omarchy]] repo hexciri already deployed) the
+  # channel is the user's choice and must never be re-asserted — installing over
+  # a box set to bleeding must not silently flip it to stable. Use
+  # hexciri-channel-set to change channel deliberately. ──
+  if grep -q '^\s*\[omarchy\]' /etc/pacman.conf 2>/dev/null; then
+    info "existing install detected — keeping current pacman channel (use hexciri-channel-set to change)"
+  else
+    info "deploying pacman channel ($CHANNEL)..."
+    cp -f /etc/pacman.conf "/etc/pacman.conf.bak.$(date +%s)"
+    cp -f "$REPO_DIR/default/pacman/pacman-$CHANNEL.conf" /etc/pacman.conf
+    cp -f "$REPO_DIR/default/pacman/mirrorlist-$CHANNEL" /etc/pacman.d/mirrorlist
+  fi
   if ! pacman -Qi omarchy-keyring &>/dev/null; then
     info "bootstrapping omarchy-keyring (signs the [omarchy] repo)..."
     pacman-key --recv-keys 40DFB630FF42BCFFB047046CF0134EE680CAC571 --keyserver keyserver.ubuntu.com
@@ -427,6 +436,10 @@ run cp -f "$REPO_DIR/branding/"*.png ~/.config/hexciri/branding/
 
 # ── configs (backup-first) ──
 deploy config/niri/config.kdl "$HOME/.config/niri/config.kdl"
+# v1→v2 one-time: a kept legacy config.kdl has no environment PATH line, so niri
+# can't find the ~/.local/bin hexciri-* commands the install just linked (the old
+# /usr/local/bin copies are gone). Inject the PATH only if missing; idempotent.
+run "$REPO_DIR/bin/hexciri-migrate-niri-path" 2>/dev/null || true
 
 # Monitor scaling ships preconfigured in config/niri/config.kdl (eDP-1 scale 2,
 # mode/VRR commented) — no runtime detection, nothing to discover in a chroot.

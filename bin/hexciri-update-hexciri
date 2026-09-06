@@ -42,6 +42,11 @@ legacy_purge() {
   else
     echo "note: stale /usr/local/bin/hexciri-* remain (no sudo session) — a system update will clear them"
   fi
+  # v1→v2 one-time: legacy configs have no environment PATH line, so niri can't
+  # find the ~/.local/bin hexciri-* commands after the stale root copies go away.
+  # Inject ~/.local/bin PATH only if missing; idempotent. (Deletion already happened
+  # at this point, so run the guard regardless of sudo success above.)
+  "$REPO/bin/hexciri-migrate-niri-path" 2>/dev/null || true
 }
 
 # The shorthand Omarchy default set is part of the framework, so it rides along
