@@ -3,13 +3,13 @@
 # hexciri:summary=Switch hexciri themes via a themed fuzzel menu with preview images
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-bindir="${HEXCIRI_BIN_DIR:-}"
-if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
-bindir="${bindir:-$SCRIPT_DIR}"
-
-here="$(readlink -f "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")"
-HEXCIRI_PATH="${HEXCIRI_PATH:-$(dirname "$here")}"
+# Resolve the repo root through the script file itself (which may be invoked
+# via a ~/.local/bin symlink) — dirname of the resolved file is repo/bin, its
+# parent is the repo. HEXCIRI_PATH feeds find_preview's repo themes lookup.
+here="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+HEXCIRI_PATH="${HEXCIRI_PATH:-$(dirname "$(dirname "$here")")}"
+bindir="${HEXCIRI_BIN_DIR:-$(dirname "$here")}"
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/hexciri/theme-selector/previews"
 mkdir -p "$cache_dir"
 
