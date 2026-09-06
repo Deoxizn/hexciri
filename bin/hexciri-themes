@@ -25,13 +25,9 @@ fi
 case "$choice" in
   "Theme list")         exec "$SCRIPT_DIR/hexciri-themes-list" ;;
   "Backgrounds")
-    dir=""
-    if [[ -f "$NOCTALIA_CFG" ]]; then
-      dir="$(awk -F= '/^directory[[:space:]]*=/ { gsub(/[ "]/,"",$2); print $2; exit }' "$NOCTALIA_CFG")"
-    fi
-    [[ -z $dir ]] && dir="$HOME/.local/state/hexciri/current/theme/backgrounds"
-    dir="${dir/#\~/$HOME}"
-    echo "Opening $dir"
+    dir="$HOME/.config/hexciri/wallpapers"
+    mkdir -p "$dir"
+    echo "Opening $dir (drop wallpapers here; they merge into the active theme)"
     exec xdg-open "$dir" ;;
   "Palette source")
     current=""

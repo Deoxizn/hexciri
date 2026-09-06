@@ -22,6 +22,7 @@ SRC_DIR="$(resolve_dir)" || { echo "theme not found: $THEME_INPUT" >&2; exit 1; 
 STATE_BASE="$HOME/.local/state/hexciri/current"
 NEXT_DIR="$STATE_BASE/next-theme"
 DEST_LINK="$STATE_BASE/theme"
+USER_WALL="$HOME/.config/hexciri/wallpapers"
 mkdir -p "$STATE_BASE"
 
 rm -rf "$NEXT_DIR"
@@ -30,10 +31,30 @@ rm -rf "$DEST_LINK"
 cp -rL "$NEXT_DIR" "$DEST_LINK"
 printf '%s' "$THEME_NAME" > "$STATE_BASE/theme.name"
 
-# background: first image in backgrounds/, prefer name match
+# Merge personal wallpapers into the active backgrounds dir as read-only
+# symlinks (zz-user-*). The store is the source of truth and is never
+# touched; this generated dir is wiped on every change, so user files must
+# never live here. Noctalia's picker reads this dir, so it sees both the
+# theme's shipped set and all user wallpapers simultaneously.
+#
+# Links are created by path only (never dereferenced): entries in the store
+# may be symlinks to an NFS mount that isn't up yet — they still get linked
+# now and resolve the moment the mount appears.
+if [[ -d $DEST_LINK/backgrounds ]]; then
+  find "$DEST_LINK/backgrounds" -maxdepth 1 -name 'zz-user-*' -delete
+  if [[ -d $USER_WALL ]]; then
+    for f in "$USER_WALL"/*; do
+      [[ -e $f || -L $f ]] || continue
+      [[ -d $f ]] && continue
+      ln -s "$f" "$DEST_LINK/backgrounds/zz-user-$(basename "$f")"
+    done
+  fi
+fi
+
+# background: first image in backgrounds/, prefer name match, skip user links
 BG_LINK="$STATE_BASE/background"
 if [[ -d $DEST_LINK/backgrounds ]]; then
-  pick="$(find -L "$DEST_LINK/backgrounds" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | sort | head -n 1)"
+  pick="$(find -L "$DEST_LINK/backgrounds" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) -not -name 'zz-user-*' | sort | head -n 1)"
   if [[ -z $pick ]]; then
     echo "hexciri-theme-set: no background found, keeping current"
   else
