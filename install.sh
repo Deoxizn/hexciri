@@ -403,8 +403,9 @@ deploy config/starship/starship.toml "$HOME/.config/starship.toml"
 deploy config/fish/conf.d/hexciri-starship.fish "$HOME/.config/fish/conf.d/hexciri-starship.fish"
 deploy config/fish/conf.d/hexciri-aliases.fish "$HOME/.config/fish/conf.d/hexciri-aliases.fish"
 deploy config/fish/conf.d/hexciri-util.fish "$HOME/.config/fish/conf.d/hexciri-util.fish"
-mkdir -p "$HOME/.config/hexciri/hooks/theme-set.d" "$HOME/.config/hexciri/hooks/lib"
+mkdir -p "$HOME/.config/hexciri/hooks/theme-set.d" "$HOME/.config/hexciri/hooks/font-set.d" "$HOME/.config/hexciri/hooks/lib"
 run cp -f "$REPO_DIR"/hooks/theme-set.d/*.sh "$HOME/.config/hexciri/hooks/theme-set.d/"
+run cp -f "$REPO_DIR"/hooks/font-set.d/*.sh "$HOME/.config/hexciri/hooks/font-set.d/"
 run cp -f "$REPO_DIR"/hooks/lib/*.sh "$HOME/.config/hexciri/hooks/lib/"
 
 # ── kitty: default config on fresh installs, include migration on converts ──

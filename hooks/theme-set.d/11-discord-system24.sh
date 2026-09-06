@@ -261,7 +261,7 @@ install_theme() {
 
     for path in "${possible_paths[@]}"; do
         if [[ -d "$path" ]]; then
-            cp -f "$output_file" "$path/vencord.theme.css"
+            cp -f "$output_file" "$path/vencord-system24.theme.css"
 
             for file in "$path"/*; do
                 if [[ -f "$file" ]]; then
