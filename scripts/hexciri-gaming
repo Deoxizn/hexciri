@@ -246,14 +246,18 @@ choice=$(
     "$FUZZEL" --dmenu --prompt='Gaming: ' --width=30 --lines=10
 ) || exit 0
 case "$choice" in
-  Steam) exec "$0" run steam ;;
-  Heroic) exec "$0" run heroic ;;
-  Lutris) exec "$0" run lutris ;;
-  RetroArch) exec "$0" run retroarch ;;
-  Minecraft) exec "$0" run minecraft ;;
-  "Battle.net") exec "$0" run battlenet ;;
-  "GeForce NOW") exec "$0" run geforcenow ;;
-  "Xbox Cloud") exec "$0" run xboxcloud ;;
+  # Everything here needs a terminal: sudo prompts (pacman/drivers), and
+  # interactive installers. Spawned from the menu (no TTY) a bare exec dies at
+  # the first sudo with no visible output — wrap each action in a held
+  # terminal instead. hexciri-gpu is left alone; it has its own gtk menu.
+  Steam) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run steam ;;
+  Heroic) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run heroic ;;
+  Lutris) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run lutris ;;
+  RetroArch) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run retroarch ;;
+  Minecraft) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run minecraft ;;
+  "Battle.net") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run battlenet ;;
+  "GeForce NOW") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run geforcenow ;;
+  "Xbox Cloud") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run xboxcloud ;;
   "GPU setup") exec hexciri-gpu ;;
-  "Xbox controllers") exec "$0" run xbox ;;
+  "Xbox controllers") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run xbox ;;
 esac

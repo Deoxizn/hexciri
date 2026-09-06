@@ -8,6 +8,10 @@ LAUNCHER="$PREFIX/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe
 
 [[ -f $LAUNCHER ]] || {
   echo "hexciri-launch-battlenet: Battle.net not installed — run 'hexciri-gaming run battlenet' first" >&2
+  # launched from a shortcut (no terminal): make sure the user sees why
+  command -v notify-send >/dev/null 2>&1 &&
+    notify-send -a hexciri -h string:x-kanon-stack-tag:hexciri-battlenet \
+      "Battle.net not installed" "Run 'hexciri-gaming run battlenet' first." 2>/dev/null || true
   exit 1
 }
 
