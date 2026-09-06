@@ -48,19 +48,45 @@ is_default() {
   return 1
 }
 
+# The extras list accepts either the literal repo path you'd paste after
+# github.com/ ("HANCORE-linux/omarchy-inkypinky-theme") OR the short theme name
+# ("HANCORE-linux/inkypinky") — the omarchy-<name>-theme naming is normalized
+# out so both spell the same theme.
+short_name() {  # <repo-or-name> -> short theme name
+  local n="$1"
+  if [[ $n =~ ^omarchy-(.+)-theme$ ]]; then printf '%s\n' "${BASH_REMATCH[1]}"; else printf '%s\n' "$n"; fi
+}
+
+# Every short theme name the extra list mentions (normalized), for reconcile.
+extra_shorts() {
+  local line owner repo short
+  while read -r line; do
+    [[ -z $line ]] && continue
+    if [[ $line =~ ^https?:// ]]; then
+      short="$(basename "$(sed 's/\.git$//' <<< "$line")")"
+    else
+      set -- $(split_line "$line"); owner="$1"; repo="$2"
+      [[ -n $repo ]] || continue
+      short="$(short_name "$repo")"
+    fi
+    printf '%s\n' "$short"
+  done < <(names_in "$(list_for extra)")
+}
+
 op_sync_extra() {
   local line owner name dest url count=0 pulled=0 skipped=0 removed=0
   echo "Syncing Extra themes from $(basename "$(list_for extra)") ..."
   while read -r line; do
     [[ -z $line ]] && continue
-    # Lines starting with http:// or https:// are explicit repo URLs;
-    # everything else is the owner/name convention (omarchy-<name>-theme).
+    # Lines starting with http:// or https:// are explicit full URLs; all
+    # other lines are <owner>/<repo> (full repo path or short theme name).
     if [[ $line =~ ^https?:// ]]; then
       url="$(sed 's/\.git$//' <<< "$line").git"
-      name="$(basename "$url" .git)"
+      name="$(short_name "$(basename "$url" .git)")"
     else
-      set -- $(split_line "$line"); owner="$1"; name="$2"
-      [[ -n $owner && -n $name ]] || continue
+      set -- $(split_line "$line"); owner="$1"; repo="$2"
+      [[ -n $owner && -n $repo ]] || continue
+      name="$(short_name "$repo")"
       url="https://github.com/$owner/omarchy-$name-theme.git"
     fi
     if is_default "$name"; then
@@ -72,26 +98,31 @@ op_sync_extra() {
         git -C "$dest" pull --ff-only &>/dev/null && { pulled=$((pulled+1)); echo "- updated $name"; } \
           || echo "- FAILED pull for $name"
       else
-        echo "- $name already present"
+        echo "- $name already present (not a clone — skipping)"
       fi
       continue
     fi
-    if git clone "$url" "$dest" 2>/dev/null; then
+    # Never hang asking for a GitHub account: a missing/private repo must
+    # fail visibly instead of prompting for credentials.
+    if GIT_TERMINAL_PROMPT=0 git clone "$url" "$dest" 2>/dev/null; then
       count=$((count+1)); echo "- installed $name"
     else
-      echo "- FAILED $name: no repo at $url (typo? or a repo that doesn't follow the omarchy-<name>-theme naming)"
+      echo "- FAILED $name: no usable repo at $url (typo? private repo? or a repo that doesn't follow omarchy-<name>-theme naming)"
     fi
   done < <(names_in "$(list_for extra)")
 
   # Reconcile: drop any locally-cloned extra whose line was deleted from the
   # list (the list is the source of truth). Anything with a .git that isn't in
   # the list and isn't an omarchy default gets removed.
-  local installed
+  local installed listed
+  listed="$(extra_shorts || true)"
   for installed in "$THEMES_DIR"/*/; do
     [[ -d $installed/.git ]] || continue
     name="$(basename "$installed")"
     is_default "$name" && continue
-    if ! names_in "$(list_for extra)" | rg -qx ".*/$name"; then
+    # Match against the captured list (a here-string, not a pipe — rg -q in a
+    # pipefail pipeline breaks when rg exits early and SIGPIPEs the producer).
+    if ! rg -qx -- "$name" <<< "$listed"; then
       echo "- removing $name (no longer in extras list)"
       rm -rf "$installed"; removed=$((removed+1))
     fi
