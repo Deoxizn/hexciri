@@ -105,3 +105,26 @@ cd ~/hexciri
 ./install.sh --channel bleeding  # Rolling Release
 ./install.sh --kernel bore       # preselect GPU kernel (else auto-detect)
 ```
+
+## Sources & Thanks
+
+Hexciri is vanilla Arch, not a fork — most of the `bin/hexciri-*` scripts and
+the theme/hook machinery descend from the projects below. Thanks for sharing.
+
+| Project | What Hexciri takes from it |
+|---|---|
+| [Omarchy](https://github.com/omacom/omarchy) | The bulk of `bin/hexciri-*` scripts + menu flow, repos/kernels idea, theme concepts |
+| [Niri](https://github.com/YaLTeR/niri) | The Wayland compositor |
+| [Noctalia](https://github.com/) | Desktop shell / widgets sitting on Niri |
+| [Quickshell](https://github.com/outfoxxed/quickshell) | QML shell toolkit Noctalia is built on |
+| [theme-hook-plugin-manager](https://github.com/OldJobobo/theme-hook-plugin-manager) | The entire `hooks/theme-set.d/` suite (29 hooks) + `theme-env.sh` runtime |
+| [base16-Discord](https://github.com/imbypass/base16-discord) | Original "match system" Discord theme (predecessor to the ClearVision base) |
+| [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7) | "Hexciri" Discord theme — the whole-UI color reset tuned to the active palette |
+| [system24](https://github.com/refact0r/system24) | "Hexciri System24" terminal-style Discord theme |
+| [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme) | GTK4/Libadwaita (Nautilus) CSS overrides + font re-stamp in `10-gtk.sh` |
+| [omarchy-dune-theme](https://github.com/OldJobobo/omarchy-dune-theme) | Theme structure template for the bundled themes |
+| [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) | Upstream sakurazuki theme Hexciri ships as its maiden default |
+| [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam) | Steam skin applied by the Steam theme hook |
+| [omarchy-various-arch-theme](https://github.com/Deoxizn/omarchy-various-arch-theme) | Our own buddy theme (also seeded) |
+
+If your work needs credit here and isn't listed, open a PR — happy to add it.
