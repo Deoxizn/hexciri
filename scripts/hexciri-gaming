@@ -191,6 +191,15 @@ do_battlenet() {
     setsid -f sh -c "WINEPREFIX=\"$PREFIX\" PROTONPATH=GE-Proton GAMEID=umu-battlenet PROTON_VERB=run umu-run \"$CACHE/Battle.net-Setup.exe\" >/tmp/hexciri-battlenet-installer.log 2>&1" </dev/null >/dev/null 2>&1
   fi
   mkdir -p "$HOME/.local/share/applications"
+  # install the app icon into the hicolor theme so Icon=battle-net resolves
+  # (ship whatever we can fetch; google s2 favicons service is a reliable 256px PNG)
+  local ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
+  mkdir -p "$ICON_DIR"
+  if [[ ! -f $ICON_DIR/battle-net.png ]]; then
+    curl --fail --location --retry 2 --max-time 20 -o "$ICON_DIR/battle-net.png" \
+      "https://www.google.com/s2/favicons?domain=battle.net&sz=256" 2>/dev/null || rm -f "$ICON_DIR/battle-net.png"
+  fi
+  gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" &>/dev/null || true
   cat > "$HOME/.local/share/applications/hexciri-battlenet.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
