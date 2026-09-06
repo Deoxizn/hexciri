@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-09-06 — hexciri v0.1.4 (unreleased)
+## 2026-09-06 — hexciri v0.1.3
 - **Repo sync floats on its own**: Update ▸ Repo / Hexciri run in the blur-floated `TUI.float` scratchpad (1000×720) instead of a full workspace terminal — matching the install/remove pattern, so the framework update no longer hijacks the whole screen.
 - **Wallpaper sources, with examples**: the shipped `config/wallpaper-sources/extra.list` now shows both `~/` shorthand and absolute paths in real, commented examples (e.g. `~/Pictures/Wallpapers`), and the live per-machine list is (re-)seeded from it on first use.
 - **One manual rescan entry**: **Update ▸ Wallpaper** re-runs `hexciri-wallpaper-refresh` on demand — prune every stale `zz-user-*` link and re-link — in the floating window. Newly added store/directory files land immediately, no need to wait for a login or a theme change.
