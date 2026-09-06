@@ -41,7 +41,7 @@ Press `Mod+K` for the searchable keybinding list.
 | agent | `opencode` (`Mod+`` `) | `hexciri-defaults` → Agent |
 | kernel | auto: `linux` (stock), `linux-lts` pinned on legacy NVIDIA | `hexciri-kernel` (custom post-install) |
 | gpu | autodetect (mesa / nvidia-open / 580xx+LTS pin) | `hexciri-gpu` |
-| monitors | auto-detect (output blocks + scale from physical size) | `~/.config/niri/config.kdl` |
+| monitors | preconfigured (laptop panel `eDP-1`, scale 2; desktops name their output) | `~/.config/niri/config.kdl` |
 | bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |
 | channel | `stable` | `hexciri-channel-set` |
@@ -73,13 +73,6 @@ no manual catalog:
 - **Extra themes** are one `<owner>/<name>` per line in an `extra.list` (or a
   full URL when the repo doesn't follow the naming); **Update ▸ Themes** clones,
   pulls and prunes extras to match the list, so removing a line removes a theme.
-
-```bash
-hexciri-theme-list                  # installed themes
-hexciri-theme-set <name>            # apply a theme
-hexciri-theme-install <git-url>     # one-off install (joins the extras list)
-hexciri-theme-extras --list         # edit your extra themes list
-```
 
 State: `~/.local/state/hexciri/current/{theme,theme.name,background}`.
 Hooks: `~/.config/hexciri/hooks/theme-set.d/` — 29 drop-ins that push the active
