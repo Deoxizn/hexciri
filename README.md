@@ -106,10 +106,9 @@ cd ~/hexciri
 ./install.sh --kernel bore       # preselect GPU kernel (else auto-detect)
 ```
 
-## Sources & Thanks
+## Sources
 
-Hexciri is vanilla Arch, not a fork — most of the `bin/hexciri-*` scripts and
-the theme/hook machinery descend from the projects below. Thanks for sharing.
+Bits of Hexciri are adapted from the following projects:
 
 | Project | What Hexciri takes from it |
 |---|---|
@@ -126,5 +125,3 @@ the theme/hook machinery descend from the projects below. Thanks for sharing.
 | [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) | Upstream sakurazuki theme Hexciri ships as its maiden default |
 | [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam) | Steam skin applied by the Steam theme hook |
 | [omarchy-various-arch-theme](https://github.com/Deoxizn/omarchy-various-arch-theme) | Our own buddy theme (also seeded) |
-
-If your work needs credit here and isn't listed, open a PR — happy to add it.
