@@ -1,6 +1,10 @@
 #!/bin/bash
-# hexciri:summary=Open a file/dir in the default editor (hexciri-defaults state → $EDITOR → installed fallback)
+# hexciri:summary=Open a file in the default editor, or a directory in the file manager
 set -euo pipefail
+
+if [[ -d "${1:-}" ]]; then
+  exec xdg-open "$1"
+fi
 
 resolve() {
   local e=""

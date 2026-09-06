@@ -17,14 +17,24 @@ choice=$(
   printf '%s\n' \
     'Theme list' \
     'Palette source' \
-    'Install theme' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=26 --lines=3
+    'Install theme' \
+    'Backgrounds' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=26 --lines=4
 ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
 case "$choice" in
   "Theme list")    exec "$SCRIPT_DIR/hexciri-themes-list" ;;
   "Install theme") exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'read -rp "Theme git URL: " url; hexciri-theme-install "$url"; read -rp "press enter to close"' ;;
+  "Backgrounds")
+    dir=""
+    if [[ -f "$NOCTALIA_CFG" ]]; then
+      dir="$(awk -F= '/^directory[[:space:]]*=/ { gsub(/[ "]/,"",$2); print $2; exit }' "$NOCTALIA_CFG")"
+    fi
+    [[ -z $dir ]] && dir="$HOME/.local/state/hexciri/current/theme/backgrounds"
+    dir="${dir/#\~/$HOME}"
+    echo "Opening $dir"
+    exec xdg-open "$dir" ;;
   "Palette source")
     current=""
     if [[ -f "$NOCTALIA_CFG" ]] && grep -q 'source = "custom"' "$NOCTALIA_CFG" 2>/dev/null; then
