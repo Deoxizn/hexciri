@@ -83,8 +83,8 @@ a { color: var(--rose); }
     <div class="card"><h3>One-click theme engine</h3><p>A single click (or <code>hexciri-theme-set &lt;name&gt;</code>) recolors the whole desktop. 22 themes ship included; extras are one line each in a list, no technical tinkering.</p></div>
     <div class="card"><h3>Transparent terminals</h3><p>kitty at reduced background opacity with niri window-effect blur behind it — see your wallpaper through the terminal.</p></div>
     <div class="card"><h3>Gaming, ready</h3><p>Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net, GeForce NOW, Xbox Cloud — GPU setup and controllers handled.</p></div>
-    <div class="card"><h3>Never-clobber config deploy</h3><p>Untouched configs update in place; edited ones stay yours, with the repo default saved alongside as <code>&lt;file&gt;.hexciri</code>.</p></div>
-    <div class="card"><h3>List-driven theming</h3><p>Themes and wallpapers are just lists — add a line to install, remove a line to uninstall. Drop files in a folder, no list needed.</p></div>
+    <div class="card"><h3>A minimal Arch experience</h3><p>Your system starts clean: Arch, Niri, and a themed shell — nothing you didn't ask for; add the rest on demand.</p></div>
+    <div class="card"><h3>Everything's just files</h3><p>Theming and state live in plain, readable lists and configs in your home — easy to tweak, back up, and version. Updates never overwrite your edits; an edited config stays yours with the new default saved alongside.</p></div>
   </div>
 </section>
 <section>
@@ -94,7 +94,25 @@ a { color: var(--rose); }
     <li>Run the line above.</li>
     <li>Reboot → straight into Niri. Press <code>Mod+K</code> for the keybinding list.</li>
   </ol>
-  <p style="margin-top:14px;">The kernel is chosen automatically — stock <code>linux</code>, or <code>linux-lts</code> pinned on legacy NVIDIA; custom kernels are a post-install choice via <code>hexciri-kernel</code>. The disk is left unencrypted — login is the SDDM password greeter.</p>
+  <p style="margin-top:14px;">No prompts to answer — kernel, GPU, and channel are all decided for you. The disk is left unencrypted; login is the SDDM password screen.</p>
+</section>
+<section>
+  <h2>Themes</h2>
+  <p>Switch the whole look of your desktop whenever you like — colors, windows, terminals and apps all change together. Pick a theme from the Themes menu or run <code>hexciri-theme-set &lt;name&gt;</code>.</p>
+  <p style="margin-top:10px;">22 themes ship included, and you can add more any time — extra themes are one line each (<code>owner/name</code>) in a simple list. Add a line, run Update ▸ Themes, done; remove the line and it's gone.</p>
+  <p style="margin-top:10px;"><strong>Your wallpapers stick around.</strong> Drop your own images into <code>~/.config/hexciri/wallpapers</code> — they show up in the wallpaper picker beside the theme's own and survive every theme change.</p>
+</section>
+<section>
+  <h2>Lists, with examples</h2>
+  <p>Both lists are plain text files — add a line, run Update ▸ Themes (for themes) or Update ▸ Wallpaper (for wallpapers), done.</p>
+  <p style="margin-top:10px;"><strong>Extra themes</strong> — <code>~/.config/hexciri/theme-sources/extra.list</code>, one <code>owner/name</code> per line:</p>
+  <pre class="curl" style="margin:10px 0;"><code># one theme per line, owner/name form
+HANCORE-linux/aamis
+OldJobobo/dracula</code></pre>
+  <p style="margin-top:10px;"><strong>Extra wallpaper folders</strong> — <code>~/.config/hexciri/wallpaper-sources/extra.list</code>, one folder per line (<code>~</code> means your home):</p>
+  <pre class="curl" style="margin:10px 0;"><code>~/Pictures/Wallpapers
+/mnt/Photos/wallpapers</code></pre>
+  <p style="margin-top:10px;">Not a list person? The plain <code>~/.config/hexciri/wallpapers</code> folder works too — drop files in and they're picked up, no list entry needed, and they stay across theme changes.</p>
 </section>
 <section>
   <h2>Defaults</h2>
@@ -109,29 +127,7 @@ a { color: var(--rose); }
     <tr><td>bluetooth</td><td>on (bluez + bar widget)</td></tr>
     <tr><td>theme / channel</td><td><code>sakurazuki</code> / <code>stable</code></td></tr>
   </table>
-</section>
-<section>
-  <h2>Channels &amp; GPU</h2>
-  <p><code>stable</code> is month-held pkgs; <code>bleeding</code> is normal Arch rolling release. GPU setup runs at install: Turing+ gets <code>nvidia-open</code> 6xx, NVIDIA GTX 1xxx or older gets <code>580xx</code> pinned to LTS, everything else gets mesa/vulkan.</p>
-</section>
-<section>
-  <h2>Themes</h2>
-  <p>Switch the whole look of your desktop whenever you like — colors, windows, terminals and apps all change together. Pick a theme from the Themes menu or run <code>hexciri-theme-set &lt;name&gt;</code>.</p>
-  <p style="margin-top:10px;">22 themes ship included, and you can add more any time — extra themes are one line each (<code>owner/name</code>) in a simple list. Add a line, run Update ▸ Themes, done; remove the line and it's gone.</p>
-  <p style="margin-top:10px;">A theme recolors practically everything: the bar and desktop shell, terminals (kitty, fish, fzf, foot, cava), browsers (Firefox, Zen, qutebrowser), editors (Zed, VS Code, Cursor, Windsurf, Typora, Obsidian), Discord/Vesktop, Spotify, Steam, Heroic, tmux, zellij and more — 30+ apps in all.</p>
-  <p style="margin-top:10px;"><strong>Your wallpapers stick around.</strong> Drop your own images into <code>~/.config/hexciri/wallpapers</code> — they show up in the wallpaper picker beside the theme's own, survive every theme change, and a theme swap never overwrites the wallpaper you're currently using.</p>
-</section>
-<section>
-  <h2>Lists, with examples</h2>
-  <p>Both lists are plain text files — add a line, run Update ▸ Themes (for themes) or Update ▸ Wallpaper (for wallpapers), done.</p>
-  <p style="margin-top:10px;"><strong>Extra themes</strong> — <code>~/.config/hexciri/theme-sources/extra.list</code>, one <code>owner/name</code> per line:</p>
-  <pre class="curl" style="margin:10px 0;"><code># one theme per line, owner/name form
-HANCORE-linux/aamis
-OldJobobo/dracula</code></pre>
-  <p style="margin-top:10px;"><strong>Extra wallpaper folders</strong> — <code>~/.config/hexciri/wallpaper-sources/extra.list</code>, one folder per line (<code>~</code> means your home):</p>
-  <pre class="curl" style="margin:10px 0;"><code>~/Pictures/Wallpapers
-/mnt/Photos/wallpapers</code></pre>
-  <p style="margin-top:10px;">Not a list person? The plain <code>~/.config/hexciri/wallpapers</code> folder works too — drop files in and they're picked up, no list entry needed, and they stay across theme changes.</p>
+  <p style="margin-top:10px;"><code>stable</code> is month-held pkgs; <code>bleeding</code> is normal Arch rolling release.</p>
 </section>
 </div>
 <footer>
