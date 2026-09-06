@@ -121,7 +121,5 @@ Bits of Hexciri are adapted from the following projects:
 | [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7) | "Hexciri" Discord theme — the whole-UI color reset tuned to the active palette |
 | [system24](https://github.com/refact0r/system24) | "Hexciri System24" terminal-style Discord theme |
 | [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme) | GTK4/Libadwaita (Nautilus) CSS overrides + font re-stamp in `10-gtk.sh` |
-| [omarchy-dune-theme](https://github.com/OldJobobo/omarchy-dune-theme) | Theme structure template for the bundled themes |
-| [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) | Upstream sakurazuki theme Hexciri ships as its maiden default |
+| [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) | Upstream sakurazuki theme — Hexciri ships it (kept updated) as its default |
 | [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam) | Steam skin applied by the Steam theme hook |
-| [omarchy-various-arch-theme](https://github.com/Deoxizn/omarchy-various-arch-theme) | Our own buddy theme (also seeded) |
