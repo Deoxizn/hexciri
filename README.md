@@ -88,6 +88,38 @@ as `zz-user-*` symlinks, alongside whatever the theme ships. Extra directories
 **Update ▸ Wallpaper** re-runs the merge on demand; a theme swap preserves your
 links and never stomps the wallpaper you're currently using.
 
+## Lists, with examples
+
+Both systems are plain text — edit a list, run **Update ▸ Themes** / **Update ▸
+Wallpaper**, done.
+
+**Extra themes** — `~/.config/hexciri/theme-sources/extra.list`:
+
+```text
+# one theme per line, <owner>/<name> form
+HANCORE-linux/aamis
+OldJobobo/dracula
+
+# full URL works for repos that don't follow the naming convention
+https://github.com/someone/not-an-omarchy-theme
+```
+
+**Extra wallpaper directories** — `~/.config/hexciri/wallpaper-sources/extra.list`:
+
+```text
+# one directory per line; ~/ expands; each merges as zz-user-<dirname>-<name>
+~/Pictures/Wallpapers
+/mnt/Photos/wallpapers
+```
+
+Removing a line removes that theme or directory's wallpapers on the next sync.
+No file is ever copied or deleted — extras are just symlinks into the theme's
+backgrounds.
+
+Not a list person? The wallpaper store is the plain `~/.config/hexciri/wallpapers`
+folder — drop files in and they merge at **Update ▸ Wallpaper**, no list entry
+needed, and they persist across theme changes.
+
 ## Highlights
 
 - **Your wallpapers survive theme changes** — personal images merge into the

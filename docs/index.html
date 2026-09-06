@@ -98,6 +98,22 @@
   <p style="margin-top:10px;">Your wallpapers survive theme changes — a persistent user store merges into the active theme's backgrounds as symlinks, so the picker shows theme images <em>and</em> your set, and a theme swap keeps your current wallpaper. Strata follows the theme live, no reopen needed.</p>
 </section>
 <section>
+  <h2>Lists, with examples</h2>
+  <p>Both systems are plain text — edit a list, run Update ▸ Themes / Update ▸ Wallpaper, done.</p>
+  <p style="margin-top:10px;"><strong>Extra themes</strong> — <code>~/.config/hexciri/theme-sources/extra.list</code>, one <code>owner/name</code> per line:</p>
+  <pre class="curl" style="margin:10px 0;"><code># one theme per line, &lt;owner&gt;/&lt;name&gt; form
+HANCORE-linux/aamis
+OldJobobo/dracula
+
+# full URL works for repos that don't follow the naming
+https://github.com/someone/not-an-omarchy-theme</code></pre>
+  <p style="margin-top:10px;"><strong>Extra wallpaper directories</strong> — <code>~/.config/hexciri/wallpaper-sources/extra.list</code>, one path per line:</p>
+  <pre class="curl" style="margin:10px 0;"><code># one directory per line; ~/ expands
+~/Pictures/Wallpapers
+/mnt/Photos/wallpapers</code></pre>
+  <p style="margin-top:10px;">Removing a line removes that theme or directory's wallpapers on the next sync — nothing is ever copied or deleted, extras are just symlinks. Not a list person? Drop files straight into <code>~/.config/hexciri/wallpapers</code> and they merge at Update ▸ Wallpaper, persisting across theme changes.</p>
+</section>
+<section>
   <h2>Highlights</h2>
   <ul>
     <li><strong>Your wallpapers survive theme changes</strong> — personal images merge into the active theme's backgrounds as symlinks and stay put across swaps.</li>
