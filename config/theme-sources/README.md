@@ -19,16 +19,14 @@ HANCORE-linux/sapphire
 OldJobobo/dracula
 ```
 
-Everything is list-driven:
+Everything is list-driven — **Sync extra themes** (Themes menu) is the whole
+job and runs from **Update ▸ Extra themes** too:
 
-- **Sync extra themes** (Themes menu) clones every line into `~/.config/hexciri/themes/`.
-- **Removing a line** uninstalls that theme on the next sync (the list is the
-  truth, so anything locally present but not listed gets dropped) — subject to
-  the exception that a name already in the Omarchy defaults is never touched.
-- **Update extra themes** (Themes menu) and **Update ▸ Extra themes** `git pull`
-  every listed theme.
-- Any theme whose name is also in the Omarchy defaults is skipped and never
-  installed or removed from this list.
+- clones every line into `~/.config/hexciri/themes/` that isn't there yet,
+- `git pull`s every line that's already installed,
+- removes any locally-cloned extra whose line was deleted from the list (the
+  list is the source of truth). A name already in the Omarchy defaults is never
+  touched.
 
 ## Per-theme-repo convention
 

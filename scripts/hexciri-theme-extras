@@ -64,7 +64,7 @@ op_install_omarchy() {
 }
 
 op_sync_extra() {
-  local line owner name dest url count=0 skipped=0 removed=0
+  local line owner name dest url count=0 pulled=0 skipped=0 removed=0
   echo "Syncing Extra themes from $(basename "$(list_for extra)") ..."
   while read -r line; do
     [[ -z $line ]] && continue
@@ -83,13 +83,18 @@ op_sync_extra() {
     fi
     dest="$THEMES_DIR/$name"
     if [[ -e $dest ]]; then
-      echo "- $name already present"; continue
+      if [[ -d $dest/.git ]]; then
+        git -C "$dest" pull --ff-only &>/dev/null && { pulled=$((pulled+1)); echo "- updated $name"; } \
+          || echo "- FAILED pull for $name"
+      else
+        echo "- $name already present"
+      fi
+      continue
     fi
-    url="https://github.com/$owner/omarchy-$name-theme.git"
     if git clone "$url" "$dest" 2>/dev/null; then
       count=$((count+1)); echo "- installed $name"
     else
-      echo "- FAILED $name: no omarchy-format repo at $url (typo? or a repo that doesn't follow the omarchy-<name>-theme naming)"
+      echo "- FAILED $name: no repo at $url (typo? or a repo that doesn't follow the omarchy-<name>-theme naming)"
     fi
   done < <(names_in "$(list_for extra)")
 
@@ -106,34 +111,25 @@ op_sync_extra() {
       rm -rf "$installed"; removed=$((removed+1))
     fi
   done
-  echo "extras: installed $count, skipped $skipped, removed $removed"
+  echo "extras: installed $count, updated $pulled, skipped $skipped, removed $removed"
 }
 
-op_update() {  # --run update [omarchy] — extras by default, omarchy for the repo sync
-  local src="${1:-extra}" n src_dir total=0
-  if [[ $src == omarchy ]]; then
-    src_dir="$SRC_BASE/omarchy"
-    if [[ ! -d $src_dir/.git ]]; then
-      op_install_omarchy
-    else
-      echo "updating Omarchy defaults ..."
-      git -C "$src_dir" pull --ff-only && total=$((total+1))
-      # re-link anything in the list not yet linked (new additions)
-      op_install_omarchy >/dev/null
-    fi
-    echo "Omarchy defaults: updated $total source clone(s)"
-    return 0
+op_update() {  # --run update omarchy — used by the repo sync to keep Omarchy defaults fresh
+  local src_dir total=0
+  if [[ ${1:-} != omarchy ]]; then
+    echo "usage: --run update omarchy (extra theme updates happen during sync)" >&2
+    return 1
   fi
-  while read -r line; do
-    [[ -z $line ]] && continue
-    name="$(printf '%s\n' "$line" | sed -E 's|^.*/||')"
-    [[ -n $name ]] || continue
-    if [[ -d $THEMES_DIR/$name/.git ]]; then
-      echo "updating $name ..."
-      git -C "$THEMES_DIR/$name" pull --ff-only && total=$((total+1))
-    fi
-  done < <(names_in "$(list_for extra)")
-  echo "Extra themes: updated $total clone(s)"
+  src_dir="$SRC_BASE/omarchy"
+  if [[ ! -d $src_dir/.git ]]; then
+    op_install_omarchy
+  else
+    echo "updating Omarchy defaults ..."
+    git -C "$src_dir" pull --ff-only && total=$((total+1))
+    # re-link anything in the list not yet linked (new additions)
+    op_install_omarchy >/dev/null
+  fi
+  echo "Omarchy defaults: updated $total source clone(s)"
 }
 
 op_remove() {  # <omarchy|extra>
@@ -165,7 +161,8 @@ if [[ ${1:-} == --run ]]; then
     install) [[ $src == omarchy ]] || { echo "usage: --run install <omarchy>"; exit 1; }
              op_install_omarchy ;;
     sync)    op_sync_extra ;;
-    update)  op_update "$src" ;;
+    update)  [[ $src == omarchy ]] || { echo "usage: --run update <omarchy>"; exit 1; }
+             op_update "$src" ;;
     remove)  [[ -n $src ]] || { echo "usage: --run remove <omarchy|extra>"; exit 1; }
              op_remove "$src" ;;
     *) echo "usage: --run install|sync|update|remove [source]"; exit 1 ;;

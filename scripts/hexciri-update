@@ -29,7 +29,7 @@ case "$choice" in
   "Hardware")  exec "$SCRIPT_DIR/hexciri-update-hardware" ;;
   "Firmware")  exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" fwupdmgr update ;;
   "Repo sync") exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update-hexciri" ;;
-  "Extra themes") exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run update ;;
+  "Extra themes") exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-theme-extras" --run sync ;;
   Channel*)    ;;
   *)           exit 0 ;;
 esac
