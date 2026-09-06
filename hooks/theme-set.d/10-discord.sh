@@ -100,6 +100,15 @@ create_dynamic_theme() {
   /* ACCESSIBILITY */
   --focus-color: var(--main-color);
 }
+
+/* Remove ClearVision branding (guild list header + settings About) */
+:is(.theme-dark, .theme-light):not(.platform-osx) .leading_c38106::before,
+:is(.theme-dark, .theme-light):not(.platform-osx) [class*="guilds_"] [class*="leading_"]::before {
+  content: none !important;
+}
+.info__2debe::after {
+  content: none !important;
+}
 EOF
 }
 
@@ -125,8 +134,6 @@ source_file="$(theme_source_file || true)"
 if [[ -n $source_file ]]; then
     cp -f "$source_file" "$generated_file"
     install_theme "$source_file"
-elif [[ -f $output_file ]]; then
-    install_theme "$output_file"
 else
     create_dynamic_theme
     install_theme "$output_file"
