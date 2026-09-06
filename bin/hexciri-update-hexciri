@@ -68,6 +68,15 @@ behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0
 relink
 sync_themes
 
+# State the sync must keep live (idempotent; a plain pull/re-link is all the
+# deploy a repo-runtime project does, so this is the deploy):
+#   * Strata bridge: omarchy/current symlink → our state (Follow Omarchy mode)
+#   * user wallpaper store merged into the active theme's backgrounds
+#   * legacy niri config PATH migration (so a kept v1 config can't kill keybinds)
+"$REPO/bin/hexciri-theme-ensure" >/dev/null 2>&1 || true
+mkdir -p "$HOME/.config/hexciri/wallpapers"
+"$REPO/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
+
 if (( behind == 0 )); then
   echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"
   legacy_purge

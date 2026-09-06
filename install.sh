@@ -591,6 +591,21 @@ if [[ -f "$REPO_DIR/config/theme-sources/omarchy.conf" ]]; then
   fi
 fi
 
+# ── Strata bridge + user wallpaper store ──
+# These are state kept live by the login-time hexciri-theme-ensure, but a box
+# that upgrades without a fresh session (or a v1→v2 convert whose sync only
+# re-links commands) never gets them. Reconcile now and on every update:
+#   * hexciri-theme-ensure symlinks ~/.local/state/omarchy/current → our state
+#     so Strata's "Follow Omarchy" mode sees the live theme after a swap;
+#   * the persistent wallpaper store (~/.config/hexciri/wallpapers) is merged
+#     into the active theme's backgrounds as zz-user-* symlinks.
+# Both are idempotent and near-instant when already correct.
+if ! $DRY_RUN; then
+  HEXCIRI_PATH="$REPO_DIR" "$REPO_DIR/bin/hexciri-theme-ensure" >/dev/null 2>&1 || true
+  mkdir -p "$HOME/.config/hexciri/wallpapers"
+  "$REPO_DIR/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
+fi
+
 # ── noctalia arch-updater plugin presets: plugin-level settings are owned by
 #    the state dir, so seed the missing keys of the preset into settings.toml
 #    (GUI overrides win — existing values are never touched). kitty + the
