@@ -74,7 +74,7 @@ Not a list person? The plain `~/.config/hexciri/wallpapers` folder works too —
 drop files in and they're picked up, no list entry needed, and they stay across
 theme changes.
 
-## Defaults (fresh install)
+## Defaults
 
 | slot | default | change it |
 |---|---|---|
