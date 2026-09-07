@@ -8,6 +8,10 @@
 #     NoDisplay curation reverts and the menu cruft returns
 # Runs as root via /usr/share/libalpm/hooks/hexciri-sync.hook (PostTransaction)
 # or manually. Idempotent; safe to run any time.
+#
+# FIX POLICY: every bug fix ships BOTH here — covering existing machines via a
+# plain system update — AND in install.sh (see its matching header), covering
+# fresh installs. Sync this file whenever you touch one or the other.
 set -euo pipefail
 
 log() { echo "hexciri-sync: $*"; }

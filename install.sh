@@ -8,6 +8,10 @@
 #
 # usage: ./install.sh [-y] [--dry-run] [--channel stable|bleeding] [--kernel stock|lts]
 # (kernel defaults to auto: stock, or LTS pinned on legacy NVIDIA; custom kernels are post-install)
+#
+# FIX POLICY: every bug fix ships BOTH here — covering fresh installs — AND in
+# bin/hexciri-sync (see its matching header), covering existing machines via a
+# plain system update. Sync this file whenever you touch one or the other.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
