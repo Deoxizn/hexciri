@@ -10,7 +10,8 @@ alias ll='ls -lhF --color=auto'
 alias ..='cd ..'
 
 # Git / misc
-alias omup='hexciri-update-run'
+alias omup='hexciri-update'
+alias hxup='hexciri-update'
 alias ga='git add .'
 alias gp='git push'
 alias gpl='git pull'

@@ -1,75 +1,10 @@
 #!/bin/bash
-# hexciri:summary=Safe system update: repo pkgs + AUR + reboot prompt on kernel change
-# usage: hexciri-update [--yes]
+# hexciri:summary=Deprecated alias of hexciri-update (kept for pre-rename refs)
+# The system updater was renamed hexciri-update-run → hexciri-update. Keep this
+# name as a zero-fat shim so anything still holding the old reference — a
+# noctalia arch-updater plugin whose update_cmd was seeded before the rename,
+# a fish alias, muscle memory — keeps working. New code should call
+# hexciri-update directly; the updater migrates the plugin's stored update_cmd
+# on its next real run anyway.
 set -euo pipefail
-
-YES=false
-[[ ${1:-} == "--yes" || ${1:-} == "-y" ]] && YES=true
-confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
-
-LOG="$HOME/.local/state/hexciri/update.log"
-mkdir -p "$(dirname "$LOG")"
-
-# ~2G free on / or stop before a half-finished transaction
-avail_kb=$(df -k / --output=avail | tail -n 1)
-(( avail_kb > 2*1024*1024 )) || { echo "hexciri-update: <2G free on / — free space first"; exit 1; }
-
-confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
-
-# Validate sudo up front (the pacman transaction needs it anyway) so the repo
-# sync's one-time legacy /usr/local/bin purge (sudo -n) succeeds here, where
-# root is already granted.
-sudo -v || { echo "sudo needed for the system update"; exit 1; }
-
-# Pull + apply framework commits first, so a system update also delivers git
-# changes (scripts, menu, configs). Non-fatal so the update proceeds if the
-# repo is dirty or the self-update hits a snag.
-echo "== framework self-update (repo pull) =="
-hexciri-update-hexciri || echo "framework self-update skipped/failed (continuing)" 
-
-{
-  echo "=== $(date -Is) channel: $(hexciri-channel-current 2>/dev/null || echo ?) ==="
-  sudo pacman -Syu --noconfirm
-  if command -v yay &>/dev/null && pacman -Qmq 2>/dev/null | grep -qv yay-bin; then
-    yay -Sua --noconfirm
-  fi
-} 2>&1 | tee -a "$LOG"
-
-# Reboot offer only when the kernel hexciri is pinned to boot differs from the
-# one currently running. hexciri's single-kernel policy means normally exactly
-# one module dir exists; if a second kernel is present (e.g. a stock `linux`
-# staged during install that was never de-picked), "newest module dir" would
-# wrongly claim the kernel changed — the pin (hexciri-kernel choice recorded in
-# /usr/share/hexciri/boot-default, else the loader default) is authoritative.
-running=$(uname -r)
-expected=""
-
-pin=/usr/share/hexciri/boot-default
-entry=""
-if [[ -r $pin ]]; then
-  e="$(cat "$pin" 2>/dev/null || true)"
-  [[ -f /boot/loader/entries/$e ]] && entry="$e"
-fi
-if [[ -z $entry && -r /boot/loader/loader.conf ]]; then
-  e="$(awk '$1=="default"{print $2}' /boot/loader/loader.conf 2>/dev/null)"
-  [[ -f /boot/loader/entries/$e ]] && entry="$e"
-fi
-
-if [[ -n $entry ]]; then
-  vmlinuz="$(awk '$1=="linux"{print $2; exit}' "/boot/loader/entries/$entry" 2>/dev/null)"
-  pkg="${vmlinuz##*/}"; pkg="${pkg#vmlinuz-}"
-  for d in /usr/lib/modules/*; do
-    [[ -d $d ]] || continue
-    if pacman -Qqo "$d" 2>/dev/null | grep -qx "$pkg"; then
-      expected="${d##*/}"; break
-    fi
-  done
-fi
-[[ -n $expected ]] || expected="$(ls -1 /usr/lib/modules/ 2>/dev/null | sort -V | tail -n 1)"
-
-if [[ -n $expected && $expected != "$running" ]]; then
-  echo "kernel: $running -> $expected (a different kernel is now the boot default)"
-  confirm "Reboot now?" && systemctl reboot
-else
-  echo "update complete."
-fi
+exec "$(dirname "$(readlink -f "$0")")/hexciri-update" "$@"

@@ -5,13 +5,14 @@
 #
 # update_cmd is run inside the plugin's own terminal wrapper
 # (`<terminal> -e bash -c ... tee -a log; read -n 1`), so kitty provides the
-# PTY and no `script -qec`/guard layer is needed. hexciri-update-run does
+# PTY and no `script -qec`/guard layer is needed. hexciri-update does
 # free-space check, `sudo pacman -Syu`, AUR via any installed helper, and a
-# kernel-reboot prompt.
+# kernel-reboot prompt. (Pre-rename "hexciri-update-run" stays working via a
+# shim and is migrated to this name on the next real update.)
 [plugin_settings."yuuto/arch-updater"]
 aur_helper = "auto"
 auto_check_hours = 1
 flatpak_enabled = false
 terminal = "kitty"
-update_cmd = "hexciri-update-run"
+update_cmd = "hexciri-update"
 update_mode = "terminal"

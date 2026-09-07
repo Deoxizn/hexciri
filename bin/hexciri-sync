@@ -49,6 +49,21 @@ if [[ -d $REPO/.git ]]; then
   fi
 fi
 
+# ── 3a. noctalia arch-updater plugin: migrate a stale update_cmd to the renamed
+# ── updater (hexciri-update-run → hexciri-update). Runs as root; the plugin's
+# ── settings.toml lives in the repo owner's state dir. The pre-rename shim
+# ── keeps the old name working, so this is tidy-up, not load-bearing. ──
+noct_home=""
+if [[ -n $REPO ]]; then
+  noct_owner="$(stat -c %U "$REPO" 2>/dev/null || true)"
+  [[ -n $noct_owner ]] && noct_home="$(getent passwd "$noct_owner" 2>/dev/null | cut -d: -f6 || true)"
+fi
+[[ -n $noct_home ]] && [[ -f $noct_home/.local/state/noctalia/settings.toml ]] && \
+  grep -q 'update_cmd = "hexciri-update-run"' "$noct_home/.local/state/noctalia/settings.toml" && \
+  sed -i 's|update_cmd = "hexciri-update-run"|update_cmd = "hexciri-update"|' \
+    "$noct_home/.local/state/noctalia/settings.toml" && \
+  log "arch-updater plugin: update_cmd migrated to hexciri-update"
+
 # ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
 if [[ -d /boot/loader ]]; then
   ROOTUUID="$(findmnt -no UUID / 2>/dev/null || true)"

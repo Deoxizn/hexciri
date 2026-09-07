@@ -431,7 +431,7 @@ deploy() { # <repo-rel> <dest> — never clobber local edits (sha-tracked)
 
 # ── commands → ~/.local/bin symlinks to the repo checkout being configured.
 #    The repo clone IS the runtime: a later `git pull` (hexciri-update-hexciri /
-#    hexciri-update-run) makes script + theme updates live immediately, so repo
+#    hexciri-update) makes script + theme updates live immediately, so repo
 #    sync never re-runs install.sh and needs no sudo. ln -sfn also sweeps up
 #    renamed/removed commands and replaces any stale /usr/local/bin hard-copy
 #    from a pre-symlink install (hexciri-util.fish already puts ~/.local/bin on

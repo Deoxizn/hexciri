@@ -1,0 +1,45 @@
+#!/bin/bash
+# hexciri:menu=update
+# hexciri:summary=Update menu: repo, channel, themes, hardware restarts, firmware.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+current=$("$bindir/hexciri-channel-current" 2>/dev/null)
+
+entries=('Hexciri' "Channel${current:+ ($current)} >" 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
+
+if [[ $# -gt 0 ]]; then
+  # Direct dispatch from menu search
+  choice="$*"
+else
+choice=$(
+  printf '%s\n' "${entries[@]}" |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Update: ' --width=30 --lines=${#entries[@]}
+) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
+fi
+choice=${choice%' >'}
+
+case "$choice" in
+  "Hexciri")   exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update-hexciri" ;;
+  "Hardware")  exec "$SCRIPT_DIR/hexciri-update-hardware" ;;
+  "Firmware")  exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" fwupdmgr update ;;
+  "Repo")      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update-hexciri" ;;
+  "Themes")    exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c "'$SCRIPT_DIR/hexciri-theme-omarchy' && '$SCRIPT_DIR/hexciri-theme-extras' --run sync" ;;
+  "Wallpaper") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-wallpaper-refresh" "$HOME/.local/state/hexciri/current/theme" ;;
+  Channel*)    ;;
+  *)           exit 0 ;;
+esac
+
+# Channel picker; switching needs sudo, so run it in a terminal.
+chan_choice=$(
+  printf '%s\n' stable bleeding |
+    awk -v cur="$current" '$0 == cur { print "✓ " $0; next } { print }' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Channel: ' --width=22 --lines=2
+) || exec "$SCRIPT_DIR/hexciri-update-menu"   # Esc = back to Update menu
+
+channel=${chan_choice#✓ }
+[[ -n $channel ]] && exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-channel-set" "$channel"

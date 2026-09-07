@@ -1,45 +1,86 @@
 #!/bin/bash
-# hexciri:menu=update
-# hexciri:summary=Update menu: repo, channel, themes, hardware restarts, firmware.
+# hexciri:summary=Safe system update: repo pkgs + AUR + reboot prompt on kernel change
+# usage: hexciri-update [--yes]
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-bindir="${HEXCIRI_BIN_DIR:-}"
-if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
-bindir="${bindir:-$SCRIPT_DIR}"
+YES=false
+[[ ${1:-} == "--yes" || ${1:-} == "-y" ]] && YES=true
+confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
 
-current=$("$bindir/hexciri-channel-current" 2>/dev/null)
+LOG="$HOME/.local/state/hexciri/update.log"
+mkdir -p "$(dirname "$LOG")"
 
-entries=('Hexciri' "Channel${current:+ ($current)} >" 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
+# ~2G free on / or stop before a half-finished transaction
+avail_kb=$(df -k / --output=avail | tail -n 1)
+(( avail_kb > 2*1024*1024 )) || { echo "hexciri-update: <2G free on / — free space first"; exit 1; }
 
-if [[ $# -gt 0 ]]; then
-  # Direct dispatch from menu search
-  choice="$*"
-else
-choice=$(
-  printf '%s\n' "${entries[@]}" |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Update: ' --width=30 --lines=${#entries[@]}
-) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
+confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
+
+# Validate sudo up front (the pacman transaction needs it anyway) so the repo
+# sync's one-time legacy /usr/local/bin purge (sudo -n) succeeds here, where
+# root is already granted.
+sudo -v || { echo "sudo needed for the system update"; exit 1; }
+
+# Pull + apply framework commits first, so a system update also delivers git
+# changes (scripts, menu, configs). Non-fatal so the update proceeds if the
+# repo is dirty or the self-update hits a snag.
+echo "== framework self-update (repo pull) =="
+hexciri-update-hexciri || echo "framework self-update skipped/failed (continuing)" 
+
+# ── migrate the noctalia arch-updater plugin to the renamed updater ──
+# update_cmd is seeded once into the user's state settings.toml and "never
+# touched again", so this re-points a stale "hexciri-update-run" reference
+# the first time the user actually runs an update again. A compat shim of that
+# name still exists, so this line is belt-and-braces, not load-bearing.
+ST="$HOME/.local/state/noctalia/settings.toml"
+if [[ -f $ST ]] && grep -q 'update_cmd = "hexciri-update-run"' "$ST"; then
+  sed -i 's|update_cmd = "hexciri-update-run"|update_cmd = "hexciri-update"|' "$ST"
+  echo "arch-updater plugin: update_cmd migrated to hexciri-update"
+fi 
+
+{
+  echo "=== $(date -Is) channel: $(hexciri-channel-current 2>/dev/null || echo ?) ==="
+  sudo pacman -Syu --noconfirm
+  if command -v yay &>/dev/null && pacman -Qmq 2>/dev/null | grep -qv yay-bin; then
+    yay -Sua --noconfirm
+  fi
+} 2>&1 | tee -a "$LOG"
+
+# Reboot offer only when the kernel hexciri is pinned to boot differs from the
+# one currently running. hexciri's single-kernel policy means normally exactly
+# one module dir exists; if a second kernel is present (e.g. a stock `linux`
+# staged during install that was never de-picked), "newest module dir" would
+# wrongly claim the kernel changed — the pin (hexciri-kernel choice recorded in
+# /usr/share/hexciri/boot-default, else the loader default) is authoritative.
+running=$(uname -r)
+expected=""
+
+pin=/usr/share/hexciri/boot-default
+entry=""
+if [[ -r $pin ]]; then
+  e="$(cat "$pin" 2>/dev/null || true)"
+  [[ -f /boot/loader/entries/$e ]] && entry="$e"
 fi
-choice=${choice%' >'}
+if [[ -z $entry && -r /boot/loader/loader.conf ]]; then
+  e="$(awk '$1=="default"{print $2}' /boot/loader/loader.conf 2>/dev/null)"
+  [[ -f /boot/loader/entries/$e ]] && entry="$e"
+fi
 
-case "$choice" in
-  "Hexciri")   exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update-hexciri" ;;
-  "Hardware")  exec "$SCRIPT_DIR/hexciri-update-hardware" ;;
-  "Firmware")  exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" fwupdmgr update ;;
-  "Repo")      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update-hexciri" ;;
-  "Themes")    exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c "'$SCRIPT_DIR/hexciri-theme-omarchy' && '$SCRIPT_DIR/hexciri-theme-extras' --run sync" ;;
-  "Wallpaper") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-wallpaper-refresh" "$HOME/.local/state/hexciri/current/theme" ;;
-  Channel*)    ;;
-  *)           exit 0 ;;
-esac
+if [[ -n $entry ]]; then
+  vmlinuz="$(awk '$1=="linux"{print $2; exit}' "/boot/loader/entries/$entry" 2>/dev/null)"
+  pkg="${vmlinuz##*/}"; pkg="${pkg#vmlinuz-}"
+  for d in /usr/lib/modules/*; do
+    [[ -d $d ]] || continue
+    if pacman -Qqo "$d" 2>/dev/null | grep -qx "$pkg"; then
+      expected="${d##*/}"; break
+    fi
+  done
+fi
+[[ -n $expected ]] || expected="$(ls -1 /usr/lib/modules/ 2>/dev/null | sort -V | tail -n 1)"
 
-# Channel picker; switching needs sudo, so run it in a terminal.
-chan_choice=$(
-  printf '%s\n' stable bleeding |
-    awk -v cur="$current" '$0 == cur { print "✓ " $0; next } { print }' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Channel: ' --width=22 --lines=2
-) || exec "$SCRIPT_DIR/hexciri-update"   # Esc = back to Update menu
-
-channel=${chan_choice#✓ }
-[[ -n $channel ]] && exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-channel-set" "$channel"
+if [[ -n $expected && $expected != "$running" ]]; then
+  echo "kernel: $running -> $expected (a different kernel is now the boot default)"
+  confirm "Reboot now?" && systemctl reboot
+else
+  echo "update complete."
+fi

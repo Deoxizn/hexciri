@@ -31,5 +31,5 @@ case "$choice" in
   Themes)        exec "$SCRIPT_DIR/hexciri-themes" ;;
   System)        exec "$SCRIPT_DIR/hexciri-system" ;;
   Restart)       exec "$SCRIPT_DIR/hexciri-restart" ;;
-  "System Update") exec "$SCRIPT_DIR/hexciri-update" ;;
+  "System Update") exec "$SCRIPT_DIR/hexciri-update-menu" ;;
 esac

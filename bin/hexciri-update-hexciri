@@ -25,7 +25,7 @@ relink() {
 # The runtime is the repo now (~/.local/bin → repo/bin), so clear the stale
 # root copies and re-point the alpm hook. Uses sudo -n deliberately: the normal
 # path runs a sync with no root at all (the Repo menu / plain pull), and the
-# rare third-party box reaches this through the system update (hexciri-update-run)
+# rare third-party box reaches this through the system update (hexciri-update)
 # which has already validated sudo. Silent skip when no root is available.
 legacy_purge() {
   local stale=false f

@@ -118,7 +118,7 @@ mode = "dark"
 #   Enabled declaratively here; its plugin-level settings are owned by the
 #   state dir and are seeded by install.sh into
 #   ~/.local/state/noctalia/settings.toml (terminal=kitty,
-#   update_cmd=hexciri-update-run). No service.luau patching — the current
+#   update_cmd=hexciri-update). No service.luau patching — the current
 #   plugin honors both keys natively.
 # ──────────────────────────────────────────────
 
