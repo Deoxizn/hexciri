@@ -12,6 +12,39 @@ set -euo pipefail
 
 log() { echo "hexciri-sync: $*"; }
 
+# ── 2. self-update: this script is a symlink into the repo checkout, so a slow
+# ── repo means a stale hook. A package update is the user's 'it just works'
+# ── moment — don't make them run a manual step to bring the framework forward.
+# ── Pull the checkout first (non-fatal: dirty/unreachable degrades to the local
+# ── code), then re-apply the hook file from the pulled tree so newer hook
+# ── targets ride along immediately. When running as root (alpm hook) the repo
+# ── is user-owned, so pull as its owner to avoid root-owned files. The rest of
+# ── this invocation keeps its own byte-for-byte version; the pulled code serves
+# ── the retry queued below and every later run. ──
+REPO=""
+if [[ -L $0 ]]; then
+  real="$(readlink -f "$0" 2>/dev/null || true)"
+  [[ -n $real ]] && REPO="$(cd "$(dirname "$real")/.." 2>/dev/null && pwd || true)"
+fi
+[[ -n $REPO ]] || [[ -d $HOME/.local/opt/hexciri ]] && REPO="$HOME/.local/opt/hexciri"
+if [[ -d $REPO/.git ]]; then
+  if [[ $EUID -eq 0 ]]; then
+    owner="$(stat -c %U "$REPO" 2>/dev/null || echo root)"
+    if command -v runuser >/dev/null && [[ $owner != root ]]; then
+      runuser -u "$owner" -- git -C "$REPO" pull --ff-only >/dev/null 2>&1 || \
+        log "warning: repo pull skipped/failed (dirty tree or offline?) — continuing with local code"
+    else
+      git -C "$REPO" pull --ff-only >/dev/null 2>&1 || true
+    fi
+  else
+    git -C "$REPO" pull --ff-only >/dev/null 2>&1 || true
+  fi
+  if [[ -f $REPO/default/alpm/hexciri-sync.hook ]] && ! cmp -s "$REPO/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook 2>/dev/null; then
+    install -m644 "$REPO/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook 2>/dev/null && \
+      log "re-applied alpm hook from repo (newer targets active from the next transaction)"
+  fi
+fi
+
 # ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
 if [[ -d /boot/loader ]]; then
   ROOTUUID="$(findmnt -no UUID / 2>/dev/null || true)"
@@ -91,7 +124,16 @@ if pacman -Q gnome-keyring 2>/dev/null | grep -qE '[ :]50\.'; then
     pacman -U --noconfirm "$gkr_pkg"
     log "downgraded gnome-keyring to 48.0 (50.0 crashes; parked until upstream fixes it)"
   else
-    log "WARNING: gnome-keyring 50.0 installed (crashy); running inside a pacman transaction so the downgrade is deferred — run 'sudo hexciri-sync' when it finishes:"
+    log "WARNING: gnome-keyring 50.0 landed in this transaction; queuing the 48.0 downgrade for right after pacman exits"
+    # We're inside an alpm hook, so pacman holds the lock — a nested pacman -U would
+    # deadlock. Schedule the re-run ourselves instead of making the user do it:
+    # prefer a transient systemd timer, fall back to a detached wait-loop.
+    if command -v systemd-run >/dev/null 2>&1 && systemd-run --no-block --unit=hexciri-gkr-retry --on-active=1m /usr/local/bin/hexciri-sync >/dev/null 2>&1; then
+      log "downgrade queued (transient timer hexciri-gkr-retry, fires in ~1min)"
+    else
+      setsid nohup bash -c 'while pgrep -x pacman >/dev/null 2>&1; do sleep 2; done; /usr/local/bin/hexciri-sync' >/dev/null 2>&1 &
+      log "downgrade queued (detached retry, runs once pacman exits)"
+    fi
   fi
 fi
 
