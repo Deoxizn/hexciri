@@ -65,8 +65,36 @@ echo "syncing $REPO ..."
 git -C "$REPO" fetch --tags origin --quiet 2>/dev/null || true
 behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
 
+# ── once, after the pull: re-exec from the freshly-pulled tree. Every entry
+# ── point funnels through this script (hexciri-update, the Repo/Hexciri menu,
+# ── hxup, and the alpm hook's hexciri-sync all invoke it), so a pull here is
+# ── THE deploy. Anything the pulled commit ships — relinks, migrations like the
+# ── plugin update_cmd, whatever ships next — must run the NEW bytes of THIS
+# ── script, not the pre-pull copy that's executing now. HXC_UPX_RERUN guards
+# ── the single re-exec; the second pass sees behind==0 and runs the deploy
+# ── steps below with current code. Same one-shot self-heal as hexciri-update
+# ── and hexciri-sync. ──
+if (( behind > 0 )) && [[ ${HXC_UPX_RERUN:-0} == 0 ]]; then
+  echo "pulling $behind new commit(s)..."
+  git -C "$REPO" pull --ff-only --quiet
+  export HXC_UPX_RERUN=1
+  exec "$0" "$@"
+fi
+
 relink
 sync_themes
+
+# ── deploy-side migrations (run every pass; idempotent). ──
+# noctalia arch-updater plugin: update_cmd is seeded once into the user's state
+# settings.toml and "never touched again", so re-point a stale
+# "hexciri-update-run" → "hexciri-update" here, in the one place every update
+# press funnels through. (The pre-rename shim keeps the old name working
+# regardless; this is tidy-up, not load-bearing.)
+ST="$HOME/.local/state/noctalia/settings.toml"
+if [[ -f $ST ]] && grep -q 'update_cmd = "hexciri-update-run"' "$ST"; then
+  sed -i 's|update_cmd = "hexciri-update-run"|update_cmd = "hexciri-update"|' "$ST"
+  echo "arch-updater plugin: update_cmd migrated to hexciri-update"
+fi
 
 # State the sync must keep live (idempotent; a plain pull/re-link is all the
 # deploy a repo-runtime project does, so this is the deploy):
@@ -82,10 +110,3 @@ if (( behind == 0 )); then
   legacy_purge
   exit 0
 fi
-
-echo "pulling $behind new commit(s)..."
-git -C "$REPO" pull --ff-only --quiet
-relink
-legacy_purge
-
-echo "repo updated to $(git -C "$REPO" rev-parse --short HEAD) — updates are already live (commands/configs/themes read straight from this repo)"

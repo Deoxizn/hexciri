@@ -17,6 +17,19 @@ if [[ ${HXC_RERUN:-0} == 0 ]]; then
   exec "$0" "$@"
 fi
 
+# ── migrate the noctalia arch-updater plugin to the renamed updater ──
+# Runs unconditionally and BEFORE any prompt/gate: a user who cancels the
+# system update at the "Run system update?" confirm (or runs in a context
+# without input) should still pay off a stale update_cmd — otherwise the press
+# that pulls the fix silently defers it. The funnel (hexciri-update-hexciri)
+# does this on its own for every entry point; this copy is belt-and-braces for
+# when the funnel was skipped/failed but we continue anyway. Idempotent.
+ST="$HOME/.local/state/noctalia/settings.toml"
+if [[ -f $ST ]] && grep -q 'update_cmd = "hexciri-update-run"' "$ST"; then
+  sed -i 's|update_cmd = "hexciri-update-run"|update_cmd = "hexciri-update"|' "$ST"
+  echo "arch-updater plugin: update_cmd migrated to hexciri-update"
+fi
+
 YES=false
 [[ ${1:-} == "--yes" || ${1:-} == "-y" ]] && YES=true
 confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
@@ -35,18 +48,8 @@ confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
 # root is already granted.
 sudo -v || { echo "sudo needed for the system update"; exit 1; }
 
-# Pull + apply framework commits already happened at the top (self-heal re-exec).
-
-# ── migrate the noctalia arch-updater plugin to the renamed updater ──
-# update_cmd is seeded once into the user's state settings.toml and "never
-# touched again", so this re-points a stale "hexciri-update-run" reference
-# the first time the user actually runs an update again. A compat shim of that
-# name still exists, so this line is belt-and-braces, not load-bearing.
-ST="$HOME/.local/state/noctalia/settings.toml"
-if [[ -f $ST ]] && grep -q 'update_cmd = "hexciri-update-run"' "$ST"; then
-  sed -i 's|update_cmd = "hexciri-update-run"|update_cmd = "hexciri-update"|' "$ST"
-  echo "arch-updater plugin: update_cmd migrated to hexciri-update"
-fi 
+# Pull + apply framework commits already happened at the top (self-heal re-exec),
+# and the plugin update_cmd migration ran unconditionally before the confirm.
 
 {
   echo "=== $(date -Is) channel: $(hexciri-channel-current 2>/dev/null || echo ?) ==="
