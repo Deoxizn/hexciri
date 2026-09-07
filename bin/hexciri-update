@@ -3,6 +3,20 @@
 # usage: hexciri-update [--yes]
 set -euo pipefail
 
+# ── one-shot self-heal: pull the framework, then RE-EXEC our freshly-pulled
+# ── bytes so every step below (confirm, migrations, pacman) runs the NEWEST
+# ── code in this press. A self-updating script keeps running its own old bytes
+# ── until it re-execs; without this, a fix shipped by the pull (updater rename,
+# ── plugin update_cmd migration, whatever ships next) only lands on the NEXT
+# ── press — the "press once, walk away" hole. HXC_RERUN=1 on the re-exec
+# ── skips the pull so the pass always terminates. ──
+if [[ ${HXC_RERUN:-0} == 0 ]]; then
+  export HXC_RERUN=1
+  echo "== framework self-update (repo pull) =="
+  hexciri-update-hexciri || echo "framework self-update skipped/failed (continuing)"
+  exec "$0" "$@"
+fi
+
 YES=false
 [[ ${1:-} == "--yes" || ${1:-} == "-y" ]] && YES=true
 confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
@@ -21,11 +35,7 @@ confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
 # root is already granted.
 sudo -v || { echo "sudo needed for the system update"; exit 1; }
 
-# Pull + apply framework commits first, so a system update also delivers git
-# changes (scripts, menu, configs). Non-fatal so the update proceeds if the
-# repo is dirty or the self-update hits a snag.
-echo "== framework self-update (repo pull) =="
-hexciri-update-hexciri || echo "framework self-update skipped/failed (continuing)" 
+# Pull + apply framework commits already happened at the top (self-heal re-exec).
 
 # ── migrate the noctalia arch-updater plugin to the renamed updater ──
 # update_cmd is seeded once into the user's state settings.toml and "never

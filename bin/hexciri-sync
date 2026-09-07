@@ -22,15 +22,16 @@ log() { echo "hexciri-sync: $*"; }
 # ── Pull the checkout first (non-fatal: dirty/unreachable degrades to the local
 # ── code), then re-apply the hook file from the pulled tree so newer hook
 # ── targets ride along immediately. When running as root (alpm hook) the repo
-# ── is user-owned, so pull as its owner to avoid root-owned files. The rest of
-# ── this invocation keeps its own byte-for-byte version; the pulled code serves
-# ── the retry queued below and every later run. ──
+# ── is user-owned, so pull as its owner to avoid root-owned files. Step 2b then
+# ── re-execs from the freshly-pulled tree so THIS invocation runs newest code. ──
 REPO=""
-if [[ -L $0 ]]; then
+[[ -n ${HEXCIRI_REPO:-} ]] && REPO="$HEXCIRI_REPO"
+if [[ -z $REPO && -L $0 ]]; then
   real="$(readlink -f "$0" 2>/dev/null || true)"
   [[ -n $real ]] && REPO="$(cd "$(dirname "$real")/.." 2>/dev/null && pwd || true)"
 fi
-[[ -n $REPO ]] || [[ -d $HOME/.local/opt/hexciri ]] && REPO="$HOME/.local/opt/hexciri"
+[[ -n $REPO ]] || [[ -d $HOME/.local/opt/hexciri ]] && REPO="${HEXCIRI_REPO:-$HOME/.local/opt/hexciri}"
+export HEXCIRI_REPO="$REPO"
 if [[ -d $REPO/.git ]]; then
   if [[ $EUID -eq 0 ]]; then
     owner="$(stat -c %U "$REPO" 2>/dev/null || echo root)"
@@ -46,6 +47,20 @@ if [[ -d $REPO/.git ]]; then
   if [[ -f $REPO/default/alpm/hexciri-sync.hook ]] && ! cmp -s "$REPO/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook 2>/dev/null; then
     install -m644 "$REPO/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook 2>/dev/null && \
       log "re-applied alpm hook from repo (newer targets active from the next transaction)"
+  fi
+
+  # ── 2b. one-shot self-heal: this process ran the PRE-pull bytes of this script
+  # ── (the pull could not also be its own upgrade). Re-exec from the JUST-pulled
+  # ── checkout so every step below — hook re-apply, plugin update_cmd migration,
+  # ── and anything future fixes add here — runs the NEWEST code within THIS same
+  # ── transaction, not the next one. HXC_SYNC_RERUN guards the single re-exec;
+  # ── the second pass pulls again (fast-forward, no-op) and proceeds. ──
+  if [[ ${HXC_SYNC_RERUN:-0} == 0 ]]; then
+    export HXC_SYNC_RERUN=1
+    if [[ -x $REPO/bin/hexciri-sync ]]; then
+      log "re-execing with pulled framework (latest fixes take effect now)"
+      exec "$REPO/bin/hexciri-sync" "$@"
+    fi
   fi
 fi
 
