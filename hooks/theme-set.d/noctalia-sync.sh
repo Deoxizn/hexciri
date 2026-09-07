@@ -245,10 +245,15 @@ if os.environ.get("NOCTALIA_SYNC_NO_WALLPAPER") != "1":
             if cur.is_symlink() or cur.exists():
                 cur.unlink()
             cur.symlink_to(dest)
-            # Tell Noctalia to apply the wallpaper
+            # Tell Noctalia to apply the wallpaper. Guard against empty/missing
+            # sources (e.g. a sandbox HOME or a corrupted theme) — sending such
+            # a path would leave the desktop + lockscreen on a black image.
             import subprocess
-            subprocess.run(["noctalia", "msg", "wallpaper-set", str(dest)], check=False)
-            print(f"noctalia-sync: wallpaper → {dest}")
+            if dest.exists() and dest.stat().st_size > 0:
+                subprocess.run(["noctalia", "msg", "wallpaper-set", str(dest)], check=False)
+                print(f"noctalia-sync: wallpaper → {dest}")
+            else:
+                print(f"noctalia-sync: skipping wallpaper-set ({dest} missing or empty)")
 
 print(f"noctalia-sync: synced theme '{theme_name}'")
 PYEOF
