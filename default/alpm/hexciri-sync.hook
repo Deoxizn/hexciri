@@ -6,6 +6,7 @@ Type = Package
 Target = linux*
 Target = mkinitcpio
 Target = sddm
+Target = gnome-keyring
 Target = avahi
 Target = hwloc
 Target = v4l-utils

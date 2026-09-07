@@ -288,27 +288,37 @@ HOOK
   # ── gnome-keyring: unlock the login keyring at sddm login via pam. Without
   #    this, the "Unlock Login Keyring" popup appears whenever the first app
   #    touches secrets. Deploy the full pam stack (backup-first, idempotent). ──
-  if [[ ! -f /etc/pam.d/sddm ]] || ! grep -q 'pam_gnome_keyring.so' /etc/pam.d/sddm; then
+  if [[ ! -f /etc/pam.d/sddm ]] || ! grep -Ev '^\s*#' /etc/pam.d/sddm | grep -q 'pam_gnome_keyring.so'; then
     run cp -f /etc/pam.d/sddm "/etc/pam.d/sddm.bak.$(date +%s)" 2>/dev/null || true
     run cp -f "$REPO_DIR/default/pam/sddm" /etc/pam.d/sddm
     info "sddm login: wired pam_gnome_keyring (auto-unlocks 'login' keyring)"
   fi
   # fingerprint-first for sudo/su/login (system-auth also backs sddm via
   # system-login); sufficient → password still works when no print is present
-  if [[ ! -f /etc/pam.d/system-auth ]] || ! grep -q 'pam_fprintd.so' /etc/pam.d/system-auth; then
+  if [[ ! -f /etc/pam.d/system-auth ]] || ! grep -Ev '^\s*#' /etc/pam.d/system-auth | grep -q 'pam_fprintd.so'; then
     run cp -f /etc/pam.d/system-auth "/etc/pam.d/system-auth.bak.$(date +%s)" 2>/dev/null || true
     run cp -f "$REPO_DIR/default/pam/system-auth" /etc/pam.d/system-auth
     info "system-auth: fingerprint-first for sudo/su/login"
   fi
+  fi # ! $UPDATE_MODE
+
   # ── gnome-keyring: PIN the last known-good build. 50.0 has an unfixed
   #    upstream crash (SIGABRT in g_variant_new during concurrent Secret
   #    Service OpenSession/PKCS11 negotiation) that kills the PAM daemon and
   #    leaves a locked replacement → "unlock login keyring" popups. Parking
-  #    48.0 with IgnorePkg removes the crashing code entirely — no masks, no
-  #    dbus overrides: a healthy daemon stays the sole owner of
-  #    org.freedesktop.secrets. Return to a clean upgrade once upstream ships
-  #    a fixed 50.x (delete the IgnorePkg line below). ──
-  if pacman -Q gnome-keyring 2>/dev/null | grep -q ' 50\.'; then
+  #    48.0 with IgnorePkg removes the crashing code. The version pin alone
+  #    doesn't stop the run: the gnome-keyring-daemon.socket unit ships enabled
+  #    at GLOBAL scope (/etc/systemd/user/sockets.target.wants/), so socket
+  #    activation can start the daemon BEFORE PAM runs and pam_gnome_keyring's
+  #    auto_start then loses the race ("another secret service is running") —
+  #    the login keyring never gets the password and the unlock popup stays.
+  #    So also disable the socket globally so PAM auto_start is the sole
+  #    starter and receives the password. Runs on install AND update: an update
+  #    must re-assert it too (a 50.x that slips past IgnorePkg leaves the box
+  #    with a locked keyring). Return to a clean upgrade once upstream ships a
+  #    fixed 50.x (delete the IgnorePkg line below). ──
+  run systemctl --global disable gnome-keyring-daemon.socket gnome-keyring-daemon.service 2>/dev/null || true
+  if pacman -Q gnome-keyring 2>/dev/null | grep -qE '[ :]50\.'; then
     gkr_pkg=/var/cache/pacman/pkg/gnome-keyring-1:48.0-1-x86_64.pkg.tar.zst
     if [[ ! -f $gkr_pkg ]]; then
       run curl -fLo "$gkr_pkg" "https://archive.archlinux.org/packages/g/gnome-keyring/gnome-keyring-1%3A48.0-1-x86_64.pkg.tar.zst"
@@ -322,7 +332,6 @@ HOOK
     run sed -i '/^\[options\]/a IgnorePkg = gnome-keyring' /etc/pacman.conf
     info "parked gnome-keyring via IgnorePkg"
   fi
-  fi # ! $UPDATE_MODE
 
   # ── SDDM theme (emblem + password greeter, Niri preferred) ──
   #    (update mode keeps your installed greeter — user-facing personalization)
