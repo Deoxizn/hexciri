@@ -48,6 +48,16 @@ confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
 # root is already granted.
 sudo -v || { echo "sudo needed for the system update"; exit 1; }
 
+# Re-apply the alpm hook from the pulled tree now that root is granted. The
+# hook only self-refreshes while a package transaction actually runs, so a
+# no-op update (nothing to upgrade) never fired it — a stale hook (e.g. missing
+# the gnome-keyring target) would linger on boxes that keep coming up empty.
+REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+if [[ -f $REPO/default/alpm/hexciri-sync.hook ]] && ! cmp -s "$REPO/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook 2>/dev/null; then
+  sudo install -m644 "$REPO/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook && \
+    echo "alpm hook re-applied (newer targets active from the next transaction)"
+fi
+
 # Pull + apply framework commits already happened at the top (self-heal re-exec),
 # and the plugin update_cmd migration ran unconditionally before the confirm.
 
