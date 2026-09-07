@@ -1,6 +1,6 @@
 #!/bin/bash
 # hexciri:menu=update
-# hexciri:summary=Update menu: repo, channel, themes, hardware restarts, firmware.
+# hexciri:summary=Update menu: system update, repo, channel, themes, hardware restarts, firmware.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,7 +10,7 @@ bindir="${bindir:-$SCRIPT_DIR}"
 
 current=$("$bindir/hexciri-channel-current" 2>/dev/null)
 
-entries=('Hexciri' "Channel${current:+ ($current)} >" 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
+entries=('System update' 'Hexciri' "Channel${current:+ ($current)} >" 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
 
 if [[ $# -gt 0 ]]; then
   # Direct dispatch from menu search
@@ -24,6 +24,7 @@ fi
 choice=${choice%' >'}
 
 case "$choice" in
+  "System update") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update" ;;
   "Hexciri")   exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update-hexciri" ;;
   "Hardware")  exec "$SCRIPT_DIR/hexciri-update-hardware" ;;
   "Firmware")  exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" fwupdmgr update ;;
