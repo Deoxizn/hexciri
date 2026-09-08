@@ -96,6 +96,13 @@ do_install() { # $1 pkg: fetch + pacman -U newest build + headers
   ensure_key
   ensure_arch
   url="$(latest "$pkg")" || { err "could not resolve newest $pkg (offline?)"; exit 1; }
+  # quick skip: the system update re-runs `install` every press; don't re-
+  # download ~220MB to reinstall the identical build. A same-version reinstall
+  # is still available via hexciri-kernel's explicit actions / uninstall+install.
+  if [[ $(installed_ver "$pkg") == "$(url_ver "$url")" ]]; then
+    info "$pkg $(url_ver "$url") already installed — up to date (no re-download)"
+    exit 0
+  fi
   hurl="$(latest_headers "$pkg")"
   tmp="$(mktemp -d)"
   trap '[[ -n ${tmp:-} ]] && rm -rf "${tmp:-}"' EXIT
