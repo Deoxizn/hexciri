@@ -13,31 +13,61 @@ bindir="${bindir:-$SCRIPT_DIR}"
 here="$(readlink -f "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")"
 shipped_base="${HEXCIRI_PATH:-$(dirname "$here")}"
 
+# niri config lives as one split tree (config.kdl + per-topic imports) — each
+# fragment gets its own row; the other WMs are single-file trees so a dir-level
+# edit (picker) is enough.
+declare -A NIRI_FRAGS=(
+  [config]="config.kdl"
+  [env]="env.kdl"
+  [input]="input.kdl"
+  [autostart]="autostart.kdl"
+  [monitors]="monitors.kdl"
+  [looknfeel]="looknfeel.kdl"
+  [window-rules]="window-rules.kdl"
+  [keybinds]="keybinds.kdl"
+  [cursors]="cursors.kdl"
+)
+niri_dir="${XDG_CONFIG_HOME:-$HOME/.config}/niri"
+cfg_xdg="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+rows=(
+  'Niri config' 'Niri env' 'Niri input' 'Niri autostart' 'Niri monitors'
+  'Niri looknfeel' 'Niri window-rules' 'Niri keybinds' 'Niri cursors'
+  'Hyprland config' 'Sway config' 'Mango config'
+  'Noctalia config'
+  'Fastfetch config'
+  'Palettes'
+  'Hexciri lockscreen'
+  'Extra themes list'
+  'Wallpaper dirs list'
+  'Hooks'
+)
+
 if [[ $# -gt 0 ]]; then
   # Direct dispatch from menu search
   choice="$*"
 else
-choice=$(
-  printf '%s\n' \
-    'Niri config' \
-    'Noctalia config' \
-    'Fastfetch config' \
-    'Palettes' \
-    'Hexciri lockscreen' \
-    'Extra themes list' \
-    'Wallpaper dirs list' \
-    'Hooks' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=26 --lines=6
-) || exec "$SCRIPT_DIR/hexciri-menu"
+  choice=$(
+    printf '%s\n' "${rows[@]}" |
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=28 --lines=9
+  ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
 case "$choice" in
-  'Niri config')        "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/niri/config.kdl" ;;
-  'Noctalia config')    "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/config.toml" ;;
-  'Fastfetch config')   "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/fastfetch/config.jsonc" ;;
-  'Palettes')           "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/palettes/" ;;
+  'Niri config'|'Niri '*)
+    frag="${choice#Niri }"
+    file="${NIRI_FRAGS[$frag]:-}"
+    if [[ -n $file ]]; then
+      "$bindir/hexciri-edit-file" "$niri_dir/$file"
+    fi ;;
+  'Hyprland config')  "$bindir/hexciri-edit-file" "$cfg_xdg/hypr/" ;;
+  'Sway config')      "$bindir/hexciri-edit-file" "$cfg_xdg/sway/" ;;
+  'Mango config')     "$bindir/hexciri-edit-file" "$cfg_xdg/mango/" ;;
+  'Noctalia config')  "$bindir/hexciri-edit-file" "$cfg_xdg/noctalia/config.toml" ;;
+  'Fastfetch config') "$bindir/hexciri-edit-file" "$cfg_xdg/fastfetch/config.jsonc" ;;
+  'Palettes')         "$bindir/hexciri-edit-file" "$cfg_xdg/noctalia/palettes/" ;;
   'Hexciri lockscreen')
-    dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri"
+    dir="$cfg_xdg/hexciri"
     mkdir -p "$dir"
     conf="$dir/lockscreen.conf"
     if [[ ! -f $conf ]]; then
@@ -50,18 +80,18 @@ EOF
     fi
     "$bindir/hexciri-edit-file" "$conf" ;;
   'Extra themes list')
-    dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/theme-sources"
+    dir="$cfg_xdg/hexciri/theme-sources"
     mkdir -p "$dir"
     list="$dir/extra.list"
     shipped="$shipped_base/theme-sources/extra.list"
     [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
     "$bindir/hexciri-edit-file" "$list" ;;
   'Wallpaper dirs list')
-    dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/wallpaper-sources"
+    dir="$cfg_xdg/hexciri/wallpaper-sources"
     mkdir -p "$dir"
     list="$dir/extra.list"
     shipped="$shipped_base/wallpaper-sources/extra.list"
     [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
     "$bindir/hexciri-edit-file" "$list" ;;
-  'Hooks')              "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/hooks/" ;;
+  'Hooks')              "$bindir/hexciri-edit-file" "$cfg_xdg/hexciri/hooks/" ;;
 esac
