@@ -474,12 +474,13 @@ ok "commands linked"
 mkdir -p ~/.config/hexciri/branding
 run cp -f "$REPO_DIR/branding/"*.png ~/.config/hexciri/branding/
 
-# ── WM config: split into per-concern fragments (~/.config/<wm>/config.kdl +
-# env/monitors/looknfeel/window-rules/keybinds/autostart.kdl), all included by
-# the entry file, each deploying independently with the sha-tracked "keep user
+# ── WM config: split into per-concern fragments (~/.config/<wm>/config.kdl for
+# niri, hyprland.lua + conf/*.lua for hyprland, config + conf.d/* for sway,
+# config.conf + source'd fragments for mango), all included/sourced by the
+# entry file, each deploying independently with the sha-tracked "keep user
 # edits" logic. Deploys the picked WM's config dir; other WMs' configs come
 # into existence via the swap path (hexciri-session-set / System > Session),
-# never on a fresh install. A WM with no repo surface yet (mango) is a no-op.
+# never on a fresh install.
 case "$WM_PICK" in
   niri)
     for _f in config cursors env monitors input looknfeel window-rules keybinds autostart; do
@@ -493,27 +494,72 @@ case "$WM_PICK" in
     # mode/VRR commented) — no runtime detection, nothing to discover in a chroot.
     ;;
   hyprland)
-    deploy config/hypr/hyprland.conf "$HOME/.config/hypr/hyprland.conf" 2>/dev/null || true
+    deploy config/hypr/hyprland.lua "$HOME/.config/hypr/hyprland.lua"
+    for _f in env input monitors looknfeel window-rules keybinds autostart; do
+      deploy "config/hypr/conf/$_f.lua" "$HOME/.config/hypr/conf/$_f.lua"
+    done
     ;;
   sway)
-    deploy config/sway/config "$HOME/.config/sway/config" 2>/dev/null || true
+    deploy config/sway/config "$HOME/.config/sway/config"
+    for _f in input monitors looknfeel window-rules keybinds autostart; do
+      deploy "config/sway/conf.d/$_f.conf" "$HOME/.config/sway/conf.d/$_f.conf"
+    done
+    deploy config/sway/environment.d/10-hexciri.conf "$HOME/.config/environment.d/10-hexciri.conf"
     ;;
   mango)
-    ;;  # no repo surface yet; swap path creates it
+    deploy config/mango/config.conf "$HOME/.config/mango/config.conf"
+    for _f in env input monitors looknfeel window-rules keybinds autostart; do
+      deploy "config/mango/$_f.conf" "$HOME/.config/mango/$_f.conf"
+    done
+    ;;
 esac
 
-# ── shell spawn in the WM's autostart must match the pick (design §4): niri
-# spawns the shell at startup only when one is actually chosen — shell=none
+# ── shell spawn in the WM's autostart must match the pick (design §4): every
+# WM spawns the shell at startup only when one is actually chosen — shell=none
 # comments the line out. Idempotent; re-installing over a different pick
 # converges the deployed autostart. ──
-_autostart="$HOME/.config/niri/autostart.kdl"
-if [[ $WM_PICK == niri && -f $_autostart ]]; then
-  if [[ $SHELL_PICK == none ]]; then
-    run sed -i 's|^spawn-at-startup "noctalia".*|// spawn-at-startup "noctalia"   // shell=none: no shell spawned|' "$_autostart"
-  else
-    run sed -i 's|^// \?spawn-at-startup "noctalia".*|spawn-at-startup "noctalia"|' "$_autostart"
-  fi
-fi
+case "$WM_PICK" in
+  niri)
+    _autostart="$HOME/.config/niri/autostart.kdl"
+    if [[ -f $_autostart ]]; then
+      if [[ $SHELL_PICK == none ]]; then
+        run sed -i 's|^spawn-at-startup "noctalia".*|// spawn-at-startup "noctalia"   // shell=none: no shell spawned|' "$_autostart"
+      else
+        run sed -i 's|^// \?spawn-at-startup "noctalia".*|spawn-at-startup "noctalia"|' "$_autostart"
+      fi
+    fi
+    ;;
+  hyprland)
+    _autostart="$HOME/.config/hypr/conf/autostart.lua"
+    if [[ -f $_autostart ]]; then
+      if [[ $SHELL_PICK == none ]]; then
+        run sed -i 's|^    hl.exec_cmd("noctalia")|    -- hl.exec_cmd("noctalia")   -- shell=none: no shell spawned|' "$_autostart"
+      else
+        run sed -i 's|^    -- hl.exec_cmd("noctalia").*|    hl.exec_cmd("noctalia")|' "$_autostart"
+      fi
+    fi
+    ;;
+  sway)
+    _autostart="$HOME/.config/sway/conf.d/autostart.conf"
+    if [[ -f $_autostart ]]; then
+      if [[ $SHELL_PICK == none ]]; then
+        run sed -i 's|^exec noctalia|# exec noctalia   # shell=none: no shell spawned|' "$_autostart"
+      else
+        run sed -i 's|^# \?exec noctalia.*|exec noctalia|' "$_autostart"
+      fi
+    fi
+    ;;
+  mango)
+    _autostart="$HOME/.config/mango/autostart.conf"
+    if [[ -f $_autostart ]]; then
+      if [[ $SHELL_PICK == none ]]; then
+        run sed -i 's|^exec-once=noctalia|# exec-once=noctalia   # shell=none: no shell spawned|' "$_autostart"
+      else
+        run sed -i 's|^# \?exec-once=noctalia.*|exec-once=noctalia|' "$_autostart"
+      fi
+    fi
+    ;;
+esac
 
 # ── hexciri WM/shell selector (authoritative source for hexciri-session) ──
 mkdir -p "$HOME/.config/hexciri"

@@ -263,6 +263,10 @@ def hex(rgb, alpha="ff"):
     c = rgb.lstrip("#").lower()
     return f"#{alpha}{c}"
 
+def lua_rgba(rgb, alpha="ff"):
+    # hyprland 0.56 `"rgba(rrggbbaa)"` — no '#', RGBA order, 8 hex digits.
+    return alpha + rgb.lstrip("#").lower()
+
 def patch_kdl(path, accent, muted):
     if not path.exists():
         return False
@@ -286,17 +290,30 @@ noct_kdl = Path.home() / ".config" / "niri" / "noctalia.kdl"
 if noct_kdl.exists():
     patch_kdl(noct_kdl, accent, muted)
 
-# hyprland: general { col.active_border / col.inactive_border }
-hypr_look = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "hypr" / "conf" / "looknfeel.conf"
-if hypr_look.exists():
-    hy = hypr_look.read_text()
-    hy2 = re.sub(r'col\.active_border\s*=\s*rgba\([0-9a-fA-F]+\)',
-                 lambda m: f'col.active_border = rgba({hex(accent)})', hy)
-    hy2 = re.sub(r'col\.inactive_border\s*=\s*rgba\([0-9a-fA-F]+\)',
-                 lambda m: f'col.inactive_border = rgba({hex(muted)})', hy2)
+# hyprland: Lua conf/looknfeel.lua (0.55+) carries the two theme-owned color
+# locals; the legacy .conf (pre-0.55 carry-over) is patched too when present.
+# skip patching if the fragment doesn't exist yet (session-set seeds it).
+def hypr_chunk(path):
+    if not path.exists():
+        return False
+    hy = path.read_text()
+    hy2 = re.sub(r'local\s+active_border\s*=\s*"rgba\([0-9a-fA-F]+\)"',
+                 f'local active_border   = "rgba({lua_rgba(accent)})"', hy)
+    hy2 = re.sub(r'local\s+inactive_border\s*=\s*"rgba\([0-9a-fA-F]+\)"',
+                 f'local inactive_border = "rgba({lua_rgba(muted)})"', hy2)
     if hy2 != hy:
-        hypr_look.write_text(hy2)
-        print(f"hexciri-sync: patched hypr looknfeel.conf borders accent={accent} inactive={muted}")
+        path.write_text(hy2)
+        print(f"hexciri-sync: patched hypr {path.name} borders accent={accent} inactive={muted}")
+        return True
+    return False
+
+hypr_root = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "hypr"
+hypr_look = hypr_root / "conf" / "looknfeel.lua"
+hypr_alt  = hypr_root / "conf" / "looknfeel.conf"
+if hypr_look.exists():
+    hypr_chunk(hypr_root / "conf" / "looknfeel.lua")
+elif hypr_alt.exists():
+    hypr_chunk(hypr_root / "conf" / "looknfeel.conf")
 
 # sway: client.focused / client.unfocused <border-hover> <border> <bg> <text>
 sway_look = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "sway" / "conf.d" / "looknfeel.conf"
@@ -309,6 +326,18 @@ if sway_look.exists():
     if sw2 != sw:
         sway_look.write_text(sw2)
         print(f"hexciri-sync: patched sway looknfeel.conf borders accent={accent} inactive={muted}")
+
+# mango: looknfeel.conf focuscolor/unfocuscolor (0xRRGGBBAA)
+mango_look = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mango" / "looknfeel.conf"
+if mango_look.exists():
+    mg = mango_look.read_text()
+    mg2 = re.sub(r'^(focuscolor)=0x[0-9a-fA-F]{8}',
+                 lambda m: f'focuscolor=0x{accent.lstrip("#").lower()}ff', mg, flags=re.M)
+    mg2 = re.sub(r'^(unfocuscolor)=0x[0-9a-fA-F]{8}',
+                 lambda m: f'unfocuscolor=0x{muted.lstrip("#").lower()}ff', mg2, flags=re.M)
+    if mg2 != mg:
+        mango_look.write_text(mg2)
+        print(f"hexciri-sync: patched mango looknfeel.conf borders accent={accent} inactive={muted}")
 
 # ── 4. Wallpaper sync ──
 # If the user has custom wallpapers merged (zz-user-* links from the store or

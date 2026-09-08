@@ -208,7 +208,7 @@ bin/hexciri-keybinds-render # [wm] → renders that WM's keybind block to stdout
 ```
 
 Combo→intent is fixed once in `intents.toml`; each renderer is a tiny sshlex-aware emitter in
-`hexciri-keybinds-render` (niri KDL, hyprland `bind =`, sway `bindsym`, mango `bind=`). Mapping
+`hexciri-keybinds-render` (niri KDL, hyprland `hl.bind`, sway `bindsym`, mango `bind=`). Mapping
 table per intent (stored as per-WM columns on each `[intents]` row):
 
 | intent | niri | hyprland | sway | mango |
@@ -235,14 +235,14 @@ Every WM gets hexciri's homegrown split (`include` / `source=` / `conf.d` glob) 
 Each concern maps 1:1 to a hexciri responsibility so the theme hook and carry-over touch exactly one
 fragment, never a whole-config splice:
 
-| concern | source of truth | niri | hyprland | sway |
-|---|---|---|---|---|
-| monitors/scale/layout | carried over from installed config (verbatim replace) | `niri/monitors.kdl` | `hypr/conf/monitors.conf` | `sway/conf.d/monitors.conf` |
-| keybinds | `intents.toml` renderer | `niri/keybinds.kdl` (`bind {}` block) | `hypr/conf/keybinds.lua` | `sway/conf.d/keybinds.conf` |
-| look & feel (borders, blur, shadow) | theme hook `hexciri-sync.sh` | `niri/looknfeel.kdl` | `hypr/conf/looknfeel.conf` | `sway/conf.d/looknfeel.conf` |
-| window rules / float | §5 intents + carry-over | `niri/window-rules.kdl` | `hypr/conf/window-rules.conf` | `sway/conf.d/window-rules.conf` |
-| environment vars | `config-render` (from niri `env.kdl`) | `niri/env.kdl` | `hypr/conf/env.lua` (`hl.env`) | `sway → ~/.config/environment.d/10-hexciri.conf` |
-| autostart / noctalia | `config-render` (from niri `autostart.kdl`) | `niri/autostart.kdl` | `hypr/conf/autostart.lua` (`hl.on`) | `sway/conf.d/autostart.conf` (`exec`), mango `autostart.conf` (`exec-once`) |
+| concern | source of truth | niri | hyprland | sway | mango |
+|---|---|---|---|---|---|
+| monitors/scale/layout | carried over from installed config (verbatim replace) | `niri/monitors.kdl` | `hypr/conf/monitors.lua` | `sway/conf.d/monitors.conf` | `mango/monitors.conf` (`monitorrule`) |
+| keybinds | `intents.toml` renderer | `niri/keybinds.kdl` (`bind {}` block) | `hypr/conf/keybinds.lua` | `sway/conf.d/keybinds.conf` | `mango/keybinds.conf` |
+| look & feel (borders, blur, shadow) | theme hook `hexciri-sync.sh` | `niri/looknfeel.kdl` | `hypr/conf/looknfeel.lua` | `sway/conf.d/looknfeel.conf` | `mango/looknfeel.conf` (`focuscolor`/`unfocuscolor`) |
+| window rules / float | §5 intents + carry-over | `niri/window-rules.kdl` | `hypr/conf/window-rules.lua` | `sway/conf.d/window-rules.conf` | `mango/window-rules.conf` |
+| environment vars | `config-render` (from niri `env.kdl`) | `niri/env.kdl` | `hypr/conf/env.lua` (`hl.env`) | `sway → ~/.config/environment.d/10-hexciri.conf` | `mango/env.conf` |
+| autostart / noctalia | `config-render` (from niri `autostart.kdl`) | `niri/autostart.kdl` | `hypr/conf/autostart.lua` (`hl.on`) | `sway/conf.d/autostart.conf` (`exec`) | `mango/autostart.conf` (`exec-once`) |
 
 - **niri**: `include "file.kdl"` (top-level only, since 25.11 — we ship 26.04). Sections merge from
   includes; `window-rule`/`output`/`workspace` are multipart and insert *as-is*. Two niri quirks:

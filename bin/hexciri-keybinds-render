@@ -13,6 +13,7 @@ case "$WM" in
 esac
 
 python3 - "$INTENTS" "$WM" <<'EOF'
+import re
 import sys
 try:
     import shlex
@@ -28,13 +29,15 @@ keys, intents = cfg["keys"], cfg["intents"]
 def key_niri(c):
     return c.replace("Mod", "Mod")
 
-def key_hyp(c):
-    # niri key names -> xkb names hyprland expects
-    m = {"Print":"Print","Return":"Return","grave":"grave","BracketLeft":"BracketLeft",
-         "BracketRight":"BracketRight","Comma":"comma","Escape":"Escape","Space":"space"}
-    parts = c.split("+")
+def key_hyp_lua(c):
+    # niri key names -> xkbcommon keysym names, joined with " + " per the 0.56
+    # Lua API (e.g. hl.bind("SUPER + Q", …)). Names are the segment after
+    # XKB_KEY_ (wiki Binds: "the name you should use is the segment after XKB_KEY_").
+    m = {"Print":"Print","Return":"Return","grave":"grave","BracketLeft":"bracketleft",
+         "BracketRight":"bracketright","Comma":"comma","Escape":"Escape","Space":"space",
+         "Up":"Up","Down":"Down","Left":"Left","Right":"Right"}
     out = []
-    for p in parts:
+    for p in c.split("+"):
         p = m.get(p, p)
         if p == "Mod":
             out.append("SUPER")
@@ -42,7 +45,59 @@ def key_hyp(c):
             out.append(p.upper())
         else:
             out.append(p)
-    return ", ".join(out)
+    return " + ".join(out)
+
+def lua_str(s):
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+def hyp_dsp(action):
+    # legacy-hyprlang dispatcher token → native 0.56 Lua hl.dsp expression.
+    # Returns None for "no sibling" notes (caller emits a `-- comment` instead).
+    a = action.strip() if isinstance(action, str) else ""
+    if a.startswith("(") or a.startswith("overview"):
+        return None
+    if a == "closeactive":
+        return "hl.dsp.window.close()"
+    m = re.match(r"^movefocus ([lrud])$", a)
+    if m:
+        return f"hl.dsp.focus({{ direction = '{m.group(1)}' }})"
+    m = re.match(r"^movewindow ([lrud])$", a)
+    if m:
+        return f"hl.dsp.window.move({{ direction = '{m.group(1)}' }})"
+    m = re.match(r"^movetoworkspace (\d+)$", a)
+    if m:
+        return f"hl.dsp.window.move({{ workspace = {m.group(1)}, follow = true }})"
+    m = re.match(r"^movetoworkspacesilent name:(.+)$", a)
+    if m:
+        return f"hl.dsp.window.move({{ workspace = {lua_str(m.group(1))}, follow = false }})"
+    m = re.match(r"^workspace (\d+)$", a)
+    if m:
+        return f"hl.dsp.focus({{ workspace = {m.group(1)} }})"
+    m = re.match(r"^workspace name:(.+)$", a)
+    if m:
+        return f"hl.dsp.focus({{ workspace = {lua_str(m.group(1))} }})"
+    m = re.match(r"^workspace (e[+-]\d+)$", a)
+    if m:
+        return f"hl.dsp.focus({{ workspace = {lua_str(m.group(1))} }})"
+    if a == "togglefloating":
+        return "hl.dsp.window.float({ action = \"toggle\" })"
+    if a == "togglefloating maximize":
+        return "hl.dsp.window.fullscreen({ mode = \"maximized\", action = \"toggle\" })"
+    if a == "fullscreen":
+        return "hl.dsp.window.fullscreen({ action = \"toggle\" })"
+    if a == "resizeactive":
+        return "hl.dsp.window.resize()"
+    if a == "togglegroup":
+        return "hl.dsp.group.toggle()"
+    if a == "focusmode floating":
+        return "hl.dsp.focus({ window = \"floating\" })"
+    if a == "focusmode tiling":
+        return "hl.dsp.focus({ window = \"tiled\" })"
+    m = re.match(r"^swapwindow ([lr])$", a)
+    if m:
+        return f"hl.dsp.window.swap({{ direction = '{m.group(1)}' }})"
+    # any other token (layout binds that have no Lua sibling yet) → visible NOTE
+    return None
 
 def key_sway(c):
     # niri -> sway keycode names
@@ -91,28 +146,51 @@ if WM in ("niri",):
             lines.append(f"    {key_niri(combo)} {{ {action}; }}")
     lines.append("}")
 elif WM == "hyprland":
-    lines.append("# Keybinds — rendered from config/keybinds/intents.toml")
-    lines.append("$mainMod = SUPER")
+    # Native 0.56 Lua fragment — required by hyprland.lua as "hypr.conf.keybinds".
+    lines.append("-- Keybinds — rendered from config/keybinds/intents.toml (single source of truth).")
+    lines.append("-- Included automatically via require(\"hypr.conf.keybinds\") in hyprland.lua.")
+    lines.append("-- Regenerate with: hexciri-keybinds-render hyprland > config/hypr/conf/keybinds.lua")
     for combo in sorted(keys, key=lambda c: (len(c), c)):
         s = intents[keys[combo]]
         if s["type"] == "spawn":
-            lines.append(f"bind = {key_hyp(combo)}, exec, {s['command']}")
+            cmd = s["command"]
+            bind_line = f"hl.bind({lua_str(key_hyp_lua(combo))}, hl.dsp.exec_cmd({lua_str(cmd)}))"
+            lines.append(bind_line)
         else:
             action = s.get(WM, s.get("niri", "(See NOTE)"))
-            lines.append(f"bind = {key_hyp(combo)}, {action}")
+            if action.endswith("via hexciri-compositor)"):
+                # the shim's screenshot op is the real sibling under hyprland
+                lines.append(f"hl.bind({lua_str(key_hyp_lua(combo))}, hl.dsp.exec_cmd({lua_str('hexciri-compositor screenshot')}))")
+                continue
+            dsp = hyp_dsp(action)
+            if dsp is None:
+                lines.append(f"-- {combo} → {action}: no Lua sibling binding emitted (design §7 NOTE)")
+                continue
+            lines.append(f"hl.bind({lua_str(key_hyp_lua(combo))}, {dsp})")
 elif WM == "sway":
     lines.append("# Keybinds — rendered from config/keybinds/intents.toml")
+    lines.append("# Included via `include ~/.config/sway/conf.d/*`. Regenerate with:")
+    lines.append("#   hexciri-keybinds-render sway > config/sway/conf.d/keybinds.conf")
     for combo in sorted(keys, key=lambda c: (len(c), c)):
         s = intents[keys[combo]]
         if s["type"] == "spawn":
             lines.append(f"bindsym {key_sway(combo)} exec {s['command']}")
         else:
             action = s.get(WM, s.get("niri", "(See NOTE)"))
+            if action.endswith("via hexciri-compositor)"):
+                lines.append(f"bindsym {key_sway(combo)} exec hexciri-compositor screenshot")
+                continue
+            if action.startswith("("):
+                # placeholder like "(See NOTE)" — a comment, not a bind
+                lines.append(f"# {combo} → {action}")
+                continue
             lines.append(f"bindsym {key_sway(combo)} {action}")
 elif WM == "mango":
     lines.append("# Keybinds — rendered from config/keybinds/intents.toml (experimental)")
     lines.append("# bind=[flags]MODS,KEY,COMMAND,PARAMS — dwl heritage: view X = show tag X,")
     lines.append("# tag X = send client to tag X (see mango skill; key names from wev).")
+    lines.append("# Sourced by config.conf. Regenerate with:")
+    lines.append("#   hexciri-keybinds-render mango > config/mango/keybinds.conf")
     for combo in sorted(keys, key=lambda c: (len(c), c)):
         s = intents[keys[combo]]
         if s["type"] == "spawn":
@@ -124,6 +202,9 @@ elif WM == "mango":
                 lines.append(f"bind={key_mango(combo)},spawn,{cmd}")
         else:
             action = s.get(WM, s.get("niri", "(See NOTE)"))
+            if action.endswith("via hexciri-compositor)"):
+                lines.append(f"bind={key_mango(combo)},spawn_shell,hexciri-compositor screenshot")
+                continue
             if action.startswith("("):
                 # placeholder like "(See NOTE)" / "(grim via …)" — cannot bind a comment
                 lines.append(f"# {combo} → {action}")

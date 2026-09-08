@@ -97,6 +97,57 @@ if [[ $want_wm != "$cur_wm" ]] ; then
   fi
 fi
 
+# ── step 4.0: seed the target WM's config dir from the repo defaults ──
+# A swap into a WM that has never been installed on this box starts from the
+# same files a fresh install deploys (config/<wm>/…), then the carry-over below
+# overwrites the per-machine surfaces (monitors, env/input/autostart, keybinds,
+# theme colors). Existing files are NEVER touched — user edits survive.
+seed_wm() {
+  local wm="$1"
+  case "$wm" in
+    niri)
+      for _f in config cursors env monitors input looknfeel window-rules keybinds autostart; do
+        [[ -f $REPO/config/niri/$_f.kdl && ! -f $XDG_CONFIG_HOME/niri/$_f.kdl ]] \
+          && cp -f "$REPO/config/niri/$_f.kdl" "$XDG_CONFIG_HOME/niri/$_f.kdl"
+      done
+      ;;
+    hyprland)
+      mkdir -p "$XDG_CONFIG_HOME/hypr/conf"
+      [[ -f $REPO/config/hypr/hyprland.lua && ! -f $XDG_CONFIG_HOME/hypr/hyprland.lua ]] \
+        && cp -f "$REPO/config/hypr/hyprland.lua" "$XDG_CONFIG_HOME/hypr/hyprland.lua"
+      for _f in env input monitors looknfeel window-rules keybinds autostart; do
+        [[ -f $REPO/config/hypr/conf/$_f.lua && ! -f $XDG_CONFIG_HOME/hypr/conf/$_f.lua ]] \
+          && cp -f "$REPO/config/hypr/conf/$_f.lua" "$XDG_CONFIG_HOME/hypr/conf/$_f.lua"
+      done
+      ;;
+    sway)
+      mkdir -p "$XDG_CONFIG_HOME/sway/conf.d"
+      [[ -f $REPO/config/sway/config && ! -f $XDG_CONFIG_HOME/sway/config ]] \
+        && cp -f "$REPO/config/sway/config" "$XDG_CONFIG_HOME/sway/config"
+      for _f in input monitors looknfeel window-rules keybinds autostart; do
+        [[ -f $REPO/config/sway/conf.d/$_f.conf && ! -f $XDG_CONFIG_HOME/sway/conf.d/$_f.conf ]] \
+          && cp -f "$REPO/config/sway/conf.d/$_f.conf" "$XDG_CONFIG_HOME/sway/conf.d/$_f.conf"
+      done
+      mkdir -p "$XDG_CONFIG_HOME/environment.d"
+      [[ -f $REPO/config/sway/environment.d/10-hexciri.conf && ! -f $XDG_CONFIG_HOME/environment.d/10-hexciri.conf ]] \
+        && cp -f "$REPO/config/sway/environment.d/10-hexciri.conf" "$XDG_CONFIG_HOME/environment.d/10-hexciri.conf"
+      ;;
+    mango)
+      mkdir -p "$XDG_CONFIG_HOME/mango"
+      [[ -f $REPO/config/mango/config.conf && ! -f $XDG_CONFIG_HOME/mango/config.conf ]] \
+        && cp -f "$REPO/config/mango/config.conf" "$XDG_CONFIG_HOME/mango/config.conf"
+      for _f in env input monitors looknfeel window-rules keybinds autostart; do
+        [[ -f $REPO/config/mango/$_f.conf && ! -f $XDG_CONFIG_HOME/mango/$_f.conf ]] \
+          && cp -f "$REPO/config/mango/$_f.conf" "$XDG_CONFIG_HOME/mango/$_f.conf"
+      done
+      ;;
+  esac
+}
+if [[ $want_wm != "$cur_wm" ]]; then
+  echo "seeding $want_wm config defaults (missing files only)..."
+  seed_wm "$want_wm"
+fi
+
 # ── step 4: carry-over the INSTALLED config into the target WM ──
 # Monitors: the only whole-file surface. Read the CURRENT WM's live output layout
 # (the machine's real scale/positions — never the repo template) and write it
@@ -114,10 +165,17 @@ case "$cur_wm" in
     fi
     ;;
   hyprland)
-    monitors_from="$XDG_CONFIG_HOME/hypr/conf/monitors.conf"
+    if [[ -f $XDG_CONFIG_HOME/hypr/conf/monitors.lua ]]; then
+      monitors_from="$XDG_CONFIG_HOME/hypr/conf/monitors.lua"
+    elif [[ -f $XDG_CONFIG_HOME/hypr/conf/monitors.conf ]]; then
+      monitors_from="$XDG_CONFIG_HOME/hypr/conf/monitors.conf"
+    fi
     ;;
   sway)
     monitors_from="$XDG_CONFIG_HOME/sway/conf.d/monitors.conf"
+    ;;
+  mango)
+    monitors_from="$XDG_CONFIG_HOME/mango/monitors.conf"
     ;;
 esac
 
@@ -126,42 +184,95 @@ if [[ -n $monitors_from && -f $monitors_from && $want_wm != "$cur_wm" ]]; then
     hyprland)
       hypr_dir="$XDG_CONFIG_HOME/hypr/conf"
       mkdir -p "$hypr_dir"
-      python3 - "$monitors_from" "$hypr_dir/monitors.conf" <<'PYEOF'
+      python3 - "$monitors_from" "$hypr_dir/monitors.lua" <<'PYEOF'
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
 txt = open(src).read()
-lines, note = [], []
-src_wm = "hyprland" if "monitor = " in txt else "niri/sway"
+blocks = []
+
+def lua_monitor(name, mode, pos, scale, vrr):
+    out = ["hl.monitor({"]
+    if name:
+        out.append(f'    output = "{name}",')
+    if mode:
+        out.append(f'    mode = "{mode}",')
+    if pos:
+        out.append(f'    position = "{pos}",')
+    if scale:
+        out.append(f'    scale = {scale},')
+    if vrr:
+        out.append("    vrr = 1,")
+    out.append("})")
+    return "\n".join(out)
+
+src_wm = "niri/sway"
+# (1) hyprland already: hl.monitor blocks pass through as-is
+if "hl.monitor(" in txt:
+    blocks.append(txt.strip())
+    src_wm = "hyprland"
+# (2) niri/sway `output "X" { ... }` blocks (niri: mode "2880x1920@120", scale,
+#     position x/y, variable-refresh-rate; sway: scale/mode/position/adaptive_sync)
 for blk in re.finditer(r'output\s+"([^"]+)"\s*\{(.*?)\}', txt, re.S):
-    name = blk.group(1)
+    name = blk.group(1).strip().strip('"')
     body = blk.group(2)
-    mode = re.search(r'mode\s+"([^"]+)"', body)
+    mode  = re.search(r'mode\s+"?([\d.]+x[\d.]+@[\d.]+)"?', body)
     scale = re.search(r'scale\s+([\d.]+)', body)
-    pos = re.search(r'position\s+x=(-?[\d.]+)\s+y=(-?[\d.]+)', body)
-    resrate = mode.group(1) if mode else "preferred"
-    p = f"{pos.group(1)}x{pos.group(2)}" if pos else "0x0"
-    s = scale.group(1) if scale else "1"
-    vrr = ",\n    vrr 1" if "variable-refresh-rate" in body else ""
-    lines.append(f'monitor = {name},{resrate},{p},{s}{vrr}')
+    pos   = re.search(r'position\s+(?:x=)?(-?[\d.]+)[,\s]+(?:y=)?(-?[\d.]+)', body)
+    vrr   = "variable-refresh-rate" in body or "adaptive_sync" in body
+    blocks.append(lua_monitor(
+        name,
+        mode and mode.group(1),
+        pos and f"{pos.group(1)}x{pos.group(2)}",
+        scale and scale.group(1),
+        vrr,
+    ))
+    src_wm = "niri/sway"
+# (3) legacy hyprland `monitor = name,res@rate,pos,scale` lines
 for m in re.finditer(r'monitor\s*=\s*([^,\n]+),([^,\n]+),([^,\n]+),([^,\n]+)', txt):
     name, resrate, p, s = (g.strip() for g in m.groups())
-    lines.append(f'monitor = {name},{resrate},{p},{s}')
-if not lines:
-    note.append("// NOTE: no monitor entries found to carry over — defaults will apply.")
-open(dst, "w").write("// hexciri — carried over from " + src_wm + " on WM swap.\n" +
-                     "// source = " + src + "\n" +
-                     "\n".join(lines) + "\n" + ("\n" + "\n".join(note) if note else ""))
+    blocks.append(lua_monitor(
+        name,
+        None if resrate in ("preferred", "") else resrate,
+        None if p in ("auto", "") else p,
+        None if s in ("auto", "") else s,
+        False,
+    ))
+    src_wm = "hyprland"
+# (4) mango monitorrule=name:...,width/height/refresh/x/y/scale/vrr
+for m in re.finditer(r'monitorrule=name:([^,\s]+),(.*)$', txt, re.M):
+    name = m.group(1)
+    params = {}
+    for kv in m.group(2).split(","):
+        k, _, v = kv.partition(":")
+        params[k.strip()] = v.strip()
+    mode = None
+    if params.get("width") and params.get("height"):
+        mode = f"{params['width']}x{params['height']}" + (f"@{params['refresh']}" if params.get("refresh") else "")
+    pos = None
+    if params.get("x") is not None and params.get("y") is not None:
+        pos = f"{params['x']}x{params['y']}"
+    blocks.append(lua_monitor(
+        name,
+        mode,
+        pos,
+        params.get("scale"),
+        params.get("vrr") == "1",
+    ))
+    src_wm = "mango"
+
+if not blocks:
+    note = "-- NOTE: no monitor entries found to carry over — the seeded defaults apply."
+    body = note
+else:
+    body = "\n".join(blocks)
+open(dst, "w").write(
+    "-- hexciri — carried over from " + src_wm + " on WM swap.\n"
+    "-- source = " + src + "\n"
+    "-- Regenerate by hand, or swap again; hyprland.lua require()s this via hypr.conf.monitors.\n\n"
+    + body + "\n"
+)
 print(f"carried monitors → {dst} (from {src_wm})")
 PYEOF
-      # hyprland must be told to read the split
-      hypr_main="$XDG_CONFIG_HOME/hypr/hyprland.conf"
-      include_line='source = ~/.config/hypr/conf/monitors.conf'
-      mkdir -p "$(dirname "$hypr_main")"
-      if [[ -f $hypr_main ]] && ! grep -qF "$include_line" "$hypr_main"; then
-        printf '\n%s\n' "$include_line" >> "$hypr_main"
-      elif [[ ! -f $hypr_main ]]; then
-        printf 'source = ~/.config/hypr/conf/*.conf\n' > "$hypr_main"
-      fi
       ;;
     sway)
       sway_dir="$XDG_CONFIG_HOME/sway/conf.d"
@@ -223,16 +334,21 @@ if [[ $want_wm != "$cur_wm" ]] && [[ -x $SCRIPT_DIR/hexciri-config-render ]]; th
       for concern in env input autostart; do
         "$SCRIPT_DIR/hexciri-config-render" "$concern" hyprland > "$hypr_dir/$concern.lua"
       done
-      # base Lua entry: require() the rendered concerns; monitors/keybinds are
-      # written by their own steps. Only touch it on first creation.
+      # base Lua entry: require() all the concerns. monitors/keybinds/looknfeel
+      # are written by their own steps at this point (style: seed_wm then the
+      # carry-overs); this fallback only fires when the repo defaults are gone.
       hypr_main="$XDG_CONFIG_HOME/hypr/hyprland.lua"
       if [[ ! -f $hypr_main ]]; then
         printf '%s\n' \
           '-- hexciri — generated on WM swap; carry-over from niri.' \
-          'hl.env(...) is emitted by env.lua below.' \
+          '-- require() pulls the per-concern fragments in conf/.' \
           '' \
           'require("hypr.conf.env")' \
           'require("hypr.conf.input")' \
+          'require("hypr.conf.monitors")' \
+          'require("hypr.conf.looknfeel")' \
+          'require("hypr.conf.window-rules")' \
+          'require("hypr.conf.keybinds")' \
           'require("hypr.conf.autostart")' \
           > "$hypr_main"
       fi
@@ -278,9 +394,13 @@ PYEOF
       if [[ ! -f $mango_main ]]; then
         printf '%s\n' \
           '# hexciri — generated on WM swap; carry-over from niri (v1.5 experimental).' \
-          'source-optional=~/.config/mango/env.conf' \
-          'source-optional=~/.config/mango/input.conf' \
-          'source-optional=~/.config/mango/autostart.conf' \
+          'source-optional=$HOME/.config/mango/env.conf' \
+          'source-optional=$HOME/.config/mango/input.conf' \
+          'source-optional=$HOME/.config/mango/monitors.conf' \
+          'source-optional=$HOME/.config/mango/looknfeel.conf' \
+          'source-optional=$HOME/.config/mango/window-rules.conf' \
+          'source-optional=$HOME/.config/mango/keybinds.conf' \
+          'source-optional=$HOME/.config/mango/autostart.conf' \
           > "$mango_main"
       fi
       echo "carried env/input/autostart → $mango_dir/{env,input,autostart}.conf"
@@ -292,8 +412,36 @@ echo "$want_wm"    > "$SEL_DIR/wm"
 echo "$want_shell" > "$SEL_DIR/shell"
 echo "selector: ~/.config/hexciri/wm = $want_wm  shell = $want_shell"
 
-# ── step 6: regenerate (bin re-link + theme hook: per-WM borders + keybinds render) ──
+# ── step 6: regenerate (bin re-link + keybinds render + theme hook: borders) ──
+# Keybinds: the intent schema (§6) IS the carry-over — re-render the target
+# WM's keybind fragment from intents.toml so custom intent rows follow the swap
+# (the seeded repo snapshot is only the fallback the master renders agree on).
+if [[ $want_wm != "$cur_wm" ]] && [[ -x $SCRIPT_DIR/hexciri-keybinds-render ]]; then
+  case "$want_wm" in
+    hyprland) mkdir -p "$XDG_CONFIG_HOME/hypr/conf"; "$SCRIPT_DIR/hexciri-keybinds-render" hyprland > "$XDG_CONFIG_HOME/hypr/conf/keybinds.lua" ;;
+    sway)     mkdir -p "$XDG_CONFIG_HOME/sway/conf.d"; "$SCRIPT_DIR/hexciri-keybinds-render" sway     > "$XDG_CONFIG_HOME/sway/conf.d/keybinds.conf" ;;
+    mango)    mkdir -p "$XDG_CONFIG_HOME/mango";    "$SCRIPT_DIR/hexciri-keybinds-render" mango    > "$XDG_CONFIG_HOME/mango/keybinds.conf" ;;
+    niri)     ;;  # committed static snapshot (config/niri/keybinds.kdl); nothing to do
+  esac
+  echo "re-rendered keybinds for $want_wm (from config/keybinds/intents.toml)"
+fi
 "$SCRIPT_DIR/hexciri-update-hexciri" >/dev/null 2>&1 || true
+# Per-WM borders: re-run the theme hook so the target WM's looknfeel fragment
+# (seeded in step 4.0) gets the active theme's colors. Idempotent — the hook
+# only patches files that exist, and colors are already right on a healthy box.
+if command -v hexciri-hook >/dev/null 2>&1; then
+  _hook=hexciri-hook
+elif [[ -x $SCRIPT_DIR/hexciri-hook ]]; then
+  _hook="$SCRIPT_DIR/hexciri-hook"
+else
+  _hook=""
+fi
+if [[ -n $_hook ]] && [[ -d $HOME/.local/state/hexciri/current/theme ]]; then
+  _tname="sakurazuki"
+  [[ -f $HOME/.local/state/hexciri/current/theme.name ]] && _tname="$(<"$HOME/.local/state/hexciri/current/theme.name")"
+  "$_hook" theme-set "$_tname" >/dev/null 2>&1 || true
+  echo "re-applied theme borders for $want_wm (theme '$_tname')"
+fi
 
 # ── step 7 ──
 echo

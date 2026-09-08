@@ -170,8 +170,9 @@ def spawn_lua(cmd, shell=False):
     return 'hl.exec_cmd(' + jquote(cmd) + ')'
 
 # ── render ─────────────────────────────────────────────────────────────────
-print(f"// hexciri — {CONCERN} rendered for {WM}")
-print(f"// source: {SOURCE} (niri fragment; regenerate with: hexciri-config-render {CONCERN} {WM})")
+CMS = {"niri": "//", "hyprland": "--", "sway": "#", "mango": "#"}[WM]
+print(f"{CMS} hexciri — {CONCERN} rendered for {WM}")
+print(f"{CMS} source: {SOURCE} (niri fragment; regenerate with: hexciri-config-render {CONCERN} {WM})")
 
 if CONCERN == "env":
     entries = parse_env(raw)
@@ -277,8 +278,6 @@ elif CONCERN == "input":
             out.append('        touchpad = { disable_while_typing = true }')
         if tp_sf:
             out.append(f'        scroll_factor = {float(tp_sf) if tp_sf else 1}')
-        if tp_tap:
-            out.append('        follow_mouse = 1')
         if ffm:
             out.append('        follow_mouse = 1')
         if tp_tap:
@@ -286,8 +285,13 @@ elif CONCERN == "input":
         if tp_map or tp_click:
             out.append('        -- NOTE: tap-button-map / click-method have no hyprland input{}')
             out.append('        --       sibling — set a per-device rule (hyprctl devices) if needed.')
+        # Lua table entries are comma-separated; join with commas but never
+        # leave one dangling on a comment line (a trailing comma there would
+        # become part of the comment and break the next entry).
+        body = ",\n".join(out)
+        body = re.sub(r"^(\s*--.*),$", r"\1", body, flags=re.M)
         print('hl.config({ input = {')
-        print("\n".join(out))
+        print("\n".join(["    " + l for l in body.splitlines()]))
         print('} })')
 
     elif WM == "sway":
@@ -369,7 +373,13 @@ elif CONCERN == "autostart":
     elif WM == "mango":
         print("# exec-once runs once at startup (exec= would re-run on every reload)")
         for cmd, shell in cmds:
-            print(f"exec-once={cmd}")
+            if shell or any(ch in cmd for ch in "|&<>\"'$()`"):
+                # mango avoids shell on native spawns — wrap compound commands
+                # in an explicit `sh -c '…'` so pipes/redirs always work.
+                wrapped = "sh -c '" + cmd.replace("'", "'\\''") + "'"
+                print(f"exec-once={wrapped}")
+            else:
+                print(f"exec-once={cmd}")
 
 print()
 EOF
