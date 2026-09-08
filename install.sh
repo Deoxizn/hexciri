@@ -514,7 +514,7 @@ case "$WM_PICK" in
     ;;
 esac
 
-# ── shell spawn in the WM's autostart must match the pick (design §4): every
+# ── shell spawn in the WM's autostart must match the pick: every
 # WM spawns the shell at startup only when one is actually chosen — shell=none
 # comments the line out. Idempotent; re-installing over a different pick
 # converges the deployed autostart. ──

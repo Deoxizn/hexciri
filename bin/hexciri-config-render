@@ -3,12 +3,12 @@
 # hexciri:args=[concern] [wm] [--source=PATH] — concern: env|input|autostart; wm: niri|hyprland|sway|mango (default: active WM). Prints the target block to stdout.
 # hexciri:requires-sudo=false
 #
-# The env/input/autostart carry-over (design docs/design-wm-shell-choice.md §6/§7):
+# The env/input/autostart carry-over:
 # these three concerns are authored once as niri fragments (config/niri/<concern>.kdl —
 # env.kdl, input.kdl, autostart.kdl) and rendered per-WM by this tool. Keybinds have
 # their own renderer (hexciri-keybinds-render); monitors carry whole-file (session-set).
 #
-# Source resolution (design §7: the installed config is the machine's reality, not the
+# Source resolution (carry-over rule: the installed config is the machine's reality, not the
 # repo template): the live ~/.config/niri/<concern>.kdl wins (per-machine input
 # tuning, shell=none commented autostart lines), falling back to the repo fragment.
 # Use --source=PATH to force a specific source file.
@@ -264,7 +264,7 @@ elif CONCERN == "input":
 
     elif WM == "hyprland":
         print("-- Confirmed 0.56 Lua keys; niri-only semantics that Hyprland lacks are")
-        print("-- surfaced as NOTE comments, never silently dropped (policy §7).")
+        print("-- surfaced as NOTE comments, never silently dropped.")
         out = []
         if layout:
             out.append(f'        kb_layout = {jquote(str(layout))}')

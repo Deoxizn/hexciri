@@ -4,7 +4,7 @@
 # Triggered automatically by hexciri-theme-set after every theme change.
 # (The alpm post-transaction repair hook is a different script, bin/hexciri-sync.)
 #
-# Design §5: the theme hook stopped being "the shell sync" and became session-wide.
+# The theme hook stopped being "the shell sync" and became session-wide:
 #   A = WM-independent render (always runs): Noctalia palette + config.toml, qt6ct,
 #       wallpaper — identical under every WM.
 #   B = per-WM render (loop over installed WMs): the tiny theme surface each WM
@@ -254,7 +254,7 @@ disabled = ", ".join("#80" + c.lstrip("#") for c in roles)
 )
 print(f"hexciri-sync: wrote Qt color scheme → {(qt6_dir / 'colors' / 'hexciri.conf')}")
 
-# ── 3. Per-WM border/focus-ring colors (design §5) ──
+# ── 3. Per-WM border/focus-ring colors ──
 # The tiny theme surface each WM carries. Patch the file(s) that hold it for
 # every installed WM, so booting a different compositor still shows the right
 # colors. A WM whose config isn't present is simply skipped (no-op until the

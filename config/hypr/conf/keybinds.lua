@@ -20,7 +20,7 @@ hl.bind("SUPER + J", hl.dsp.focus({ direction = 'd' }))
 hl.bind("SUPER + K", hl.dsp.exec_cmd("hexciri-keybinds"))
 hl.bind("SUPER + L", hl.dsp.focus({ direction = 'r' }))
 hl.bind("SUPER + N", hl.dsp.exec_cmd("noctalia msg panel-toggle notifications"))
--- Mod+O → overview:toggle: no Lua sibling binding emitted (design §7 NOTE)
+-- Mod+O → overview:toggle: no Lua sibling binding emitted
 hl.bind("SUPER + P", hl.dsp.focus({ window = "floating" }))
 hl.bind("SUPER + Q", hl.dsp.window.close())
 hl.bind("SUPER + R", hl.dsp.window.resize())

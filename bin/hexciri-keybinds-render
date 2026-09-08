@@ -164,7 +164,7 @@ elif WM == "hyprland":
                 continue
             dsp = hyp_dsp(action)
             if dsp is None:
-                lines.append(f"-- {combo} → {action}: no Lua sibling binding emitted (design §7 NOTE)")
+                lines.append(f"-- {combo} → {action}: no Lua sibling binding emitted")
                 continue
             lines.append(f"hl.bind({lua_str(key_hyp_lua(combo))}, {dsp})")
 elif WM == "sway":

@@ -6,8 +6,8 @@
 # The complement of hexciri-session-set: switching installs the target WM but never
 # removes the old one, so niri→hyprland→sway leaves all three resident (packages,
 # ~/.config/<wm>/, /usr/share/wayland-sessions/<wm>.desktop). This is the drop path —
-# design docs/design-wm-shell-choice.md §4 "non-goal" (a WM is present only while
-# current/actively-chosen; everything else is garbage to be cleaned by the user).
+# the switch anti-goal (a WM is present only while current/actively-chosen;
+# everything else is garbage to be cleaned by the user).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -4,7 +4,7 @@
 # hexciri:requires-sudo=true
 #
 # The deliberate WM-swap path (install --wm is the non-interactive fresh-install
-# shortcut). Steps, per docs/design-wm-shell-choice.md §4:
+# shortcut). Steps:
 #   1. resolve the target combo (args or the System > Session picker)
 #   2. pull fresh + re-exec (must not run stale bytes — same guard as the updater funnel)
 #   3. install the target WM package (sudo) + generate /usr/share/wayland-sessions/${wm}.desktop
@@ -153,7 +153,7 @@ fi
 # (the machine's real scale/positions — never the repo template) and write it
 # into the target WM's monitor fragment. env/input/autostart go through
 # hexciri-config-render (rendered from the live niri fragments). Keybinds are
-# NOT copied: the intent schema (§6) is the carry-over; step 6 re-renders them.
+# NOT copied: the intent schema is the carry-over; step 6 re-renders them.
 monitors_from=""
 case "$cur_wm" in
   niri)
@@ -321,7 +321,7 @@ fi
 
 # ── step 4b: env/input/autostart — rendered from the live niri fragments ──
 # hexciri-config-render resolves the LIVE ~/.config/niri/<concern>.kdl (machine
-# reality, per design §7) and emits the target WM's syntax. Each concern lands
+# reality, carry-over rule) and emits the target WM's syntax. Each concern lands
 # in its own fragment so the theme hook / carry-over keeps touching one file.
 if [[ $want_wm != "$cur_wm" ]] && [[ -x $SCRIPT_DIR/hexciri-config-render ]]; then
   case "$want_wm" in
@@ -413,7 +413,7 @@ echo "$want_shell" > "$SEL_DIR/shell"
 echo "selector: ~/.config/hexciri/wm = $want_wm  shell = $want_shell"
 
 # ── step 6: regenerate (bin re-link + keybinds render + theme hook: borders) ──
-# Keybinds: the intent schema (§6) IS the carry-over — re-render the target
+# Keybinds: the intent schema is the carry-over — re-render the target
 # WM's keybind fragment from intents.toml so custom intent rows follow the swap
 # (the seeded repo snapshot is only the fallback the master renders agree on).
 if [[ $want_wm != "$cur_wm" ]] && [[ -x $SCRIPT_DIR/hexciri-keybinds-render ]]; then
