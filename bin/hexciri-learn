@@ -40,8 +40,14 @@ add "Arch wiki" "https://wiki.archlinux.org/title/Main_page" ""
 add "Starship docs" "https://starship.rs" starship
 
 choice=$(
-  printf '%s\n' "${entries[@]}" |
+  printf '%s\n' "${entries[@]}" | sed 's/|.*//' |
     "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Learn: ' --width=28 --lines=${#entries[@]}
 ) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
 
-exec "$SCRIPT_DIR/hexciri-launch-webapp" "${choice#*|}"
+# resolve the picked title back to its URL, then open it as a webapp
+for e in "${entries[@]}"; do
+  if [[ "${e%%|*}" == "$choice" ]]; then
+    exec "$SCRIPT_DIR/hexciri-launch-webapp" "${e#*|}"
+  fi
+done
+exec "$SCRIPT_DIR/hexciri-launch-webapp" "$choice"  # unreachable fallback
