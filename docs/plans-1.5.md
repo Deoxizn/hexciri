@@ -49,15 +49,14 @@ touches nothing there.
 - Theming: DankMaterialShell's palette hooks (config path, live-reload) are
   unknown here — research needed before a per-shell render is scoped.
 
-## 2. Kernel: omarchy edge repo on bleeding, CachyOS removed (final)
+## 2. Kernel: omarchy edge repo on bleeding + AUR 580xx (final)
 
-Decided + shipped (revised — CachyOS direction reverted after the second box
-proved the direct-fetch path fragile): **CachyOS is gone entirely**
-(`bin/hexciri-cachyos`, tier fetch, driver fetch, AUR ignore-stamp — all
-deleted). Custom kernels now come from the **omarchy edge repo** as ordinary
-repo packages (install + update via plain `pacman -Syu`, no fetch loop, no AUR
-rebuilds). Custom kernels stay post-install personalization (System ▸ Kernel),
-so `--kernel` stays `stock|lts` and install.sh never stages them.
+Custom kernels come from the **omarchy edge repo** as ordinary repo packages
+(install + update via plain `pacman -Syu`, no fetch loop, no AUR rebuilds). A
+second box's black-screen freeze proved the 580xx must actually land at install
+time — the AUR build does that reliably. Custom kernels stay post-install
+personalization (System ▸ Kernel), so `--kernel` stays `stock|lts` and install.sh
+never stages them.
 
 - `pacman-bleeding.conf` ships `[omarchy]` → `https://pkgs.omarchy.org/edge/$arch`;
   `install.sh` bootstraps omarchy-keyring whenever the deployed conf carries the
@@ -68,14 +67,15 @@ so `--kernel` stays `stock|lts` and install.sh never stages them.
   runs the detect pass at install and again on kernel change; `run` applies it.
 - `bin/hexciri-kernel` — menu now `Recommended (auto-detect)`, Stock, LTS,
   `linux-omarchy` (EEVDF), `linux-omarchy-bore` (BORE) + Status.
-- Legacy 580xx drivers — EOL in official repos — now **AUR-built** by
+- Legacy 580xx drivers — EOL in official repos — are **AUR-built** by
   `hexciri-gpu` (`aur_install_580xx`: full `nvidia-580xx` split in dependency
   order as a regular user, temp passwordless-pacman sudoers rule, signing-key
-  import, `--skippgpcheck` fallback). This fixes the second-box failure where the
-  old chroot resolver silently skipped the driver and Pascal booted to nouveau
-  (black-screen hard-lock). Updates ride the existing `yay -Sua` pass.
-- `hexciri-update` has no cachyos refresh loop anymore; `hexciri-gpu` /
-  `hexciri-gaming` kernel lists + boot-default mapping moved to omarchy names.
+  import, `--skippgpcheck` fallback). A stage2 chroot resolver used to silently
+  skip the driver so Pascal/Volta boxes booted to nouveau (black-screen
+  hard-lock) — fixed and confirmed on the 1080 Ti box. Updates ride the
+  existing `yay -Sua` pass.
+- `hexciri-gpu` / `hexciri-gaming` kernel lists + boot-default mapping follow the
+  omarchy names; `hexciri-update` has no driver-refresh loop.
 - Per-PC makepkg tuning (`lib/makepkg-tuning.sh`) — jobs + CPU tier written to
   `/etc/makepkg.conf.d/` on fresh installs and by `hexciri-sync` on every update.
 
@@ -87,6 +87,6 @@ so `--kernel` stays `stock|lts` and install.sh never stages them.
 3. hexciri-session / session-set / install `known_shell` lists — one shared set.
 4. Theme hook: add per-shell render fragment, noctalia paths untouched.
 5. Kernel: ✅ done (see §2) — omarchy-edge kernels + AUR 580xx, scheduler
-   autodetect, makepkg tuning, CachyOS removed.
+   autodetect, makepkg tuning.
 6. Validate: hyprland+caelestia (this machine's ground truth), niri+noctalia
    (default), both channels.
