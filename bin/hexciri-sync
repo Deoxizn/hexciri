@@ -26,11 +26,22 @@ log() { echo "hexciri-sync: $*"; }
 # ── re-execs from the freshly-pulled tree so THIS invocation runs newest code. ──
 REPO=""
 [[ -n ${HEXCIRI_REPO:-} ]] && REPO="$HEXCIRI_REPO"
-if [[ -z $REPO && -L $0 ]]; then
-  real="$(readlink -f "$0" 2>/dev/null || true)"
-  [[ -n $real ]] && REPO="$(cd "$(dirname "$real")/.." 2>/dev/null && pwd || true)"
+# Resolve the repo independent of the invoking context. `-L` on $0 alone is
+# unreliable (bash often presents the resolved path, and `sudo hexciri-sync`
+# passes just the name), so fall back to `command -v` against PATH — that finds
+# the /usr/local/bin -> repo/bin/hexciri-sync symlink even for root, whose HOME
+# (~/.local/opt/hexciri) would otherwise be used and come up empty.
+if [[ -z $REPO ]]; then
+  for p in "$0" "$(command -v "${0##*/}" 2>/dev/null || true)"; do
+    [[ -n $p ]] || continue
+    real="$(readlink -f "$p" 2>/dev/null || true)"
+    [[ -n $real ]] || continue
+    cand="$(cd "$(dirname "$real")/.." 2>/dev/null && pwd || true)"
+    [[ -n $cand && -f $cand/bin/hexciri-sync ]] && { REPO="$cand"; break; }
+  done
 fi
-[[ -n $REPO ]] || [[ -d $HOME/.local/opt/hexciri ]] && REPO="${HEXCIRI_REPO:-$HOME/.local/opt/hexciri}"
+[[ -n $REPO ]] || REPO="${HEXCIRI_REPO:-$HOME/.local/opt/hexciri}"
+[[ -d $REPO ]] || REPO=""
 export HEXCIRI_REPO="$REPO"
 if [[ -d $REPO/.git ]]; then
   if [[ $EUID -eq 0 ]]; then

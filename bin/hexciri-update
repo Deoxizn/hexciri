@@ -69,7 +69,9 @@ fi
   for ck in linux-cachyos linux-cachyos-bore linux-cachyos-lts; do
     pacman -Q "$ck" >/dev/null 2>&1 || continue
     echo "-- cachyos kernel: refreshing $ck --"
-    sudo hexciri-cachyos install "$ck" 2>&1 || echo "cachyos refresh for $ck failed (continuing)"
+    cacbin="$(command -v hexciri-cachyos || true)"
+    [[ -n $cacbin ]] || { echo "cachyos refresh for $ck failed (hexciri-cachyos not on PATH)"; continue; }
+    sudo "$cacbin" install "$ck" 2>&1 || echo "cachyos refresh for $ck failed (continuing)"
   done
   if command -v yay &>/dev/null && pacman -Qmq 2>/dev/null | grep -qv yay-bin; then
     yay -Sua --noconfirm

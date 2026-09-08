@@ -16,8 +16,10 @@ fi
 relink() {
   mkdir -p "$HOME/.local/bin"
   for f in "$REPO"/bin/*; do
-    [[ -f $f ]] && ln -sfn "$REPO/bin/$(basename "$f")" "$HOME/.local/bin/$(basename "$f")"
+    [[ -f $f ]] || continue   # dirs (e.g. __pycache__) must not end the loop's status
+    ln -sfn "$REPO/bin/$(basename "$f")" "$HOME/.local/bin/$(basename "$f")" || true
   done
+  return 0
 }
 
 # One-time legacy migration: pre-symlink installs hard-copied every command to
