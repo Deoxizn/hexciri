@@ -155,9 +155,18 @@ if $LEGACY; then
   if ((${#headers[@]})); then pkg "${headers[@]}"; fi
   # 580xx is EOL in the official repos (the 590 release dropped below Turing →
   # 580xx left `extra` for AUR); cachyos still publishes the prebuilt split, so
-  # direct-fetch it — local-file pacman -U, no repo adopted.
-  local cacbin; cacbin="$(command -v hexciri-cachyos || true)"
-  [[ -n $cacbin ]] || { err "hexciri-cachyos not on PATH"; exit 1; }
+  # direct-fetch it — local-file pacman -U, no repo adopted. Resolve the helper
+  # explicitly: during install this runs inside the chroot where PATH is minimal.
+  local cacbin cand
+  for cand in \
+    "${HEXCIRI_BIN_DIR:+$HEXCIRI_BIN_DIR/hexciri-cachyos}" \
+    "$HOME/.local/opt/hexciri/bin/hexciri-cachyos" \
+    "$HOME/.local/bin/hexciri-cachyos" \
+    /usr/local/bin/hexciri-cachyos; do
+    [[ -n $cand && -x $cand ]] && { cacbin=$cand; break; }
+  done
+  [[ -z ${cacbin:-} ]] && cacbin="$(command -v hexciri-cachyos || true)"
+  [[ -n $cacbin ]] || { err "hexciri-cachyos not found"; exit 1; }
   sudo "$cacbin" nvidia
   nvidia_common
   verify_nvidia_mod || exit 1

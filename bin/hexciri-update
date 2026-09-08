@@ -66,18 +66,32 @@ fi
   sudo pacman -Syu --noconfirm
   # cachyos kernels install from local files (no repo), so pacman never
   # updates them — re-fetch the newest builds for any that are installed.
+  # Do NOT rely on command -v for the helper: this subshell often runs under a
+  # minimal PATH (menu/launcher/dbus) that lacks ~/.local/bin, so resolve the
+  # deployed bin dir explicitly.
+  resolve_cac() {
+    local cand
+    for cand in \
+      "${HEXCIRI_BIN_DIR:+$HEXCIRI_BIN_DIR/hexciri-cachyos}" \
+      "$HOME/.local/opt/hexciri/bin/hexciri-cachyos" \
+      "$HOME/.local/bin/hexciri-cachyos" \
+      /usr/local/bin/hexciri-cachyos; do
+      [[ -n $cand && -x $cand ]] && { printf '%s\n' "$cand"; return 0; }
+    done
+    command -v hexciri-cachyos 2>/dev/null || return 1
+  }
   for ck in linux-cachyos linux-cachyos-bore linux-cachyos-lts; do
     pacman -Q "$ck" >/dev/null 2>&1 || continue
     echo "-- cachyos kernel: refreshing $ck --"
-    cacbin="$(command -v hexciri-cachyos || true)"
-    [[ -n $cacbin ]] || { echo "cachyos refresh for $ck failed (hexciri-cachyos not on PATH)"; continue; }
+    cacbin="$(resolve_cac || true)"
+    [[ -n $cacbin ]] || { echo "cachyos refresh for $ck failed (hexciri-cachyos not found)"; continue; }
     sudo "$cacbin" install "$ck" 2>&1 || echo "cachyos refresh for $ck failed (continuing)"
   done
   # legacy NVIDIA (Maxwell/Pascal/Volta): 580xx is EOL in official repos, so the
   # cachyos-mirror direct-fetch refreshes it the same way (installed = local file).
   if pacman -Q nvidia-580xx-utils >/dev/null 2>&1; then
     echo "-- cachyos driver: refreshing nvidia-580xx --"
-    cacbin="$(command -v hexciri-cachyos || true)"
+    cacbin="$(resolve_cac || true)"
     [[ -n $cacbin ]] && sudo "$cacbin" nvidia 2>&1 || echo "nvidia-580xx refresh failed (continuing)"
   fi
   if command -v yay &>/dev/null && pacman -Qmq 2>/dev/null | grep -qv yay-bin; then
