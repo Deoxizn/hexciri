@@ -28,11 +28,8 @@ Arch × Niri × Noctalia
 - **A minimal Arch experience** — your system starts clean: Arch, your chosen
   WM, and the Noctalia shell — nothing you didn't ask for; add the rest on
   demand.
-- **Everything's just files** — the theming engine is literally two text lists
-  you can read and edit: `theme-sources/extra.list` (extra themes) and
-  `wallpaper-sources/extra.list` (extra wallpaper folders). Easy to tweak, back
-  up, and version. And updates never overwrite your edits — an edited config
-  stays yours, with the new default saved alongside as `<file>.hexciri`.
+- **It's just Arch** — same repos, same package manager, same knowledge.
+  Everything that runs on Arch runs here; nothing hidden, nothing reinvented.
 
 ## Install
 
