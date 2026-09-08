@@ -11,7 +11,7 @@ surface. Everything below is scoping how far that plumbing stretches.
 Today `~/.config/hexciri/shell` accepts `noctalia|none` (`hexciri-session`
 tolerates `caelestia` only via `pgrep quickshell`). The obvious 1.5 additions:
 
-| shell | taxonomy | spawn today's job would need |
+| shell | taxonomy | spawn the machinery needs |
 |-------|----------|------------------------------|
 | `noctalia` | native shell (default) | `noctalia` — done |
 | `none` | no shell | comment the spawn out — done |
@@ -67,18 +67,18 @@ same "custom kernel" slot.
 - `install.sh` kernel case (`omarchy|bore|muqss` → add `cachyos|…`), the
   single-kernel replace policy, and `hexciri-gpu`/`hexciri-kernel`'s recorded
   boot default.
-- The kernel hedge from the v1.4 doc still stands either way: stock kernel as a
-  boot fallback, never a custom kernel as the *only* one.
+- The kernel hedge still stands either way: stock kernel as a boot fallback,
+  never a custom kernel as the *only* one.
 
 ### Open questions
 
-- Chaotic-AUR as the delivery (CC/entropy repos) vs CachyOS's own repo —
-  Chaotic is the "already known" one the user wants; it also keys into the
-  AUR pipeline install.sh may want for [quickshell, dankshell, caelestia] anyway.
+- Chaotic-AUR as the delivery (its `chaotic-aur` mirror/repo) vs CachyOS's own
+  repo — Chaotic is the "already known" one the user wants; it also keys into
+  the AUR pipeline install.sh may want anyway (quickshell, dankshell, caelestia).
 - Repo/mirror trust: omarchy today, +chaotic tomorrow — keep both mirrorlists or
   swap?
-- Kernel tuning that git-describes (fastfetch/changelog): does a cachyos pick
-  change what `hexciri` reports, or stay `linux`?
+- Kernel naming (fastfetch/changelog): does a cachyos pick change what `hexciri`
+  reports, or stay `linux`?
 
 ## 3. Carry-over / build order (proposed, not approved)
 
@@ -87,6 +87,6 @@ same "custom kernel" slot.
    `$SHELL_PICK`; widen it from `noctalia|none` to the new set.
 3. hexciri-session / session-set / install `known_shell` lists — one shared set.
 4. Theme hook: add per-shell render fragment, noctalia paths untouched.
-5. Kernel: Chaotic-AUR mirror + cachyos `--kernel` names + boot-default record.
+5. Kernel: Chaotic-AUR mirror + CachyOS `--kernel` names + boot-default record.
 6. Validate: hyprland+caelestia (this machine's ground truth), niri+noctalia
    (default), both channels.
