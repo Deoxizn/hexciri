@@ -64,10 +64,14 @@ latest_headers() { # $1 pkg -> URL of the matching -headers build
 }
 
 installed_ver() { pacman -Q "$1" 2>/dev/null | awk '{print $2}' || true; }
-url_ver() { echo "$1" | sed -E "s#^.*/$1-([0-9][^/]*)-x86_64[^/]*\.pkg\.tar\.zst\$#\1#"; }
+url_ver() {
+  local f="${1##*/}" # basename, e.g. linux-cachyos-bore-7.2.3-1-x86_64_v4.pkg.tar.zst
+  echo "$f" | sed -E 's/^.*-([0-9][^-]*-[0-9][^-]*)-x86_64[^/]*\.pkg\.tar\.zst$/\1/'
+  #        greedy-name  pkgver.pkgrel (digits sep by dots/rc)   subarch
+}
 
 do_install() { # $1 pkg: fetch + pacman -U newest build + headers
-  local pkg=$1 url hurl t/partst
+  local pkg=$1 url hurl tmp
   case "$pkg" in
     linux-cachyos|linux-cachyos-bore|linux-cachyos-lts) ;;
     *) err "unknown kernel package '$pkg'"; exit 1 ;;
