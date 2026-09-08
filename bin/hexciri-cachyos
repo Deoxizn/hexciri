@@ -48,6 +48,21 @@ ensure_key() { # import + local-sign the cachyos signing key (idempotent)
   fi
 }
 
+ensure_arch() { # the v3/v4 tiers ship x86_64_v3/v4 packages; pacman only accepts
+  # them when the micro-arch level is in the configured arch set. `Architecture
+  # = auto` is unreliable here (resolved to plain x86_64 on pacman 7.1), so
+  # stamp the EXPLICIT pair — base x86_64 (keeps official repos valid) + our
+  # level. Plain-tier machines need none of it.
+  local tier lvl
+  tier="$(detect_tier)"
+  [[ $tier == generic ]] && return 0
+  if [[ $tier == v3 ]]; then lvl=x86_64_v3; else lvl=x86_64_v4; fi
+  if pacman-conf Architecture 2>/dev/null | grep -qx "$lvl"; then return 0; fi
+  sed -i '/^\s*Architecture\s*=/d' /etc/pacman.conf
+  sed -i "/^\[options\]/a Architecture = x86_64\nArchitecture = $lvl" /etc/pacman.conf
+  info "Architecture = x86_64 + $lvl in /etc/pacman.conf (accepts $tier packages, keeps base repos)"
+}
+
 latest() { # $1 pkg (linux-cachyos[-bore|-lts]) -> full URL of newest build
   local tier dir arch
   tier="$(detect_tier)"; read -r dir arch <<< "$(tier_dir "$tier")"

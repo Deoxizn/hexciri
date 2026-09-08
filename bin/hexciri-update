@@ -76,6 +76,14 @@ fi
   fi
 } 2>&1 | tee -a "$LOG"
 
+# ── re-apply hexciri sync state: the alpm hook only fires when a tracked
+# ── package (kernel/sddm/…) actually changed, so a no-op update never ran it.
+# ── Running it here — every press — guarantees boot entries, PAM, the gnome-
+# ── keyring pin AND the per-PC makepkg tuning land even when pacman had
+# ── nothing to do. Idempotent; the hook stays for plain `pacman -Syu`. ──
+echo "-- re-applying hexciri state (boot entries, PAM, keyring, makepkg tuning) --"
+sudo hexciri-sync || echo "hexciri-sync step failed (continuing)"
+
 # Reboot offer only when the kernel hexciri is pinned to boot differs from the
 # one currently running. hexciri's single-kernel policy means normally exactly
 # one module dir exists; if a second kernel is present (e.g. a stock `linux`

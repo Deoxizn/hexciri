@@ -23,6 +23,7 @@ choice=$(
     'Noctalia config' \
     'Fastfetch config' \
     'Palettes' \
+    'Hexciri lockscreen' \
     'Extra themes list' \
     'Wallpaper dirs list' \
     'Hooks' |
@@ -35,6 +36,19 @@ case "$choice" in
   'Noctalia config')    "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/config.toml" ;;
   'Fastfetch config')   "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/fastfetch/config.jsonc" ;;
   'Palettes')           "$bindir/hexciri-edit-file" "${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/palettes/" ;;
+  'Hexciri lockscreen')
+    dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri"
+    mkdir -p "$dir"
+    conf="$dir/lockscreen.conf"
+    if [[ ! -f $conf ]]; then
+      cat > "$conf" <<'EOF'
+# hexciri lockscreen panel-off timing (read by hexciri-lock, session user)
+# lock_panel_delay = seconds after locking before the monitors go dark again
+# (input wakes them; re-armed at each tick). 0 = leave monitors on while locked.
+lock_panel_delay = 20
+EOF
+    fi
+    "$bindir/hexciri-edit-file" "$conf" ;;
   'Extra themes list')
     dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/theme-sources"
     mkdir -p "$dir"

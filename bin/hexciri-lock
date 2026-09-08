@@ -23,8 +23,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 "$SCRIPT_DIR/hexciri-compositor" lock
 
 SHELL="$("$SCRIPT_DIR/hexciri-session" shell)"
-INTERVAL=20
-MAX_TICKS=150   # noctalia-lock fallback only: ~50 min safety cap
+INTERVAL=20   # seconds after locking before panels go dark again
+MAX_TICKS=150 # noctalia-lock fallback only: safety cap, ticks * interval
+
+# per-user override: ~/.config/hexciri/lockscreen.conf  (lock_panel_delay=N)
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/lockscreen.conf"
+if [[ -f $CONF ]]; then
+  v="$(sed -nE 's/^\s*lock_panel_delay\s*=\s*([0-9]+).*/\1/p' "$CONF" | head -n1)"
+  [[ -n $v && $v =~ ^[0-9]+$ ]] && INTERVAL="$v"
+fi
 
 still_locked() {
   if [[ "$SHELL" == noctalia ]] && command -v noctalia >/dev/null 2>&1; then
@@ -34,11 +41,14 @@ still_locked() {
   fi
 }
 
-ticks=0
-while still_locked && (( ticks < MAX_TICKS )); do
-  sleep "$INTERVAL"
-  "$SCRIPT_DIR/hexciri-compositor" power-off-monitors
-  (( ticks++ )) || true
-done
+# lock_panel_delay=0 → exit after locking (monitors stay on)
+if (( INTERVAL > 0 )); then
+  ticks=0
+  while still_locked && (( ticks < MAX_TICKS )); do
+    sleep "$INTERVAL"
+    "$SCRIPT_DIR/hexciri-compositor" power-off-monitors
+    (( ticks++ )) || true
+  done
+fi
 
 exit 0

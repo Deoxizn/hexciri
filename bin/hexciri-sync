@@ -184,6 +184,8 @@ if [[ -f $REPO/lib/makepkg-tuning.sh ]]; then
   # shellcheck disable=SC1091
   . "$REPO/lib/makepkg-tuning.sh"
   hexciri_apply_makepkg_tuning && log "per-PC makepkg tuning applied ($(nproc) threads)"
+else
+  log "per-PC makepkg tuning skipped (repo checkout missing lib/makepkg-tuning.sh)"
 fi
 
 exit 0
