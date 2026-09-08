@@ -43,7 +43,8 @@ wm() {
     return 0
   fi
   # fallback: live session
-  val="${XDG_CURRENT_DESKTOP%%[:(]*}"
+  val="${XDG_CURRENT_DESKTOP:-}"
+  val="${val%%[:(]*}"
   val="${val,,}"
   if [[ -n $val ]] && known_wm "$val"; then
     echo "$val"
