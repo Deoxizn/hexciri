@@ -126,15 +126,17 @@ NVIDIA_580XX_SPLIT=(nvidia-580xx-utils nvidia-580xx-dkms lib32-nvidia-580xx-util
 
 # Legacy NVIDIA (Maxwell/Pascal/Volta) driver: EOL in official Arch repos (the
 # 590 release dropped below Turing and the 580xx line left `extra` for AUR);
-# cachyos still publishes the full 580xx split prebuilt, so we direct-fetch it
-# the same way as kernels — a local-file pacman -U, no repo adopted.
+# cachyos still publishes the full 580xx split prebuilt — but ONLY in the
+# generic repo (the x86_64_v3/v4 tier mirrors carry no 580xx). Drivers are
+# plain-x86_64 ABI (unlike per-CPU-optimized kernels), so generic is correct
+# for every tier. Direct-fetch it the same way as kernels: local-file pacman
+# -U, no repo adopted; the split installs for any kernel with headers present.
 do_nvidia() {
-  local tier dir arch listing base ver f tmp urls=()
+  local dir="x86_64/cachyos" listing base ver f tmp urls=()
   [[ $(id -u) -eq 0 ]] || { err "nvidia needs root — run with sudo (or re-run via System ▸ Kernel status)"; exit 1; }
-  info "tier: $(detect_tier)"
+  info "tier: $(detect_tier) (driver fetched from the generic repo: $dir)"
   ensure_key
   ensure_arch
-  read -r dir arch <<< "$(tier_dir "$(detect_tier)")"
   listing="$(${CURL} "$MIRROR/$dir/?C=M&O=D" 2>/dev/null || true)"
   base="$(grep -oE 'href="nvidia-580xx-utils-[0-9][^"]*\.pkg\.tar\.zst"' <<<"$listing" \
     | head -n 1 | sed 's/^href="//; s/"$//' || true)"
@@ -149,7 +151,7 @@ do_nvidia() {
   for p in "${NVIDIA_580XX_SPLIT[@]}"; do
     f="$(grep -oE "href=\"$p-[0-9][^\"]*\.pkg\.tar\.zst\"" <<<"$listing" \
       | head -n 1 | sed 's/^href="//; s/"$//' || true)"
-    [[ -n $f ]] || { err "no $p build in the $dir repo — is the machine tier right?"; exit 1; }
+    [[ -n $f ]] || { err "no $p build in the $dir repo"; exit 1; }
     ${CURL} -fLo "$tmp/$f" "$MIRROR/$dir/$f"
     ${CURL} -fLo "$tmp/$f.sig" "$MIRROR/$dir/$f.sig" 2>/dev/null || true
     urls+=("$tmp/$f")

@@ -8,7 +8,8 @@
 #
 # usage: ./install.sh [-y] [--dry-run] [--channel stable|bleeding] [--kernel stock|lts]
 #                  [--wm niri|hyprland|sway|mango] [--shell noctalia|none]
-# (kernel defaults to auto: stock; --kernel=lts opts into LTS; custom kernels are post-install)
+# (kernel is always stock on fresh installs — --kernel is internal/support only;
+#  custom kernels are post-install via System ▸ Kernel)
 # (wm/shell default to niri+noctalia; --shell=none means no shell is spawned at startup)
 #
 # FIX POLICY: every bug fix ships BOTH here — covering fresh installs — AND in

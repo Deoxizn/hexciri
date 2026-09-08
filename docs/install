@@ -107,7 +107,7 @@ CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
 info "channel: $CHANNEL"
 
-info "kernel: auto (stock; --kernel=lts opts into LTS)"
+info "kernel: auto (stock on fresh installs — custom kernels are post-install via System ▸ Kernel)"
 
 
 
