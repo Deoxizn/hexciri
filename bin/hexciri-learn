@@ -1,32 +1,47 @@
 #!/bin/bash
 # hexciri:menu=learn
-# hexciri:summary=Learn submenu — official docs for the tools Hexciri ships.
+# hexciri:summary=Learn submenu — official docs for the tools actually installed on your system.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Docs for what this machine ships, gated on what is actually installed.
+# Remove a package → its row disappears (e.g. opencode preinstalled not wanted).
+# The WM row follows the installed WM, the terminal row follows the installed
+# terminal — swapping one just swaps which docs the menu shows.
+declare -a entries=()
+
+add() { # add <label> <url> <binary-or-''> — '' means always show (framework itself)
+  local label="$1" url="$2" bin="${3:-}"
+  if [[ -z $bin ]] || command -v "$bin" &>/dev/null; then
+    entries+=("$label|$url")
+  fi
+}
+
+add "Hexciri" "https://hexciri.dirty.pizza" ""
+add "Noctalia docs" "https://docs.noctalia.dev/noctalia/" noctalia
+
+# WM row — whichever WM is installed shows its docs.
+add "Niri wiki" "https://github.com/YaLTeR/niri/wiki" niri
+add "Hyprland wiki" "https://wiki.hyprland.org" Hyprland
+add "Sway wiki" "https://github.com/swaywm/sway/wiki" sway
+add "Mango docs" "https://mangowm.github.io/docs" mango
+
+# Terminal row — kitty is the shipped default; a swap to alacritty/foot just
+# changes which docs show.
+add "kitty docs" "https://sw.kovidgoyal.net/kitty/" kitty
+add "Alacritty docs" "https://alacritty.org/" alacritty
+add "foot docs" "https://codeberg.org/dnkl/foot" foot
+
+add "fish docs" "https://fishshell.com/docs/current/" fish
+add "Zed docs" "https://zed.dev/docs" zeditor
+add "OpenCode docs" "https://opencode.ai/docs" opencode
+add "Arch wiki" "https://wiki.archlinux.org/title/Main_page" ""
+add "Starship docs" "https://starship.rs" starship
+
 choice=$(
-  printf '%s\n' \
-    'Hexciri' \
-    'Niri wiki' \
-    'Noctalia docs' \
-    'kitty docs' \
-    'fish docs' \
-    'Zed docs' \
-    'OpenCode docs' \
-    'Arch wiki' \
-    'Starship docs' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Learn: ' --width=26 --lines=9
+  printf '%s\n' "${entries[@]}" |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Learn: ' --width=28 --lines=${#entries[@]}
 ) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
 
-case "$choice" in
-  "Hexciri")       exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://hexciri.dirty.pizza' ;;
-  "Niri wiki")     exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://github.com/YaLTeR/niri/wiki' ;;
-  "Noctalia docs") exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://docs.noctalia.dev/noctalia/' ;;
-  "kitty docs")    exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://sw.kovidgoyal.net/kitty/' ;;
-  "fish docs")     exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fishshell.com/docs/current/' ;;
-  "Zed docs")      exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://zed.dev/docs' ;;
-  "OpenCode docs") exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://opencode.ai/docs' ;;
-  "Arch wiki")     exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://wiki.archlinux.org/title/Main_page' ;;
-  "Starship docs") exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://starship.rs' ;;
-esac
+exec "$SCRIPT_DIR/hexciri-launch-webapp" "${choice#*|}"
