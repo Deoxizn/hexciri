@@ -49,36 +49,31 @@ touches nothing there.
 - Theming: DankMaterialShell's palette hooks (config path, live-reload) are
   unknown here — research needed before a per-shell render is scoped.
 
-## 2. Kernel: CachyOS over omarchy?
+## 2. Kernel: CachyOS over omarchy ✅ (implemented)
 
-Today: `--kernel stock|lts|omarchy|bore|muqss`. The omarchy kernels
-(`linux-omarchy[-bore|-muqss]`) come from the omarchy repo/mirror and are the
-framework's custom kernel story.
+Decided + shipped: **CachyOS kernels via direct per-CPU fetch**, so they work on
+both channels without adopting a repo (Chaotic-AUR rejected — another
+third-party mirror/key source). Custom kernels are post-install personalization
+(System ▸ Kernel), so `--kernel` stays `stock|lts` and install.sh never stages
+them.
 
-1.5 candidate: re-add **Chaotic-AUR** (it shipped before; the mirror set is
-`default/pacman/mirrorlist-<channel>`) and offer **CachyOS kernels**
-(`linux-cachyos`, `linux-cachyos-bore`, …) as `--kernel` picks. Rationale:
-CachyOS is far more known than omarchy, widely wanted, and its kernel line is
-optimized (BORE scheduler, LTO/PGO tunables) — a better-known drop-in for the
-same "custom kernel" slot.
-
-### What it touches
-
-- `install.sh` kernel case (`omarchy|bore|muqss` → add `cachyos|…`), the
-  single-kernel replace policy, and `hexciri-gpu`/`hexciri-kernel`'s recorded
-  boot default.
-- The kernel hedge still stands either way: stock kernel as a boot fallback,
-  never a custom kernel as the *only* one.
-
-### Open questions
-
-- Chaotic-AUR as the delivery (its `chaotic-aur` mirror/repo) vs CachyOS's own
-  repo — Chaotic is the "already known" one the user wants; it also keys into
-  the AUR pipeline install.sh may want anyway (quickshell, dankshell, caelestia).
-- Repo/mirror trust: omarchy today, +chaotic tomorrow — keep both mirrorlists or
-  swap?
-- Kernel naming (fastfetch/changelog): does a cachyos pick change what `hexciri`
-  reports, or stay `linux`?
+- `bin/hexciri-cachyos` — picks this CPU's tier (`znver4`/`v4`/`v3`/generic via
+  `/lib/ld-linux-x86-64.so.2 --help` + AMD vendor match), date-sorts the mirror
+  listing for the newest build, imports + local-signs key `F3B607488DB35A47`
+  once, `pacman -U`s kernel + headers. `install`/`status`/`tier` subcommands.
+- `bin/hexciri-scheduler` — reads this machine (NVIDIA sysfs GPU, X3D CPU, RAM,
+  laptop battery) and recommends **BORE** for interactive/gaming or **EEVDF**;
+  runs the detect pass at install and again on kernel change; `run` applies it.
+- `bin/hexciri-kernel` — menu now `Recommended (auto-detect)`, Stock, LTS,
+  `linux-cachyos` (EEVDF), BORE, CachyOS LTS + Status; no repo/channel gate.
+- `hexciri-update` re-fetches installed cachyos kernels (local files never see
+  `pacman -Syu`); `hexciri-gpu`/`hexciri-gaming` kernel lists + boot-default
+  mapping moved to the cachyos names.
+- Bleeding channel is now plain official Arch (`geo.mirror.pkgbuild.com`,
+  no `[omarchy]`); stable keeps the omarchy month-hold mirror + `[omarchy]`
+  repo + omarchy-keyring (gated, skipped on bleeding).
+- Per-PC makepkg tuning (`lib/makepkg-tuning.sh`) — jobs + CPU tier written to
+  `/etc/makepkg.conf.d/` on fresh installs and by `hexciri-sync` on every update.
 
 ## 3. Carry-over / build order (proposed, not approved)
 
@@ -87,6 +82,7 @@ same "custom kernel" slot.
    `$SHELL_PICK`; widen it from `noctalia|none` to the new set.
 3. hexciri-session / session-set / install `known_shell` lists — one shared set.
 4. Theme hook: add per-shell render fragment, noctalia paths untouched.
-5. Kernel: Chaotic-AUR mirror + CachyOS `--kernel` names + boot-default record.
+5. Kernel: ✅ done (see §2) — cachyos direct-fetch, scheduler autodetect,
+   makepkg tuning, bleeding on official Arch.
 6. Validate: hyprland+caelestia (this machine's ground truth), niri+noctalia
    (default), both channels.

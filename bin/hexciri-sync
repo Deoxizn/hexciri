@@ -2,7 +2,7 @@
 # hexciri:summary=Re-apply hexciri system state after package transactions (alpm hook + manual)
 # Package upgrades routinely clobber hexciri's bits:
 #   * kernels install + mkinitcpio builds the initramfs, but systemd-boot gets no
-#     new entry — the box keeps booting the old default (see: linux-omarchy-bore)
+#     new entry — the box keeps booting the old default (see: linux-cachyos-bore)
 #   * sddm heals /etc/pam.d/sddm, losing pam_gnome_keyring + pam_fprintd
 #   * avahi/hwloc/v4l-utils/qt6ct restore their stock .desktop files, so the
 #     NoDisplay curation reverts and the menu cruft returns
@@ -177,5 +177,13 @@ for f in avahi-discover.desktop bssh.desktop bvnc.desktop lstopo.desktop \
   d="/usr/share/applications/$f"
   [[ -f $d ]] && ! grep -q '^NoDisplay=true' "$d" && printf 'NoDisplay=true\n' >> "$d" && log "hid $f"
 done
+
+# ── 5. per-PC makepkg tuning (jobs + CPU tier): write quietly on upgrades too,
+# ── so machines that installed before 1.5 get it with a plain system update ──
+if [[ -f $REPO/lib/makepkg-tuning.sh ]]; then
+  # shellcheck disable=SC1091
+  . "$REPO/lib/makepkg-tuning.sh"
+  hexciri_apply_makepkg_tuning && log "per-PC makepkg tuning applied ($(nproc) threads)"
+fi
 
 exit 0

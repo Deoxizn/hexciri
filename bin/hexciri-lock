@@ -1,11 +1,44 @@
 #!/bin/bash
 # hexciri:lock=session-lock
-# hexciri:summary=Lock screen + power off monitors after 20s if still locked
-# hexciri-lock — lock screen + power off monitors after 20s
+# hexciri:summary=Lock screen + keep monitors powered off every 20s while locked
+# hexciri-lock — lock screen, then re-power-off monitors every 20s while the
+# lock screen stays up.
+#
+# Lock-scoped, NOT system-idle: the panels go dark 20s after locking regardless
+# of whether you're wiggling the mouse. Any input while locked wakes them (niri
+# / noctalia do that), and 20s later they power back down — guarding against
+# pets/accidental bumps when you walk away but a stray input nudged the screen.
+# The loop exits the moment the lock screen closes, so unlocked system-idle is
+# never touched.
+#
+# Power-off routes through the compositor shim so it works on every WM — niri
+# (niri msg action power-off-monitors), hyprland (dpms off), sway (dpms off).
+# "still locked" is read from `noctalia msg status`'s `locked` field when the
+# shell is noctalia; other shells fall back to a finite loop so a background
+# proc can never run away.
+set -euo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 "$SCRIPT_DIR/hexciri-compositor" lock
 
-# Power off monitors after 20s if still locked (Noctalia owns idle timeouts)
-sleep 20
-case "$("$SCRIPT_DIR/hexciri-session" wm)" in hyprland) hyprctl dispatch dpms off 2>/dev/null;; *) true;; esac
+SHELL="$("$SCRIPT_DIR/hexciri-session" shell)"
+INTERVAL=20
+MAX_TICKS=150   # noctalia-lock fallback only: ~50 min safety cap
+
+still_locked() {
+  if [[ "$SHELL" == noctalia ]] && command -v noctalia >/dev/null 2>&1; then
+    noctalia msg status 2>/dev/null | grep -q '"locked": *true'
+  else
+    return 0  # unknown lock surface — rely on the tick cap
+  fi
+}
+
+ticks=0
+while still_locked && (( ticks < MAX_TICKS )); do
+  sleep "$INTERVAL"
+  "$SCRIPT_DIR/hexciri-compositor" power-off-monitors
+  (( ticks++ )) || true
+done
+
+exit 0

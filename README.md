@@ -147,10 +147,17 @@ Volume, brightness and mic keys work as labeled.
 
 | channel | Arch mirror | pkgs | kernel menu |
 |---|---|---|---|
-| `stable` (default) | `stable-mirror.omarchy.org` | `pkgs.omarchy.org/stable` | `linux`, `linux-lts` |
-| `bleeding` | `mirror.omarchy.org` | `pkgs.omarchy.org/edge` | + `linux-omarchy`, `-bore`, `-muqss` |
+| `stable` (default) | `stable-mirror.omarchy.org` (month-held) | `pkgs.omarchy.org/stable` | `linux`, `linux-lts` + cachyos set |
+| `bleeding` | official Arch (`geo.mirror.pkgbuild.com`) | none | `linux`, `linux-lts` + cachyos set |
 
-Stable — month-held packages; bleeding — normal Arch rolling release.
+Stable — month-held packages (kept for users who want slower, vetted releases);
+bleeding — normal Arch rolling release. CachyOS kernels are the same on both:
+never a repo, always a per-CPU direct fetch (`hexciri-cachyos`: your tier —
+`znver4`/`v4`/`v3`/generic — detected from this CPU, key `F3B607488DB35A47`
+local-signed once). Install/update them via **System ▸ Kernel**, where
+**Recommended (auto-detect)** has `hexciri-scheduler` read this machine (NVIDIA
+dGPU / X3D → BORE, else EEVDF) and pick the matching build. `pacman -Syu`
+won't update local-file kernels — `hexciri-update` re-fetches them.
 
 ## Already on Arch?
 Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:

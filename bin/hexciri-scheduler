@@ -1,0 +1,86 @@
+#!/bin/bash
+# hexciri:summary=Autodetect the best cachyos kernel scheduler for THIS machine (BORE vs EEVDF)
+# usage: hexciri-scheduler [detect|run]
+#   detect  print the recommended kernel variant + why (read-only, no sudo)
+#   run     install the recommended variant via the hexciri-kernel flow (applies it)
+# Read-only detective work only: reads /proc/cpuinfo, /proc/meminfo, sysfs PCI,
+# and power-supply batteries. Never guesses hardware, never tunes blindly.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+info() { echo -e "\e[0;36m[hexciri:sched]\e[0m $*"; }
+err()  { echo -e "\e[0;31m[hexciri:sched]\e[0m $*" >&2; }
+
+PCI_PATH="${HEXCIRI_PCI_DEVICES_PATH:-/sys/bus/pci/devices}"
+gpu_vendor() { # true if any VGA/3D device matches $1 (0x10de etc) — same sysfs
+  local d                                   # read as hexciri-gpu does (no PCI wakeups)
+  for d in "$PCI_PATH"/*; do
+    [[ $(<"$d/vendor") == "$1" ]] || continue
+    [[ $(<"$d/class") == 0x03* ]] && return 0
+  done
+  return 1
+}
+is_laptop() { # any battery supplier → power-sensitive portable (behavior target)
+  compgen -G '/sys/class/power_supply/*/type' >/dev/null 2>&1 || return 1
+  for t in /sys/class/power_supply/*/type; do
+    [[ $(<"$t") == "Battery" ]] && return 0
+  done
+  return 1
+}
+ram_gb() { awk '/^MemTotal:/{printf "%.0f", $2/1024/1024}' /proc/meminfo; }
+
+cpu_model="$(awk -F: '/^model name/{print $2; exit}' /proc/cpuinfo | sed 's/^ *//')"
+cores="$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo)"
+ram="$(ram_gb)"
+
+# ── profile ──
+NVIDIA=false; gpu_vendor 0x10de && NVIDIA=true
+X3D=false; [[ -n $cpu_model ]] && grep -qi 'X3D' <<<"$cpu_model" && X3D=true
+LAPTOP=false; is_laptop && LAPTOP=true
+
+# ── decision ──
+# NVIDIA dGPU or an X3D CPU → interactive desktop/gaming load → BORE (burst-
+# oriented response enhancer). Everything else on a shell desktop is well served
+# by the default EEVDF build; a likely-server profile gets a note, never applied.
+pick="cachyos"           # linux-cachyos = EEVDF (Clang LTO + AutoFDO) — balanced default
+reason="EEVDF (balanced default — general desktop/workstation)"
+if $NVIDIA || $X3D; then
+  pick="cachyos-bore"    # linux-cachyos-bore = BORE scheduler — interactive/gaming
+  if $NVIDIA && $X3D; then
+    reason="BORE — discrete NVIDIA GPU + X3D CPU (gaming/interactive workload)"
+  elif $NVIDIA; then
+    reason="BORE — discrete NVIDIA GPU detected (gaming/interactive workload)"
+  else
+    reason="BORE — X3D CPU detected ($cpu_model, gaming cache)"
+  fi
+elif $LAPTOP; then
+  reason="EEVDF — laptop (battery), power-friendly balanced scheduler"
+elif (( cores >= 24 && ram >= 64 )); then
+  reason="EEVDF — high-core workstation ($cores threads / ${ram}G RAM)"
+fi
+
+detect() {
+  local gpu="integrated/other"
+  $NVIDIA && gpu="NVIDIA discrete"
+  local tags=()
+  $LAPTOP && tags+=(laptop)
+  info "CPU: ${cpu_model:-unknown} ($cores threads, ${ram}G RAM)"
+  info "GPU: $gpu ${tags[*]:+(${tags[*]})}"
+  info "recommended cachyos kernel: $pick"
+  info "  $reason"
+  if (( cores >= 24 && ram >= 64 )) && ! $NVIDIA && ! $X3D; then
+    info "  (server-flavored box: linux-cachyos-server exists if you want server tuning — not auto-applied)"
+  fi
+  info "apply anytime: hexciri-kernel (System ▸ Kernel), or: hexciri-scheduler run"
+}
+
+case "${1:-detect}" in
+  detect) detect ;;
+  run)
+    detect
+    info "applying $pick via the kernel flow..."
+    exec "$SCRIPT_DIR/hexciri-kernel" run "$pick"
+    ;;
+  *) err "unknown action '$1' (detect|run)"; exit 1 ;;
+esac

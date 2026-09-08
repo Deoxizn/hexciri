@@ -138,7 +138,7 @@ do_retroarch() {
 do_xbox() {
   info "installing Xbox controller support (xpadneo)..."
   local headers=()
-  for k in linux linux-lts linux-omarchy linux-omarchy-bore linux-omarchy-muqss; do
+  for k in linux linux-lts linux-cachyos linux-cachyos-bore linux-cachyos-lts; do
     pacman -Q "$k" &>/dev/null && headers+=("$k-headers")
   done
   pkg "${headers[@]}" xpadneo-dkms

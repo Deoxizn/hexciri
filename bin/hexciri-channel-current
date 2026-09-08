@@ -2,24 +2,15 @@
 # hexciri:summary=Print the active hexciri channel (stable|bleeding|unknown)
 set -euo pipefail
 
-if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist 2>/dev/null; then
-  mirror="stable"
-elif grep -q "https://mirror.omarchy.org/" /etc/pacman.d/mirrorlist 2>/dev/null; then
-  mirror="bleeding"
-else
-  mirror="unknown"
-fi
+# channel = which mirror feed we track: stable is the omarchy month-hold
+# snapshot, bleeding is official Arch (since 1.5; the omarchy mirror was swapped
+# out for geo.mirror.pkgbuild.com). The repo state is informational only —
+# stable carries the [omarchy] repo (responsive, month-held), bleeding has none.
+mirror=$(grep -hoE "https://(stable-mirror|mirror)\.omarchy\.org/|https://geo\.mirror\.pkgbuild\.com/" /etc/pacman.d/mirrorlist 2>/dev/null | head -n1)
 
-if grep -q "https://pkgs.omarchy.org/stable/" /etc/pacman.conf 2>/dev/null; then
-  pkgs="stable"
-elif grep -q "https://pkgs.omarchy.org/edge/" /etc/pacman.conf 2>/dev/null; then
-  pkgs="bleeding"
-else
-  pkgs="unknown"
-fi
-
-if [[ $mirror == "$pkgs" ]]; then
-  echo "$mirror"
-else
-  echo "$mirror / $pkgs"
-fi
+case "$mirror" in
+  *stable-mirror.omarchy.org*) echo "stable" ;;
+  *geo.mirror.pkgbuild.com*) echo "bleeding" ;;
+  *mirror.omarchy.org*) echo "bleeding" ;; # legacy curved picked up pre-1.5
+  "") echo "unknown" ;;
+esac

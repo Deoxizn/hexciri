@@ -1,9 +1,10 @@
 #!/bin/bash
 # hexciri:summary=GPU autodetect + setup: mesa/vulkan per vendor, nvidia-open 6xx (Turing+), 580xx + LTS pin (GTX 1xxx or older)
-# usage: hexciri-gpu [--kernel=stock|lts|omarchy|bore|muqss] [--yes]
+# usage: hexciri-gpu [--kernel=stock|lts|cachyos|cachyos-bore|cachyos-lts] [--yes]
 #   --kernel picks the default kernel (default: current-best for your card).
-#   omarchy/bore/muqss kernels need the bleeding channel; GTX 1xxx or older cards
-#   refuse non-LTS kernels (580xx only survives LTS).
+#   cachyos kernels are post-install personalization (hexciri-kernel direct
+#   fetch, any channel) and are never the installer's default; GTX 1xxx or
+#   older cards refuse non-LTS kernels (580xx only survives LTS).
 set -euo pipefail
 
 KERNEL_PICK=""
@@ -17,16 +18,16 @@ while (($#)); do
     *) shift ;;
   esac
 done
-# accept short keys or full package names (linux-omarchy-bore -> bore)
+# accept short keys or full package names (linux-cachyos-bore -> cachyos-bore)
 case "${KERNEL_PICK,,}" in
   ""|"auto") KERNEL_PICK="" ;;
   stock|linux) KERNEL_PICK=stock ;;
   lts|linux-lts) KERNEL_PICK=lts ;;
-  omarchy|linux-omarchy) KERNEL_PICK=omarchy ;;
-  bore|linux-omarchy-bore) KERNEL_PICK=bore ;;
-  muqss|linux-omarchy-muqss) KERNEL_PICK=muqss ;;
+  cachyos|linux-cachyos) KERNEL_PICK=cachyos ;;
+  cachyos-bore|linux-cachyos-bore) KERNEL_PICK=cachyos-bore ;;
+  cachyos-lts|linux-cachyos-lts) KERNEL_PICK=cachyos-lts ;;
 esac
-[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { echo "hexciri-gpu: --kernel must be stock|lts|omarchy|bore|muqss"; exit 1; }
+[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|cachyos|cachyos-bore|cachyos-lts)$ ]] || { echo "hexciri-gpu: --kernel must be stock|lts|cachyos|cachyos-bore|cachyos-lts"; exit 1; }
 
 info() { echo -e "\e[0;36m[hexciri:gpu]\e[0m $*"; }
 ok()   { echo -e "\e[0;32m[hexciri:gpu]\e[0m $*"; }
@@ -138,9 +139,9 @@ if $NVIDIA; then
     cur="$(awk '$1=="default"{print $2; exit}' /boot/loader/loader.conf 2>/dev/null || true)"
     case "$cur" in
       hexciri-linux-lts.conf)            KERNEL_PICK=lts ;;
-      hexciri-linux-omarchy.conf)        KERNEL_PICK=omarchy ;;
-      hexciri-linux-omarchy-bore.conf)   KERNEL_PICK=bore ;;
-      hexciri-linux-omarchy-muqss.conf)  KERNEL_PICK=muqss ;;
+      hexciri-linux-cachyos.conf)        KERNEL_PICK=cachyos ;;
+      hexciri-linux-cachyos-bore.conf)   KERNEL_PICK=cachyos-bore ;;
+      hexciri-linux-cachyos-lts.conf)    KERNEL_PICK=cachyos-lts ;;
       hexciri-linux.conf)                KERNEL_PICK=stock ;;
       *) : ;;
     esac
@@ -155,7 +156,7 @@ if $NVIDIA; then
     use_kernel "$KERNEL_PICK"
   fi
   headers=()
-  for k in linux linux-lts linux-omarchy linux-omarchy-bore linux-omarchy-muqss; do
+  for k in linux linux-lts linux-cachyos linux-cachyos-bore linux-cachyos-lts; do
     pacman -Q "$k" &>/dev/null && headers+=("$k-headers")
   done
   pkg "${headers[@]}" nvidia-open-dkms nvidia-utils lib32-nvidia-utils

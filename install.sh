@@ -47,16 +47,15 @@ while (($#)); do
   esac
 done
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { echo "channel must be stable|bleeding"; exit 1; }
-# accept short keys or full package names (linux-omarchy-bore -> bore)
+# accept short keys or full package names (linux-lts -> lts)
+# CachyOS kernels are post-install personalization — they live in the
+# System ▸ Kernel menu (hexciri-kernel), never in the installer.
 case "${KERNEL_PICK,,}" in
   ""|"auto") KERNEL_PICK="" ;;
   stock|linux) KERNEL_PICK=stock ;;
   lts|linux-lts) KERNEL_PICK=lts ;;
-  omarchy|linux-omarchy) KERNEL_PICK=omarchy ;;
-  bore|linux-omarchy-bore) KERNEL_PICK=bore ;;
-  muqss|linux-omarchy-muqss) KERNEL_PICK=muqss ;;
 esac
-[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|bore|muqss)$ ]] || { echo "kernel must be stock|lts|omarchy|bore|muqss"; exit 1; }
+[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts)$ ]] || { echo "kernel must be stock|lts (cachyos kernels are post-install, via the Kernel menu)"; exit 1; }
 [[ $WM_PICK =~ ^(niri|hyprland|sway|mango)$ ]] || { echo "wm must be niri|hyprland|sway|mango"; exit 1; }
 [[ $SHELL_PICK =~ ^(noctalia|none)$ ]] || { echo "shell must be noctalia|none"; exit 1; }
 
@@ -100,11 +99,12 @@ if $SYSTEM_ONLY; then
   if ! $UPDATE_MODE; then
   # ── channel + keyring ──
   # The pacman channel is first-install-only personal state: on an existing
-  # install (detected by the [[omarchy]] repo hexciri already deployed) the
-  # channel is the user's choice and must never be re-asserted — installing over
-  # a box set to bleeding must not silently flip it to stable. Use
-  # hexciri-channel-set to change channel deliberately. ──
-  if grep -q '^\s*\[omarchy\]' /etc/pacman.conf 2>/dev/null; then
+  # install (detected by the hexciri-sync hook hexciri already deployed, or a
+  # legacy [[omarchy]] repo from a pre-1.5 bleeding install) the channel is the
+  # user's choice and must never be re-asserted — installing over a box set to
+  # bleeding must not silently flip it to stable. Use hexciri-channel-set to
+  # change channel deliberately. ──
+  if [[ -f /usr/share/libalpm/hooks/hexciri-sync.hook ]] || grep -q '^\s*\[omarchy\]' /etc/pacman.conf 2>/dev/null; then
     info "existing install detected — keeping current pacman channel (use hexciri-channel-set to change)"
   else
     info "deploying pacman channel ($CHANNEL)..."
@@ -112,7 +112,9 @@ if $SYSTEM_ONLY; then
     cp -f "$REPO_DIR/default/pacman/pacman-$CHANNEL.conf" /etc/pacman.conf
     cp -f "$REPO_DIR/default/pacman/mirrorlist-$CHANNEL" /etc/pacman.d/mirrorlist
   fi
-  if ! pacman -Qi omarchy-keyring &>/dev/null; then
+  # omarchy-keyring signs the [omarchy] repo — present on stable only after
+  # 1.5 (bleeding is plain Arch + the CachyOS kernel path, no omarchy repo)
+  if grep -q '^\s*\[omarchy\]' "$REPO_DIR/default/pacman/pacman-$CHANNEL.conf" 2>/dev/null && ! pacman -Qi omarchy-keyring &>/dev/null; then
     info "bootstrapping omarchy-keyring (signs the [omarchy] repo)..."
     pacman-key --recv-keys 40DFB630FF42BCFFB047046CF0134EE680CAC571 --keyserver keyserver.ubuntu.com
     pacman-key --lsign-key 40DFB630FF42BCFFB047046CF0134EE680CAC571
@@ -364,6 +366,17 @@ HOOK
     info "parked gnome-keyring via IgnorePkg"
   fi
 
+  # ── per-PC makepkg tuning: jobs + CPU tier written for AUR/local builds
+  #    (official pkgs prebuilt, unaffected). Same helper hexciri-sync runs on
+  #    every package transaction via the alpm hook, so installed machines keep
+  #    getting it without reinstallation; this covers fresh installs (and the
+  #    script's own update path). ──
+  if [[ -f "$REPO_DIR/lib/makepkg-tuning.sh" ]] && ! $DRY_RUN; then
+    # shellcheck disable=SC1091
+    . "$REPO_DIR/lib/makepkg-tuning.sh"
+    hexciri_apply_makepkg_tuning || warn "makepkg tuning skipped"
+  fi
+
   # ── SDDM theme (emblem + password greeter, Niri preferred) ──
   #    (update mode keeps your installed greeter — user-facing personalization)
   if ! $UPDATE_MODE && ! $DRY_RUN; then
@@ -385,10 +398,11 @@ HOOK
   # ── version stamp (hexciri-version uses git describe from the repo; the
   #    /usr/share/hexciri mirror is gone, so no brand is written here) ──
 
-  # ── GPU autodetect + single-kernel policy (first-install only) ──
+  # ── GPU autodetect (first-install only) ──
   #    Updates never touch the kernel: the boot kernel you chose is preserved;
   #    nothing reinstalls linux/linux-headers over a custom kernel or reasserts
-  #    driver setup. ──
+  #    driver setup. Custom kernels are post-install (System ▸ Kernel), so no
+  #    single-kernel replace policy runs here anymore. ──
   if ! $UPDATE_MODE; then
   # ── GPU autodetect (runs as root here; installer reboots at the end, not mid-run) ──
   if ! $DRY_RUN; then
@@ -397,29 +411,14 @@ HOOK
       || warn "GPU setup needs attention — re-run: hexciri-gpu"
   fi
 
-  # ── single-kernel policy: a custom pick replaces the staged base kernel ──
-  if [[ $KERNEL_PICK == omarchy || $KERNEL_PICK == bore || $KERNEL_PICK == muqss ]] && ! $DRY_RUN; then
-    case $KERNEL_PICK in
-      omarchy) custom_pkg=linux-omarchy ;;
-      bore) custom_pkg=linux-omarchy-bore ;;
-      muqss) custom_pkg=linux-omarchy-muqss ;;
-    esac
-    if pacman -Q "$custom_pkg" &>/dev/null; then
-      for k in linux linux-lts; do
-        if pacman -Q "$k" &>/dev/null; then
-          info "removing staged $k (single-kernel policy)..."
-          pacman -Rns --noconfirm "$k"
-          pacman -Q "$k-headers" &>/dev/null && pacman -Rns --noconfirm "$k-headers" || true
-          rm -f "/boot/loader/entries/hexciri-$k.conf"
-        fi
-      done
-      # self-heal a possibly-inherited corrupt mkinitcpio.conf before rebuilding
-      run "$REPO_DIR/lib/initramfs.sh" repair /etc/mkinitcpio.conf
-      rm -f /etc/mkinitcpio.conf.hexciri-changed
-      mkinitcpio -P
-    else
-      warn "$custom_pkg did not install (custom kernels need bleeding) — keeping staged kernel"
-    fi
+  # ── scheduler autodetect (first-install only): tell the user which cachyos
+  #    kernel variant fits this machine (BORE vs EEVDF), non-destructively. The
+  #    pick itself stays post-install via the System ▸ Kernel menu; this just
+  #    lands the recommendation in the install output (and at next login via
+  #    hexciri-scheduler). ──
+  if ! $DRY_RUN; then
+    "$REPO_DIR/bin/hexciri-scheduler" detect \
+      || warn "scheduler autodetect skipped (offline?) — run hexciri-scheduler later"
   fi
   fi # ! $UPDATE_MODE
 
