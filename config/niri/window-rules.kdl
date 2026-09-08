@@ -1,0 +1,211 @@
+// ──────────────────────────────────────────────
+// Niri fragment: Window rules (workspace targets, floating, blur)
+// Included by config.kdl. Static hexciri defaults — not theme-generated.
+// These bind apps to the named workspaces (defined below) and float the
+// dialogs/overlays that shouldn't tile. niri treats these as multipart
+// sections: they INSERT as-is (never merged away), so this file is the only
+// place they live, and a theme template must not duplicate them.
+// ──────────────────────────────────────────────
+
+// ── Named workspaces ──
+// Reference by name in the rules below and in keybinds (Mod+1–9 / Mod+0).
+workspace "browser"
+workspace "code"
+workspace "chat"
+workspace "media"
+
+// ── Floating dialogs — these apps always open as floating popups ──
+window-rule {
+    match app-id="pavucontrol"              // PulseAudio volume control
+    open-floating true
+}
+
+window-rule {
+    match app-id="nm-connection-editor"     // Network Manager connection editor
+    open-floating true
+}
+
+window-rule {
+    match app-id="blueman-manager"          // Bluetooth manager
+    open-floating true
+}
+
+window-rule {
+    match app-id="org.gnome.Calculator"     // GNOME Calculator
+    open-floating true
+}
+
+window-rule {
+    match app-id="org.gnome.Settings"       // GNOME Settings
+    open-floating true
+}
+
+window-rule {
+    match app-id="feh"                      // Image viewer
+    open-floating true
+}
+
+window-rule {
+    match app-id="imv"                      // Image viewer (wayland-native)
+    open-floating true
+}
+
+// LocalSend — floating at 1100x700 (floating share dialog)
+window-rule {
+    match app-id="localsend"
+    match title="Share"
+    open-floating true
+    default-column-width { fixed 1100; }
+    default-window-height { fixed 700; }
+}
+
+// Speedtest (fast.com) — floating for gauges
+window-rule {
+    match app-id=".*fast\\.com.*"
+    open-floating true
+    default-column-width { fixed 1100; }
+    default-window-height { fixed 700; }
+}
+
+// Media player — floating (sizing handled by mpv config)
+window-rule {
+    match app-id="mpv"                      // Video player
+    open-floating true
+}
+
+// Webcam overlay — floating (hexciri-screenrecord --with-webcam)
+window-rule {
+    match app-id="WebcamOverlay"
+    open-floating true
+}
+
+// Default terminal — opens at half screen width (whichever picker default is active)
+// background-effect blurs the wallpaper behind the terminal so its reduced
+// background_opacity reads as soft translucency instead of a flat color.
+window-rule {
+    match app-id="kitty"
+    default-column-width { proportion 0.5; }
+    background-effect {
+        blur true
+    }
+}
+
+window-rule {
+    match app-id="Alacritty"
+    default-column-width { proportion 0.5; }
+}
+
+window-rule {
+    match app-id="foot"
+    default-column-width { proportion 0.5; }
+}
+
+window-rule {
+    match app-id="com.mitchellh.ghostty"
+    default-column-width { proportion 0.5; }
+}
+
+// TUI apps — float at 1000x720, centered
+// Used by hexciri-agent (opencode), hexciri-kernel, hexciri-defaults,
+// install/remove menus, etc.
+// background-effect blurs the wallpaper behind the host terminal so its reduced
+// background_opacity reads as soft translucency — same as the kitty rule.
+window-rule {
+    match app-id="TUI\\.float"             // Matches apps launched with --app-id=TUI.float
+    open-floating true
+    default-column-width { fixed 1000; }    // Fixed width in pixels
+    default-window-height { fixed 720; }    // Fixed height in pixels
+    background-effect {
+        blur true
+    }
+}
+
+// File manager — Strata tiles with the rest (no float rule)
+
+// ── Browser — always opens on the "browser" named workspace ──
+window-rule {
+    match app-id="firefox"
+    open-on-workspace "browser"
+}
+
+window-rule {
+    match app-id="chromium"
+    open-on-workspace "browser"
+}
+
+window-rule {
+    match app-id="brave-browser"
+    open-on-workspace "browser"
+}
+
+window-rule {
+    match app-id="brave-browser-beta"
+    open-on-workspace "browser"
+}
+
+// Chromium web apps (hexciri-launch-webapp) — full width, maximized
+window-rule {
+    match app-id="brave-www\\.messenger\\.com__-Default"
+    default-column-width { proportion 1.0; }
+    open-maximized true
+}
+
+window-rule {
+    match app-id="brave-gemini\\.google\\.com__app-Default"
+    default-column-width { proportion 1.0; }
+    open-maximized true
+}
+
+window-rule {
+    match app-id="brave-photopea\\.com__-Default"
+    default-column-width { proportion 1.0; }
+    open-maximized true
+}
+
+// ── Code editors — always opens on the "code" named workspace ──
+window-rule {
+    match app-id="code"                     // VS Code
+    open-on-workspace "code"
+}
+
+window-rule {
+    match app-id="jetbrains-*"             // JetBrains IDEs (IntelliJ, PyCharm, etc.)
+    open-on-workspace "code"
+}
+
+// ── Media — always opens on the "media" named workspace ──
+window-rule {
+    match app-id="mpv"                      // Video player
+    open-on-workspace "media"
+}
+
+// ── Chat apps — always opens on the "chat" named workspace ──
+window-rule {
+    match app-id="discord"
+    open-on-workspace "chat"
+}
+
+window-rule {
+    match app-id="org.telegram.desktop"     // Telegram
+    open-on-workspace "chat"
+}
+
+// ──────────────────────────────────────────────
+// Layer rules
+// Apply effects to layer-shell surfaces (panels, overlays, launchers).
+// "blur true" makes the background see-through with a blur effect.
+// ──────────────────────────────────────────────
+
+layer-rule {
+    match namespace="fuzzel"                // Fuzzel app launcher
+    background-effect {
+        blur true
+    }
+}
+
+layer-rule {
+    match namespace="noctalia"              // Noctalia shell (bar, launcher, etc.)
+    background-effect {
+        blur true
+    }
+}

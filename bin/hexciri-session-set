@@ -1,0 +1,222 @@
+#!/bin/bash
+# hexciri:summary=Switch the active WM/shell combo (niri|hyprland|sway|mango × noctalia|none)
+# hexciri:args=wm=<wm> shell=<shell>  — e.g. "hexciri-session-set wm=hyprland"; menu picks if omitted
+# hexciri:requires-sudo=true
+#
+# The deliberate WM-swap path (install --wm is the non-interactive fresh-install
+# shortcut). Steps, per docs/design-wm-shell-choice.md §4:
+#   1. resolve the target combo (args or the System > Session picker)
+#   2. pull fresh + re-exec (must not run stale bytes — same guard as the updater funnel)
+#   3. install the target WM package (sudo) + generate /usr/share/wayland-sessions/${wm}.desktop
+#   4. carry-over the INSTALLED config into the target WM (monitors whole-file,
+#      keybinds re-rendered from intents.toml — the schema IS the carry-over)
+#   5. write ~/.config/hexciri/{wm,shell} (the authoritative selector)
+#   6. re-run the theme hook (hexciri-sync: per-WM borders/keybinds render)
+#   7. print "log out and pick <wm> in the session picker" (current session untouched)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+[[ -d $REPO ]] || REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+SEL_DIR="$XDG_CONFIG_HOME/hexciri"
+SESSION_DIR="/usr/share/wayland-sessions"
+
+known_wm()   { case "${1:-}" in niri|hyprland|sway|mango) return 0;; *) return 1;; esac; }
+known_shell(){ case "${1:-}" in noctalia|none) return 0;; *) return 1;; esac; }
+
+# ── resolve target combo ──
+want_wm=""
+want_shell=""
+for a in "$@"; do
+  case "$a" in
+    wm=*)     want_wm="${a#wm=}" ;;
+    shell=*)  want_shell="${a#shell=}" ;;
+  esac
+done
+
+picker() {
+  local prompt="$1"; shift
+  printf '%s\n' "$@" | "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt="$prompt" --lines="$#"
+}
+if [[ -z $want_wm ]]; then
+  want_wm=$(picker "WM: " niri hyprland sway mango) || exit 0
+fi
+if [[ -z $want_shell ]]; then
+  want_shell=$(picker "Shell: " noctalia none) || exit 0
+fi
+known_wm "$want_wm"   || { echo "unknown WM: $want_wm (niri|hyprland|sway|mango)" >&2; exit 1; }
+known_shell "$want_shell" || { echo "unknown shell: $want_shell (noctalia|none)" >&2; exit 1; }
+
+cur_wm="$("$SCRIPT_DIR/hexciri-session" wm)"
+cur_shell="$("$SCRIPT_DIR/hexciri-session" shell)"
+if [[ $want_wm == "$cur_wm" && $want_shell == "$cur_shell" ]]; then
+  echo "already on $cur_wm+$cur_shell — nothing to do"
+  exit 0
+fi
+
+# ── step 2: pull fresh + re-exec once (never switch on stale bytes) ──
+if [[ ${HXC_SESSION_RERUN:-0} == 0 ]] && git -C "$REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
+  if (( behind > 0 )); then
+    echo "pulling $behind new commit(s) before switching..."
+    git -C "$REPO" pull --ff-only --quiet
+    export HXC_SESSION_RERUN=1
+    exec "$0" "$@"
+  fi
+fi
+
+# ── step 3: install the target WM (only what it needs; no multi-GB preinstall) ──
+pkg_install() {
+  local wm="$1"
+  case "$wm" in
+    niri)     sudo pacman -S --needed --noconfirm niri 2>/dev/null || true ;;
+    hyprland) sudo pacman -S --needed --noconfirm hyprland hyprlock 2>/dev/null || true ;;
+    sway)     sudo pacman -S --needed --noconfirm sway swaylock 2>/dev/null || true ;;
+    mango)    echo "mango is experimental — install the WM package yourself, session dispatch will follow" ;;
+  esac
+}
+if [[ $want_wm != "$cur_wm" ]]; then
+  echo "installing $want_wm (this may take a moment)..."
+  pkg_install "$want_wm"
+fi
+
+# ── session file: guarantee a login-gate entry exists (sddm rejects pre-session) ──
+if [[ $want_wm != "$cur_wm" ]] ; then
+  exec_line="/usr/bin/$want_wm"
+  case "$want_wm" in
+    niri) exec_line="/usr/bin/niri" ;;
+    hyprland) exec_line="/usr/bin/Hyprland" ;;
+    sway) exec_line="/usr/bin/sway" ;;
+  esac
+  sudo mkdir -p "$SESSION_DIR"
+  if [[ ! -f "$SESSION_DIR/$want_wm.desktop" ]]; then
+    printf '[Desktop Entry]\nName=%s\nComment=%s Wayland compositor\nExec=%s\nType=Application\n' \
+      "$want_wm" "$want_wm" "$exec_line" | sudo tee "$SESSION_DIR/$want_wm.desktop" >/dev/null
+    echo "session file: $SESSION_DIR/$want_wm.desktop"
+  fi
+fi
+
+# ── step 4: carry-over the INSTALLED config into the target WM ──
+# Monitors: the only whole-file surface. Read the CURRENT WM's live output layout
+# (the machine's real scale/positions — never the repo template) and write it
+# into the target WM's monitor fragment. Keybinds are NOT copied: the intent
+# schema (§6) is the carry-over; step 6 re-renders them for the new WM.
+monitors_from=""
+case "$cur_wm" in
+  niri)
+    if [[ -f $XDG_CONFIG_HOME/niri/monitors.kdl ]]; then
+      monitors_from="$XDG_CONFIG_HOME/niri/monitors.kdl"
+    elif [[ -f $XDG_CONFIG_HOME/niri/config.kdl ]] \
+         && ! grep -q '^include "' "$XDG_CONFIG_HOME/niri/config.kdl"; then
+      monitors_from="$XDG_CONFIG_HOME/niri/config.kdl"
+    fi
+    ;;
+  hyprland)
+    monitors_from="$XDG_CONFIG_HOME/hypr/conf/monitors.conf"
+    ;;
+  sway)
+    monitors_from="$XDG_CONFIG_HOME/sway/conf.d/monitors.conf"
+    ;;
+esac
+
+if [[ -n $monitors_from && -f $monitors_from && $want_wm != "$cur_wm" ]]; then
+  case "$want_wm" in
+    hyprland)
+      hypr_dir="$XDG_CONFIG_HOME/hypr/conf"
+      mkdir -p "$hypr_dir"
+      python3 - "$monitors_from" "$hypr_dir/monitors.conf" <<'PYEOF'
+import re, sys
+src, dst = sys.argv[1], sys.argv[2]
+txt = open(src).read()
+lines, note = [], []
+src_wm = "hyprland" if "monitor = " in txt else "niri/sway"
+for blk in re.finditer(r'output\s+"([^"]+)"\s*\{(.*?)\}', txt, re.S):
+    name = blk.group(1)
+    body = blk.group(2)
+    mode = re.search(r'mode\s+"([^"]+)"', body)
+    scale = re.search(r'scale\s+([\d.]+)', body)
+    pos = re.search(r'position\s+x=(-?[\d.]+)\s+y=(-?[\d.]+)', body)
+    resrate = mode.group(1) if mode else "preferred"
+    p = f"{pos.group(1)}x{pos.group(2)}" if pos else "0x0"
+    s = scale.group(1) if scale else "1"
+    vrr = ",\n    vrr 1" if "variable-refresh-rate" in body else ""
+    lines.append(f'monitor = {name},{resrate},{p},{s}{vrr}')
+for m in re.finditer(r'monitor\s*=\s*([^,\n]+),([^,\n]+),([^,\n]+),([^,\n]+)', txt):
+    name, resrate, p, s = (g.strip() for g in m.groups())
+    lines.append(f'monitor = {name},{resrate},{p},{s}')
+if not lines:
+    note.append("// NOTE: no monitor entries found to carry over — defaults will apply.")
+open(dst, "w").write("// hexciri — carried over from " + src_wm + " on WM swap.\n" +
+                     "// source = " + src + "\n" +
+                     "\n".join(lines) + "\n" + ("\n" + "\n".join(note) if note else ""))
+print(f"carried monitors → {dst} (from {src_wm})")
+PYEOF
+      # hyprland must be told to read the split
+      hypr_main="$XDG_CONFIG_HOME/hypr/hyprland.conf"
+      include_line='source = ~/.config/hypr/conf/monitors.conf'
+      mkdir -p "$(dirname "$hypr_main")"
+      if [[ -f $hypr_main ]] && ! grep -qF "$include_line" "$hypr_main"; then
+        printf '\n%s\n' "$include_line" >> "$hypr_main"
+      elif [[ ! -f $hypr_main ]]; then
+        printf 'source = ~/.config/hypr/conf/*.conf\n' > "$hypr_main"
+      fi
+      ;;
+    sway)
+      sway_dir="$XDG_CONFIG_HOME/sway/conf.d"
+      mkdir -p "$sway_dir"
+      cp -f "$monitors_from" "$sway_dir/monitors.conf"
+      # sway output blocks are niri-compatible shape; sway needs include glob
+      sway_main="$XDG_CONFIG_HOME/sway/config"
+      include_line='include ~/.config/sway/conf.d/*'
+      if [[ -f $sway_main ]] && ! grep -qF "$include_line" "$sway_main"; then
+        printf '\n%s\n' "$include_line" >> "$sway_main"
+      elif [[ ! -f $sway_main ]]; then
+        printf 'include ~/.config/sway/conf.d/*\n' > "$sway_main"
+      fi
+      echo "carried monitors → $sway_dir/monitors.conf (from $cur_wm)"
+      ;;
+    niri)
+      # translate hyprland monitor = ... lines → niri output { } blocks
+      if [[ -n "$monitors_from" ]] && grep -q '^monitor =' "$monitors_from"; then
+        niri_mon="$XDG_CONFIG_HOME/niri/monitors.kdl"
+        python3 - "$monitors_from" "$niri_mon" <<'PYEOF'
+import re, sys
+src, dst = sys.argv[1], sys.argv[2]
+mons = []
+for m in re.finditer(r'monitor\s*=\s*([^,\n]+),([^,\n]+),([^,\n]+),([^,\n]+)(?:,.*)?', open(src).read()):
+    name, resrate, pos, scale = (g.strip() for g in m.groups())
+    if not name:
+        continue  # hyprland "monitor = ,preferred,auto,1" → niri can't name blank
+    x, y = pos.split("x") if "x" in pos else ("0", "0")
+    lines = [f'output "{name}" {{']
+    if resrate and resrate != "preferred":
+        lines.append(f'    mode "{resrate}"')
+    if scale:
+        lines.append(f'    scale {scale}')
+    lines.append(f'    position x={x} y={y}')
+    lines.append("}")
+    mons.append("\n".join(lines))
+body = "\n\n".join(mons) if mons else "// NOTE: nothing to carry over — defaults will apply."
+open(dst, "w").write("// hexciri — carried over from hyprland on WM swap.\n" +
+                     f"// source = {src}\n\n" + body + "\n")
+print(f"carried monitors → {dst} (from hyprland)")
+PYEOF
+      fi
+      ;;
+  esac
+fi
+
+# ── step 5: write the authoritative selector ──
+mkdir -p "$SEL_DIR"
+echo "$want_wm"    > "$SEL_DIR/wm"
+echo "$want_shell" > "$SEL_DIR/shell"
+echo "selector: ~/.config/hexciri/wm = $want_wm  shell = $want_shell"
+
+# ── step 6: regenerate (bin re-link + theme hook: per-WM borders + keybinds render) ──
+"$SCRIPT_DIR/hexciri-update-hexciri" >/dev/null 2>&1 || true
+
+# ── step 7 ──
+echo
+echo "Switched selector to $want_wm + $want_shell (carried over from $cur_wm+$cur_shell)."
+echo "Log out and pick '$want_wm' in the session picker — the current session is untouched."

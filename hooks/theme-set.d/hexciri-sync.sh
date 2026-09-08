@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
-# noctalia-sync.sh — Bridge hexciri colors.toml → Noctalia + Niri theme
+# hexciri-sync.sh — Session-wide theme bridge: hexciri colors.toml → shell + every installed WM
 # Installed to: ~/.config/hexciri/hooks/theme-set.d/
 # Triggered automatically by hexciri-theme-set after every theme change.
+# (The alpm post-transaction repair hook is a different script, bin/hexciri-sync.)
 #
-# Reads hexciri's current colors.toml and:
-#   1. Generates a Noctalia custom palette JSON from hexciri colors
-#   2. Sets Noctalia to use the custom palette
-#   3. Updates Niri config.kdl border/focus ring colors
-#   4. Syncs wallpaper if the theme ships a backgrounds/ directory.
+# Design §5: the theme hook stopped being "the shell sync" and became session-wide.
+#   A = WM-independent render (always runs): Noctalia palette + config.toml, qt6ct,
+#       wallpaper — identical under every WM.
+#   B = per-WM render (loop over installed WMs): the tiny theme surface each WM
+#       carries (border/focus-ring colors). Border color writes land on the right
+#       per-WM file no matter which compositor you boot.
+#
+# Niri specifics:
+#   0. Migrates a legacy pre-split Niri config (v1/v1.2/v1.3): backs the
+#      monolith up to config.bak, then installs the split design so theme
+#      border writes + live-reload hit the right files. The .bak is kept
+#      byte-for-byte — a user (or an AI) can port personal tweaks from it.
+#   3. Updates Niri border/focus ring colors (looknfeel.kdl, the theme-owned
+#      fragment — falls back to the legacy monolith when it's still in place)
 
 set -euo pipefail
 
@@ -17,12 +27,51 @@ NOCTALIA_CFG="$NOCTALIA_DIR/config.toml"
 NIRI_CFG="$HOME/.config/niri/config.kdl"
 
 if [[ ! -f "$THEME_DIR/colors.toml" ]]; then
-  echo "hexciri noctalia-sync: no colors.toml found at $THEME_DIR" >&2
+  echo "hexciri-sync: no colors.toml found at $THEME_DIR" >&2
   exit 1
 fi
 
 mkdir -p "$NOCTALIA_DIR"
 mkdir -p "$NOCTALIA_DIR/palettes"
+
+# ── 0. Niri legacy-monolith migration (v1 → split) ──
+# sync.sh owns the upgrade guard (install.sh is fresh-install only). A v1/v1.2/
+# v1.3 config.kdl has everything inlined and no `include "..."` lines. Back it
+# up to config.bak unchanged, then install the split design so the border color
+# write below lands on the right file and niri live-reload works per-fragment.
+# Personal tweaks stay safe in config.bak until the user (or an AI) ports them.
+NIRI_PATCH_FILE="$NIRI_CFG"
+HEXCIRI_ROOT=""
+_nb="$(command -v hexciri-theme-set 2>/dev/null || true)"
+if [[ -n $_nb ]]; then
+  _nb="$(readlink -f "$_nb" 2>/dev/null || true)"
+  if [[ -n $_nb ]]; then
+    _root="$(dirname "$(dirname "$_nb")")"
+    [[ -d "$_root/config/niri" ]] && HEXCIRI_ROOT="$_root"
+  fi
+fi
+NIRI_SPLIT_SRC="${HEXCIRI_NIRI_SPLIT_SRC:-${HEXCIRI_ROOT:+$HEXCIRI_ROOT/config/niri}}"
+
+if [[ -f $NIRI_CFG ]] && ! grep -q '^include "' "$NIRI_CFG"; then
+  if [[ -n $NIRI_SPLIT_SRC && -f "$NIRI_SPLIT_SRC/config.kdl" ]]; then
+    if [[ ! -f $HOME/.config/niri/config.bak ]]; then
+      cp -f "$NIRI_CFG" "$HOME/.config/niri/config.bak"
+      echo "hexciri-sync: backed up legacy config.kdl → config.bak"
+    fi
+    for _f in config cursors env monitors input looknfeel window-rules keybinds autostart; do
+      [[ -f "$NIRI_SPLIT_SRC/$_f.kdl" ]] && cp -f "$NIRI_SPLIT_SRC/$_f.kdl" "$HOME/.config/niri/$_f.kdl"
+    done
+    echo "hexciri-sync: replaced legacy niri monolith with the split design"
+  else
+    echo "hexciri-sync: legacy config.kdl found but split source missing ($NIRI_SPLIT_SRC) — leaving it untouched" >&2
+  fi
+fi
+# Borders/focus-ring live in looknfeel.kdl after the split; patch that instead
+# of the (now include-only) config.kdl. Fall back to config.kdl only if a legacy
+# monolith is still the active config.
+if [[ -f $HOME/.config/niri/looknfeel.kdl ]]; then
+  NIRI_PATCH_FILE="$HOME/.config/niri/looknfeel.kdl"
+fi
 
 THEME_NAME_FILE="$HOME/.local/state/hexciri/current/theme.name"
 if [[ -f "$THEME_NAME_FILE" ]]; then
@@ -35,6 +84,7 @@ export HEXCIRI_CURRENT_THEME="$THEME_DIR"
 export NOCTARCHIA_THEME_NAME="$THEME_NAME"
 export NOCTALIA_DIR
 export NIRI_CFG
+export NIRI_PATCH_FILE
 
 python3 <<'PYEOF'
 import json
@@ -48,6 +98,7 @@ theme_name = os.environ.get("NOCTARCHIA_THEME_NAME", "unknown")
 noctalia_dir = Path(os.environ["NOCTALIA_DIR"])
 noctalia_cfg = noctalia_dir / "config.toml"
 niri_cfg = Path(os.environ["NIRI_CFG"])
+niri_patch = Path(os.environ.get("NIRI_PATCH_FILE") or os.environ["NIRI_CFG"])
 
 data = tomllib.loads((theme_dir / "colors.toml").read_text())
 
@@ -126,7 +177,7 @@ palette = {
 
 palette_path = noctalia_dir / "palettes" / "hexciri.json"
 palette_path.write_text(json.dumps(palette, indent=2) + "\n")
-print(f"noctalia-sync: wrote palette → {palette_path}")
+print(f"hexciri-sync: wrote palette → {palette_path}")
 
 # ── 2. Patch Noctalia config.toml to use custom palette ──
 # Palette source is the user's independent choice (Themes menu → Palette
@@ -149,9 +200,9 @@ mode = "{"dark" if mode == "dark" else "light"}\""""
         else:
             cfg = theme_block + "\n\n" + cfg
         noctalia_cfg.write_text(cfg)
-        print(f"noctalia-sync: patched config.toml → custom palette 'hexciri'")
+        print(f"hexciri-sync: patched config.toml → custom palette 'hexciri'")
     else:
-        print(f"noctalia-sync: preserving palette source '{cur_src}' (user choice)")
+        print(f"hexciri-sync: preserving palette source '{cur_src}' (user choice)")
 
 # ── 3b. Qt theming (qt6ct): QPalette color scheme from theme colors ──
 qt6_dir = Path.home() / ".config" / "qt6ct"
@@ -201,15 +252,63 @@ disabled = ", ".join("#80" + c.lstrip("#") for c in roles)
     f"color_scheme_path={qt6_dir / 'colors' / 'hexciri.conf'}\n"
     "standard_dialogs=0\n"
 )
-print(f"noctalia-sync: wrote Qt color scheme → {(qt6_dir / 'colors' / 'hexciri.conf')}")
+print(f"hexciri-sync: wrote Qt color scheme → {(qt6_dir / 'colors' / 'hexciri.conf')}")
 
-# ── 3. Patch Niri config.kdl borders ──
-if niri_cfg.exists():
-    kdl = niri_cfg.read_text()
-    kdl = re.sub(r'(?<!\w)(active-color\s+)"#[0-9a-fA-F]{6}"', f'\\1"{accent}"', kdl)
-    kdl = re.sub(r'(inactive-color\s+)"#[0-9a-fA-F]{6}"', f'\\1"{muted}"', kdl)
-    niri_cfg.write_text(kdl)
-    print(f"noctalia-sync: patched config.kdl borders accent={accent} inactive={muted}")
+# ── 3. Per-WM border/focus-ring colors (design §5) ──
+# The tiny theme surface each WM carries. Patch the file(s) that hold it for
+# every installed WM, so booting a different compositor still shows the right
+# colors. A WM whose config isn't present is simply skipped (no-op until the
+# session-set carry-over creates it).
+def hex(rgb, alpha="ff"):
+    c = rgb.lstrip("#").lower()
+    return f"#{alpha}{c}"
+
+def patch_kdl(path, accent, muted):
+    if not path.exists():
+        return False
+    kdl = path.read_text()
+    new = re.sub(r'(?<!\w)(active-color\s+)"#[0-9a-fA-F]{6}"', f'\\1"{accent}"', kdl)
+    new = re.sub(r'(inactive-color\s+)"#[0-9a-fA-F]{6}"', f'\\1"{muted}"', new)
+    if new != kdl:
+        path.write_text(new)
+        print(f"hexciri-sync: patched {path.name} borders accent={accent} inactive={muted}")
+        return True
+    return False
+
+# niri: after the split these live in looknfeel.kdl (theme-owned); a legacy
+# monolith (pre-split) carries them in config.kdl. Release cron doesn't know
+# which — patch whichever file holds them via NIRI_PATCH_FILE.
+if niri_patch.exists():
+    patch_kdl(niri_patch, accent, muted)
+
+# niri via Noctalia's own include (noctalia.kdl) may hold layout colors too
+noct_kdl = Path.home() / ".config" / "niri" / "noctalia.kdl"
+if noct_kdl.exists():
+    patch_kdl(noct_kdl, accent, muted)
+
+# hyprland: general { col.active_border / col.inactive_border }
+hypr_look = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "hypr" / "conf" / "looknfeel.conf"
+if hypr_look.exists():
+    hy = hypr_look.read_text()
+    hy2 = re.sub(r'col\.active_border\s*=\s*rgba\([0-9a-fA-F]+\)',
+                 lambda m: f'col.active_border = rgba({hex(accent)})', hy)
+    hy2 = re.sub(r'col\.inactive_border\s*=\s*rgba\([0-9a-fA-F]+\)',
+                 lambda m: f'col.inactive_border = rgba({hex(muted)})', hy2)
+    if hy2 != hy:
+        hypr_look.write_text(hy2)
+        print(f"hexciri-sync: patched hypr looknfeel.conf borders accent={accent} inactive={muted}")
+
+# sway: client.focused / client.unfocused <border-hover> <border> <bg> <text>
+sway_look = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "sway" / "conf.d" / "looknfeel.conf"
+if sway_look.exists():
+    sw = sway_look.read_text()
+    sw2 = re.sub(r'client\.focused\s+.+',
+                 f'client.focused {accent} {accent} {dark_background} {foreground}', sw)
+    sw2 = re.sub(r'client\.unfocused\s+.+',
+                 f'client.unfocused {muted} {muted} {dark_background} {foreground}', sw2)
+    if sw2 != sw:
+        sway_look.write_text(sw2)
+        print(f"hexciri-sync: patched sway looknfeel.conf borders accent={accent} inactive={muted}")
 
 # ── 4. Wallpaper sync ──
 # If the user has custom wallpapers merged (zz-user-* links from the store or
@@ -221,7 +320,7 @@ if os.environ.get("NOCTALIA_SYNC_NO_WALLPAPER") != "1":
     if wp_dir.is_dir():
         has_custom = any(p.name.startswith("zz-user-") for p in wp_dir.iterdir())
     if has_custom:
-        print("noctalia-sync: custom user wallpapers present — keeping the current wallpaper")
+        print("hexciri-sync: custom user wallpapers present — keeping the current wallpaper")
     elif wp_dir.is_dir():
         imgs = sorted(
             p for p in wp_dir.iterdir()
@@ -251,9 +350,9 @@ if os.environ.get("NOCTALIA_SYNC_NO_WALLPAPER") != "1":
             import subprocess
             if dest.exists() and dest.stat().st_size > 0:
                 subprocess.run(["noctalia", "msg", "wallpaper-set", str(dest)], check=False)
-                print(f"noctalia-sync: wallpaper → {dest}")
+                print(f"hexciri-sync: wallpaper → {dest}")
             else:
-                print(f"noctalia-sync: skipping wallpaper-set ({dest} missing or empty)")
+                print(f"hexciri-sync: skipping wallpaper-set ({dest} missing or empty)")
 
-print(f"noctalia-sync: synced theme '{theme_name}'")
+print(f"hexciri-sync: synced theme '{theme_name}'")
 PYEOF

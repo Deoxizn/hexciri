@@ -8,43 +8,55 @@
 set -euo pipefail
 
 CFG="${NIRI_CONFIG:-$HOME/.config/niri/config.kdl}"
+ENV_CFG="${NIRI_ENV_CONFIG:-$HOME/.config/niri/env.kdl}"
 HEXCIRI_BIN="${HEXCIRI_BIN:-$HOME/.local/bin}"
 STOCK_PATH="$HEXCIRI_BIN:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"
 
-[[ -f $CFG ]] || { echo "hexciri-migrate-niri-path: no niri config at $CFG — skipping"; exit 0; }
+[[ -f $ENV_CFG ]] || [[ -f $CFG ]] || { echo "hexciri-migrate-niri-path: no niri config at $CFG ($ENV_CFG) — skipping"; exit 0; }
 
-# Is the exact stock PATH already present in the environment block?
-probe=$(
+# Split layout: the PATH lives in the env.kdl fragment; patch that. Legacy
+# monolith (no env.kdl): patch the environment block inside config.kdl.
+if [[ -f $ENV_CFG ]]; then
+  TARGET="$ENV_CFG"
+  [[ -f $CFG && "$(grep -c '^environment' "$CFG" || true)" -gt 0 ]] && echo "hexciri-migrate-niri-path: note: legacy environment block found in $CFG — split layout uses env.kdl, ignoring" >&2 || true
+else
+  TARGET="$CFG"
+fi
+
+is_patched() {
   awk -v path="$STOCK_PATH" '
     /^environment[[:space:]]*\{[[:space:]]*$/ { in_env=1; next }
     in_env && /^[[:space:]]*\}/ { in_env=0; next }
     in_env && $0 ~ /PATH[[:space:]]*"/ && $0 ~ path { found=1 }
     END { exit found ? 0 : 1 }
-  ' "$CFG"
-) && { echo "hexciri-migrate-niri-path: ~/.local/bin already on PATH in $CFG — nothing to do"; exit 0; }
+  ' "$TARGET"
+}
+
+if is_patched; then
+  echo "hexciri-migrate-niri-path: ~/.local/bin already on PATH in $TARGET — nothing to do"
+  exit 0
+fi
 
 # Rewrite: drop any PATH line inside the environment block, then insert the stock
 # PATH (which leads with ~/.local/bin) right after `environment {`.
-TMP="${CFG}.tmp.$$"
+TMP="${TARGET}.tmp.$$"
 awk -v path="$STOCK_PATH" '
   /^environment[[:space:]]*\{[[:space:]]*$/ { in_env=1; print; print "    PATH \"" path "\""; next }
   in_env && /^[[:space:]]*\}/ { in_env=0; print; next }
   in_env && $1 == "PATH" { next }   # stale/legacy PATH line — replaced by the stock one
   { print }
-' "$CFG" > "$TMP"
+' "$TARGET" > "$TMP"
 
-if cmp -s "$CFG" "$TMP"; then
+if cmp -s "$TARGET" "$TMP"; then
   rm -f "$TMP"
-  echo "hexciri-migrate-niri-path: no change needed for $CFG"
+  echo "hexciri-migrate-niri-path: no change needed for $TARGET"
   exit 0
 fi
 
-cp -f "$CFG" "$CFG.bak.$(date +%s)"
-mv -f "$TMP" "$CFG"
-echo "hexciri-migrate-niri-path: injected ~/.local/bin PATH into $CFG (backup saved)"
+cp -f "$TARGET" "$TARGET.bak.$(date +%s)"
+mv -f "$TMP" "$TARGET"
+echo "hexciri-migrate-niri-path: injected ~/.local/bin PATH into $TARGET (backup saved)"
 
 # Reload the compositor so the fix is live immediately (no-op outside a session)
-if [[ -S /run/user/$(id -u)/$(ls /run/user/$(id -u)/ 2>/dev/null | rg '^niri\..+\.sock$' | head -1 || true) ]] &&
-   [[ "$("$HOME/.local/opt/hexciri/bin/hexciri-session" wm 2>/dev/null)" == "niri" ]]; then
-  niri msg action load-config-file >/dev/null 2>&1 && echo "hexciri-migrate-niri-path: niri config reloaded"
-fi
+"$HOME/.local/opt/hexciri/bin/hexciri-compositor" load-config >/dev/null 2>&1 \
+  && echo "hexciri-migrate-niri-path: compositor config reloaded"

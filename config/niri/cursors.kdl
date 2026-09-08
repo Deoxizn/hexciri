@@ -1,0 +1,14 @@
+// ──────────────────────────────────────────────
+// Niri fragment: Cursor
+// Included by config.kdl. Your cursor look is a per-machine choice (theme
+// name, size), never theme-owned — keep it here, separate from looknfeel.kdl.
+// Per-machine: the dev box uses "Future-dark-cursors", the laptop uses the
+// distro default "breeze_cursors". Change the xcursor-theme line to match
+// what's actually installed on this machine (fc-list | grep -i cursor).
+// ──────────────────────────────────────────────
+cursor {
+    xcursor-theme "breeze_cursors"    // Cursor theme name (change to match your installed theme)
+    xcursor-size 24                   // Cursor size in pixels
+    hide-when-typing                  // Hide cursor while typing
+    hide-after-inactive-ms 1000       // Hide cursor after 1 second of inactivity
+}

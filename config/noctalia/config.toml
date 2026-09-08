@@ -105,7 +105,7 @@ enabled = true
 
 # ──────────────────────────────────────────────
 # Theming (custom palette generated from the hexciri theme on every
-# theme switch by hooks/theme-set.d/noctalia-sync.sh)
+# theme switch by hooks/theme-set.d/hexciri-sync.sh)
 # ──────────────────────────────────────────────
 
 [theme]

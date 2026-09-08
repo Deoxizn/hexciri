@@ -159,6 +159,19 @@ sync. There are no other theme hooks that touch WM configs today.
 Result: a theme switch re-skins whatever WMs are installed, so booting Sway after configuring Niri
 still shows correct borders/colors; nothing is niri-only in the theme layer anymore.
 
+**Look-nfeel ownership note (GROUNDED on this machine)**: Noctalia v5 ships its own
+`/usr/share/noctalia/assets/templates/niri/` → `apply.sh` writes
+`~/.config/niri/noctalia.kdl` (a fragment with `layout { focus-ring/border/tab-indicator/
+insert-hint }` + `recent-windows` colors from the active palette) and injects
+`include "noctalia.kdl"` into `config.kdl`. That fragment is exactly our `looknfeel.kdl`
+surface. The current hook *regex-patches* the monolithic `config.kdl` instead (the old path);
+once we split, the clean design is: hexciri writes `looknfeel.kdl` (its borders/theme) and
+either defers the layout-color fragment to Noctalia's own `noctalia.kdl` include or owns it
+itself — but NOT both patch the same file. Decision: hexciri keeps a `binds { }`-free
+`looknfeel.kdl`, and the hook's step-2 writes that file (per ± theme); Noctalia's own
+`noctalia.kdl` include coexists since niri merges `layout` sections (border/`focus-ring`
+presence in an include needs no `on` quirk because we always write explicit `on`/`off`).
+
 ## 6. Keybinds intent schema (the "one set, every WM" guarantee)
 
 The distro promise: **muscle memory survives a WM switch.** So keybinds are not maintained per-WM —
@@ -170,54 +183,68 @@ emulated copy/paste/cut (explicitly WM-agnostic), and ~34 layout/window/workspac
 WM-specific ones). The spawn/wtype binds are already 100% portable — they execute commands, nothing
 else. Only the layout binds need mapping.
 
-New layout:
+New layout (implemented):
 
 ```
 config/keybinds/
-    intents.toml        # THE schema — one row per intent (key combo → intent name)
-    niri.kdl            # renderer: intent → niri action
-    hyprland.conf       # renderer: intent → hyprland action
-    sway.conf           # renderer: intent → sway action
-    mango.kdl           # renderer: intent → mango action
+    intents.toml            # single source of truth:
+                            #   [keys]   combo → intent name (79 binds, incl. 9 personal XF86)
+                            #   [intents] per-intent: spawn command, or per-WM action columns
+                            #               for the ~34 layout binds
+bin/hexciri-keybinds        # searchable reference (fuzzel) — reads intents.toml, shows the
+                            # active WM's resolved action per combo
+bin/hexciri-keybinds-render # [wm] → renders that WM's keybind block to stdout; used by the
+                            # theme hook / session-set to write the live config. Multi-word spawns
+                            # go through shlex so `sh -c 'grim -g "$(slurp)"…'` stays intact.
 ```
 
-`intents.toml` is the single source of truth (keys fixed once):
-
-```toml
-mod = "Mod"
-Mod+Return      = "terminal"
-Mod+Space       = "launcher"
-Mod+Alt+Space   = "root-menu"
-Mod+Q           = "close-window"
-Mod+Left        = "focus-left"
-Mod+Ctrl+Left   = "move-left"
-Mod+1           = "ws-1"
-Mod+Shift+1     = "move-to-ws-1"
-Mod+Print       = "screenshot"
-Mod+Ctrl+Print  = "screenshot-clipboard"
-Mod+Escape      = "power-menu"
-Mod+Ctrl+L      = "lock"
-# …rest of the 34 layout binds
-```
-
-Renders via `bin/hexciri-keybinds` (today: parses `config.kdl`; after: renders the active WM's
-block from intents + bind spawns, and is also the readable reference). Mapping table per intent:
+Combo→intent is fixed once in `intents.toml`; each renderer is a tiny sshlex-aware emitter in
+`hexciri-keybinds-render` (niri KDL, hyprland `bind =`, sway `bindsym`, mango `bind=`). Mapping
+table per intent (stored as per-WM columns on each `[intents]` row):
 
 | intent | niri | hyprland | sway | mango |
 |--------|------|----------|------|-------|
 | close-window | `close-window` | `closeactive` | `kill` | `close` |
-| focus-left | `focus-column-left` | `movefocus l` | `focus left` | like niri |
-| move-left | `move-column-left` | `movewindow l` | `move left` | like niri |
-| ws-1 | `focus-workspace 1` | `workspace 1` | `workspace 1` | like niri |
-| move-to-ws-1 | `move-column-to-workspace 1` | `movetoworkspace 1` | `move workspace 1` | like niri |
-| screenshot | `screenshot` | `grim` + `wl-copy` | `grim` + `wl-copy` | `grim` |
-| overview | `toggle-overview` | `overview:toggle` | (n/a) | (n/a) |
+| focus-left | `focus-column-left` | `movefocus l` | `focus left` | `focus left` |
+| move-left | `move-column-left` | `movewindow l` | `move left` | `move left` |
+| ws-1 | `focus-workspace 1` | `workspace 1` | `workspace 1` | `tag 1` |
+| move-to-ws-1 | `move-column-to-workspace 1` | `movetoworkspace 1` | `move container to workspace 1` | `move-to-tag 1` |
+| screenshot | `screenshot` | (via hexciri-compositor) | (via hexciri-compositor) | (via hexciri-compositor) |
+| overview | `toggle-overview` | `overview:toggle` | (See NOTE) | (See NOTE) |
 
 True semantic gaps exist (niri's column consume/expel, tabbed columns, preset column width map to
 sibling actions in hyprland, a loaded question in sway/mango). Policy: map to a best-effort sibling
-where the WM has one, otherwise drop the intent with a note visible in `hexciri-keybinds`. The
-intents that exist are uniform everywhere; the WM-only ones are explicitly documented per row — not
-silently missing.
+where the WM has one, otherwise the row carries a `(See NOTE)` marker and is documented per row — not
+silently missing. The spawned/intent rows are uniform everywhere.
+
+The rendered block is validated: `niri validate` passes on the spliced output (chain: strip the
+live `binds {}` block, splice the render, validate — clean).
+
+#### Output shape: one file vs per-concern split
+
+Every WM gets hexciri's homegrown split (`include` / `source=` / `conf.d` glob) — no one-size big-file.
+Each concern maps 1:1 to a hexciri responsibility so the theme hook and carry-over touch exactly one
+fragment, never a whole-config splice:
+
+| concern | source of truth | niri | hyprland | sway |
+|---|---|---|---|---|
+| monitors/scale/layout | carried over from installed config (verbatim replace) | `niri/monitors.kdl` | `hypr/conf/monitors.conf` | `sway/conf.d/monitors.conf` |
+| keybinds | `intents.toml` renderer | `niri/keybinds.kdl` (`bind {}` block) | `hypr/conf/keybinds.conf` | `sway/conf.d/keybinds.conf` |
+| look & feel (borders, blur, shadow) | theme hook `hexciri-sync.sh` | `niri/looknfeel.kdl` | `hypr/conf/looknfeel.conf` | `sway/conf.d/looknfeel.conf` |
+| window rules / float | §5 intents + carry-over | `niri/window-rules.kdl` | `hypr/conf/window-rules.conf` | `sway/conf.d/window-rules.conf` |
+| environment vars | hexciri (static) | `niri/env.kdl` | `hypr/conf/env.conf` | `sway/conf.d/env.conf` |
+| autostart / noctalia | hexciri (static) | `niri/autostart.kdl` | `hypr/conf/autostart.conf` | `sway/conf.d/autostart.conf` |
+
+- **niri**: `include "file.kdl"` (top-level only, since 25.11 — we ship 26.04). Sections merge from
+  includes; `window-rule`/`output`/`workspace` are multipart and insert *as-is*. Two niri quirks:
+  (1) `layout { border {} }` written in an *included* file does nothing without an explicit `on`
+  (historical: presence enabled the border only in the main file) — our `looknfeel.kdl` always writes
+  `on`/`off` explicitly; (2) multipart sections never merge, so carry-over for `monitors.kdl` is a
+  **whole-file replace**, never an append. All fragments are watched → theme changes hot-reload.
+- **hyprland**: ecosystem norm `source = ~/.config/hypr/conf/*.conf`. Split for real; carry-over is a file drop.
+- **sway**: `include ~/.config/sway/conf.d/*` (glob). Same split; carry-over is a file drop.
+- **mango**: single `config.conf`; not yet confirmed it accepts `source=`/`include` — decide at the
+  v1.5 experimental row (default: single-file rendered sections like niri).
 
 The WM config deploy (section 4) and the theme hook (section 5) both source the rendered keybind
 block, so install, theme-set, and `hexciri-sync` all regenerate the same single-source-of-truth

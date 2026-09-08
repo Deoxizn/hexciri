@@ -1,0 +1,115 @@
+#!/bin/bash
+# hexciri:summary=Render the keybind block for a WM from config/keybinds/intents.toml
+# hexciri:args=[wm] — default: active WM (hexciri-session wm). Prints config block to stdout.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INTENTS="$SCRIPT_DIR/../config/keybinds/intents.toml"
+WM="${1:-$("$SCRIPT_DIR/hexciri-session" wm)}"
+
+case "$WM" in
+  niri|hyprland|sway|mango) ;;
+  *) echo "hexciri-keybinds-render: unknown WM '$WM'" >&2; exit 1 ;;
+esac
+
+python3 - "$INTENTS" "$WM" <<'EOF'
+import sys
+try:
+    import shlex
+    import tomllib
+except ImportError:
+    sys.stderr.write("python3 too old: shlex/tomllib unavailable\n"); sys.exit(1)
+
+INTENTS_FILE, WM = sys.argv[1], sys.argv[2]
+cfg = tomllib.load(open(INTENTS_FILE, "rb"))
+keys, intents = cfg["keys"], cfg["intents"]
+
+# ── per-WM syntax helpers ────────────────────────────────────────────────
+def key_niri(c):
+    return c.replace("Mod", "Mod")
+
+def key_hyp(c):
+    # niri key names -> xkb names hyprland expects
+    m = {"Print":"Print","Return":"Return","grave":"grave","BracketLeft":"BracketLeft",
+         "BracketRight":"BracketRight","Comma":"comma","Escape":"Escape","Space":"space"}
+    parts = c.split("+")
+    out = []
+    for p in parts:
+        p = m.get(p, p)
+        if p == "Mod":
+            out.append("SUPER")
+        elif p in ("Ctrl","Shift","Alt"):
+            out.append(p.upper())
+        else:
+            out.append(p)
+    return ", ".join(out)
+
+def key_sway(c):
+    # niri -> sway keycode names
+    m = {"Print":"Print","Return":"Return","grave":"grave","BracketLeft":"bracketleft",
+         "BracketRight":"bracketright","Comma":"comma","Escape":"Escape","Space":"space"}
+    parts = c.split("+")
+    mods=""
+    sub=""
+    for p in parts:
+        if p == "Mod": mods += "Mod4+"
+        elif p == "Ctrl": mods += "Ctrl+"
+        elif p == "Shift": mods += "Shift+"
+        elif p == "Alt": mods += "Mod1+"
+        else: sub = m.get(p, p)
+    return f"{mods}{sub}"
+
+def key_mango(c):
+    # mango uses hyprland-ish binding with applesauce syntax
+    return c.replace("Mod", "Mod")
+
+lines = []
+if WM in ("niri",):
+    # Standalone fragment for config/niri/keybinds.kdl — the whole `binds {}`
+    # block lives here, included by the entry config.kdl. niri MERGES binds
+    # sections across includes, so this stays the single block.
+    lines.append("// Keybinds — rendered from config/keybinds/intents.toml")
+    lines.append("// Niri has NO default binds — this block defines ALL of them.")
+    lines.append("// \"Mod\" = Super key. Regenerate with: hexciri-keybinds-render niri > config/niri/keybinds.kdl")
+    lines.append("binds {")
+    for combo in sorted(keys, key=lambda c: (len(c), c)):
+        s = intents[keys[combo]]
+        if s["type"] == "spawn":
+            args = " ".join('"{}"'.format(a.replace('"', r'\"')) for a in shlex.split(s["command"]))
+            lines.append(f"    {key_niri(combo)} {{ spawn {args}; }}")
+        else:
+            action = s.get(WM, s.get("niri"))
+            lines.append(f"    {key_niri(combo)} {{ {action}; }}")
+    lines.append("}")
+elif WM == "hyprland":
+    lines.append("# Keybinds — rendered from config/keybinds/intents.toml")
+    lines.append("$mainMod = SUPER")
+    for combo in sorted(keys, key=lambda c: (len(c), c)):
+        s = intents[keys[combo]]
+        if s["type"] == "spawn":
+            lines.append(f"bind = {key_hyp(combo)}, exec, {s['command']}")
+        else:
+            action = s.get(WM, s.get("niri", "(See NOTE)"))
+            lines.append(f"bind = {key_hyp(combo)}, {action}")
+elif WM == "sway":
+    lines.append("# Keybinds — rendered from config/keybinds/intents.toml")
+    for combo in sorted(keys, key=lambda c: (len(c), c)):
+        s = intents[keys[combo]]
+        if s["type"] == "spawn":
+            lines.append(f"bindsym {key_sway(combo)} exec {s['command']}")
+        else:
+            action = s.get(WM, s.get("niri", "(See NOTE)"))
+            lines.append(f"bindsym {key_sway(combo)} {action}")
+elif WM == "mango":
+    lines.append("# Keybinds — rendered from config/keybinds/intents.toml (experimental)")
+    for combo in sorted(keys, key=lambda c: (len(c), c)):
+        s = intents[keys[combo]]
+        if s["type"] == "spawn":
+            lines.append(f"bind={key_mango(combo)}=exec {s['command']}")
+        else:
+            action = s.get(WM, s.get("niri", "(See NOTE)"))
+            lines.append(f"bind={key_mango(combo)}={action}")
+
+print("\n".join(lines))
+EOF
+exit 0

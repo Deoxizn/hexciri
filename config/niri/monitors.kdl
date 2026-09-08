@@ -1,0 +1,33 @@
+// ──────────────────────────────────────────────
+// Niri fragment: Monitors / outputs
+// Included by config.kdl. This is the ONLY fragment the WM-swap carry-over
+// replaces whole-hog (your installed monitor layout overwrites hexciri's copy),
+// so keep it to pure `output { }` blocks and comments about them.
+//
+// The active block below is the default for this machine's laptop panel
+// (eDP-1, 2880x1920@120, 2x HiDPI — the same default omarchy ships). On a
+// desktop, or if your panel has a different name, run:  niri msg outputs
+// then rename the output line and set your values. Commented alternatives
+// show the options; uncomment the lines you want.
+// Per-output settings you can set:
+//   mode "2880x1920@120"        // WIDTHxHEIGHT@REFRESH — resolution + refresh rate
+//   scale 2                     // UI scaling: 1.0 native, 1.25/1.5/2 for sharper/fractional
+//   variable-refresh-rate       // VRR: match refresh to content (reduces tearing)
+//   position x=0 y=0            // Arrange multi-monitor layout
+//   transform "90"              // Rotation: "90"/"180"/"270" (e.g. portrait second screen)
+// ──────────────────────────────────────────────
+output "eDP-1" {
+    scale 2
+    // mode "2880x1920@120"
+    // variable-refresh-rate
+    // position x=0 y=0
+}
+// Desktop / second monitor example (commented — enable by editing):
+// output "DP-1" {
+//     scale 1
+//     // mode "2560x1440@144"
+//     // variable-refresh-rate
+// }
+// Save → niri live-reloads (or: niri msg action load-config-file). Scale is
+// fractional; VRR only kicks in if the panel + cable support it.
+// ──────────────────────────────────────────────

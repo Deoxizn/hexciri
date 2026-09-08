@@ -1,0 +1,391 @@
+#!/usr/bin/env python3
+# hexciri-migrate-niri-split — convert a legacy monolithic niri config.kdl into the
+# per-concern fragment layout shipped by hexciri (env/monitors/looknfeel/
+# window-rules/keybinds/autostart.kdl + entry config.kdl).
+#
+# usage: hexciri-migrate-niri-split [path-to-config.kdl] [-o OUT_DIR] [--yes]
+#   default input : ~/.config/niri/config.kdl
+#   default output: same directory as the input, next to it
+#
+# WHAT IT DOES
+#   Reads the existing (pre-split) config.kdl, backs it up as
+#   config.kdl.pre-split.<ts>, then writes the fragment files the repo layout
+#   expects — using the repo defaults as the base and carrying over the
+#   machine's custom bits (monitors, personal window rules, personal keybinds,
+#   input/touchpad, border/focus-ring state, autostart, env). Runs only once:
+#   if the config already includes the fragments it exits with "already split".
+#
+# DESIGN NOTES
+#   - Fragments that the monolith fully owns (monitors, window-rules,
+#     autostart) are carried over verbatim; if the monolith has none for a
+#     concern, the repo default fragment is written instead.
+#   - The entry config.kdl and env/looknfeel start from the repo defaults so
+#     the result looks like the canonical split; user sections whose content
+#     differs from the default replace their default counterpart.
+#   - keybinds.kdl is re-rendered from config/keybinds/intents.toml (the single
+#     source of truth), then the monolith's binds that the schema does not yet
+#     cover are appended as a "personal carry-over" block so nothing is lost.
+#   - In the monolith, layout { } mixes static + theme parts. Static children
+#     (gaps, widths, struts) stay in the entry; theme children (focus-ring,
+#     border, shadow, tab-indicator, insert-hint) go to looknfeel.kdl.
+#   - Skip messages via --yes are for non-interactive runs; the script never
+#     overwrites an existing fragment unless it is byte-identical to what it
+#     would write (idempotent).
+
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_DIR = SCRIPT_DIR.parent
+DEFAULT_DIR = Path(__file__).resolve().parent.parent / "config" / "niri"
+
+# ── arg parsing ─────────────────────────────────────────────────────────
+def usage():
+    print(__doc__, file=sys.stderr)
+    sys.exit(2)
+
+args = [a for a in sys.argv[1:] if a != "--yes"]
+yes = "--yes" in sys.argv[1:]
+out_dir = None
+in_path = None
+i = 0
+while i < len(args):
+    if args[i] == "-o":
+        i += 1
+        if i >= len(args): usage()
+        out_dir = Path(args[i])
+    elif args[i].startswith("-") and args[i] != "-":
+        usage()
+    else:
+        in_path = Path(args[i])
+    i += 1
+
+INPUT = in_path or Path.home() / ".config" / "niri" / "config.kdl"
+
+if not INPUT.is_file():
+    print(f"hexciri-migrate-niri-split: no config at {INPUT}", file=sys.stderr)
+    sys.exit(1)
+
+OUT = out_dir or INPUT.parent
+OUT.mkdir(parents=True, exist_ok=True)
+
+text = INPUT.read_text()
+
+# Already split? (a split entry includes at least one fragment)
+if re.search(r'^\s*include\s+"\S+\.kdl"', text, re.MULTILINE):
+    print(f"hexciri-migrate-niri-split: {INPUT} already split — nothing to do")
+    sys.exit(0)
+
+# ── a small KDL-aware top-level scanner ────────────────────────────────
+# Returns a list of dicts:
+#   {kind:'block', name, args, body}   name [args] { body }
+#   {kind:'stmt',  name, args}         name args…
+def scan(s):
+    out, n, i, L = [], len(s), 0, len(s)
+    while i < L:
+        c = s[i]
+        if c.isspace():
+            i += 1; continue
+        if s.startswith("//", i):
+            while i < L and s[i] != "\n": i += 1
+            continue
+        # read the node name ([A-Za-z0-9\-_+])
+        m = re.match(r"[A-Za-z0-9\-_+]+", s[i:])
+        if not m:
+            i += 1; continue
+        name = m.group(0)
+        i += len(name)
+        # read args up to `{` or newline (KDL: a node is either a block or a stmt)
+        argbuf, has_brace, in_q, qi = [], False, False, 0
+        while i < L:
+            c = s[i]
+            if in_q:
+                argbuf.append(c)
+                if c == '"' and (qi == 0 or s[i-1] != "\\"):
+                    in_q = False
+                i += 1; continue
+            if c == '"':
+                in_q, qi = True, 0
+                argbuf.append(c); i += 1; continue
+            if c == "{":
+                has_brace = True; i += 1; break
+            if c == "\n":
+                break
+            if c == "//":  # trailing comment before `{`? treat as comment end
+                if has_brace == False:
+                    while i < L and s[i] != "\n": i += 1
+                break
+            argbuf.append(c); i += 1
+        args = "".join(argbuf).strip()
+        if has_brace:
+            # find matching close brace at depth 1, respecting strings
+            depth, body, q, start = 1, [], False, i
+            while i < L:
+                c = s[i]
+                if q:
+                    body.append(c)
+                    if c == '"' and s[i-1] != "\\": q = False
+                    i += 1; continue
+                if c == '"':
+                    q, body = True, body + [c]; i += 1; continue
+                if c == "{":
+                    body, depth = body + [c], depth + 1; i += 1; continue
+                if c == "}":
+                    depth -= 1
+                    if depth == 0: i += 1; break
+                    body.append(c); i += 1; continue
+                body.append(c); i += 1
+            out.append({"kind": "block", "name": name, "args": args, "body": "".join(body)})
+        else:
+            out.append({"kind": "stmt", "name": name, "args": args})
+    return out
+
+# ── helpers ─────────────────────────────────────────────────────────────
+def strip_comments(s):
+    out, i, L, q = [], 0, len(s), False
+    while i < L:
+        if q:
+            if s[i] == '"' and s[i-1] != "\\": q = False
+            out.append(s[i]); i += 1; continue
+        if s[i] == '"': q = True; out.append(s[i]); i += 1; continue
+        if s.startswith("//", i):
+            while i < L and s[i] != "\n": i += 1
+            continue
+        out.append(s[i]); i += 1
+    return "".join(out)
+
+def norm(s):
+    return re.sub(r"\s+", " ", strip_comments(s)).strip()
+
+def block_text(b):
+    """'name { body-rendered }' exactly as the repo default would print it."""
+    args = b["args"].strip()
+    args = f" {args}" if args else ""
+    inner = b["body"].strip()
+    if not inner:
+        return f"{b['name']}{args} {{ }}"
+    return f"{b['name']}{args} {{\n    {inner}\n}}"
+
+def stmt_text(b):
+    args = b["args"].strip()
+    return f"{b['name']}{(' ' + args) if args else ''}"
+
+def node_text(b):
+    return block_text(b) if b["kind"] == "block" else stmt_text(b)
+
+def load_default(name):
+    p = DEFAULT_DIR / name
+    return p.read_text() if p.is_file() else None
+
+def prompt(msg):
+    if yes:
+        print(msg)
+        return True
+    try:
+        return input(f"{msg} [y/N] ").strip().lower() in ("y", "yes")
+    except EOFError:
+        return False
+
+nodes = scan(text)
+
+# ── bucket the top-level nodes ──────────────────────────────────────────
+env_nodes    = [b for b in nodes if b["name"] == "environment"]
+output_nodes = [b for b in nodes if b["name"] == "output"]
+wr_nodes     = [b for b in nodes if b["name"] in ("workspace", "window-rule", "layer-rule")]
+binds_nodes  = [b for b in nodes if b["name"] == "binds"]
+autostart    = [b for b in nodes if b["name"] in ("spawn-at-startup", "spawn-sh-at-startup")]
+statics      = [b for b in nodes if b["name"] in ("cursor", "input", "xwayland-satellite",
+                "clipboard", "config-notification", "prefer-no-csd")]
+statics_args = [b for b in nodes if b["name"] in ("screenshot-path",)]
+anim_nodes   = [b for b in nodes if b["name"] == "animations"]
+overview     = [b for b in nodes if b["name"] == "overview"]
+blur_nodes   = [b for b in nodes if b["name"] == "blur"]
+hotkey_nodes = [b for b in nodes if b["name"] == "hotkey-overlay"]
+layout_nodes = [b for b in nodes if b["name"] == "layout"]
+
+# theme vs static children of layout
+THEME_CHILDREN = {"focus-ring", "border", "shadow", "tab-indicator", "insert-hint", "recent-windows"}
+layout_theme, layout_static = [], []
+for lb in layout_nodes:
+    for ch in scan(lb["body"]):
+        if ch["name"] in THEME_CHILDREN:
+            layout_theme.append(ch)
+        elif ch["name"].startswith(" "):
+            pass
+        else:
+            layout_static.append(ch)
+
+# ── 1. env.kdl ──────────────────────────────────────────────────────────
+if env_nodes:
+    body_lines = [ln.strip() for ln in env_nodes[0]["body"].split("\n")]
+    body_lines = [ln for ln in body_lines if ln]
+    env_body = "\n    " + "\n    ".join(body_lines) + "\n" if body_lines else ""
+    env_out = "environment {\n" + env_body + "}\n"
+else:
+    env_out = load_default("env.kdl") or ""
+
+# ── 2. monitors.kdl ─────────────────────────────────────────────────────
+if output_nodes:
+    monitor_text = "\n\n".join(block_text(b) for b in output_nodes)
+    monitors_out = "// Output / Monitor config — carried over from your pre-split config.kdl.\n" \
+                   "// Per-machine: this is the machine's actual screens. Edit freely.\n\n" + monitor_text + "\n"
+else:
+    monitors_out = load_default("monitors.kdl") or ""
+
+# ── 3. looknfeel.kdl ───────────────────────────────────────────────────
+d = load_default("looknfeel.kdl") or ""
+# Replace the default border/focus-ring/shadow children with the monolith's if present.
+look_parts = []
+if layout_theme:
+    theme_block = "layout {\n" + "\n\n".join("    " + node_text(c).replace("\n", "\n    ") for c in layout_theme) + "\n}"
+    look_parts.append(theme_block)
+if blur_nodes:
+    look_parts.append("\n\n".join(block_text(b) for b in blur_nodes))
+if hotkey_nodes:
+    look_parts.append("\n\n".join(block_text(b) for b in hotkey_nodes))
+if look_parts:
+    look_out = "// Look & feel (theme-owned) — borders, focus ring, shadow, blur, hotkey overlay.\n" \
+               "// Carried over from your pre-split config.kdl.\n\n" + "\n\n".join(look_parts) + "\n"
+else:
+    look_out = d
+
+# ── 4. window-rules.kdl ─────────────────────────────────────────────────
+if wr_nodes:
+    wr_text = "\n\n".join(block_text(b) for b in wr_nodes)
+    window_out = "// Window rules — carried over from your pre-split config.kdl.\n" \
+                 "// workspace names + window-rule + layer-rule. Personal rules kept intact.\n\n" + wr_text + "\n"
+else:
+    window_out = load_default("window-rules.kdl") or ""
+
+# ── 5. autostart.kdl ────────────────────────────────────────────────────
+if autostart:
+    auto = "\n".join(f"{b['name']}{(' ' + b['args'].strip()) if b['args'].strip() else ''}" for b in autostart)
+    autostart_out = "// Autostart — carried over from your pre-split config.kdl.\n" \
+                    "// Programs that start automatically when you log in.\n\n" + auto + "\n"
+else:
+    autostart_out = load_default("autostart.kdl") or ""
+
+# ── 6. keybinds.kdl (schema + personal carry-over) ──────────────────────
+renderer = SCRIPT_DIR / "hexciri-keybinds-render"
+try:
+    proc = subprocess.run([str(renderer), "niri"], capture_output=True, text=True, check=True)
+    schema_binds = proc.stdout
+except Exception as e:
+    print(f"hexciri-migrate-niri-split: could not render schema binds ({e})", file=sys.stderr)
+    schema_binds = ""
+
+def bind_action_key(b):
+    """A comparable 'what does it do' key: bare action word, or the program a
+    spawn launches. Lets carry-over keep binds whose NAME is in the schema but
+    whose action differs on this machine (e.g. laptop vs dev webapp launcher)."""
+    text = b["body"] if b["kind"] == "block" else b["args"]
+    m = re.search(r'(?:spawn|spawn-sh)\s+"([^"]+)"', strip_comments(text))
+    if m:
+        return m.group(1)
+    m = re.search(r"^\s*([\w\.\-]+)", strip_comments(text))
+    if m:
+        return m.group(1)
+    return text.strip()
+
+covered = set()
+for c in re.finditer(r"^\s+(\S+)\s*\{([^\n}]*)\}", schema_binds, re.MULTILINE):
+    name, inner = c.group(1), c.group(2)
+    mk = re.search(r'(?:spawn|spawn-sh)\s+"([^"]+)"', inner)
+    if mk:
+        covered.add((name, mk.group(1)))
+    else:
+        mk = re.search(r"([\w\.\-]+)", inner)
+        covered.add((name, mk.group(1) if mk else ""))
+
+uncovered = []
+for bb in binds_nodes:
+    for bias in scan(bb["body"]):
+        if bias["kind"] not in ("stmt", "block"): continue
+        name = bias["name"].strip()
+        if not name:
+            continue
+        if (name, bind_action_key(bias)) in covered:
+            continue
+        if bias["kind"] == "block":
+            uncovered.append(f"    {node_text(bias)}")
+        else:
+            uncovered.append(f"    {stmt_text(bias)}")
+if schema_binds:
+    kb = schema_binds.rstrip("\n") + "\n"
+    if uncovered:
+        kb += "\n// Personal carry-over (not yet in config/keybinds/intents.toml) —\n" \
+              "// port these into the schema and regenerate, or leave them here.\n" \
+              + "\n".join(uncovered) + "\n"
+    keybinds_out = kb
+else:
+    kb_raw = "\n".join(f"binds {{\n{b['body']}\n}}" for b in binds_nodes)
+    keybinds_out = kb_raw + "\n"
+
+# ── 7. entry config.kdl ─────────────────────────────────────────────────
+entry_def = load_default("config.kdl") or ""
+# Start from default; replace matched sections with user versions.
+default_text = entry_def
+sections_kept = {b["name"] for b in statics + statics_args + anim_nodes + overview}
+for b in (statics + statics_args + anim_nodes + overview):
+    pat = re.compile(r"^\s*" + re.escape(b["name"]) + r"(?:\s*\{[^\n]*(?:\n.*?)*?^\})", re.MULTILINE)
+    if not pat.search(default_text):
+        continue
+    repl = block_text(b)
+    if norm(block_text(b)) != norm(pat.search(default_text).group(0)):
+        default_text = pat.sub(repl, default_text, count=1)
+# layout: carry over the monolith's static children only if they differ from
+# the default layout block (theme children already went to looknfeel.kdl).
+if layout_static:
+    user_layout_block = (
+        "layout {\n"
+        + "\n\n".join("    " + node_text(c).replace("\n", "\n    ") for c in layout_static)
+        + "\n}"
+    )
+    def_layout = re.search(r"(?mi)^layout\s*\{[^\n]*(?:\n(?!#).*?)*?^\}", default_text)
+    if def_layout:
+        old = def_layout.group(0)
+        if norm(user_layout_block) != norm(old):
+            # keep the default's comments, but swap in user's child values line-by-line
+            default_text = default_text.replace(old, user_layout_block, 1)
+#            else: keep default layout untouched
+entry_out = default_text
+
+# ── write: back up the monolith first, then fragments (idempotent) ─────
+FILES = {
+    "env.kdl": env_out,
+    "monitors.kdl": monitors_out,
+    "looknfeel.kdl": look_out,
+    "window-rules.kdl": window_out,
+    "keybinds.kdl": keybinds_out,
+    "autostart.kdl": autostart_out,
+    "config.kdl": entry_out,
+}
+if str(INPUT.resolve()) in {str((OUT / n).resolve()) for n in FILES}:
+    bak = INPUT.with_name(f"{INPUT.name}.pre-split.{int(time.time())}")
+    import shutil
+    shutil.copy2(INPUT, bak)
+    print(f"hexciri-migrate-niri-split: backed up monolith → {bak}")
+
+skipped = []
+for name, content in FILES.items():
+    target = OUT / name
+    if str(target.resolve()) == str(INPUT.resolve()):
+        target.write_text(content)
+        print(f"hexciri-migrate-niri-split: wrote {target} (entry, replacing monolith)")
+        continue
+    if target.is_file() and target.read_text() != content:
+        print(f"hexciri-migrate-niri-split: {target} exists and differs — will leave it untouched (skipped).", file=sys.stderr)
+        skipped.append(target)
+        continue
+    if target.is_file() and target.read_text() == content:
+        print(f"hexciri-migrate-niri-split: {target} already matches — no change")
+        continue
+    target.write_text(content)
+    print(f"hexciri-migrate-niri-split: wrote {target}")
+
+# ── validation hint ─────────────────────────────────────────────────────
+print("hexciri-migrate-niri-split: done. Validate with:  niri validate -c <out>/config.kdl")

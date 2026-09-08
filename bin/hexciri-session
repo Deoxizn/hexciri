@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Resolve the active WM and shell (niri|hyprland|sway|mango × noctalia|caelestia|none)
+# hexciri:summary=Resolve the active WM and shell (shipped set: niri|hyprland|sway|mango × noctalia|none; caelestia tolerated when detected)
 # hexciri-session [wm|shell|combo]
 #
 # Authoritative source: ~/.config/hexciri/{wm,shell} (one word each, set by
