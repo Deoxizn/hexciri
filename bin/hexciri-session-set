@@ -73,7 +73,7 @@ pkg_install() {
     niri)     sudo pacman -S --needed --noconfirm niri 2>/dev/null || true ;;
     hyprland) sudo pacman -S --needed --noconfirm hyprland hyprlock 2>/dev/null || true ;;
     sway)     sudo pacman -S --needed --noconfirm sway swaylock 2>/dev/null || true ;;
-    mango)    echo "mango is experimental — install the WM package yourself, session dispatch will follow" ;;
+    mango)    echo "mango is experimental — install it yourself (yay -S mangowm); session dispatch will follow" ;;
   esac
 }
 if [[ $want_wm != "$cur_wm" ]]; then
@@ -100,8 +100,9 @@ fi
 # ── step 4: carry-over the INSTALLED config into the target WM ──
 # Monitors: the only whole-file surface. Read the CURRENT WM's live output layout
 # (the machine's real scale/positions — never the repo template) and write it
-# into the target WM's monitor fragment. Keybinds are NOT copied: the intent
-# schema (§6) is the carry-over; step 6 re-renders them for the new WM.
+# into the target WM's monitor fragment. env/input/autostart go through
+# hexciri-config-render (rendered from the live niri fragments). Keybinds are
+# NOT copied: the intent schema (§6) is the carry-over; step 6 re-renders them.
 monitors_from=""
 case "$cur_wm" in
   niri)
@@ -207,7 +208,85 @@ PYEOF
   esac
 fi
 
-# ── step 5: write the authoritative selector ──
+# ── step 4b: env/input/autostart — rendered from the live niri fragments ──
+# hexciri-config-render resolves the LIVE ~/.config/niri/<concern>.kdl (machine
+# reality, per design §7) and emits the target WM's syntax. Each concern lands
+# in its own fragment so the theme hook / carry-over keeps touching one file.
+if [[ $want_wm != "$cur_wm" ]] && [[ -x $SCRIPT_DIR/hexciri-config-render ]]; then
+  case "$want_wm" in
+    niri)
+      # niri → niri is a no-op (the live fragments ARE the source).
+      ;;
+    hyprland)
+      hypr_dir="$XDG_CONFIG_HOME/hypr/conf"
+      mkdir -p "$hypr_dir"
+      for concern in env input autostart; do
+        "$SCRIPT_DIR/hexciri-config-render" "$concern" hyprland > "$hypr_dir/$concern.lua"
+      done
+      # base Lua entry: require() the rendered concerns; monitors/keybinds are
+      # written by their own steps. Only touch it on first creation.
+      hypr_main="$XDG_CONFIG_HOME/hypr/hyprland.lua"
+      if [[ ! -f $hypr_main ]]; then
+        printf '%s\n' \
+          '-- hexciri — generated on WM swap; carry-over from niri.' \
+          'hl.env(...) is emitted by env.lua below.' \
+          '' \
+          'require("hypr.conf.env")' \
+          'require("hypr.conf.input")' \
+          'require("hypr.conf.autostart")' \
+          > "$hypr_main"
+      fi
+      echo "carried env/input/autostart → $hypr_dir/{env,input,autostart}.lua"
+      ;;
+    sway)
+      # env has no sway directive — the writer drops KEY=VALUE into
+      # ~/.config/environment.d/10-hexciri.conf (imported by the session command)
+      envdest="$XDG_CONFIG_HOME/environment.d/10-hexciri.conf"
+      envsrc="$(mktemp)"
+      mkdir -p "$(dirname "$envdest")"
+      "$SCRIPT_DIR/hexciri-config-render" env niri > "$envsrc"
+      python3 - "$envsrc" "$envdest" <<'PYEOF'
+import re, sys
+src, dst = sys.argv[1], sys.argv[2]
+raw = open(src).read()
+lines = []
+for m in re.finditer(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s+"([^"]*)"', raw, re.M):
+    k, v = m.group(1), m.group(2)
+    if k == "XDG_CURRENT_DESKTOP":
+        v = "sway"
+    lines.append(f"{k}={v}")
+open(dst, "w").write("# hexciri — environment + sway (rendered from niri env fragment on WM swap)\n" +
+                     "\n".join(lines) + "\n")
+print(f"env → {dst} (environment.d)")
+PYEOF
+      rm -f "$envsrc"
+      sway_dir="$XDG_CONFIG_HOME/sway/conf.d"
+      mkdir -p "$sway_dir"
+      "$SCRIPT_DIR/hexciri-config-render" input sway  > "$sway_dir/input.conf"
+      "$SCRIPT_DIR/hexciri-config-render" autostart sway > "$sway_dir/autostart.conf"
+      echo "carried env/input/autostart → sway (environment.d + conf.d)"
+      ;;
+    mango)
+      mango_dir="$XDG_CONFIG_HOME/mango"
+      mkdir -p "$mango_dir"
+      # mango supports source= (docs: "Sub-Configuration") — keep the concern
+      # split like the other targets; entry file sources the fragments.
+      "$SCRIPT_DIR/hexciri-config-render" env mango       > "$mango_dir/env.conf"
+      "$SCRIPT_DIR/hexciri-config-render" input mango     > "$mango_dir/input.conf"
+      "$SCRIPT_DIR/hexciri-config-render" autostart mango > "$mango_dir/autostart.conf"
+      mango_main="$mango_dir/config.conf"
+      if [[ ! -f $mango_main ]]; then
+        printf '%s\n' \
+          '# hexciri — generated on WM swap; carry-over from niri (v1.5 experimental).' \
+          'source-optional=~/.config/mango/env.conf' \
+          'source-optional=~/.config/mango/input.conf' \
+          'source-optional=~/.config/mango/autostart.conf' \
+          > "$mango_main"
+      fi
+      echo "carried env/input/autostart → $mango_dir/{env,input,autostart}.conf"
+      ;;
+  esac
+fi
 mkdir -p "$SEL_DIR"
 echo "$want_wm"    > "$SEL_DIR/wm"
 echo "$want_shell" > "$SEL_DIR/shell"

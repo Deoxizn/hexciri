@@ -104,50 +104,50 @@ webapp-messenger = { type = "spawn", command = "hexciri-launch-or-focus-webapp m
 webapp-gemini = { type = "spawn", command = "hexciri-launch-or-focus-webapp gemini https://gemini.google.com/app" }
 webapp-photopea = { type = "spawn", command = "hexciri-launch-or-focus-webapp photopea https://photopea.com" }
 
-close-window = { type = "action", niri = "close-window", hyprland = "closeactive", sway = "kill", mango = "close" }
+close-window = { type = "action", niri = "close-window", hyprland = "closeactive", sway = "kill", mango = "killclient" }
 
-focus-left   = { type = "action", niri = "focus-column-left", hyprland = "movefocus l", sway = "focus left", mango = "focus left" }
-focus-right  = { type = "action", niri = "focus-column-right", hyprland = "movefocus r", sway = "focus right", mango = "focus right" }
-focus-down   = { type = "action", niri = "focus-window-down", hyprland = "movefocus d", sway = "focus down", mango = "focus down" }
-focus-up     = { type = "action", niri = "focus-window-up", hyprland = "movefocus u", sway = "focus up", mango = "focus up" }
+focus-left   = { type = "action", niri = "focus-column-left", hyprland = "movefocus l", sway = "focus left", mango = "(See NOTE — dwl stacks, no directional focus)" }
+focus-right  = { type = "action", niri = "focus-column-right", hyprland = "movefocus r", sway = "focus right", mango = "(See NOTE — dwl stacks, no directional focus)" }
+focus-down   = { type = "action", niri = "focus-window-down", hyprland = "movefocus d", sway = "focus down", mango = "(See NOTE — dwl stacks, no directional focus)" }
+focus-up     = { type = "action", niri = "focus-window-up", hyprland = "movefocus u", sway = "focus up", mango = "(See NOTE — dwl stacks, no directional focus)" }
 
-move-left  = { type = "action", niri = "move-column-left", hyprland = "movewindow l", sway = "move left", mango = "move left" }
-move-right = { type = "action", niri = "move-column-right", hyprland = "movewindow r", sway = "move right", mango = "move right" }
-move-down  = { type = "action", niri = "move-window-down", hyprland = "movewindow d", sway = "move down", mango = "move down" }
-move-up    = { type = "action", niri = "move-window-up", hyprland = "movewindow u", sway = "move up", mango = "move up" }
+move-left  = { type = "action", niri = "move-column-left", hyprland = "movewindow l", sway = "move left", mango = "(See NOTE — no directional move)" }
+move-right = { type = "action", niri = "move-column-right", hyprland = "movewindow r", sway = "move right", mango = "(See NOTE — no directional move)" }
+move-down  = { type = "action", niri = "move-window-down", hyprland = "movewindow d", sway = "move down", mango = "(See NOTE — no directional move)" }
+move-up    = { type = "action", niri = "move-window-up", hyprland = "movewindow u", sway = "move up", mango = "(See NOTE — no directional move)" }
 
-ws-1 = { type = "action", niri = "focus-workspace 1", hyprland = "workspace 1", sway = "workspace 1", mango = "tag 1" }
-ws-2 = { type = "action", niri = "focus-workspace 2", hyprland = "workspace 2", sway = "workspace 2", mango = "tag 2" }
-ws-3 = { type = "action", niri = "focus-workspace 3", hyprland = "workspace 3", sway = "workspace 3", mango = "tag 3" }
-ws-4 = { type = "action", niri = "focus-workspace 4", hyprland = "workspace 4", sway = "workspace 4", mango = "tag 4" }
-ws-5 = { type = "action", niri = "focus-workspace 5", hyprland = "workspace 5", sway = "workspace 5", mango = "tag 5" }
-ws-6 = { type = "action", niri = "focus-workspace 6", hyprland = "workspace 6", sway = "workspace 6", mango = "tag 6" }
-ws-7 = { type = "action", niri = "focus-workspace 7", hyprland = "workspace 7", sway = "workspace 7", mango = "tag 7" }
-ws-8 = { type = "action", niri = "focus-workspace 8", hyprland = "workspace 8", sway = "workspace 8", mango = "tag 8" }
-ws-9 = { type = "action", niri = "focus-workspace 9", hyprland = "workspace 9", sway = "workspace 9", mango = "tag 9" }
-ws-browser = { type = "action", niri = "focus-workspace \"browser\"", hyprland = "workspace name:browser", sway = "workspace browser", mango = "tag 10" }
+ws-1 = { type = "action", niri = "focus-workspace 1", hyprland = "workspace 1", sway = "workspace 1", mango = "view 1" }
+ws-2 = { type = "action", niri = "focus-workspace 2", hyprland = "workspace 2", sway = "workspace 2", mango = "view 2" }
+ws-3 = { type = "action", niri = "focus-workspace 3", hyprland = "workspace 3", sway = "workspace 3", mango = "view 3" }
+ws-4 = { type = "action", niri = "focus-workspace 4", hyprland = "workspace 4", sway = "workspace 4", mango = "view 4" }
+ws-5 = { type = "action", niri = "focus-workspace 5", hyprland = "workspace 5", sway = "workspace 5", mango = "view 5" }
+ws-6 = { type = "action", niri = "focus-workspace 6", hyprland = "workspace 6", sway = "workspace 6", mango = "view 6" }
+ws-7 = { type = "action", niri = "focus-workspace 7", hyprland = "workspace 7", sway = "workspace 7", mango = "view 7" }
+ws-8 = { type = "action", niri = "focus-workspace 8", hyprland = "workspace 8", sway = "workspace 8", mango = "view 8" }
+ws-9 = { type = "action", niri = "focus-workspace 9", hyprland = "workspace 9", sway = "workspace 9", mango = "view 9" }
+ws-browser = { type = "action", niri = "focus-workspace \"browser\"", hyprland = "workspace name:browser", sway = "workspace browser", mango = "view 10" }
 
-move-to-ws-1 = { type = "action", niri = "move-column-to-workspace 1", hyprland = "movetoworkspace 1", sway = "move container to workspace 1", mango = "move-to-tag 1" }
-move-to-ws-2 = { type = "action", niri = "move-column-to-workspace 2", hyprland = "movetoworkspace 2", sway = "move container to workspace 2", mango = "move-to-tag 2" }
-move-to-ws-3 = { type = "action", niri = "move-column-to-workspace 3", hyprland = "movetoworkspace 3", sway = "move container to workspace 3", mango = "move-to-tag 3" }
-move-to-ws-4 = { type = "action", niri = "move-column-to-workspace 4", hyprland = "movetoworkspace 4", sway = "move container to workspace 4", mango = "move-to-tag 4" }
-move-to-ws-5 = { type = "action", niri = "move-column-to-workspace 5", hyprland = "movetoworkspace 5", sway = "move container to workspace 5", mango = "move-to-tag 5" }
-move-to-ws-6 = { type = "action", niri = "move-column-to-workspace 6", hyprland = "movetoworkspace 6", sway = "move container to workspace 6", mango = "move-to-tag 6" }
-move-to-ws-7 = { type = "action", niri = "move-column-to-workspace 7", hyprland = "movetoworkspace 7", sway = "move container to workspace 7", mango = "move-to-tag 7" }
-move-to-ws-8 = { type = "action", niri = "move-column-to-workspace 8", hyprland = "movetoworkspace 8", sway = "move container to workspace 8", mango = "move-to-tag 8" }
-move-to-ws-9 = { type = "action", niri = "move-column-to-workspace 9", hyprland = "movetoworkspace 9", sway = "move container to workspace 9", mango = "move-to-tag 9" }
-move-to-ws-browser = { type = "action", niri = "move-column-to-workspace \"browser\"", hyprland = "movetoworkspacesilent name:browser", sway = "move container to workspace browser", mango = "move-to-tag 10" }
+move-to-ws-1 = { type = "action", niri = "move-column-to-workspace 1", hyprland = "movetoworkspace 1", sway = "move container to workspace 1", mango = "tag 1" }
+move-to-ws-2 = { type = "action", niri = "move-column-to-workspace 2", hyprland = "movetoworkspace 2", sway = "move container to workspace 2", mango = "tag 2" }
+move-to-ws-3 = { type = "action", niri = "move-column-to-workspace 3", hyprland = "movetoworkspace 3", sway = "move container to workspace 3", mango = "tag 3" }
+move-to-ws-4 = { type = "action", niri = "move-column-to-workspace 4", hyprland = "movetoworkspace 4", sway = "move container to workspace 4", mango = "tag 4" }
+move-to-ws-5 = { type = "action", niri = "move-column-to-workspace 5", hyprland = "movetoworkspace 5", sway = "move container to workspace 5", mango = "tag 5" }
+move-to-ws-6 = { type = "action", niri = "move-column-to-workspace 6", hyprland = "movetoworkspace 6", sway = "move container to workspace 6", mango = "tag 6" }
+move-to-ws-7 = { type = "action", niri = "move-column-to-workspace 7", hyprland = "movetoworkspace 7", sway = "move container to workspace 7", mango = "tag 7" }
+move-to-ws-8 = { type = "action", niri = "move-column-to-workspace 8", hyprland = "movetoworkspace 8", sway = "move container to workspace 8", mango = "tag 8" }
+move-to-ws-9 = { type = "action", niri = "move-column-to-workspace 9", hyprland = "movetoworkspace 9", sway = "move container to workspace 9", mango = "tag 9" }
+move-to-ws-browser = { type = "action", niri = "move-column-to-workspace \"browser\"", hyprland = "movetoworkspacesilent name:browser", sway = "move container to workspace browser", mango = "tag 10" }
 
-ws-prev = { type = "action", niri = "focus-workspace-down", hyprland = "workspace e+1", sway = "workspace prev", mango = "workspace-prev" }
-ws-next = { type = "action", niri = "focus-workspace-up", hyprland = "workspace e-1", sway = "workspace next", mango = "workspace-next" }
+ws-prev = { type = "action", niri = "focus-workspace-down", hyprland = "workspace e+1", sway = "workspace prev", mango = "viewtoleft" }
+ws-next = { type = "action", niri = "focus-workspace-up", hyprland = "workspace e-1", sway = "workspace next", mango = "viewtoright" }
 
-maximize-column = { type = "action", niri = "maximize-column", hyprland = "togglefloating maximize", sway = "fullscreen toggle", mango = "maximize" }
-fullscreen   = { type = "action", niri = "fullscreen-window", hyprland = "fullscreen", sway = "fullscreen toggle", mango = "fullscreen" }
+maximize-column = { type = "action", niri = "maximize-column", hyprland = "togglefloating maximize", sway = "fullscreen toggle", mango = "(See NOTE)" }
+fullscreen   = { type = "action", niri = "fullscreen-window", hyprland = "fullscreen", sway = "fullscreen toggle", mango = "(See NOTE — fakefullscreen via windowrule)" }
 switch-column-width = { type = "action", niri = "switch-preset-column-width", hyprland = "resizeactive", sway = "(See NOTE)", mango = "(See NOTE)" }
 tabbed-column = { type = "action", niri = "toggle-column-tabbed-display", hyprland = "togglegroup", sway = "(See NOTE)", mango = "(See NOTE)" }
-toggle-float = { type = "action", niri = "toggle-window-floating", hyprland = "togglefloating", sway = "floating toggle", mango = "toggle-floating" }
-focus-float = { type = "action", niri = "focus-floating", hyprland = "focusmode floating", sway = "focus floating", mango = "focus-floating" }
-focus-tiling = { type = "action", niri = "focus-tiling", hyprland = "focusmode tiling", sway = "focus tiling", mango = "focus-tiling" }
+toggle-float = { type = "action", niri = "toggle-window-floating", hyprland = "togglefloating", sway = "floating toggle", mango = "(See NOTE — float via windowrule open_as_floating)" }
+focus-float = { type = "action", niri = "focus-floating", hyprland = "focusmode floating", sway = "focus floating", mango = "(See NOTE)" }
+focus-tiling = { type = "action", niri = "focus-tiling", hyprland = "focusmode tiling", sway = "focus tiling", mango = "(See NOTE)" }
 consume-into-column = { type = "action", niri = "consume-window-into-column", hyprland = "swapwindow l", sway = "(See NOTE)", mango = "(See NOTE)" }
 expel-from-column = { type = "action", niri = "expel-window-from-column", hyprland = "swapwindow r", sway = "(See NOTE)", mango = "(See NOTE)" }
 

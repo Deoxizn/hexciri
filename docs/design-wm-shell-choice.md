@@ -138,6 +138,15 @@ the remuxes (stellarchy/noctarchy) are rejected — it's multi-gigabyte bloat th
 on the system and needs a reboot to flip. The selector and the theme hook render only what's actually
 installed; a WM is present on disk only while it's the current (or an actively-chosen) session.
 
+**The Remove path completes that loop** (`bin/hexciri-session-remove`, System > Session > Remove):
+the switch installs the new WM but never removed the old one, so niri→hyprland→sway stacked all
+three resident. The drop script lists installed (non-current, non-running) WMs and, per choice:
+back-ups `~/.config/<wm>` into `.config/hexciri-backup/<ts>-<wm>`, removes the WM's packages
+(`pacman -Rns`, WM-specific set only — shared deps like xwayland-satellite are pruned as orphans,
+never yanked from under another WM), and deletes `/usr/share/wayland-sessions/<wm>.desktop`. It
+refuses the active selector WM and the currently-running compositor. The menu gained a Session
+submenu (`hexciri-session-menu`): `Install >` (the existing picker) and `Remove >` (installed list).
+
 ## 5. Theme hook generalization (`noctalia-sync.sh` → `hexciri-sync.sh`)
 
 Today `hooks/theme-set.d/noctalia-sync.sh` does: (1) write the Noctalia palette JSON, (2) patch
@@ -229,11 +238,11 @@ fragment, never a whole-config splice:
 | concern | source of truth | niri | hyprland | sway |
 |---|---|---|---|---|
 | monitors/scale/layout | carried over from installed config (verbatim replace) | `niri/monitors.kdl` | `hypr/conf/monitors.conf` | `sway/conf.d/monitors.conf` |
-| keybinds | `intents.toml` renderer | `niri/keybinds.kdl` (`bind {}` block) | `hypr/conf/keybinds.conf` | `sway/conf.d/keybinds.conf` |
+| keybinds | `intents.toml` renderer | `niri/keybinds.kdl` (`bind {}` block) | `hypr/conf/keybinds.lua` | `sway/conf.d/keybinds.conf` |
 | look & feel (borders, blur, shadow) | theme hook `hexciri-sync.sh` | `niri/looknfeel.kdl` | `hypr/conf/looknfeel.conf` | `sway/conf.d/looknfeel.conf` |
 | window rules / float | §5 intents + carry-over | `niri/window-rules.kdl` | `hypr/conf/window-rules.conf` | `sway/conf.d/window-rules.conf` |
-| environment vars | hexciri (static) | `niri/env.kdl` | `hypr/conf/env.conf` | `sway/conf.d/env.conf` |
-| autostart / noctalia | hexciri (static) | `niri/autostart.kdl` | `hypr/conf/autostart.conf` | `sway/conf.d/autostart.conf` |
+| environment vars | `config-render` (from niri `env.kdl`) | `niri/env.kdl` | `hypr/conf/env.lua` (`hl.env`) | `sway → ~/.config/environment.d/10-hexciri.conf` |
+| autostart / noctalia | `config-render` (from niri `autostart.kdl`) | `niri/autostart.kdl` | `hypr/conf/autostart.lua` (`hl.on`) | `sway/conf.d/autostart.conf` (`exec`), mango `autostart.conf` (`exec-once`) |
 
 - **niri**: `include "file.kdl"` (top-level only, since 25.11 — we ship 26.04). Sections merge from
   includes; `window-rule`/`output`/`workspace` are multipart and insert *as-is*. Two niri quirks:
@@ -241,10 +250,9 @@ fragment, never a whole-config splice:
   (historical: presence enabled the border only in the main file) — our `looknfeel.kdl` always writes
   `on`/`off` explicitly; (2) multipart sections never merge, so carry-over for `monitors.kdl` is a
   **whole-file replace**, never an append. All fragments are watched → theme changes hot-reload.
-- **hyprland**: ecosystem norm `source = ~/.config/hypr/conf/*.conf`. Split for real; carry-over is a file drop.
-- **sway**: `include ~/.config/sway/conf.d/*` (glob). Same split; carry-over is a file drop.
-- **mango**: single `config.conf`; not yet confirmed it accepts `source=`/`include` — decide at the
-  v1.5 experimental row (default: single-file rendered sections like niri).
+- **hyprland**: **Lua** (0.56+; hyprlang `.conf` deprecated → dropped ~0.57). `require("hypr.conf.<concern>")` from `hyprland.lua`; each concern is a `.lua` fragment (`hl.env`/`hl.config`/`hl.on`). Split for real; carry-over is a renderer drop (`hexciri-config-render`).
+- **sway**: `include ~/.config/sway/conf.d/*` (glob). Same split; carry-over is a renderer drop. Env has NO sway directive — lands in `~/.config/environment.d/10-hexciri.conf`.
+- **mango**: single `config.conf` supports `source=`/`source-optional=` (docs: sub-configuration) — same concern-split as the rest; `env.conf`/`input.conf`/`autostart.conf` sourced from the entry file.
 
 The WM config deploy (section 4) and the theme hook (section 5) both source the rendered keybind
 block, so install, theme-set, and `hexciri-sync` all regenerate the same single-source-of-truth

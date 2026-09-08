@@ -60,8 +60,17 @@ def key_sway(c):
     return f"{mods}{sub}"
 
 def key_mango(c):
-    # mango uses hyprland-ish binding with applesauce syntax
-    return c.replace("Mod", "Mod")
+    # niri names -> mango: SUPER/CTRL/ALT/SHIFT (dwl-style tags via 'view'/'tag').
+    # Modifier names packed with '+', then comma separates the key name.
+    m = {"Mod": "SUPER", "Ctrl": "CTRL", "Alt": "ALT", "Shift": "SHIFT"}
+    mods, key = [], ""
+    for p in c.split("+"):
+        p = m.get(p, p)
+        if p in ("SUPER", "CTRL", "ALT", "SHIFT"):
+            mods.append(p)
+        else:
+            key = p
+    return ("+".join(mods) if mods else "NONE") + "," + key
 
 lines = []
 if WM in ("niri",):
@@ -102,13 +111,28 @@ elif WM == "sway":
             lines.append(f"bindsym {key_sway(combo)} {action}")
 elif WM == "mango":
     lines.append("# Keybinds — rendered from config/keybinds/intents.toml (experimental)")
+    lines.append("# bind=[flags]MODS,KEY,COMMAND,PARAMS — dwl heritage: view X = show tag X,")
+    lines.append("# tag X = send client to tag X (see mango skill; key names from wev).")
     for combo in sorted(keys, key=lambda c: (len(c), c)):
         s = intents[keys[combo]]
         if s["type"] == "spawn":
-            lines.append(f"bind={key_mango(combo)}=exec {s['command']}")
+            # spawn has no pipe/&& support — route shell metachar commands to spawn_shell
+            cmd = s["command"]
+            if any(ch in cmd for ch in "|&<>\"'$()`"):
+                lines.append(f"bind={key_mango(combo)},spawn_shell,{cmd}")
+            else:
+                lines.append(f"bind={key_mango(combo)},spawn,{cmd}")
         else:
             action = s.get(WM, s.get("niri", "(See NOTE)"))
-            lines.append(f"bind={key_mango(combo)}={action}")
+            if action.startswith("("):
+                # placeholder like "(See NOTE)" / "(grim via …)" — cannot bind a comment
+                lines.append(f"# {combo} → {action}")
+                continue
+            act, _, params = action.partition(" ")
+            if params:
+                lines.append(f"bind={key_mango(combo)},{act},{params}")
+            else:
+                lines.append(f"bind={key_mango(combo)},{act}")
 
 print("\n".join(lines))
 EOF

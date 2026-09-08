@@ -1,0 +1,96 @@
+#!/bin/bash
+# hexciri:summary=Remove an installed (non-current) WM: packages, config dir, session file
+# hexciri:args=[wm] — picker of installed WMs if omitted. Refuses the active/current WM.
+# hexciri:requires-sudo=true
+#
+# The complement of hexciri-session-set: switching installs the target WM but never
+# removes the old one, so niri→hyprland→sway leaves all three resident (packages,
+# ~/.config/<wm>/, /usr/share/wayland-sessions/<wm>.desktop). This is the drop path —
+# design docs/design-wm-shell-choice.md §4 "non-goal" (a WM is present only while
+# current/actively-chosen; everything else is garbage to be cleaned by the user).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+SESSION_DIR="/usr/share/wayland-sessions"
+BAK_ROOT="$HOME/.config/hexciri-backup"
+
+known_wm() { case "${1:-}" in niri|hyprland|sway|mango) return 0;; *) return 1;; esac; }
+
+# Per-WM packages. Shared deps (xwayland-satellite, wlroots…) are NOT listed:
+# pacman -Rns prunes orphaned dependencies, so removing only the WM's own packages
+# is enough and never takes another installed WM's shared stack with it.
+wm_pkgs() {
+  case "$1" in
+    niri)     echo niri ;;
+    hyprland) echo "hyprland hyprlock" ;;
+    sway)     echo "sway swaylock" ;;
+    mango)    echo mangowm ;;  # AUR: yay -S mangowm
+  esac
+}
+
+running_wm() {
+  for wm in niri Hyprland sway mango MangoWM; do
+    pgrep -x "$wm" >/dev/null 2>&1 && { case "$wm" in Hyprland) echo hyprland;; MangoWM) echo mango;; *) echo "$wm";; esac; return 0; }
+  done
+  return 1
+}
+
+cur_wm="$("$SCRIPT_DIR/hexciri-session" wm)"
+run_wm="$(running_wm || true)"
+
+# installed = a config dir exists under ~/.config/<wm> (the only honest marker the
+# selector can't fake; package presence is second-best — some WMs are AUR-built).
+installed=()
+for wm in niri hyprland sway mango; do
+  if [[ -d $XDG_CONFIG_HOME/$wm || -f $SESSION_DIR/$wm.desktop || -f /usr/bin/$wm ]]; then
+    installed+=("$wm")
+  fi
+done
+if ((${#installed[@]} == 0)); then
+  echo "no installed WMs found"
+  exit 0
+fi
+
+want="${1:-}"
+if [[ -z $want ]]; then
+  want=$(
+    printf '%s\n' "${installed[@]}" |
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt="Remove WM: " --lines="${#installed[@]}"
+  ) || exit 0
+fi
+known_wm "$want" || { echo "unknown WM: $want (niri|hyprland|sway|mango)" >&2; exit 1; }
+
+if [[ $want == "$cur_wm" || $want == "$run_wm" ]]; then
+  echo "refusing to remove '$want' — it is the active/current WM (boot into another first)"
+  exit 1
+fi
+
+echo "removing $want:"
+echo "  packages: $(wm_pkgs "$want")"
+echo "  config:   $XDG_CONFIG_HOME/$want"
+echo "  session:  $SESSION_DIR/$want.desktop"
+
+# back up the config dir (hexciri convention: backup-before-destroy) then remove
+if [[ -d $XDG_CONFIG_HOME/$want ]]; then
+  bak="$BAK_ROOT/$(date +%Y%m%d%H%M%S)-$want"
+  mkdir -p "$BAK_ROOT"
+  mv "$XDG_CONFIG_HOME/$want" "$bak"
+  echo "  backed up config → $bak"
+fi
+
+# remove only the packages actually installed (AUR builds may be absent)
+inst_pkgs=""
+for p in $(wm_pkgs "$want"); do
+  pacman -Qq "$p" >/dev/null 2>&1 && inst_pkgs="$inst_pkgs $p"
+done
+if [[ -n $inst_pkgs ]]; then
+  # shellcheck disable=SC2086
+  sudo pacman -Rns --noconfirm $inst_pkgs 2>/dev/null || true
+fi
+
+sudo rm -f "$SESSION_DIR/$want.desktop" 2>/dev/null || true
+
+echo
+echo "$want removed (packages + config + session file)."
+echo "It can be re-added anytime: System > Session > Install, or hexciri-session-set wm=$want"

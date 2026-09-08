@@ -124,7 +124,7 @@ if $SYSTEM_ONLY; then
     niri)     WM_PKGS=(niri xwayland-satellite) ;;
     hyprland) WM_PKGS=(hyprland hyprlock xwayland-satellite) ;;
     sway)     WM_PKGS=(sway swaylock) ;;
-    mango)    WM_PKGS=(mango) ;;
+    mango)    WM_PKGS=(mangowm) ;;  # AUR (yay -S mangowm); pacman skips unless built
   esac
   case "$SHELL_PICK" in
     noctalia) SHELL_PKGS=(noctalia) ;;
