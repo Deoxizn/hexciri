@@ -156,9 +156,14 @@ if $LEGACY; then
   # 580xx is EOL in the official repos (the 590 release dropped below Turing →
   # 580xx left `extra` for AUR); cachyos still publishes the prebuilt split, so
   # direct-fetch it — local-file pacman -U, no repo adopted. Resolve the helper
-  # explicitly: during install this runs inside the chroot where PATH is minimal.
-  local cacbin cand
+  # explicitly: during install this runs inside the chroot where PATH is minimal
+  # and the helper only exists right here (git clone at /root/hexciri-install/bin),
+  # so the sibling binary is the first candidate; deployed machines fall through
+  # to the installed bin dirs.
+  local cacbin cand selfdir
+  selfdir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
   for cand in \
+    "${selfdir:/nonexistent}/hexciri-cachyos" \
     "${HEXCIRI_BIN_DIR:+$HEXCIRI_BIN_DIR/hexciri-cachyos}" \
     "$HOME/.local/opt/hexciri/bin/hexciri-cachyos" \
     "$HOME/.local/bin/hexciri-cachyos" \

@@ -70,8 +70,10 @@ fi
   # minimal PATH (menu/launcher/dbus) that lacks ~/.local/bin, so resolve the
   # deployed bin dir explicitly.
   resolve_cac() {
-    local cand
+    local cand selfdir
+    selfdir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
     for cand in \
+      "${selfdir:/nonexistent}/hexciri-cachyos" \
       "${HEXCIRI_BIN_DIR:+$HEXCIRI_BIN_DIR/hexciri-cachyos}" \
       "$HOME/.local/opt/hexciri/bin/hexciri-cachyos" \
       "$HOME/.local/bin/hexciri-cachyos" \

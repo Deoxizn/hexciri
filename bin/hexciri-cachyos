@@ -85,6 +85,45 @@ latest_headers() { # $1 pkg -> URL of the matching -headers build
 }
 
 installed_ver() { pacman -Q "$1" 2>/dev/null | awk '{print $2}' || true; }
+
+# yay treats any foreign package that also exists in the AUR (linux-cachyos-*,
+# the broken nvidia-580xx split) as AUR-managed and re-stages a makepkg build
+# on every `yay -Sua`. These packages are deliberately mirror-fetched, never
+# AUR-built, so persist IgnorePkg in the caller's yay config. This is THE one
+# choke point: the Kernel menu, System ▸ Update, and fresh installs all route
+# through hexciri-cachyos, so stamping here covers every path on every machine.
+# Idempotent; leaves the rest of the yay config untouched. paru users add the
+# same names to /etc/paru.conf (IgnorePkg = ...).
+ignore_aur() { # package...
+  local u uh f body existing all json
+  [[ $# -gt 0 ]] || return 0
+  u="${SUDO_USER:-$USER}" ; uh="$(getent passwd "$u" 2>/dev/null | cut -d: -f6)"
+  [[ -n $uh ]] || uh="${HOME:-/root}"; [[ -d $uh ]] || return 0
+  f="$uh/.config/yay/config.json"
+  mkdir -p "${f%/*}"
+  [[ -f $f ]] || printf '{}\n' > "$f"
+  body="$(<"$f")"
+  existing="$(sed -n 's/.*"IgnorePkg"[^:]*:[^[]*\[\([^]]*\)\].*/\1/p' "$f" \
+    | head -n1 | tr -d '",')"
+  existing="${existing#"${existing%%[![:space:]]*}"}"   # trim leading ws
+  existing="${existing%"${existing##*[![:space:]]}"}"   # trim trailing ws
+  all="$(for p in $existing "$@"; do [[ -n ${p:-} ]] && echo "$p"; done | sort -u)"
+  [[ -z $all ]] && return 0
+  if [[ "$(echo "$all" | tr '\n' ' ' | sed 's/ $//')" == "$existing" ]]; then
+    return 0
+  fi
+  json="$(echo "$all" | awk '{printf "\"%s\",",$0}' | sed 's/,$//')"
+  if [[ -n $body && $body =~ '"IgnorePkg"' ]]; then
+    new="$(sed "s|\(.*\)\"IgnorePkg\"[^:]*:[^[]*\[[^\]]*\]\(.*\)|\1\"IgnorePkg\": [$json]\2|" <<<"$body")"
+  elif [[ $body =~ ^[[:space:]]*\{[[:space:]]*\}[[:space:]]*$ ]]; then
+    new="{ \"IgnorePkg\": [$json] }"
+  else
+    new="$(sed "s|\(.*\)\}[[:space:]]*$|\1, \"IgnorePkg\": [$json] }|" <<<"$body")"
+  fi
+  printf '%s\n' "$new" > "$f"
+  echo "-> yay now ignores $* (mirror-fetched cachyos: no AUR rebuilds)"
+}
+
 url_ver() {
   local f="${1##*/}" # basename, e.g. linux-cachyos-bore-7.2.3-1-x86_64_v4.pkg.tar.zst
   echo "$f" | sed -E 's/^.*-([0-9][^-]*-[0-9][^-]*)-x86_64[^/]*\.pkg\.tar\.zst$/\1/'
@@ -101,6 +140,7 @@ do_install() { # $1 pkg: fetch + pacman -U newest build + headers
   info "tier: $(detect_tier)"
   ensure_key
   ensure_arch
+  ignore_aur "$pkg" "$pkg-headers"
   url="$(latest "$pkg")" || { err "could not resolve newest $pkg (offline?)"; exit 1; }
   # quick skip: the system update re-runs `install` every press; don't re-
   # download ~220MB to reinstall the identical build. A same-version reinstall
@@ -137,6 +177,7 @@ do_nvidia() {
   info "tier: $(detect_tier) (driver fetched from the generic repo: $dir)"
   ensure_key
   ensure_arch
+  ignore_aur "${NVIDIA_580XX_SPLIT[@]}"
   listing="$(${CURL} "$MIRROR/$dir/?C=M&O=D" 2>/dev/null || true)"
   base="$(grep -oE 'href="nvidia-580xx-utils-[0-9][^"]*\.pkg\.tar\.zst"' <<<"$listing" \
     | head -n 1 | sed 's/^href="//; s/"$//' || true)"
