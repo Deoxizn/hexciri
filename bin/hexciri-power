@@ -25,7 +25,7 @@ confirm() {
 do_action() {
     case "$choice" in
         Lock)         hexciri-lock & ;;
-        Logout)       niri msg action quit ;;
+        Logout)       "$SCRIPT_DIR/hexciri-compositor" quit ;;
         Suspend)      systemctl suspend ;;
         Hibernate)    systemctl hibernate ;;
         Reboot)       confirm "Reboot" && systemctl reboot ;;

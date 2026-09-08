@@ -1,0 +1,78 @@
+#!/bin/bash
+# hexciri:summary=Resolve the active WM and shell (niri|hyprland|sway|mango × noctalia|caelestia|none)
+# hexciri-session [wm|shell|combo]
+#
+# Authoritative source: ~/.config/hexciri/{wm,shell} (one word each, set by
+# hexciri-session-set / install.sh). Falls back to live detection (the running
+# compositor, XDG_CURRENT_DESKTOP) so the framework degrades gracefully on a
+# machine where the selector was never written.
+set -euo pipefail
+
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+WM_FILE="$XDG_CONFIG_HOME/hexciri/wm"
+SHELL_FILE="$XDG_CONFIG_HOME/hexciri/shell"
+
+known_wm() {  # knows niri|hyprland|s-way|mango (the shipped set)
+  case "${1:-}" in
+    niri|hyprland|sway|mango) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+detect_running_wm() {
+  for wm in niri Hyprland sway mango MangoWM; do
+    if pgrep -x "$wm" >/dev/null 2>&1; then
+      case "$wm" in
+        Hyprland) echo hyprland ;;
+        MangoWM)  echo mango ;;
+        *)        echo "$wm" ;;
+      esac
+      return 0
+    fi
+  done
+  return 1
+}
+
+wm() {
+  local val=""
+  if [[ -f $WM_FILE ]]; then
+    val="$(tr -d '[:space:]' <"$WM_FILE" 2>/dev/null || true)"
+  fi
+  if [[ -n $val ]] && known_wm "$val"; then
+    echo "$val"
+    return 0
+  fi
+  # fallback: live session
+  val="${XDG_CURRENT_DESKTOP%%[:(]*}"
+  val="${val,,}"
+  if [[ -n $val ]] && known_wm "$val"; then
+    echo "$val"
+    return 0
+  fi
+  if val="$(detect_running_wm)"; then
+    echo "$val"
+    return 0
+  fi
+  echo niri   # overnight default — the flip needs to be deliberate
+}
+
+shell() {
+  local val=""
+  if [[ -f $SHELL_FILE ]]; then
+    val="$(tr -d '[:space:]' <"$SHELL_FILE" 2>/dev/null || true)"
+  fi
+  case "${val:-}" in
+    noctalia|caelestia|none) echo "$val"; return 0 ;;
+  esac
+  # fallback: live detection
+  if pgrep -x noctalia >/dev/null 2>&1; then echo noctalia; return 0; fi
+  if pgrep -x quickshell >/dev/null 2>&1; then echo caelestia; return 0; fi
+  echo none
+}
+
+case "${1:-}" in
+  wm)    wm ;;
+  shell) shell ;;
+  combo) printf '%s+%s\n' "$(wm)" "$(shell)" ;;
+  *)     printf 'Usage: %s [wm|shell|combo]\n' "${0##*/}" >&2; exit 1 ;;
+esac

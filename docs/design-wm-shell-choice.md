@@ -76,7 +76,7 @@ Implementation: tiny `case` on `$WM` inside one script, `$WM` resolved from
 `~/.config/hexciri/wm` (authoritative) with `XDG_CURRENT_DESKTOP` fallback. Config & shell files
 derive from the same values, so nothing else needs to detect anything.
 
-## 4. Install flavor
+## 4. Install flavor AND in-place switch
 
 `install.sh` takes the combo (via flags or `hexciri-session-set`-style config) instead of
 hardcoding niri:
@@ -91,11 +91,52 @@ then:
 - **packages**: `niri` ↔ `hyprland` ↔ `sway` etc.; `caelestia`/quickshell pulled only for that shell.
 - **session file**: `${wm}.desktop` under `/usr/share/wayland-sessions` (already generated like the current `niri.desktop`).
 - **config deploy**: `config/<wm>/{…}` instead of `config/niri/config.kdl` only.
-- **shell startup**: noctalia spawn-at-startup (already in niri config.kdl) is WM-config-dependent —
+- **shell startup**: any spawn-at-startup/autostart that launches noctalia/quickshell is WM-config-dependent —
   the per-WM config carries `spawn-at-startup "noctalia"` only when `shell != none`, and the Caelestia
   variant spawns quickshell instead.
 - **theme hook**: becomes `hexciri-sync.sh` (§5) — shell render (unchanged) plus a per-WM borders +
   keybind block for each installed WM; nothing renders WM config for `shell=none`.
+
+The switch is **not install-only**. A new `bin/hexciri-session-set` (mirror of the existing
+`hexciri-session`-adjacent channel/menu scripts) performs the same steps on a live machine:
+
+```
+$ hexciri-session-set wm=hyprland shell=noctalia   # or from System > Session in the menu
+```
+
+and the **System menu** (which already hosts Config > / Kernel > / Reset defaults) gains a
+`Session >` entry dispatching it. The flow on an existing install:
+
+1. resolve the target combo from args or the menu picker
+2. **pull fresh** (same re-exec guard as the updater funnel — it must not run stale bytes)
+3. install the target WM package(s) (sudo) and generate the `${wm}.desktop` session file
+4. carry-over the *installed* config — read the current WM's live `~/.config/<wm>/…` (not the repo:
+   that's where monitor scale, dual-monitor layout, and personal keybinds actually live) and
+   re-render it into the target WM's config (§7)
+5. write `~/.config/hexciri/wm` + `~/.config/hexciri/shell` (the selector)
+6. regenerate: bin re-links, `hexciri-sync.sh` re-render, keybinds render, `--png` nothing
+7. print "log out and pick <wm> in the session picker" — the current session is left untouched
+
+**Install vs swap are two different moments.** A fresh `install.sh` deploys the pristine *repo
+default* for the chosen combo — full defaults, no carry-over, nothing to migrate. Carry-over exists
+*only* in the swap path (`hexciri-session-set` / System > Session): it reads what the user actually
+runs today (their installed `~/.config`, which legitimately diverges from the repo — see the live
+`output "DP-4" { mode "3840x2160@144" }` vs the repo's commented `eDP-1` template) and transfers it
+into the new WM. The repo file stays the shippable default; the installed file is the machine's
+reality.
+
+Because it shares the funnel's pull-and-re-exec guard and the hook's convergence, **running an
+update already pulls the latest scripts; switching is a deliberate second action the user presses.**
+Existing machines (this DEV machine, the laptop) are never *forced* to a WM — the default stays
+`niri` until someone presses System > Session. A fresh install deploys that WM's pristine defaults;
+a swap re-renders the *installed* config into the new WM. Same command line either way,
+install-time `--wm` is just the non-interactive shortcut (defaults, no carry-over).
+
+**Non-goal: preinstalling every WM.** The switch installs only the target WM (and only the packages
+it needs). Shipping all of niri/hyprland/sway/labwc/mango resident is rejected for the same reason
+the remuxes (stellarchy/noctarchy) are rejected — it's multi-gigabyte bloat that permanently weighs
+on the system and needs a reboot to flip. The selector and the theme hook render only what's actually
+installed; a WM is present on disk only while it's the current (or an actively-chosen) session.
 
 ## 5. Theme hook generalization (`noctalia-sync.sh` → `hexciri-sync.sh`)
 
@@ -182,7 +223,38 @@ The WM config deploy (section 4) and the theme hook (section 5) both source the 
 block, so install, theme-set, and `hexciri-sync` all regenerate the same single-source-of-truth
 binds into every installed WM.
 
-## 7. What changes where (concrete)
+## 7. Carry-over on switch (bindings, monitors, notifications)
+
+The recurring question on a WM switch is "do I lose my customizations?" — answered per surface,
+not hand-waved. **The source is always the installed `~/.config/<current-wm>/…`, never the repo
+template** — that's where the machine's real choices live (metrics, second monitors, personal binds).
+
+- **Keybindings**: the intent schema (§6) *is* the carry-over. The 32 spawn + 4 wtype binds are
+  already WM-agnostic (`spawn "…"` executes a command); only the ~34 layout binds need mapping, and
+  the mapping table renders the same intent into each WM. A personal bind (*only I use this*) is
+  just another row in `intents.toml` — if its *action* has a sibling in the target WM it transfers;
+  if the bind is a `spawn "…"` of a custom command it transfers verbatim; only a genuinely
+  niri-specific semantic (column consume/expel) survives as a best-effort sibling or a visible
+  `# NOTE:`. Never silently dropped.
+- **Monitor settings**: *exactly the case you raised*. The live `output` blocks in the installed
+  `config.kdl` — your `scale` on the laptop panel, your `output "DP-4" { mode "3840x2160@144" }`
+  second monitor, dual-monitor positions, VRR, rotation — are parsed into a **monitor intent** and
+  rendered into the target WM's syntax: `output` blocks under niri/sway, `monitor = NAME,res@rate,pos,scale`
+  lines under hyprland. Per-output scale and mode transfer directly; multi-monitor *positions* map
+  to the closest sibling or land as a `# NOTE:` in the rendered config.
+- **Notifications**: **shell-owned, not WM-owned** — the notification center, OSD placement, panel,
+  and "which notifications appear where" live in Noctalia's config (`noctalia msg panel-toggle
+  notifications`; `config.toml`), *not* in the WM. A WM swap that keeps `shell=noctalia` carries
+  your notification setup across with literally zero work — only the *binds* that open/clear the
+  panel sit in the WM config, and those are spawn binds, already portable. That includes
+  per-window/per-output notification placement: it's a shell choice, so it survives untouched.
+  (Under `shell=none` there's no notification center by design, so nothing carries.)
+
+The global policy matches §6's: **copy where the WM has a sibling, otherwise emit a visible `# NOTE:`
+in the rendered config — never silently drop.** Personal edits transfer; only the semantics the new
+WM simply cannot express are surfaced as notes for the user, never quietly lost.
+
+## 8. What changes where (concrete)
 
 | file | today | after |
 |------|-------|-------|
@@ -202,7 +274,7 @@ Migration: `hexciri-migrate-niri-path` already exists; generalize to "add `~/.lo
 WM config PATH" guarding on whichever WM config exists. No data migration otherwise — the runtime
 stays repo-based regardless of flavor.
 
-## 8. Open questions
+## 9. Open questions
 
 1. Single `session` value vs separate `wm`+`shell` files — separate is more flexible (any WM ×
    any shell later), single is simpler to render in the menu/fastfetch.
@@ -212,12 +284,25 @@ stays repo-based regardless of flavor.
    own `hooks/theme-set.d/caelestia-*.sh` set, driven by the same `shell=caelestia` value. Is that
    a v2 spike or a "hyprland-only postscript"?
 
-## 9. v1.4 scope proposal
+## 10. v1.4 scope proposal
 
-- **v1: niri + hyprland + sway** (all `extra`, rich native IPC, hot reload) — the validated rows.
-- **v1.4 (this doc)**: `hexciri-compositor` shim + install `--wm`/`--shell` flavoring +
-  `hexciri-sync.sh` rename with per-WM theme render + keybinds intent schema. `mango` ships as an
-  **experimental row** (generic-fallback IPC, documented as unstable).
+**DECIDED — approved, in build.** The supported matrix is:
+
+| WM | status | carry-over |
+|----|--------|------------|
+| niri      | **solid (today)** | — |
+| hyprland  | **solid** | monitor + keybind + shell-native |
+| sway      | **solid** | monitor + keybind + shell-native |
+| mango     | **experimental** | generic-fallback IPC, documented as unstable — a real alternative if you like niri |
+| (shell=none) | first-class minimal corner | theme hook skips shell targets |
+
+- **v1.4 (this doc)**: `hexciri-compositor` shim + `hexciri-session` (wm/shell resolution) +
+  `hexciri-session-set` (System > Session) + install `--wm`/`--shell` flavoring +
+  `hexciri-sync.sh` rename with per-WM theme render + keybinds **and monitor** intent schema.
 - **Mango instability is not hexciri's risk**: the fallback row absorbs it. The *real* single
   point of failure is the omarchy kernel (`linux-omarchy-bore` = the only kernel). Hedge it (install
   stock as a boot fallback) rather than abandon it — install.sh already supports `--kernel=stock|lts`.
+
+Approved build order: shim → session resolution → migrate niri callers → keybinds/monitor intent
+schema → `hexciri-session-set` + System > Session → `hexciri-sync.sh` rename → install flavoring →
+validate on niri + converge both machines.

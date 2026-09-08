@@ -43,7 +43,8 @@ cp -f "$CFG" "$CFG.bak.$(date +%s)"
 mv -f "$TMP" "$CFG"
 echo "hexciri-migrate-niri-path: injected ~/.local/bin PATH into $CFG (backup saved)"
 
-# Reload niri so the fix is live immediately (no-op outside a session)
-if [[ -n ${NIRI_SOCKET:-} || -S /run/user/$(id -u)/$(ls /run/user/$(id -u)/ 2>/dev/null | rg '^niri\..+\.sock$' | head -1 || true) ]]; then
+# Reload the compositor so the fix is live immediately (no-op outside a session)
+if [[ -S /run/user/$(id -u)/$(ls /run/user/$(id -u)/ 2>/dev/null | rg '^niri\..+\.sock$' | head -1 || true) ]] &&
+   [[ "$("$HOME/.local/opt/hexciri/bin/hexciri-session" wm 2>/dev/null)" == "niri" ]]; then
   niri msg action load-config-file >/dev/null 2>&1 && echo "hexciri-migrate-niri-path: niri config reloaded"
 fi

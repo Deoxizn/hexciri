@@ -15,13 +15,13 @@ fi
 
 case "$choice" in
   "Reload Niri")
-    niri msg action load-config-file 2>/dev/null && note "Niri config reloaded" || note "Niri reload failed"
+    "$SCRIPT_DIR/hexciri-compositor" load-config >/dev/null 2>&1 && note "Niri config reloaded" || note "Niri reload failed"
     ;;
   "Restart Noctalia")
     pkill -x noctalia 2>/dev/null || true
     sleep 1
     if pgrep -x noctalia >/dev/null; then note "Noctalia still running"; exit 0; fi
-    niri msg action spawn -- noctalia 2>/dev/null && note "Noctalia restarted" || note "Noctalia restart failed"
+    "$SCRIPT_DIR/hexciri-compositor" spawn noctalia >/dev/null 2>&1 && note "Noctalia restarted" || note "Noctalia restart failed"
     ;;
   "Refresh theme")
     theme="$(cat ~/.local/state/hexciri/current/theme.name 2>/dev/null || true)"

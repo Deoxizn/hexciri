@@ -7,6 +7,8 @@
 # KDL block and reload the live config.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 KIND="${1:-}"
 ACTION="${2:-toggle}"
 
@@ -80,7 +82,7 @@ device_off() { [[ -f $STATE_FILE ]] || grep -q "// $KIND disabled (toggle via me
 enable() {
   flip on
   rm -f "$STATE_FILE"
-  niri msg action load-config-file >/dev/null 2>&1 || true
+  "$SCRIPT_DIR/hexciri-compositor" load-config >/dev/null 2>&1 || true
   notify-send -a hexciri "$LABEL enabled" 2>/dev/null || true
 }
 
@@ -88,7 +90,7 @@ disable() {
   flip off
   mkdir -p "$(dirname "$STATE_FILE")"
   touch "$STATE_FILE"
-  niri msg action load-config-file >/dev/null 2>&1 || true
+  "$SCRIPT_DIR/hexciri-compositor" load-config >/dev/null 2>&1 || true
   notify-send -a hexciri "$LABEL disabled" 2>/dev/null || true
 }
 
