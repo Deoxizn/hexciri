@@ -44,10 +44,8 @@
       "format": "\u001b[1m\u001b[38;2;153;206;239m{user-name} @ \u001b[38;2;153;206;239m{host-name}",
     },
     {
-      "type": "command",
-      "key": "SOLO",
-      "keyWidth": 0,
-      "text": "wm=$(cat \"${HEXCIRI_SELECTOR_DIR:-$HOME/.config/hexciri}\"/wm 2>/dev/null || echo niri); sh=$(cat \"${HEXCIRI_SELECTOR_DIR:-$HOME/.config/hexciri}\"/shell 2>/dev/null || echo noctalia); case \"$wm\" in niri|n) wm=\"Niri\";; hyprland|h) wm=\"Hyprland\";; sway|s) wm=\"Sway\";; mango|m) wm=\"Mango\";; esac; [ \"$sh\" = \"none\" ] || sh=\"$(echo \"$sh\" | sed 's/.*/\\u&/')\"; echo -e \"   \\e[38;2;153;206;239m►\\e[0m Hexciri - Arch × $wm × $sh\"",
+      "type": "custom",
+      "format": "   \u001b[38;2;153;206;239m►\u001b[0m Hexciri",
     },
     {
       "type": "break",

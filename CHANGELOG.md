@@ -2,6 +2,9 @@
 
 ## 2026-09-08 — hexciri v1.4
 
+- **fastfetch header is just `► Hexciri`** — the old row hard-coded a `SOLO` module key and printed `► Hexciri - Arch × Niri × Noctalia`. The `- Arch × $wm × $sh` tail was dropped (the WM/shell combo is live config, not branding) and the row became a `custom` module, so the stray `SOLO:` label is gone too.
+- **systemd-boot renders at full console resolution** — hexciri-sync stamps `console-mode max` into `/boot/loader/loader.conf` (preserving a user-set `console-mode` if present). Fixes the ~1 inch tall boot-menu text on high-density/GOP consoles.
+
 - **System ▸ Config ▸ Hexciri Lockscreen sets the panel-off re-arm delay** — new `~/.config/hexciri/lockscreen.conf` (`lock_panel_delay`, seconds; `0` = leave monitors on while locked) is seeded on first open of that Config entry and read fresh on every lock. It's the knob behind the 20s "panels go dark again" default.
 - **Every Update press now re-applies sync state** — the alpm hook only fired when a tracked package (kernel/sddm/…) actually changed, so a no-op update never ran `hexciri-sync` and no `/etc/makepkg.conf.d/hexciri-tuning.conf` appeared on machines that had nothing to upgrade. `hexciri-update` now runs `sudo hexciri-sync` explicitly after the transaction — boot entries, PAM, the gnome-keyring pin, and the per-PC makepkg tuning land on every press. (The hook still covers plain `pacman -Syu`.)
 - **CachyOS install self-heals the package-architecture gate** — v3/v4 tier packages are `x86_64_v3/v4` and `Architecture = auto` resolved to plain `x86_64` here (pacman 7.1), so `pacman -U` rejected them. `hexciri-cachyos` now stamps the explicit pair (`x86_64` + `x86_64_v3/v4`) under `[options]`, keeping official Arch repos valid while accepting tier packages. Idempotent; base-tier machines untouched.

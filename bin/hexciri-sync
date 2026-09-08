@@ -123,7 +123,14 @@ if [[ -d /boot/loader ]]; then
       newest="$(ls -1t /boot/initramfs-*.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null | sed 's/^initramfs-//; s/\.img$//' || echo linux)"
       default="hexciri-$newest.conf"
     fi
-    echo -e "default $default\ntimeout 3" > /boot/loader/loader.conf
+    # console-mode max = highest GOP resolution = smallest/most readable text.
+    # systemd-boot's default can pick a low-res console mode that renders an
+    # ~1 inch tall font on high-density panels. A user-set `console-mode` in the
+    # current loader.conf wins (their override survives regeneration); otherwise
+    # we stamp max.
+    cmode="$(awk '$1=="console-mode"{print $2; exit}' /boot/loader/loader.conf 2>/dev/null)"
+    [[ -n $cmode ]] || cmode="max"
+    echo -e "default $default\ntimeout 3\nconsole-mode $cmode" > /boot/loader/loader.conf
     log "systemd-boot entries regenerated (default: $default)"
   fi
 fi
