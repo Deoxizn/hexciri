@@ -91,7 +91,7 @@ run_via_terminal() { # <key> — do the action in a visible terminal, hold open 
 }
 
 if command -v hexciri-fuzzel &>/dev/null; then
-  choice="$(printf '%s\n' 'Recommended — auto-detect scheduler' 'Stock — linux' 'LTS — linux-lts' 'CachyOS — linux-cachyos (EEVDF)' 'CachyOS BORE — linux-cachyos-bore' 'CachyOS LTS — linux-cachyos-lts' 'Status' | hexciri-fuzzel --dmenu --prompt='Kernel: ' --width=36 --lines=7)" || exit 0
+  choice="$(printf '%s\n' 'Recommended — auto-detect scheduler' 'Stock — linux' 'LTS — linux-lts' 'CachyOS — linux-cachyos (EEVDF)' 'CachyOS BORE — linux-cachyos-bore' 'CachyOS LTS — linux-cachyos-lts' 'Status' | hexciri-fuzzel --dmenu --prompt='Kernel: ' --width=36 --lines=7)" || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
   case "$choice" in
     Recommended*) run_via_terminal scheduler-run ;;
     Stock*)  run_via_terminal stock ;;

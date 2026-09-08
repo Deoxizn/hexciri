@@ -109,8 +109,8 @@ theme changes.
 | files | `strata` | `hexciri-defaults` → Files |
 | editor | `zed` | `hexciri-defaults` → Editor |
 | agent | `opencode` (`Mod`+backtick) | `hexciri-defaults` → Agent |
-| kernel | auto: `linux` (stock), `linux-lts` pinned on legacy NVIDIA | `hexciri-kernel` (custom post-install) |
-| gpu | autodetect (mesa / nvidia-open / 580xx+LTS pin) | `hexciri-gpu` |
+| kernel | auto: `linux` (stock); `--kernel=lts` opts into LTS | `hexciri-kernel` (custom post-install) |
+| gpu | autodetect (mesa/vulkan per vendor; nvidia-open Turing+, 580xx legacy Maxwell/Pascal/Volta) | `hexciri-gpu` |
 | monitors | preconfigured (scale 2) | in your WM's own config |
 | bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |

@@ -60,13 +60,13 @@ menu_via_fuzzel() { # <prompt> -- <items...>
 
 pick_type="${1:-}"
 if [[ -z $pick_type ]]; then
-  pick_type="$(menu_via_fuzzel 'Defaults: ' -- Browser Editor Terminal Shell Files Images Agent)" || exit 0
+  pick_type="$(menu_via_fuzzel 'Defaults: ' -- Browser Editor Terminal Shell Files Images Agent)" || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
 fi
 
 case "${pick_type,,}" in
   browser)
     current="$(get browser)"
-    choice="$(menu_via_fuzzel 'Browser: ' -- "$(available browser "$current" brave-origin brave-origin-beta brave firefox chromium zen)")" || exit 0
+    choice="$(menu_via_fuzzel 'Browser: ' -- "$(available browser "$current" brave-origin brave-origin-beta brave firefox chromium zen)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     if [[ -z $(available browser "$current" brave-origin brave-origin-beta brave firefox chromium zen | grep -F "$choice") && $choice != "$current" ]]; then
       exit 0
     fi
@@ -90,13 +90,13 @@ case "${pick_type,,}" in
     ;;
   terminal)
     current="$(get terminal)"
-    choice="$(menu_via_fuzzel 'Terminal: ' -- "$(available terminal "$current" kitty foot ghostty alacritty)")" || exit 0
+    choice="$(menu_via_fuzzel 'Terminal: ' -- "$(available terminal "$current" kitty foot ghostty alacritty)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv terminal "$choice"
     ;;
   shell)
     current="$(get shell)"
-    choice="$(menu_via_fuzzel 'Shell: ' -- "$(available shell "$current" fish bash)")" || exit 0
+    choice="$(menu_via_fuzzel 'Shell: ' -- "$(available shell "$current" fish bash)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv shell "$choice"
     # shell is the interactive terminal shell only; the login shell stays bash
@@ -115,7 +115,7 @@ case "${pick_type,,}" in
     ;;
   files)
     current="$(get files)"
-    choice="$(menu_via_fuzzel 'Files: ' -- "$(available files "$current" strata nautilus thunar yazi)")" || exit 0
+    choice="$(menu_via_fuzzel 'Files: ' -- "$(available files "$current" strata nautilus thunar yazi)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv files "$choice"
     if [[ $choice == strata ]]; then
@@ -125,7 +125,7 @@ case "${pick_type,,}" in
     ;;
   images)
     current="$(get images)"
-    choice="$(menu_via_fuzzel 'Images: ' -- "$(available images "$current" imv qimgv)")" || exit 0
+    choice="$(menu_via_fuzzel 'Images: ' -- "$(available images "$current" imv qimgv)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv images "$choice"
     # imv ships NoDisplay=true, so it never wins as a hidden default; a
@@ -150,13 +150,13 @@ case "${pick_type,,}" in
     ;;
   editor)
     current="$(get editor)"
-    choice="$(menu_via_fuzzel 'Editor: ' -- "$(available editor "$current" zed nvim helix code)")" || exit 0
+    choice="$(menu_via_fuzzel 'Editor: ' -- "$(available editor "$current" zed nvim helix code)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv editor "$choice"
     ;;
   agent)
     current="$(get agent)"
-    choice="$(menu_via_fuzzel 'Agent: ' -- "$(available agent "$current" opencode claude codex)")" || exit 0
+    choice="$(menu_via_fuzzel 'Agent: ' -- "$(available agent "$current" opencode claude codex)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv agent "$choice"
     ;;

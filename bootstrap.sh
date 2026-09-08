@@ -14,7 +14,7 @@ SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
 BOOTSTRAP_REV=29   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
-KERNEL_PICK=""      # always: installer auto-picks (stock; LTS pinned on legacy NVIDIA). Custom kernels are post-install via hexciri-kernel.
+KERNEL_PICK=""      # always: installer auto-picks stock (custom kernels are post-install via hexciri-kernel)
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
 
 info() { echo -e "\e[0;36m[hexciri:bootstrap]\e[0m $*"; }
@@ -107,7 +107,7 @@ CHANNEL="${CHANNEL,,}"; CHANNEL="${CHANNEL:-stable}"
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { err "channel must be stable|bleeding"; exit 1; }
 info "channel: $CHANNEL"
 
-info "kernel: auto (stock; LTS pinned on legacy NVIDIA by the installer)"
+info "kernel: auto (stock; --kernel=lts opts into LTS)"
 
 
 
@@ -226,23 +226,13 @@ mkdir -p /mnt/boot
 mount -t vfat "$ESP" /mnt/boot
 
 # ── kernel set: exactly one bootable base kernel (+custom added later by the
-# installer, which also flips the default). Legacy NVIDIA (GTX 1xxx or older)
-# and custom picks stage on LTS; everything else stages on stock linux ──
-is_legacy_nvidia() {
-  local d id
-  for d in /sys/bus/pci/devices/*; do
-    [[ $(<"$d/vendor") == "0x10de" ]] || continue
-    [[ $(<"$d/class") == 0x03* ]] || continue
-    id=$(<"$d/device")
-    (( id >= 0x1340 && id < 0x1e00 )) && return 0
-  done
-  return 1
-}
+# installer, which also flips the default). An explicit --kernel=lts stages on
+# LTS; everything else stages on stock linux. (Legacy NVIDIA used to pin LTS
+# because the 580xx DKMS line was thought to only build against it — NVIDIA's
+# 580 legacy releases keep new-kernel support for their lifetime, so those cards
+# are fine on mainline.) ──
 STAGE1_KERNEL=linux
-if is_legacy_nvidia || [[ $KERNEL_PICK == lts ]]; then
-  STAGE1_KERNEL=linux-lts
-fi
-is_legacy_nvidia && info "legacy NVIDIA: base kernel linux-lts"
+[[ $KERNEL_PICK == lts ]] && STAGE1_KERNEL=linux-lts
 UCODE="intel-ucode"
 grep -qi "AuthenticAMD" /proc/cpuinfo && UCODE="amd-ucode"
 info "base install ($STAGE1_KERNEL, $UCODE)..."

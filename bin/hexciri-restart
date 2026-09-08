@@ -8,10 +8,10 @@ note() { notify-send "Hexciri" "$1" 2>/dev/null || true; }
 if [[ $# -gt 0 ]]; then
   choice="$*"
 else
-  choice=$(printf '%s\n' "Reload Niri" "Restart Noctalia" "Refresh theme" |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Restart: ' --width=24 --lines=3)
-  [[ -z ${choice:-} ]] && exit 0
-fi
+choice=$(printf '%s\n' "Reload Niri" "Restart Noctalia" "Refresh theme" |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Restart: ' --width=24 --lines=3) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
+  [[ -z ${choice:-} ]] && exec "$SCRIPT_DIR/hexciri-menu"   # empty (no Esc shell-out above) — still back to root
+  fi
 
 case "$choice" in
   "Reload Niri")

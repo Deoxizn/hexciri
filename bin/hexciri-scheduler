@@ -21,16 +21,6 @@ gpu_vendor() { # true if any VGA/3D device matches $1 (0x10de etc) — same sysf
   done
   return 1
 }
-nvidia_legacy() { # Maxwell/Pascal/Volta: 0x1340..0x1e00 (GTX 1xxx or older) —
-  local d id       # same rule hexciri-gpu uses: 580xx only survives the LTS kernel
-  for d in "$PCI_PATH"/*; do
-    [[ $(<"$d/vendor") == "0x10de" ]] || continue
-    [[ $(<"$d/class") == 0x03* ]] || continue
-    id=$(<"$d/device")
-    (( id >= 0x1340 && id < 0x1e00 )) && return 0
-  done
-  return 1
-}
 is_laptop() { # any battery supplier → power-sensitive portable (behavior target)
   compgen -G '/sys/class/power_supply/*/type' >/dev/null 2>&1 || return 1
   for t in /sys/class/power_supply/*/type; do
@@ -46,23 +36,20 @@ ram="$(ram_gb)"
 
 # ── profile ──
 NVIDIA=false; gpu_vendor 0x10de && NVIDIA=true
-LEGACY=false; $NVIDIA && nvidia_legacy && LEGACY=true
 X3D=false; [[ -n $cpu_model ]] && grep -qi 'X3D' <<<"$cpu_model" && X3D=true
 LAPTOP=false; is_laptop && LAPTOP=true
 
 # ── decision ──
-# GTX 1xxx or older (Maxwell/Pascal/Volta): 580xx only survives the LTS kernel —
-# that constraint overrides any gaming lean, so legacy cards get the LTS build.
-# Otherwise an NVIDIA dGPU or an X3D CPU → interactive desktop/gaming load →
-# BORE (burst-oriented response enhancer). Everything else on a shell desktop
-# is well served by the default EEVDF build; a likely-server profile gets a
-# note, never applied.
+# NVIDIA dGPU or an X3D CPU → interactive desktop/gaming load → BORE
+# (burst-oriented response enhancer). (Legacy Maxwell/Pascal/Volta cards used to
+# drag the pick to cachyos-lts because the 580xx DKMS line supposedly only built
+# against the LTS kernel — NVIDIA's 580 legacy releases keep new-kernel support
+# for their lifetime, so those cards are fine on mainline now and follow the
+# same BORE/EEVDF rule.) Everything else on a shell desktop is well served by
+# the default EEVDF build; a likely-server profile gets a note, never applied.
 pick="cachyos"           # linux-cachyos = EEVDF (Clang LTO + AutoFDO) — balanced default
 reason="EEVDF (balanced default — general desktop/workstation)"
-if $LEGACY; then
-  pick="cachyos-lts"     # linux-cachyos-lts — 580xx survives only the LTS kernel
-  reason="CachyOS LTS — legacy NVIDIA (Maxwell/Pascal/Volta, GTX 1xxx or older): 580xx only survives the LTS kernel"
-elif $NVIDIA || $X3D; then
+if $NVIDIA || $X3D; then
   pick="cachyos-bore"    # linux-cachyos-bore = BORE scheduler — interactive/gaming
   if $NVIDIA && $X3D; then
     reason="BORE — discrete NVIDIA GPU + X3D CPU (gaming/interactive workload)"
@@ -80,7 +67,6 @@ fi
 detect() {
   local gpu="integrated/other"
   $NVIDIA && gpu="NVIDIA discrete"
-  $LEGACY && gpu="NVIDIA legacy (Maxwell/Pascal/Volta — 580xx, LTS-only)"
   local tags=()
   $LAPTOP && tags+=(laptop)
   info "CPU: ${cpu_model:-unknown} ($cores threads, ${ram}G RAM)"

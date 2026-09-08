@@ -19,7 +19,7 @@ choice=$(
     'Folder' \
     'Receive' |
     "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Share: ' --width=28 --lines=4
-) || exec "$SCRIPT_DIR/hexciri-trigger"   # Esc = back to trigger menu
+) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
 fi
 choice=${choice%' >'}
 

@@ -1,10 +1,11 @@
 #!/bin/bash
-# hexciri:summary=GPU autodetect + setup: mesa/vulkan per vendor, nvidia-open 6xx (Turing+), 580xx + LTS pin (GTX 1xxx or older)
+# hexciri:summary=GPU autodetect + setup: mesa/vulkan per vendor, nvidia-open 6xx (Turing+), 580xx (GTX 1xxx or older)
 # usage: hexciri-gpu [--kernel=stock|lts|cachyos|cachyos-bore|cachyos-lts] [--yes]
 #   --kernel picks the default kernel (default: current-best for your card).
 #   cachyos kernels are post-install personalization (hexciri-kernel direct
-#   fetch, any channel) and are never the installer's default; GTX 1xxx or
-#   older cards refuse non-LTS kernels (580xx only survives LTS).
+#   fetch, any channel) and are never the installer's default; legacy
+#   Maxwell/Pascal/Volta cards (GTX 1xxx or older) get the 580xx legacy driver,
+#   which builds on stock and cachyos kernels alike (no LTS requirement).
 set -euo pipefail
 
 KERNEL_PICK=""
@@ -113,19 +114,31 @@ nvidia_legacy && LEGACY=true
 
 if $LEGACY; then
   info "legacy NVIDIA card detected (Maxwell/Pascal/Volta — GTX 1xxx or older)."
-  if [[ -n $KERNEL_PICK && $KERNEL_PICK != lts ]]; then
-    err "580xx drivers only survive the LTS kernel — refusing --kernel=$KERNEL_PICK."
-    err "run without --kernel (uses LTS) or pick --kernel=lts."
-    exit 1
+  # 580xx is the last driver line for these GPUs, but NVIDIA keeps new-kernel
+  # compatibility fixes in it for its support lifetime — it builds on stock and
+  # cachyos kernels, so no LTS pin/refusal. Respect the current boot default;
+  # only when nothing is pinned does stock get picked (fresh-install default).
+  if [[ -z $KERNEL_PICK ]]; then
+    cur="$(awk '$1=="default"{print $2; exit}' /boot/loader/loader.conf 2>/dev/null || true)"
+    case "$cur" in
+      hexciri-linux-lts.conf)            KERNEL_PICK=lts ;;
+      hexciri-linux-cachyos.conf)        KERNEL_PICK=cachyos ;;
+      hexciri-linux-cachyos-bore.conf)   KERNEL_PICK=cachyos-bore ;;
+      hexciri-linux-cachyos-lts.conf)    KERNEL_PICK=cachyos-lts ;;
+      hexciri-linux.conf)                KERNEL_PICK=stock ;;
+      *) KERNEL_PICK=stock ;;
+    esac
+    info "kernel -> $KERNEL_PICK"
   fi
-  confirm "Pin LTS kernel + install 580xx drivers?" || exit 0
-  use_kernel lts
-  set_default_entry hexciri-linux-lts.conf
+  confirm "Install 580xx legacy drivers (kernel: $KERNEL_PICK)?" || exit 0
+  use_kernel "$KERNEL_PICK"
   headers=()
-  for k in linux-lts; do pacman -Q "$k" &>/dev/null && headers+=("$k-headers"); done
+  for k in linux linux-lts linux-cachyos linux-cachyos-bore linux-cachyos-lts; do
+    pacman -Q "$k" &>/dev/null && headers+=("$k-headers")
+  done
   pkg "${headers[@]}" nvidia-580xx-utils nvidia-580xx-dkms lib32-nvidia-580xx-utils
   nvidia_common
-  ok "legacy stack ready. REBOOT required."
+  ok "legacy stack ready (580xx on $KERNEL_PICK). REBOOT required."
   reboot_now
   exit 0
 fi
