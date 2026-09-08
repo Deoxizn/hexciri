@@ -56,4 +56,20 @@ CXXFLAGS=\"$march -O2 -pipe -fno-plt\"
     printf '%s\n%s' "$stamped" "$body" > /etc/makepkg.conf.d/hexciri-tuning.conf
     echo "hexciri: makepkg tuned for this machine ($tier, $jobs threads)"
   fi
+
+  # The drop-in only works if makepkg actually LOADS it. This makepkg has no
+  # `Include` keyword (grep /usr/bin/makepkg for it = 0), and /etc/makepkg.conf
+  # sources nothing — so a conf.d file sits inert, exactly like fortran.conf /
+  # rust.conf here. Make the load happen by appending a bash source block with a
+  # marker (idempotent); runs after the distro defaults at EOF, so our values
+  # win. Sourcing the whole glob also finally arms rust.conf/fortran.conf.
+  marker='# hexciri: source /etc/makepkg.conf.d drop-ins (makepkg lacks Include support)'
+  if ! grep -qF "$marker" /etc/makepkg.conf 2>/dev/null; then
+    {
+      echo
+      echo "$marker"
+      echo 'for _f in /etc/makepkg.conf.d/*.conf; do [[ -e $_f ]] && source "$_f"; done'
+    } >> /etc/makepkg.conf
+    echo "hexciri: /etc/makepkg.conf now sources /etc/makepkg.conf.d (drop-ins active)"
+  fi
 }
