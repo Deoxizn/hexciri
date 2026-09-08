@@ -10,6 +10,10 @@ Arch × Niri × Noctalia
 
 ## Highlights
 
+- **Your WM, your shell — never locked in** — ships on Niri + Noctalia,
+  but Hyprland, Sway and Mango are installed-and-configured options too,
+  with or without a desktop shell. Switch with one command or one menu pick:
+  your monitors, keybindings and theme follow you to the new one.
 - **Themes that color everything** — one click (or `hexciri-theme-set <name>`)
   recolors the whole desktop, 30+ apps in all. 22 themes ship included; extras
   are one line each in a list.
@@ -17,12 +21,13 @@ Arch × Niri × Noctalia
   `~/.config/hexciri/wallpapers`, or point it at your own folder via
   `wallpaper-sources/extra.list`, and they show up in the picker and stay across
   every theme swap.
-- **Transparent terminals** — kitty at reduced background opacity with niri
-  blur behind it, so your wallpaper shows through.
+- **Transparent terminals** — kitty at reduced background opacity with blur
+  behind it, so your wallpaper shows through.
 - **Gaming, ready** — Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net,
   GeForce NOW, Xbox Cloud, controllers, GPU setup.
-- **A minimal Arch experience** — your system starts clean: Arch, Niri, and
-  the Noctalia shell — nothing you didn't ask for; add the rest on demand.
+- **A minimal Arch experience** — your system starts clean: Arch, your chosen
+  WM, and the Noctalia shell — nothing you didn't ask for; add the rest on
+  demand.
 - **Everything's just files** — the theming engine is literally two text lists
   you can read and edit: `theme-sources/extra.list` (extra themes) and
   `wallpaper-sources/extra.list` (extra wallpaper folders). Easy to tweak, back
@@ -36,6 +41,31 @@ Boot the Arch ISO, then run:
 ```bash
 curl -LO https://hexciri.dirty.pizza/hexciri && sh hexciri
 ```
+
+## Your WM, your shell
+
+Hexciri is not tied to one window manager. You pick the pair:
+
+| WM | shell |
+|---|---|
+| `niri` (default) | `noctalia` (default) |
+| `hyprland` | `none` (bare WM) |
+| `sway` | |
+| `mango` | |
+
+Switching is one menu pick (**System ▸ Session**) or one command:
+
+```bash
+hexciri-session-set wm=sway shell=noctalia
+```
+
+What happens: the new WM is installed, a login entry is created, and your
+monitors, environment, input settings, keybindings and theme are carried over
+into that WM's own config format. Your current session is untouched — log out,
+pick the new WM at the login screen, done. Switch back any time.
+
+Fresh installs pick with `install.sh --wm sway --shell none`; nothing is
+installed for a WM you never choose.
 
 ## Themes
 
@@ -72,20 +102,47 @@ theme changes.
 
 | slot | default | change it |
 |---|---|---|
+| WM | `niri` | `hexciri-session-set wm=…` (System ▸ Session) |
+| shell | `noctalia` | `hexciri-session-set shell=…` |
 | terminal | `kitty` | `hexciri-defaults` → Terminal |
 | shell | `bash` (login) · `fish` (kitty) | `hexciri-defaults` → Shell |
 | browser | `brave-origin` | `hexciri-defaults` → Browser |
 | files | `strata` | `hexciri-defaults` → Files |
 | editor | `zed` | `hexciri-defaults` → Editor |
-| agent | `opencode` (`Mod+`` `) | `hexciri-defaults` → Agent |
+| agent | `opencode` (`Mod`+backtick) | `hexciri-defaults` → Agent |
 | kernel | auto: `linux` (stock), `linux-lts` pinned on legacy NVIDIA | `hexciri-kernel` (custom post-install) |
 | gpu | autodetect (mesa / nvidia-open / 580xx+LTS pin) | `hexciri-gpu` |
-| monitors | preconfigured (scale 2) | `~/.config/niri/config.kdl` |
+| monitors | preconfigured (scale 2) | in your WM's own config |
 | bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |
 | channel | `stable` | `hexciri-channel-set` |
 | boot | systemd-boot, SDDM password/fingerprint greeter | — |
 | prompt/fetch | starship + fastfetch w/ emblem | `~/.config/starship.toml`, `~/.config/fastfetch/config.jsonc` |
+
+`Mod` is the Super key. Press **`Mod`+K** — or run `hexciri-keybinds` — for a
+searchable list of every keybind for whichever WM you're on. Keybindings are
+one and the same across WMs, so muscle memory survives a switch.
+
+**Main ones:**
+
+| key | does |
+|---|---|
+| `Mod`+D | open the app launcher |
+| `Mod`+Return | open a terminal |
+| `Mod`+Space | quick run bar (fuzzel) |
+| `Mod`+Q | close the focused window |
+| `Mod`+F | fullscreen the window |
+| `Mod`+1 … `Mod`+9, `Mod`+0 | jump to a workspace |
+| `Mod`+Shift+1 … 9 | move the window to a workspace |
+| `Mod`+Left/Right or H/L | move between windows |
+| `Mod`+Ctrl+arrows | drag a window along |
+| `Mod`+Ctrl+L | lock the screen |
+| `Mod`+Print | screenshot the screen |
+| `Ctrl`+Print | screenshot and copy a chosen area |
+| `Alt`+Print | record the screen |
+| `Mod`+Escape | power menu (shutdown/reboot/logout…) |
+
+Volume, brightness and mic keys work as labeled.
 
 ## Channels
 
@@ -107,28 +164,21 @@ git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
 
 The clone is the runtime — install.sh symlinks its commands into `~/.local/bin`
 and wires the configs, once at bootstrap. Updating is just a pull (**Update ▸
-Repo**, or `hxup`'s system update pulls the repo as part of `pacman -Syu`); the
-repo is never reinstalled on an update, so no reinstall ever needs sudo.
+Repo**, or `hxup`'s system update pulls the repo as part of `pacman -Syu`).
 
-> **Upgrading an install older than v0.1.3?** Pre-0.1.3 installs hard-copied
-> commands into `/usr/local/bin` (and until v0.1.1 had no self-update at all),
-> so a mere `pacman -Syu` won't migrate them. Do this once:
+> **Upgrading an install older than v0.1.3?** Old installs hard-copied commands
+> into `/usr/local/bin`; newer ones use symlinks, so a plain `pacman -Syu`
+> won't fix a stale one. Run this once:
 >
 > ```bash
 > git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
 > ~/.local/opt/hexciri/install.sh --update
 > ```
 >
-> (`--update` deploys the files and links the commands without re-running
-> first-install system work — packages, kernels, services and the pacman
-> channel, i.e. stable vs bleeding, are your existing state and are left
-> untouched.) The bootstrap clears the stale `/usr/local/bin/hexciri-*` copies,
-> links the commands into `~/.local/bin`, and re-wires the one `hexciri-sync`
-> hook — afterwards the normal pull-based updates work as described above.
-> pre-0.1.3 configs are kept as-is (install.sh never clobbers edits), so the
-> migration also adds the `~/.local/bin` PATH entry your old niri config was
-> missing — without it, every `hexciri-*` keybind fails silently once the old
-> /usr/local copies are gone.
+> That replaces the old copies with symlinks and keeps your settings as they
+> are (it never touches installed packages, kernels, services or the channel).
+> Afterwards, the normal pull-based updates apply. What changed, release by
+> release? Read `CHANGELOG.md`.
 
 ## Sources
 
