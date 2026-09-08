@@ -3,7 +3,7 @@
 # hexciri:summary=Searchable keybinding reference — built from the intent schema for the active WM
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 INTENTS="$SCRIPT_DIR/../config/keybinds/intents.toml"
 WM="$("$SCRIPT_DIR/hexciri-session" wm)"
 
