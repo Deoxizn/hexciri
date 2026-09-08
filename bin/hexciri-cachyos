@@ -94,10 +94,11 @@ do_install() { # $1 pkg: fetch + pacman -U newest build + headers
   [[ $(id -u) -eq 0 ]] || { err "install needs root — run with sudo/hexciri-kernel"; exit 1; }
   info "tier: $(detect_tier)"
   ensure_key
+  ensure_arch
   url="$(latest "$pkg")" || { err "could not resolve newest $pkg (offline?)"; exit 1; }
   hurl="$(latest_headers "$pkg")"
   tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
+  trap '[[ -n ${tmp:-} ]] && rm -rf "${tmp:-}"' EXIT
   info "downloading $url"
   curl -fLo "$tmp/$(basename "$url")" "$url"
   curl -fLo "$tmp/$(basename "$url").sig" "$url.sig" 2>/dev/null || true
