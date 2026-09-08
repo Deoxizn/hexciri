@@ -49,14 +49,14 @@ while (($#)); do
 done
 [[ $CHANNEL == stable || $CHANNEL == bleeding ]] || { echo "channel must be stable|bleeding"; exit 1; }
 # accept short keys or full package names (linux-lts -> lts)
-# CachyOS kernels are post-install personalization — they live in the
+# Omarchy kernels are post-install personalization — they live in the
 # System ▸ Kernel menu (hexciri-kernel), never in the installer.
 case "${KERNEL_PICK,,}" in
   ""|"auto") KERNEL_PICK="" ;;
   stock|linux) KERNEL_PICK=stock ;;
   lts|linux-lts) KERNEL_PICK=lts ;;
 esac
-[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts)$ ]] || { echo "kernel must be stock|lts (cachyos kernels are post-install, via the Kernel menu)"; exit 1; }
+[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts)$ ]] || { echo "kernel must be stock|lts (omarchy kernels are post-install, via the Kernel menu)"; exit 1; }
 [[ $WM_PICK =~ ^(niri|hyprland|sway|mango)$ ]] || { echo "wm must be niri|hyprland|sway|mango"; exit 1; }
 [[ $SHELL_PICK =~ ^(noctalia|none)$ ]] || { echo "shell must be noctalia|none"; exit 1; }
 
@@ -113,8 +113,9 @@ if $SYSTEM_ONLY; then
     cp -f "$REPO_DIR/default/pacman/pacman-$CHANNEL.conf" /etc/pacman.conf
     cp -f "$REPO_DIR/default/pacman/mirrorlist-$CHANNEL" /etc/pacman.d/mirrorlist
   fi
-  # omarchy-keyring signs the [omarchy] repo — present on stable only after
-  # 1.5 (bleeding is plain Arch + the CachyOS kernel path, no omarchy repo)
+  # omarchy-keyring signs the [omarchy] repo — bootstrap it on any channel
+  # whose deployed pacman conf actually carries [omarchy] (bleeding now ships
+  # it for the omarchy edge kernel line too)
   if grep -q '^\s*\[omarchy\]' "$REPO_DIR/default/pacman/pacman-$CHANNEL.conf" 2>/dev/null && ! pacman -Qi omarchy-keyring &>/dev/null; then
     info "bootstrapping omarchy-keyring (signs the [omarchy] repo)..."
     pacman-key --recv-keys 40DFB630FF42BCFFB047046CF0134EE680CAC571 --keyserver keyserver.ubuntu.com
@@ -415,7 +416,7 @@ HOOK
     fi
   fi
 
-  # ── scheduler autodetect (first-install only): tell the user which cachyos
+  # ── scheduler autodetect (first-install only): tell the user which omarchy
   #    kernel variant fits this machine (BORE vs EEVDF), non-destructively. The
   #    pick itself stays post-install via the System ▸ Kernel menu; this just
   #    lands the recommendation in the install output (and at next login via

@@ -173,7 +173,6 @@ Amazon = " "
 Android = " " #
 Arch = " "
 Artix = " "
-CachyOS = " "
 CentOS = " "
 Debian = " "
 DragonFly = " "

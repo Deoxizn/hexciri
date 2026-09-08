@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-09-08+ — hexciri v1.5 (CachyOS removed, omarchy-kernel line restored)
+
+- **CachyOS path fully removed** — `bin/hexciri-cachyos`, the tier fetch, the per-CPU mirror direct-fetch of kernels *and* the 580xx driver, the ignore-AUR stamp, and every reference in scripts/menus/README are gone. Nothing CachyOS is installed, fetched, or advertised anymore.
+- **Kernels come from the omarchy edge repo on bleeding** — `pacman-bleeding.conf` ships `[omarchy]` → `https://pkgs.omarchy.org/edge/$arch` (keyring `F3B607488DB35A47`/omarchy-keyring bootstrapped on install when the deployed conf carries the repo). `System ▸ Kernel` now offers Stock, LTS, `linux-omarchy` (EEVDF) and `linux-omarchy-bore` (BORE); `hexciri-scheduler` recommends BORE for NVIDIA/X3D else EEVDF. Because they are ordinary repo packages they update with plain `pacman -Syu` — no fetch loop, no AUR rebuild. Stable stays stock/lts only (vetted repo); omarchy kernels are a bleeding extra.
+- **Legacy 580xx installed from the AUR, not the mirror** — `hexciri-gpu`'s legacy branch now builds the `nvidia-580xx` split (`nvidia-580xx-utils` → `-dkms` → `lib32-utils` → opencl → lib32-opencl) in dependency order as a regular user: temporary passwordless-pacman sudoers rule, import of the signing keys (`E18447AC…`, `E8B9AA39…`), `makepkg -si` per package, `--skippgpcheck` fallback if the keyserver is unreachable, rule removed after. Updates ride the existing `yay -Sua` pass, so the refresh loop is gone from `hexciri-update` too.
+- **Fixed what actually broke the legacy install:** a stage2-chroot resolver never found `hexciri-cachyos` (it only gets deployed under `/root/hexciri-install/bin/` inside the chroot), so the 580xx was silently skipped and Pascal/Volta boxes booted into nouveau, which hard-locks after login — confirmed on the 1080 Ti box ("no nvidia shows up"). The old resolver workaround is moot; the AUR build lives entirely inside `hexciri-gpu` and works in the chroot.
+- `hexciri-sync`/`hexciri-gaming` header- and kernel lists, starship OS-symbol maps, makepkg-tuning comment, installer comments, README channel table and CHANGELOG now describe the omarchy kernel line.
+
 ## 2026-09-08 — hexciri v1.4
 
 - **Esc in submenus now goes back, not away** — Share, System ▸ Default Apps, System ▸ Kernel, and Restart each *exited outright* when you pressed Esc (Share even jumped to the Hardware menu instead of returning). Every dmenu stage now re-execs its parent menu: Share → root, Default Apps → System (each category picker → the Defaults list), Kernel → System, Restart → root.

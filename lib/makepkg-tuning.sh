@@ -7,8 +7,8 @@
 #   hexciri_apply_makepkg_tuning   detect + (re)write /etc/makepkg.conf.d/
 #
 # Per-PC = this CPU's real tier (znver4/v4/v3/x86-64 via /lib/ld-linux-x86-64.so.2
-# + vendor match, same rule bin/hexciri-cachyos uses) and real nproc. Official
-# repo packages are unaffected (prebuilt); this only speeds up local/AUR builds.
+# + vendor match for Zen 4/5) and real nproc. Official repo packages are
+# unaffected (prebuilt); this only speeds up local/AUR builds.
 
 hexciri_detect_cpu_tier() {
   local ld=/lib/ld-linux-x86-64.so.2

@@ -1,11 +1,12 @@
 #!/bin/bash
-# hexciri:summary=GPU autodetect + setup: mesa/vulkan per vendor, nvidia-open 6xx (Turing+), 580xx (GTX 1xxx or older)
-# usage: hexciri-gpu [--kernel=stock|lts|cachyos|cachyos-bore|cachyos-lts] [--yes]
+# hexciri:summary=GPU autodetect + setup: mesa/vulkan per vendor, nvidia-open 6xx (Turing+), 580xx (GTX 1xxx or older, from AUR)
+# usage: hexciri-gpu [--kernel=stock|lts|omarchy|omarchy-bore] [--yes]
 #   --kernel picks the default kernel (default: current-best for your card).
-#   cachyos kernels are post-install personalization (hexciri-kernel direct
-#   fetch, any channel) and are never the installer's default; legacy
-#   Maxwell/Pascal/Volta cards (GTX 1xxx or older) get the 580xx legacy driver,
-#   which builds on stock and cachyos kernels alike (no LTS requirement).
+#   omarchy kernels are post-install personalization (System ▸ Kernel — they
+#   ship as repo packages via the [omarchy] repo and update with pacman), and
+#   are never the installer's default; legacy Maxwell/Pascal/Volta cards
+#   (GTX 1xxx or older) get the 580xx legacy driver from the AUR, which builds
+#   on stock and omarchy kernels alike (no LTS requirement).
 set -euo pipefail
 
 KERNEL_PICK=""
@@ -19,16 +20,15 @@ while (($#)); do
     *) shift ;;
   esac
 done
-# accept short keys or full package names (linux-cachyos-bore -> cachyos-bore)
+# accept short keys or full package names (linux-omarchy-bore -> omarchy-bore)
 case "${KERNEL_PICK,,}" in
   ""|"auto") KERNEL_PICK="" ;;
   stock|linux) KERNEL_PICK=stock ;;
   lts|linux-lts) KERNEL_PICK=lts ;;
-  cachyos|linux-cachyos) KERNEL_PICK=cachyos ;;
-  cachyos-bore|linux-cachyos-bore) KERNEL_PICK=cachyos-bore ;;
-  cachyos-lts|linux-cachyos-lts) KERNEL_PICK=cachyos-lts ;;
+  omarchy|linux-omarchy) KERNEL_PICK=omarchy ;;
+  omarchy-bore|linux-omarchy-bore) KERNEL_PICK=omarchy-bore ;;
 esac
-[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|cachyos|cachyos-bore|cachyos-lts)$ ]] || { echo "hexciri-gpu: --kernel must be stock|lts|cachyos|cachyos-bore|cachyos-lts"; exit 1; }
+[[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|omarchy-bore)$ ]] || { echo "hexciri-gpu: --kernel must be stock|lts|omarchy|omarchy-bore"; exit 1; }
 
 info() { echo -e "\e[0;36m[hexciri:gpu]\e[0m $*"; }
 ok()   { echo -e "\e[0;32m[hexciri:gpu]\e[0m $*"; }
@@ -124,6 +124,47 @@ verify_nvidia_mod() { # confirm the -dkms module actually landed. Inside the
   return 1
 }
 
+# 580xx is EOL in the official repos (the 590 release dropped below Turing →
+# 580xx left `extra` for the AUR). Build the AUR split in dependency order as a
+# regular user (makepkg refuses root), then pacman-install each. The build user
+# gets passwordless pacman so `makepkg -s` can pull missing deps, and the
+# maintainer keys that sign the packages are imported first; if the keyserver is
+# unreachable the build falls back to --skippgpcheck with a warning rather than
+# bricking the install (the AUR tarball still arrives over TLS).
+AUR_580XX_SPLIT=(nvidia-580xx-utils nvidia-580xx-dkms lib32-nvidia-580xx-utils opencl-nvidia-580xx lib32-opencl-nvidia-580xx)
+AUR_580XX_KEYS=(E18447AC260021D31F3FF6C4C8A2A4774B8B63C4 E8B9AA39F054E30E8290D492C3C4820857F654FE)
+aur_install_580xx() {
+  local user dir p
+  pkg git base-devel
+  user="${HEXCIRI_USER:-}"
+  [[ -n $user ]] || user="${SUDO_USER:-}"
+  if [[ -z $user || $user == root ]]; then
+    user="$(awk -F: '$3>=1000 && $3<2000 && $1!="nobody"{print $1; exit}' /etc/passwd)"
+  fi
+  [[ -n $user ]] || user="build"
+  id "$user" &>/dev/null || useradd -m "$user"
+  dir="/tmp/hexciri-580xx"
+  rm -rf "$dir"; mkdir -p "$dir"; chown "$user:$user" "$dir"
+  # makepkg -s installs deps via sudo pacman; scope that grant to pacman only
+  printf '%s ALL=(root) NOPASSWD: /usr/bin/pacman\n' "$user" > /etc/sudoers.d/hexciri-aurbuild
+  chmod 440 /etc/sudoers.d/hexciri-aurbuild
+  sudo -u "$user" gpg --keyserver keyserver.ubuntu.com --recv-keys "${AUR_580XX_KEYS[@]}" >/dev/null 2>&1 || true
+  for p in "${AUR_580XX_SPLIT[@]}"; do
+    info "aur: building $p..."
+    rm -rf "$dir/$p"
+    sudo -u "$user" git clone -q "https://aur.archlinux.org/$p.git" "$dir/$p" \
+      || { err "aur: could not clone $p"; rm -f /etc/sudoers.d/hexciri-aurbuild; return 1; }
+    if ! ( cd "$dir/$p" && sudo -u "$user" makepkg -si --noconfirm ) 2>&1 \
+         && ! ( cd "$dir/$p" && sudo -u "$user" makepkg -si --noconfirm --skippgpcheck ) 2>&1; then
+      err "aur: $p failed to build"
+      rm -f /etc/sudoers.d/hexciri-aurbuild
+      return 1
+    fi
+  done
+  rm -f /etc/sudoers.d/hexciri-aurbuild
+  return 0
+}
+
 NVIDIA=false; LEGACY=false
 has_vendor 0x10de && NVIDIA=true
 nvidia_legacy && LEGACY=true
@@ -132,16 +173,15 @@ if $LEGACY; then
   info "legacy NVIDIA card detected (Maxwell/Pascal/Volta — GTX 1xxx or older)."
   # 580xx is the last driver line for these GPUs, but NVIDIA keeps new-kernel
   # compatibility fixes in it for its support lifetime — it builds on stock and
-  # cachyos kernels, so no LTS pin/refusal. Respect the current boot default;
+  # omarchy kernels, so no LTS pin/refusal. Respect the current boot default;
   # only when nothing is pinned does stock get picked (fresh-install default).
   if [[ -z $KERNEL_PICK ]]; then
     cur="$(awk '$1=="default"{print $2; exit}' /boot/loader/loader.conf 2>/dev/null || true)"
     case "$cur" in
-      hexciri-linux-lts.conf)            KERNEL_PICK=lts ;;
-      hexciri-linux-cachyos.conf)        KERNEL_PICK=cachyos ;;
-      hexciri-linux-cachyos-bore.conf)   KERNEL_PICK=cachyos-bore ;;
-      hexciri-linux-cachyos-lts.conf)    KERNEL_PICK=cachyos-lts ;;
-      hexciri-linux.conf)                KERNEL_PICK=stock ;;
+      hexciri-linux-lts.conf)          KERNEL_PICK=lts ;;
+      hexciri-linux-omarchy.conf)      KERNEL_PICK=omarchy ;;
+      hexciri-linux-omarchy-bore.conf) KERNEL_PICK=omarchy-bore ;;
+      hexciri-linux.conf)              KERNEL_PICK=stock ;;
       *) KERNEL_PICK=stock ;;
     esac
     info "kernel -> $KERNEL_PICK"
@@ -149,30 +189,14 @@ if $LEGACY; then
   confirm "Install 580xx legacy drivers (kernel: $KERNEL_PICK)?" || exit 0
   use_kernel "$KERNEL_PICK"
   headers=()
-  for k in linux linux-lts linux-cachyos linux-cachyos-bore linux-cachyos-lts; do
+  for k in linux linux-lts linux-omarchy linux-omarchy-bore; do
     pacman -Q "$k" &>/dev/null && headers+=("$k-headers")
   done
   if ((${#headers[@]})); then pkg "${headers[@]}"; fi
-  # 580xx is EOL in the official repos (the 590 release dropped below Turing →
-  # 580xx left `extra` for AUR); cachyos still publishes the prebuilt split, so
-  # direct-fetch it — local-file pacman -U, no repo adopted. Resolve the helper
-  # explicitly: during install this runs inside the chroot where PATH is minimal
-  # and the helper only exists right here (git clone at /root/hexciri-install/bin),
-  # so the sibling binary is the first candidate; deployed machines fall through
-  # to the installed bin dirs.
-  local cacbin cand selfdir
-  selfdir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
-  for cand in \
-    "${selfdir:-/nonexistent}/hexciri-cachyos" \
-    "${HEXCIRI_BIN_DIR:+$HEXCIRI_BIN_DIR/hexciri-cachyos}" \
-    "$HOME/.local/opt/hexciri/bin/hexciri-cachyos" \
-    "$HOME/.local/bin/hexciri-cachyos" \
-    /usr/local/bin/hexciri-cachyos; do
-    [[ -n $cand && -x $cand ]] && { cacbin=$cand; break; }
-  done
-  [[ -z ${cacbin:-} ]] && cacbin="$(command -v hexciri-cachyos || true)"
-  [[ -n $cacbin ]] || { err "hexciri-cachyos not found"; exit 1; }
-  sudo "$cacbin" nvidia
+  # 580xx is EOL in the official repos — build it from the AUR (the split
+  # above). Runs fine inside the stage2 chroot: minimal PATH doesn't matter,
+  # everything here is a sibling/absolute call.
+  aur_install_580xx || exit 1
   nvidia_common
   verify_nvidia_mod || exit 1
   ok "legacy stack ready (580xx on $KERNEL_PICK). REBOOT required."
@@ -188,11 +212,10 @@ if $NVIDIA; then
   if [[ -z $KERNEL_PICK ]]; then
     cur="$(awk '$1=="default"{print $2; exit}' /boot/loader/loader.conf 2>/dev/null || true)"
     case "$cur" in
-      hexciri-linux-lts.conf)            KERNEL_PICK=lts ;;
-      hexciri-linux-cachyos.conf)        KERNEL_PICK=cachyos ;;
-      hexciri-linux-cachyos-bore.conf)   KERNEL_PICK=cachyos-bore ;;
-      hexciri-linux-cachyos-lts.conf)    KERNEL_PICK=cachyos-lts ;;
-      hexciri-linux.conf)                KERNEL_PICK=stock ;;
+      hexciri-linux-lts.conf)          KERNEL_PICK=lts ;;
+      hexciri-linux-omarchy.conf)      KERNEL_PICK=omarchy ;;
+      hexciri-linux-omarchy-bore.conf) KERNEL_PICK=omarchy-bore ;;
+      hexciri-linux.conf)              KERNEL_PICK=stock ;;
       *) : ;;
     esac
     if [[ -n $KERNEL_PICK ]]; then
@@ -206,7 +229,7 @@ if $NVIDIA; then
     use_kernel "$KERNEL_PICK"
   fi
   headers=()
-  for k in linux linux-lts linux-cachyos linux-cachyos-bore linux-cachyos-lts; do
+  for k in linux linux-lts linux-omarchy linux-omarchy-bore; do
     pacman -Q "$k" &>/dev/null && headers+=("$k-headers")
   done
   pkg "${headers[@]}" nvidia-open-dkms nvidia-utils lib32-nvidia-utils

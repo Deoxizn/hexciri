@@ -1,7 +1,8 @@
 #!/bin/bash
-# hexciri:summary=Kernel menu: stock linux/lts (any channel) + cachyos prebuilt kernels (per-CPU tier, direct fetch)
-# No repo adoption for cachyos: packages install as local files via hexciri-cachyos,
-# updates ride hexciri-update. systemd-boot entries only. Stock kernel kept as fallback.
+# hexciri:summary=Kernel menu: stock linux/lts + omarchy kernels (linux-omarchy EEVDF / linux-omarchy-bore BORE) from the [omarchy] repo
+# Omarchy kernels are ordinary repo packages — they install with pacman and
+# update with pacman -Syu, no AUR, no rebuilds. systemd-boot entries only.
+# Stock kernel kept as fallback.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,9 +13,8 @@ bindir="${bindir:-$SCRIPT_DIR}"
 declare -A KERNEL_PKGS=(
   [stock]="linux"
   [lts]="linux-lts"
-  [cachyos]="linux-cachyos"
-  [cachyos-bore]="linux-cachyos-bore"
-  [cachyos-lts]="linux-cachyos-lts"
+  [omarchy]="linux-omarchy"
+  [omarchy-bore]="linux-omarchy-bore"
 )
 
 info() { echo -e "\e[0;36m[hexciri]\e[0m $*"; }
@@ -44,16 +44,8 @@ do_kernel() {
   if pacman -Q "$base" &>/dev/null; then
     ok "$base already installed"
   else
-    case "$key" in
-      cachyos|cachyos-bore|cachyos-lts)
-        # direct per-CPU fetch (hexciri-cachyos needs root for pacman -U)
-        sudo "$bindir/hexciri-cachyos" install "$base"
-        ;;
-      *)
-        info "installing $base + headers from configured repos..."
-        sudo pacman -S --noconfirm "$base" "$base-headers"
-        ;;
-    esac
+    info "installing $base + headers from configured repos..."
+    sudo pacman -S --noconfirm "$base" "$base-headers"
   fi
 
   # mkinitcpio preset drops vmlinuz/initramfs; hexciri-sync (PostTransaction)
@@ -62,15 +54,12 @@ do_kernel() {
 }
 
 do_status() {
-  for k in stock lts cachyos cachyos-bore cachyos-lts; do
+  for k in stock lts omarchy omarchy-bore; do
     if pacman -Q "${KERNEL_PKGS[$k]}" &>/dev/null; then
       echo "installed: $k (${KERNEL_PKGS[$k]} $(pacman -Q "${KERNEL_PKGS[$k]}" | cut -d' ' -f2))"
     fi
   done
   echo "default: $(grep '^default ' /boot/loader/loader.conf 2>/dev/null || echo '(none set)')"
-  if command -v "$bindir/hexciri-cachyos" &>/dev/null; then
-    echo "cachyos tier: $("$bindir/hexciri-cachyos" tier 2>/dev/null || echo 'n/a')"
-  fi
 }
 
 if [[ ${1:-} == run ]]; then
@@ -78,7 +67,7 @@ if [[ ${1:-} == run ]]; then
   case ${1:-} in
     status) do_status ;;
     scheduler-run) exec "$SCRIPT_DIR/hexciri-scheduler" run ;;
-    stock|lts|cachyos|cachyos-bore|cachyos-lts) do_kernel "$1" ;;
+    stock|lts|omarchy|omarchy-bore) do_kernel "$1" ;;
     *) err "unknown action '$1'"; exit 1 ;;
   esac
   exit 0
@@ -91,15 +80,14 @@ run_via_terminal() { # <key> — do the action in a visible terminal, hold open 
 }
 
 if command -v hexciri-fuzzel &>/dev/null; then
-  choice="$(printf '%s\n' 'Recommended — auto-detect scheduler' 'Stock — linux' 'LTS — linux-lts' 'CachyOS — linux-cachyos (EEVDF)' 'CachyOS BORE — linux-cachyos-bore' 'CachyOS LTS — linux-cachyos-lts' 'Status' | hexciri-fuzzel --dmenu --prompt='Kernel: ' --width=36 --lines=7)" || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
+  choice="$(printf '%s\n' 'Recommended — auto-detect scheduler' 'Stock — linux' 'LTS — linux-lts' 'Omarchy — linux-omarchy (EEVDF)' 'Omarchy BORE — linux-omarchy-bore' 'Status' | hexciri-fuzzel --dmenu --prompt='Kernel: ' --width=38 --lines=6)" || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
   case "$choice" in
     Recommended*) run_via_terminal scheduler-run ;;
-    Stock*)  run_via_terminal stock ;;
-    LTS*)    run_via_terminal lts ;;
-    CachyOS\ BORE*) run_via_terminal cachyos-bore ;;
-    CachyOS\ LTS*)  run_via_terminal cachyos-lts ;;
-    CachyOS*) run_via_terminal cachyos ;;
-    Status)  run_via_terminal status ;;
+    Stock*)       run_via_terminal stock ;;
+    LTS*)         run_via_terminal lts ;;
+    Omarchy\ BORE*) run_via_terminal omarchy-bore ;;
+    Omarchy*)     run_via_terminal omarchy ;;
+    Status)       run_via_terminal status ;;
   esac
 else
   do_status

@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Autodetect the best cachyos kernel scheduler for THIS machine (BORE vs EEVDF)
+# hexciri:summary=Autodetect the best omarchy kernel scheduler for THIS machine (BORE vs EEVDF)
 # usage: hexciri-scheduler [detect|run]
 #   detect  print the recommended kernel variant + why (read-only, no sudo)
 #   run     install the recommended variant via the hexciri-kernel flow (applies it)
@@ -42,15 +42,15 @@ LAPTOP=false; is_laptop && LAPTOP=true
 # ── decision ──
 # NVIDIA dGPU or an X3D CPU → interactive desktop/gaming load → BORE
 # (burst-oriented response enhancer). (Legacy Maxwell/Pascal/Volta cards used to
-# drag the pick to cachyos-lts because the 580xx DKMS line supposedly only built
-# against the LTS kernel — NVIDIA's 580 legacy releases keep new-kernel support
-# for their lifetime, so those cards are fine on mainline now and follow the
-# same BORE/EEVDF rule.) Everything else on a shell desktop is well served by
-# the default EEVDF build; a likely-server profile gets a note, never applied.
-pick="cachyos"           # linux-cachyos = EEVDF (Clang LTO + AutoFDO) — balanced default
+# drag the pick to LTS because the 580xx DKMS line supposedly only built against
+# the LTS kernel — NVIDIA's 580 legacy releases keep new-kernel support for their
+# lifetime, so those cards are fine on mainline now and follow the same
+# BORE/EEVDF rule.) Everything else on a shell desktop is well served by the
+# default EEVDF build; a likely-server profile gets a note, never applied.
+pick="omarchy"           # linux-omarchy = EEVDF — balanced default
 reason="EEVDF (balanced default — general desktop/workstation)"
 if $NVIDIA || $X3D; then
-  pick="cachyos-bore"    # linux-cachyos-bore = BORE scheduler — interactive/gaming
+  pick="omarchy-bore"    # linux-omarchy-bore = BORE scheduler — interactive/gaming
   if $NVIDIA && $X3D; then
     reason="BORE — discrete NVIDIA GPU + X3D CPU (gaming/interactive workload)"
   elif $NVIDIA; then
@@ -71,10 +71,10 @@ detect() {
   $LAPTOP && tags+=(laptop)
   info "CPU: ${cpu_model:-unknown} ($cores threads, ${ram}G RAM)"
   info "GPU: $gpu${tags[*]:+ (${tags[*]})}"
-  info "recommended cachyos kernel: $pick"
+  info "recommended omarchy kernel: $pick"
   info "  $reason"
   if (( cores >= 24 && ram >= 64 )) && ! $NVIDIA && ! $X3D; then
-    info "  (server-flavored box: linux-cachyos-server exists if you want server tuning — not auto-applied)"
+    info "  (server-flavored box: a server-tuned variant could be added to [omarchy] — not auto-applied)"
   fi
   info "apply anytime: hexciri-kernel (System ▸ Kernel), or: hexciri-scheduler run"
 }

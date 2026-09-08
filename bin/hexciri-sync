@@ -2,7 +2,7 @@
 # hexciri:summary=Re-apply hexciri system state after package transactions (alpm hook + manual)
 # Package upgrades routinely clobber hexciri's bits:
 #   * kernels install + mkinitcpio builds the initramfs, but systemd-boot gets no
-#     new entry — the box keeps booting the old default (see: linux-cachyos-bore)
+#     new entry — the box keeps booting the old default (see: linux-omarchy-bore)
 #   * sddm heals /etc/pam.d/sddm, losing pam_gnome_keyring + pam_fprintd
 #   * avahi/hwloc/v4l-utils/qt6ct restore their stock .desktop files, so the
 #     NoDisplay curation reverts and the menu cruft returns

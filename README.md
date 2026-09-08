@@ -110,7 +110,7 @@ theme changes.
 | editor | `zed` | `hexciri-defaults` → Editor |
 | agent | `opencode` (`Mod`+backtick) | `hexciri-defaults` → Agent |
 | kernel | auto: `linux` (stock) on fresh installs | `hexciri-kernel` (custom post-install) |
-| gpu | autodetect (mesa/vulkan per vendor; nvidia-open Turing+, 580xx legacy Maxwell/Pascal/Volta via CachyOS direct-fetch) | `hexciri-gpu` |
+| gpu | autodetect (mesa/vulkan per vendor; nvidia-open Turing+, 580xx legacy Maxwell/Pascal/Volta via AUR build) | `hexciri-gpu` |
 | monitors | preconfigured (scale 2) | in your WM's own config |
 | bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |
@@ -147,17 +147,20 @@ Volume, brightness and mic keys work as labeled.
 
 | channel | Arch mirror | pkgs | kernel menu |
 |---|---|---|---|
-| `stable` (default) | `stable-mirror.omarchy.org` (month-held) | `pkgs.omarchy.org/stable` | `linux`, `linux-lts` + cachyos set |
-| `bleeding` | official Arch (`geo.mirror.pkgbuild.com`) | none | `linux`, `linux-lts` + cachyos set |
+| `stable` (default) | `stable-mirror.omarchy.org` (month-held) | `pkgs.omarchy.org/stable` | `linux`, `linux-lts` |
+| `bleeding` | official Arch (`geo.mirror.pkgbuild.com`) | `pkgs.omarchy.org/edge` | `linux`, `linux-lts`, omarchy EEVDF + BORE |
 
 Stable — month-held packages (kept for users who want slower, vetted releases);
-bleeding — normal Arch rolling release. CachyOS kernels are the same on both:
-never a repo, always a per-CPU direct fetch (`hexciri-cachyos`: your tier —
-`znver4`/`v4`/`v3`/generic — detected from this CPU, key `F3B607488DB35A47`
-local-signed once). Install/update them via **System ▸ Kernel**, where
-**Recommended (auto-detect)** has `hexciri-scheduler` read this machine (NVIDIA
-dGPU / X3D → BORE, else EEVDF) and pick the matching build. `pacman -Syu`
-won't update local-file kernels — `hexciri-update` re-fetches them.
+bleeding — normal Arch rolling release plus the omarchy **edge** repo, which
+carries omarchy's own kernel line as ordinary repo packages: `linux-omarchy`
+(EEVDF) and `linux-omarchy-bore` (BORE). Install/update them via
+**System ▸ Kernel** (or `hexciri-kernel`), where **Recommended (auto-detect)**
+has `hexciri-scheduler` read this machine (NVIDIA dGPU / X3D → BORE, else
+EEVDF) and pick the matching build. Because they're real repo packages they
+update with plain `pacman -Syu` — no fetch loop, no AUR rebuilds, and the
+omarchy keyring is bootstrapped on install. Stock `linux`/`linux-lts` stay the
+kernel-menu base everywhere; omarchy kernels are a bleeding-channel extra.
+Legacy 580xx drivers are AUR-built in dependency order by `hexciri-gpu`.
 
 ## Already on Arch?
 Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:
