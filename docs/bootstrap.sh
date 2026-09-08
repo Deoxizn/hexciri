@@ -327,7 +327,10 @@ for img in /boot/vmlinuz-*; do
     echo "options \$ROOTOPTS"
   } > "/boot/loader/entries/hexciri-\$k.conf"
 done
-echo -e "default hexciri-$STAGE1_KERNEL.conf\ntimeout 3" > /boot/loader/loader.conf
+# console-mode max = native GOP resolution = smallest readable text on first
+# boot (systemd-boot's default can fall back to a low-res mode ≈1in-tall glyphs
+# on dense panels; hexciri-sync also enforces this after the first package run)
+echo -e "default hexciri-$STAGE1_KERNEL.conf\ntimeout 3\nconsole-mode max" > /boot/loader/loader.conf
 # one-shot insurance: a malformed options line boots to a timeout with no
 # useful error, so refuse to continue if spacing or an empty key value slipped in
 if grep -qE '(root|options) +=' /boot/loader/entries/hexciri-*.conf; then

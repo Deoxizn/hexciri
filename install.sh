@@ -407,8 +407,11 @@ HOOK
   # ── GPU autodetect (runs as root here; installer reboots at the end, not mid-run) ──
   if ! $DRY_RUN; then
     # shellcheck disable=SC2086
-    HEXCIRI_NO_REBOOT=1 hexciri-gpu -y ${KERNEL_PICK:+--kernel $KERNEL_PICK} \
-      || warn "GPU setup needs attention — re-run: hexciri-gpu"
+    if ! HEXCIRI_NO_REBOOT=1 hexciri-gpu -y ${KERNEL_PICK:+--kernel $KERNEL_PICK}; then
+      warn "GPU setup FAILED. An NVIDIA machine booting without its driver hangs"
+      warn "on nouveau after login — boot to a console/live ISO and fix before using it:"
+      warn "  arch-chroot /mnt  pacman -S <kernel>-headers nvidia-580xx/nvidia-open-dkms …"
+    fi
   fi
 
   # ── scheduler autodetect (first-install only): tell the user which cachyos

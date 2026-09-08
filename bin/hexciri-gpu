@@ -108,6 +108,22 @@ nvidia_common() {
   $changed && sudo mkinitcpio -P || true
 }
 
+verify_nvidia_mod() { # confirm the -dkms module actually landed. Inside the
+  # install chroot uname -r is the LIVE ISO kernel, so match on the modules dir.
+  local okall=1
+  for m in nvidia nvidia_modeset nvidia_drm nvidia_uvm; do
+    compgen -G "/usr/lib/modules/*/updates/dkms/$m.ko*" >/dev/null \
+      || { err "expected module $m missing"; okall=0; }
+  done
+  if (( okall )); then
+    ok "nvidia kernel module(s) built"
+    return 0
+  fi
+  err "nvidia kernel module NOT built — rebooting now lands on nouveau, which hard-locks after login on this generation"
+  err "fix the build, then re-run: $(basename "$0")"
+  return 1
+}
+
 NVIDIA=false; LEGACY=false
 has_vendor 0x10de && NVIDIA=true
 nvidia_legacy && LEGACY=true
@@ -138,6 +154,7 @@ if $LEGACY; then
   done
   pkg "${headers[@]}" nvidia-580xx-utils nvidia-580xx-dkms lib32-nvidia-580xx-utils
   nvidia_common
+  verify_nvidia_mod || exit 1
   ok "legacy stack ready (580xx on $KERNEL_PICK). REBOOT required."
   reboot_now
   exit 0
@@ -174,6 +191,7 @@ if $NVIDIA; then
   done
   pkg "${headers[@]}" nvidia-open-dkms nvidia-utils lib32-nvidia-utils
   nvidia_common
+  verify_nvidia_mod || exit 1
   ok "nvidia-open stack ready. REBOOT required."
   reboot_now
   exit 0
