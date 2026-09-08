@@ -28,8 +28,10 @@ Arch × Niri × Noctalia
 - **A minimal Arch experience** — your system starts clean: Arch, your chosen
   WM, and the Noctalia shell — nothing you didn't ask for; add the rest on
   demand.
-- **It's just Arch** — same repos, same package manager, same knowledge.
-  Everything that runs on Arch runs here; nothing hidden, nothing reinvented.
+- **It's Arch. Only calmer.** — same package manager, same knowledge:
+  everything that runs on Arch runs here. But the default repo holds packages
+  back a month, so updates don't surprise you. Rolling release is one `--channel
+  bleeding` away.
 
 ## Install
 
