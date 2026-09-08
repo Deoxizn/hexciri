@@ -152,7 +152,13 @@ if $LEGACY; then
   for k in linux linux-lts linux-cachyos linux-cachyos-bore linux-cachyos-lts; do
     pacman -Q "$k" &>/dev/null && headers+=("$k-headers")
   done
-  pkg "${headers[@]}" nvidia-580xx-utils nvidia-580xx-dkms lib32-nvidia-580xx-utils
+  if ((${#headers[@]})); then pkg "${headers[@]}"; fi
+  # 580xx is EOL in the official repos (the 590 release dropped below Turing →
+  # 580xx left `extra` for AUR); cachyos still publishes the prebuilt split, so
+  # direct-fetch it — local-file pacman -U, no repo adopted.
+  local cacbin; cacbin="$(command -v hexciri-cachyos || true)"
+  [[ -n $cacbin ]] || { err "hexciri-cachyos not on PATH"; exit 1; }
+  sudo "$cacbin" nvidia
   nvidia_common
   verify_nvidia_mod || exit 1
   ok "legacy stack ready (580xx on $KERNEL_PICK). REBOOT required."

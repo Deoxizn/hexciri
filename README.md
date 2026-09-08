@@ -110,7 +110,7 @@ theme changes.
 | editor | `zed` | `hexciri-defaults` → Editor |
 | agent | `opencode` (`Mod`+backtick) | `hexciri-defaults` → Agent |
 | kernel | auto: `linux` (stock); `--kernel=lts` opts into LTS | `hexciri-kernel` (custom post-install) |
-| gpu | autodetect (mesa/vulkan per vendor; nvidia-open Turing+, 580xx legacy Maxwell/Pascal/Volta) | `hexciri-gpu` |
+| gpu | autodetect (mesa/vulkan per vendor; nvidia-open Turing+, 580xx legacy Maxwell/Pascal/Volta via CachyOS direct-fetch) | `hexciri-gpu` |
 | monitors | preconfigured (scale 2) | in your WM's own config |
 | bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |

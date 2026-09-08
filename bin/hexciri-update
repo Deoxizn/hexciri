@@ -73,6 +73,13 @@ fi
     [[ -n $cacbin ]] || { echo "cachyos refresh for $ck failed (hexciri-cachyos not on PATH)"; continue; }
     sudo "$cacbin" install "$ck" 2>&1 || echo "cachyos refresh for $ck failed (continuing)"
   done
+  # legacy NVIDIA (Maxwell/Pascal/Volta): 580xx is EOL in official repos, so the
+  # cachyos-mirror direct-fetch refreshes it the same way (installed = local file).
+  if pacman -Q nvidia-580xx-utils >/dev/null 2>&1; then
+    echo "-- cachyos driver: refreshing nvidia-580xx --"
+    cacbin="$(command -v hexciri-cachyos || true)"
+    [[ -n $cacbin ]] && sudo "$cacbin" nvidia 2>&1 || echo "nvidia-580xx refresh failed (continuing)"
+  fi
   if command -v yay &>/dev/null && pacman -Qmq 2>/dev/null | grep -qv yay-bin; then
     yay -Sua --noconfirm
   fi
