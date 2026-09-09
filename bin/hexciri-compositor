@@ -113,7 +113,12 @@ case "$op" in
       niri)     niri msg action load-config-file 2>/dev/null || true ;;
       hyprland) hyprctl reload 2>/dev/null || true ;;
       sway)     swaymsg reload 2>/dev/null || true ;;
-      *)        pkill -HUP -f "$WM" 2>/dev/null || true ;;
+      mango)
+        # mango reloads via its mmsg IPC (no SIGHUP/config-watch handler — a
+        # HUP here would *terminate* the session, so never use the generic path).
+        if [[ -n ${MANGO_INSTANCE_SIGNATURE:-} ]]; then
+          mmsg dispatch reload_config 2>/dev/null || true
+        fi ;;
     esac
     exit 0
     ;;

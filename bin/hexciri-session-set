@@ -40,7 +40,9 @@ picker() {
   printf '%s\n' "$@" | "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt="$prompt" --lines="$#"
 }
 if [[ -z $want_wm ]]; then
-  want_wm=$(picker "WM: " niri hyprland sway mango) || exit 0
+  # mango stays selectable via explicit `wm=mango` but is NOT advertised in the
+  # picker (parked pending stability — see config/mango).
+  want_wm=$(picker "WM: " niri hyprland sway) || exit 0
 fi
 if [[ -z $want_shell ]]; then
   want_shell=$(picker "Shell: " noctalia none) || exit 0
@@ -51,7 +53,13 @@ known_shell "$want_shell" || { echo "unknown shell: $want_shell (noctalia|none)"
 cur_wm="$("$SCRIPT_DIR/hexciri-session" wm)"
 cur_shell="$("$SCRIPT_DIR/hexciri-session" shell)"
 if [[ $want_wm == "$cur_wm" && $want_shell == "$cur_shell" ]]; then
-  echo "already on $cur_wm+$cur_shell — nothing to do"
+  msg="already on $cur_wm + $cur_shell — nothing to do"
+  echo "$msg"
+  # A picker-only run has no tty: echo goes nowhere, so the "nothing happened"
+  # confusion is real — say it aloud instead of staying silent.
+  if [[ ! -t 0 && ! -t 1 ]] && command -v notify-send >/dev/null 2>&1; then
+    notify-send "Hexciri" "$msg" 2>/dev/null || true
+  fi
   exit 0
 fi
 

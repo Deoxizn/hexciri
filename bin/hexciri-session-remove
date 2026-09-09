@@ -41,8 +41,10 @@ run_wm="$(running_wm || true)"
 
 # installed = a config dir exists under ~/.config/<wm> (the only honest marker the
 # selector can't fake; package presence is second-best — some WMs are AUR-built).
+# mango is parked/unadvertised: it stays removable via explicit arg but is not
+# offered in the picker.
 installed=()
-for wm in niri hyprland sway mango; do
+for wm in niri hyprland sway; do
   if [[ -d $XDG_CONFIG_HOME/$wm || -f $SESSION_DIR/$wm.desktop || -f /usr/bin/$wm ]]; then
     installed+=("$wm")
   fi

@@ -25,7 +25,6 @@ add "Noctalia docs" "https://docs.noctalia.dev/noctalia/" noctalia
 add "Niri wiki" "https://github.com/YaLTeR/niri/wiki" niri
 add "Hyprland wiki" "https://wiki.hyprland.org" Hyprland
 add "Sway wiki" "https://github.com/swaywm/sway/wiki" sway
-add "Mango docs" "https://mangowm.github.io/docs" mango
 
 # Terminal row — kitty is the shipped default; a swap to alacritty/foot just
 # changes which docs show.
