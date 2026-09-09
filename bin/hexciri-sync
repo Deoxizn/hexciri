@@ -126,6 +126,28 @@ if [[ -n $noct_home && -f $noct_home/.config/kitty/kitty.conf ]] \
     log "kitty: remote control hardened to socket-only (pre-1454112 config migrated)"
 fi
 
+# ── 3a5. sddm: require the Wayland greeter (sddm-greeter-qt6). Without it sddm
+# ── falls back to its fragile X11 greeter — one such box wedged on logout (the
+# ── session teardown hit 'Authentication error: Process crashed' and the greeter
+# ── never respawned: black screen + cursor on vt1 while Xorg idled on vt2).
+# ── Fresh installs get it via install.sh PKGS; this heals boxes that predate
+# ── that. Lock-aware like the gnome-keyring downgrade: inside an alpm hook
+# ── pacman holds the lock, so a nested pacman -S would deadlock — defer. ──
+if ! pacman -Q sddm-greeter-qt6 >/dev/null 2>&1; then
+  if pgrep -x pacman >/dev/null; then
+    if command -v systemd-run >/dev/null 2>&1 \
+       && systemd-run --no-block --unit=hexciri-greeter-retry --on-active=1m /usr/local/bin/hexciri-sync >/dev/null 2>&1; then
+      log "sddm-greeter-qt6 install queued (transient timer hexciri-greeter-retry)"
+    else
+      setsid nohup bash -c 'while pgrep -x pacman >/dev/null 2>&1; do sleep 2; done; /usr/local/bin/hexciri-sync' >/dev/null 2>&1 &
+      log "sddm-greeter-qt6 install queued (detached retry)"
+    fi
+  else
+    pacman -S --needed --noconfirm sddm-greeter-qt6 >/dev/null 2>&1 && \
+      log "installed sddm-greeter-qt6 (Wayland greeter — robust logout/login)"
+  fi
+fi
+
 # ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
 if [[ -d /boot/loader ]]; then
   ROOTUUID="$(findmnt -no UUID / 2>/dev/null || true)"
