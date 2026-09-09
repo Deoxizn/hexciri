@@ -1,6 +1,6 @@
-// Keybinds — rendered from config/keybinds/intents.toml
+// Keybinds — hexciri core, hand-written.
 // Niri has NO default binds — this block defines ALL of them.
-// "Mod" = Super key. Regenerate with: hexciri-keybinds-render niri > config/niri/keybinds.kdl
+// "Mod" = Super key.
 binds {
     Mod+0 { focus-workspace "browser"; }
     Mod+1 { focus-workspace 1; }
@@ -62,8 +62,6 @@ binds {
     Mod+Shift+F { spawn "~/.local/bin/strata"; }
     Mod+Shift+P { focus-tiling; }
     Mod+Shift+R { toggle-column-tabbed-display; }
-    XF86Launch5 { spawn "hexciri-launch-or-focus-webapp" "gemini" "https://gemini.google.com/app"; }
-    XF86Launch6 { spawn "hexciri-launch-or-focus-webapp" "photopea" "https://photopea.com"; }
     Mod+Alt+Space { spawn "hexciri-menu"; }
     Mod+Ctrl+Down { move-window-down; }
     Mod+Ctrl+Left { move-column-left; }

@@ -9,9 +9,9 @@
 #   2. pull fresh + re-exec (must not run stale bytes — same guard as the updater funnel)
 #   3. install the target WM package (sudo) + generate /usr/share/wayland-sessions/${wm}.desktop
 #   4. carry-over the INSTALLED config into the target WM (monitors whole-file,
-#      keybinds re-rendered from intents.toml — the schema IS the carry-over)
+#      keybinds copied whole from the hand-written per-WM configs)
 #   5. write ~/.config/hexciri/{wm,shell} (the authoritative selector)
-#   6. re-run the theme hook (hexciri-sync: per-WM borders/keybinds render)
+#   6. re-run the theme hook (hexciri-sync: per-WM borders, keybinds copy)
 #   7. print "log out and pick <wm> in the session picker" (current session untouched)
 set -euo pipefail
 
@@ -173,7 +173,7 @@ fi
 # (the machine's real scale/positions — never the repo template) and write it
 # into the target WM's monitor fragment. env/input/autostart go through
 # hexciri-config-render (rendered from the live niri fragments). Keybinds are
-# NOT copied: the intent schema is the carry-over; step 6 re-renders them.
+# owned by the hand-written per-WM configs — copied whole in step 6.
 monitors_from=""
 case "$cur_wm" in
   niri)
@@ -432,18 +432,32 @@ echo "$want_wm"    > "$SEL_DIR/wm"
 echo "$want_shell" > "$SEL_DIR/shell"
 echo "selector: ~/.config/hexciri/wm = $want_wm  shell = $want_shell"
 
-# ── step 6: regenerate (bin re-link + keybinds render + theme hook: borders) ──
-# Keybinds: the intent schema is the carry-over — re-render the target
-# WM's keybind fragment from intents.toml so custom intent rows follow the swap
-# (the seeded repo snapshot is only the fallback the master renders agree on).
-if [[ $want_wm != "$cur_wm" ]] && [[ -x $SCRIPT_DIR/hexciri-keybinds-render ]]; then
+# ── step 6: regenerate (bin re-link + keybinds copy + theme hook: borders) ──
+# Keybinds: owned by the hand-written per-WM configs — copy them whole so a
+# swap into a WM that was never installed gets the exact shipped bind set (the
+# seeded snapshot in step 4.0 covers missing files; this overwrite also keeps
+# the fragment in sync with the repo for previously-seeded WMs). No backups:
+# WM selection is an install-time decision; the live keybind file is hexciri's.
+if [[ $want_wm != "$cur_wm" ]]; then
   case "$want_wm" in
-    hyprland) mkdir -p "$XDG_CONFIG_HOME/hypr/conf"; "$SCRIPT_DIR/hexciri-keybinds-render" hyprland > "$XDG_CONFIG_HOME/hypr/conf/keybinds.lua" ;;
-    sway)     mkdir -p "$XDG_CONFIG_HOME/sway/conf.d"; "$SCRIPT_DIR/hexciri-keybinds-render" sway     > "$XDG_CONFIG_HOME/sway/conf.d/keybinds.conf" ;;
-    mango)    mkdir -p "$XDG_CONFIG_HOME/mango";    "$SCRIPT_DIR/hexciri-keybinds-render" mango    > "$XDG_CONFIG_HOME/mango/keybinds.conf" ;;
-    niri)     ;;  # committed static snapshot (config/niri/keybinds.kdl); nothing to do
+    hyprland)
+      mkdir -p "$XDG_CONFIG_HOME/hypr/conf"
+      cp -f "$REPO/config/hypr/conf/keybinds.lua" "$XDG_CONFIG_HOME/hypr/conf/keybinds.lua"
+      ;;
+    sway)
+      mkdir -p "$XDG_CONFIG_HOME/sway/conf.d"
+      cp -f "$REPO/config/sway/conf.d/keybinds.conf" "$XDG_CONFIG_HOME/sway/conf.d/keybinds.conf"
+      ;;
+    mango)
+      mkdir -p "$XDG_CONFIG_HOME/mango"
+      cp -f "$REPO/config/mango/keybinds.conf" "$XDG_CONFIG_HOME/mango/keybinds.conf"
+      ;;
+    niri)
+      mkdir -p "$XDG_CONFIG_HOME/niri"
+      cp -f "$REPO/config/niri/keybinds.kdl" "$XDG_CONFIG_HOME/niri/keybinds.kdl"
+      ;;
   esac
-  echo "re-rendered keybinds for $want_wm (from config/keybinds/intents.toml)"
+  echo "copied hand-written keybinds for $want_wm (config/<wm>/keybinds*)"
 fi
 "$SCRIPT_DIR/hexciri-update-hexciri" >/dev/null 2>&1 || true
 # Per-WM borders: re-run the theme hook so the target WM's looknfeel fragment

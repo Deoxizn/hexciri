@@ -1,6 +1,22 @@
--- Keybinds — rendered from config/keybinds/intents.toml (single source of truth).
+-- Keybinds — hexciri core, hand-written (Lua 0.56+).
+-- Hyprland has no shipped default binds; this file defines the hexciri core
+-- set. Replaces the former render from config/keybinds/intents.toml.
 -- Included automatically via require("hypr.conf.keybinds") in hyprland.lua.
--- Regenerate with: hexciri-keybinds-render hyprland > config/hypr/conf/keybinds.lua
+--
+-- Stock per-workspace layouts are kept. The native Scrolling Layout (the
+-- niri/mango-scroller feel) is included below as a commented example:
+--
+--   hl.config({ scrolling = { column_width = 0.5 } })
+--   for _, ws in ipairs({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }) do
+--     hl.workspace_rule({
+--       workspace = tostring(ws),
+--       monitor = "DP-1",
+--       layout = "scrolling",
+--       layout_opts = { direction = "right" },
+--     })
+--   end
+--   -- secondary monitor: monitor = "HDMI-A-1", layout_opts = { direction = "down" }
+-- See https://wiki.hypr.land/Configuring/Layouts/Scrolling-Layout/
 hl.bind("SUPER + 0", hl.dsp.focus({ workspace = "browser" }))
 hl.bind("SUPER + 1", hl.dsp.focus({ workspace = 1 }))
 hl.bind("SUPER + 2", hl.dsp.focus({ workspace = 2 }))
@@ -61,8 +77,6 @@ hl.bind("SUPER + SHIFT + E", hl.dsp.exec_cmd("zeditor"))
 hl.bind("SUPER + SHIFT + F", hl.dsp.exec_cmd("~/.local/bin/strata"))
 hl.bind("SUPER + SHIFT + P", hl.dsp.focus({ window = "tiled" }))
 hl.bind("SUPER + SHIFT + R", hl.dsp.group.toggle())
-hl.bind("XF86Launch5", hl.dsp.exec_cmd("hexciri-launch-or-focus-webapp gemini https://gemini.google.com/app"))
-hl.bind("XF86Launch6", hl.dsp.exec_cmd("hexciri-launch-or-focus-webapp photopea https://photopea.com"))
 hl.bind("SUPER + ALT + space", hl.dsp.exec_cmd("hexciri-menu"))
 hl.bind("SUPER + CTRL + Down", hl.dsp.window.move({ direction = 'd' }))
 hl.bind("SUPER + CTRL + Left", hl.dsp.window.move({ direction = 'l' }))

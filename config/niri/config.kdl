@@ -12,7 +12,7 @@
 //   include "looknfeel.kdl"     // layout borders/focus-ring/shadow, blur,
 //                                //   animations, hotkey-overlay (theme-owned feel)
 //   include "window-rules.kdl"   // workspace names + window-rule + layer-rule
-//   include "keybinds.kdl"       // binds { } — rendered from config/keybinds/intents.toml
+//   include "keybinds.kdl"       // binds { } — hexciri core (hand-written)
 //   include "autostart.kdl"      // spawn-at-startup — boot-time services & shell
 //
 // Split so each concern is easy to find, edit and back up on its own.

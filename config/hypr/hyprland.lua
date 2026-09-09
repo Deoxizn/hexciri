@@ -10,8 +10,7 @@
 --   require("hypr.conf.monitors")       -- hl.monitor(...) — screens, scale, mode, VRR
 --   require("hypr.conf.looknfeel")      -- theme-owned feel: borders (gradient), gaps
 --   require("hypr.conf.window-rules")   -- window rules (samples; edit to taste)
---   require("hypr.conf.keybinds")       -- hl.bind(...) — rendered from
---                                       --   config/keybinds/intents.toml (single source)
+--   require("hypr.conf.keybinds")       -- hl.bind(...) — hexciri core (hand-written)
 --   require("hypr.conf.autostart")      -- hl.on("hyprland.start", ...) — boot services
 --
 -- Split so each concern is easy to find, edit and back up on its own.

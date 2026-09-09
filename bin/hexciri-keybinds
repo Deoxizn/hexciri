@@ -1,54 +1,170 @@
 #!/bin/bash
 # hexciri:keybinds=searchable-list
-# hexciri:summary=Per-WM keybinding cheatsheet — only binds actually emitted for the active WM
-# Walks config/keybinds/intents.toml using the SAME bound-check rules as
-# hexciri-keybinds-render, so this lists exactly what the active WM binds now.
+# hexciri:summary=Per-WM keybinding cheatsheet — parsed from the ACTIVE WM's live keybinds config
+# Reads the hand-written keybinds file for the current WM (live ~/.config copy,
+# falling back to the repo snapshot) and renders a searchable cheat list. The
+# hexciri core combos are identical across WMs; combos below the core are shown
+# with the action they run so per-WM extras stay discoverable.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-INTENTS="$SCRIPT_DIR/../config/keybinds/intents.toml"
-WM="$("$SCRIPT_DIR/hexciri-session" wm)"
+REPO="${HEXCIRI_PATH:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
+WM="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || true)"
 
-export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
-output=$(python3 - "$INTENTS" "$WM" <<'EOF'
-import sys
-try:
-    import tomllib
-    from key_translate import hyp_dsp
-except ImportError:
-    sys.stderr.write("python3 too old or key_translate missing: tomllib unavailable\n")
-    sys.exit(1)
+case "$WM" in
+  niri)
+    LIVE="$CFG/niri/keybinds.kdl"
+    FALLBACK="$REPO/config/niri/keybinds.kdl" ;;
+  hyprland)
+    LIVE="$CFG/hypr/conf/keybinds.lua"
+    FALLBACK="$REPO/config/hypr/conf/keybinds.lua" ;;
+  sway)
+    LIVE="$CFG/sway/conf.d/keybinds.conf"
+    FALLBACK="$REPO/config/sway/conf.d/keybinds.conf" ;;
+  mango)
+    LIVE="$CFG/mango/keybinds.conf"
+    FALLBACK="$REPO/config/mango/keybinds.conf" ;;
+  *)
+    echo "hexciri-keybinds: unknown WM '$WM' (niri|hyprland|sway|mango)" >&2
+    exit 1 ;;
+esac
+FILE=""
+[[ -f $LIVE ]]     && FILE="$LIVE"
+[[ -z $FILE ]] && [[ -f $FALLBACK ]] && FILE="$FALLBACK"
+if [[ -z $FILE ]]; then
+  echo "hexciri-keybinds: no keybinds config found for $WM ($LIVE)" >&2
+  exit 1
+fi
 
-INTENTS_FILE, WM = sys.argv[1], sys.argv[2]
-cfg = tomllib.load(open(INTENTS_FILE, "rb"))
-keys, intents = cfg["keys"], cfg["intents"]
+output=$(KEYBINDS_FILE="$FILE" WM="$WM" python3 <<'EOF'
+import os, re, sys
 
-def bound(intent):
-    s = intents[intent]
-    if s.get("type") == "spawn":
-        return True
-    action = s.get(WM, s.get("niri", "(See NOTE)"))
-    if action is None:
-        return False
-    if action.endswith("via hexciri-compositor)"):
-        return True
-    if action.startswith("("):
-        return False
-    if WM == "hyprland":
-        return hyp_dsp(action) is not None
-    return True
+file, wm = os.environ["KEYBINDS_FILE"], os.environ["WM"]
+
+# ── hexciri core: canonical combo -> description (mirrors the hand-written configs) ──
+DESC = {
+    "Mod+Space": "App launcher",
+    "Mod+Alt+Space": "Root menu",
+    "Mod+K": "Keybind reference (this list)",
+    "Mod+Return": "Terminal",
+    "Mod+grave": "AI agent",
+    "Mod+Shift+B": "Browser",
+    "Mod+Shift+E": "Text editor",
+    "Mod+Shift+F": "File manager",
+    "Mod+Ctrl+M": "Messenger webapp",
+    "Mod+Q": "Close window",
+    "Mod+Left": "Focus left", "Mod+H": "Focus left",
+    "Mod+Right": "Focus right", "Mod+L": "Focus right",
+    "Mod+Down": "Focus down", "Mod+J": "Focus down",
+    "Mod+Up": "Focus up",
+    "Mod+Ctrl+Left": "Move window left", "Mod+Ctrl+H": "Move window left",
+    "Mod+Ctrl+Right": "Move window right", "Mod+Ctrl+L": "Move window right",
+    "Mod+Ctrl+Down": "Move window down", "Mod+Ctrl+J": "Move window down",
+    "Mod+Ctrl+Up": "Move window up", "Mod+Ctrl+K": "Move window up",
+    "Mod+1": "Workspace 1", "Mod+2": "Workspace 2", "Mod+3": "Workspace 3",
+    "Mod+4": "Workspace 4", "Mod+5": "Workspace 5", "Mod+6": "Workspace 6",
+    "Mod+7": "Workspace 7", "Mod+8": "Workspace 8", "Mod+9": "Workspace 9",
+    "Mod+0": "Browser workspace",
+    "Mod+Shift+1": "Move window to workspace 1",
+    "Mod+Shift+2": "Move window to workspace 2",
+    "Mod+Shift+3": "Move window to workspace 3",
+    "Mod+Shift+4": "Move window to workspace 4",
+    "Mod+Shift+5": "Move window to workspace 5",
+    "Mod+Shift+6": "Move window to workspace 6",
+    "Mod+Shift+7": "Move window to workspace 7",
+    "Mod+Shift+8": "Move window to workspace 8",
+    "Mod+Shift+9": "Move window to workspace 9",
+    "Mod+Shift+0": "Move window to browser workspace",
+    "Mod+U": "Previous workspace",
+    "Mod+I": "Next workspace",
+    "Mod+F": "Maximize column",
+    "Mod+Ctrl+F": "Fullscreen",
+    "Mod+R": "Cycle column width",
+    "Mod+Shift+R": "Tabbed column",
+    "Mod+Shift+Space": "Toggle floating",
+    "Mod+P": "Focus floating window",
+    "Mod+Shift+P": "Focus tiling window",
+    "Mod+BracketLeft": "Consume window into column",
+    "Mod+BracketRight": "Expel window from column",
+    "Mod+Print": "Screenshot",
+    "Ctrl+Print": "Screenshot region to clipboard",
+    "Alt+Print": "Screen record",
+    "Mod+O": "Overview",
+    "Mod+C": "Copy", "Mod+V": "Paste", "Mod+X": "Cut",
+    "Mod+Ctrl+L": "Lock screen",
+    "Mod+Ctrl+V": "Clipboard history",
+    "Mod+Escape": "Power menu",
+    "Mod+Comma": "Clear notifications",
+    "Mod+N": "Toggle notifications",
+    "XF86AudioRaiseVolume": "Volume up",
+    "XF86AudioLowerVolume": "Volume down",
+    "XF86AudioMute": "Mute",
+    "XF86AudioMicMute": "Mic mute",
+    "XF86AudioPlay": "Play / pause",
+    "XF86AudioPrev": "Previous track",
+    "XF86AudioNext": "Next track",
+    "XF86MonBrightnessUp": "Brightness up",
+    "XF86MonBrightnessDown": "Brightness down",
+}
+
+SUB_TO_XDG = {
+    "space": "Space", "comma": "Comma", "grave": "grave", "return": "Return",
+    "escape": "Escape", "print": "Print", "up": "Up", "down": "Down",
+    "left": "Left", "right": "Right", "bracketleft": "BracketLeft",
+    "bracketright": "BracketRight", "0": "0", "1": "1", "2": "2", "3": "3",
+    "4": "4", "5": "5", "6": "6", "7": "7", "8": "8", "9": "9",
+}
+
+def canon_key(token):
+    t = token.strip()
+    if t in ("Mod", "SUPER", "Mod4"):
+        return "Mod"
+    if t in ("Ctrl", "CTRL"):
+        return "Ctrl"
+    if t in ("Alt", "ALT", "Mod1"):
+        return "Alt"
+    if t in ("Shift", "SHIFT"):
+        return "Shift"
+    if t.startswith("XF86"):
+        return t
+    return SUB_TO_XDG.get(t.lower(), t)
+
+def canon(combo):
+    toks = re.split(r"\+|\s*\+\s*", combo)
+    toks = [c for c in toks if c]
+    return "+".join(canon_key(t) for t in toks)
+
+binds = []
+if wm == "niri":
+    for m in re.finditer(r"^\s*([^\s{}]+)\s*\{\s*([^;{}]*)", open(file).read(), re.M):
+        name = m.group(1).strip()
+        if name in ("binds", "binds+", "binds-columns"):  # the binds { } block opener
+            continue
+        binds.append((name, m.group(2).strip()))
+elif wm == "hyprland":
+    for m in re.finditer(r'^hl\.bind\(\s*"([^"]+)"\s*,\s*([^)]*)\)', open(file).read(), re.M):
+        binds.append((m.group(1), m.group(2).strip()))
+elif wm == "sway":
+    for m in re.finditer(r"^bindsym\s+(\S+)\s+(.*)$", open(file).read(), re.M):
+        binds.append((m.group(1), m.group(2).strip()))
+elif wm == "mango":
+    for m in re.finditer(r"^bind=(?:\[[a-z0-9]+\])?([^,]*),([^,]+),(.*)$", open(file).read(), re.M):
+        mods, key, act = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+        combo = (mods + "+" if mods and mods != "NONE" else "") + key
+        binds.append((combo, act))
 
 rows = []
-for combo in sorted(keys, key=lambda c: (len(c), c)):
-    intent = keys[combo]
-    if not bound(intent):
-        continue
-    desc = intents[intent].get("desc", intent)
-    rows.append(f"{combo:<22} {desc}")
+for combo, action in binds:
+    c = canon(combo)
+    desc = DESC.get(c, action)
+    rows.append(f"{c:<22} {desc}")
 
 if not rows:
-    print("No keybinds bound for active WM", end="", file=sys.stderr)
+    print(f"No keybinds found in {file}", file=sys.stderr)
     sys.exit(1)
+
+rows.sort(key=lambda r: (len(r.split()[0]) if r.split() else 0, r))
 print("\n".join(rows))
 EOF
 ) || exit 1

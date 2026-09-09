@@ -22,8 +22,8 @@
 #   - The entry config.kdl and env/looknfeel start from the repo defaults so
 #     the result looks like the canonical split; user sections whose content
 #     differs from the default replace their default counterpart.
-#   - keybinds.kdl is re-rendered from config/keybinds/intents.toml (the single
-#     source of truth), then the monolith's binds that the schema does not yet
+#   - keybinds.kdl is seeded from the hand-written config/niri/keybinds.kdl
+#     (the hexciri core), then the monolith's binds that the core does not yet
 #     cover are appended as a "personal carry-over" block so nothing is lost.
 #   - In the monolith, layout { } mixes static + theme parts. Static children
 #     (gaps, widths, struts) stay in the entry; theme children (focus-ring,
@@ -269,13 +269,11 @@ if autostart:
 else:
     autostart_out = load_default("autostart.kdl") or ""
 
-# ── 6. keybinds.kdl (schema + personal carry-over) ──────────────────────
-renderer = SCRIPT_DIR / "hexciri-keybinds-render"
+# ── 6. keybinds.kdl (hexciri core + personal carry-over) ─────────────────
 try:
-    proc = subprocess.run([str(renderer), "niri"], capture_output=True, text=True, check=True)
-    schema_binds = proc.stdout
+    schema_binds = (DEFAULT_DIR / "keybinds.kdl").read_text()
 except Exception as e:
-    print(f"hexciri-migrate-niri-split: could not render schema binds ({e})", file=sys.stderr)
+    print(f"hexciri-migrate-niri-split: could not read shipped keybinds ({e})", file=sys.stderr)
     schema_binds = ""
 
 def bind_action_key(b):
@@ -317,8 +315,8 @@ for bb in binds_nodes:
 if schema_binds:
     kb = schema_binds.rstrip("\n") + "\n"
     if uncovered:
-        kb += "\n// Personal carry-over (not yet in config/keybinds/intents.toml) —\n" \
-              "// port these into the schema and regenerate, or leave them here.\n" \
+        kb += "\n// Personal carry-over (not yet in hexciri core) —\n" \
+              "// port these into config/niri/keybinds.kdl, or leave them here.\n" \
               + "\n".join(uncovered) + "\n"
     keybinds_out = kb
 else:

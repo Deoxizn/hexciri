@@ -107,30 +107,32 @@ fi
 mkdir -p "$HOME/.config/hexciri/wallpapers"
 "$REPO/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
 
-# Keybind fragments are OWNED by the schema (config/keybinds/intents.toml) and
-# re-rendered on WM swap — so a pull that ships new intent rows/renderers must
-# refresh the ACTIVE WM's live fragment too, or the machine keeps stale binds
-# (seen in the wild: mango ran the pre-focusdir render after an update pulled
-# the fix). Deterministic + idempotent: output is byte-identical unless the
-# schema/renderer changed, and swaps already overwrite the same file. Runs on
-# every pass (even "up to date") so a stale fragment self-heals on the next press.
-render_keybinds() {
-  [[ -x "$REPO/bin/hexciri-keybinds-render" && -x "$REPO/bin/hexciri-session" ]] || return 0
-  local wm
+# Keybind fragments are OWNED by the hand-written per-WM configs
+# (config/<wm>/keybinds.{kdl,lua,conf}) and copied whole on WM swap — so a
+# pull that ships a newer hand-written keybind file must refresh the ACTIVE
+# WM's live fragment too, or the machine keeps stale binds. Deterministic +
+# idempotent: bytes identical unless the shipped file changed, and swaps
+# overwrite the same path. Runs on every pass (even "up to date") so a stale
+# fragment self-heals on the next press.
+sync_keybinds() {
+  [[ -x "$REPO/bin/hexciri-session" ]] || return 0
+  local wm src dst
   wm="$("$REPO/bin/hexciri-session" wm 2>/dev/null || echo niri)"
   case "$wm" in
-    niri)     local dst="$HOME/.config/niri/keybinds.kdl" ;;
-    hyprland) local dst="$HOME/.config/hypr/conf/keybinds.lua" ;;
-    sway)     local dst="$HOME/.config/sway/conf.d/keybinds.conf" ;;
-    mango)    local dst="$HOME/.config/mango/keybinds.conf" ;;
+    niri)     src="$REPO/config/niri/keybinds.kdl";          dst="$HOME/.config/niri/keybinds.kdl" ;;
+    hyprland) src="$REPO/config/hypr/conf/keybinds.lua";     dst="$HOME/.config/hypr/conf/keybinds.lua" ;;
+    sway)     src="$REPO/config/sway/conf.d/keybinds.conf";  dst="$HOME/.config/sway/conf.d/keybinds.conf" ;;
+    mango)    src="$REPO/config/mango/keybinds.conf";        dst="$HOME/.config/mango/keybinds.conf" ;;
     *) return 0 ;;
   esac
+  [[ -f $src ]] || return 0
   mkdir -p "$(dirname "$dst")"
-  if "$REPO/bin/hexciri-keybinds-render" "$wm" > "$dst" 2>/dev/null; then
-    echo "re-rendered keybinds for $wm ($dst)"
+  if ! cmp -s "$src" "$dst"; then
+    cp -f "$src" "$dst"
+    echo "synced keybinds for $wm ($dst)"
   fi
 }
-render_keybinds
+sync_keybinds
 
 if (( behind == 0 )); then
   echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"

@@ -6,7 +6,7 @@
 # The env/input/autostart carry-over:
 # these three concerns are authored once as niri fragments (config/niri/<concern>.kdl —
 # env.kdl, input.kdl, autostart.kdl) and rendered per-WM by this tool. Keybinds have
-# their own renderer (hexciri-keybinds-render); monitors carry whole-file (session-set).
+# their own hand-written files (config/<wm>/keybinds.*); monitors carry whole-file (session-set).
 #
 # Source resolution (carry-over rule: the installed config is the machine's reality, not the
 # repo template): the live ~/.config/niri/<concern>.kdl wins (per-machine input
