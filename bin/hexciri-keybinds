@@ -172,6 +172,12 @@ DESC = {
     "XF86MonBrightnessDown": "Brightness down",
 }
 
+# Per-WM overrides for combos whose meaning legitimately differs across WMs.
+OVERRIDE = {
+    "mango": {"Mod+S": "Scroller layout"},
+    "sway": {"Mod+S": "Stacking layout"},
+}
+
 SUB_TO_XDG = {
     "space": "Space", "comma": "Comma", "grave": "grave", "return": "Return",
     "escape": "Escape", "print": "Print", "up": "Up", "down": "Down",
@@ -224,6 +230,7 @@ rows = []
 for combo, action in binds:
     c = canon(combo)
     desc = DESC.get(c, action)
+    desc = OVERRIDE.get(wm, {}).get(c, desc)
     rows.append(f"{c:<22} {desc}")
 
 if not rows:
