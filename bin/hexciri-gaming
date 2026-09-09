@@ -59,33 +59,52 @@ nvidia_legacy() { # Maxwell/Pascal/Volta (0x1340..0x1e00) -> 580xx
 
 do_drivers() {
   info "detecting GPUs for lib32 drivers..."
-  local pkgs=()
-  lspci 2>/dev/null | grep -iE "(VGA|Display).*Intel" >/dev/null && pkgs+=(lib32-vulkan-intel)
-  lspci 2>/dev/null | grep -iE "(VGA|Display).*AMD" >/dev/null && pkgs+=(lib32-vulkan-radeon)
-  nvidia_gsp && pkgs+=(lib32-nvidia-utils)
-  nvidia_legacy && pkgs+=(lib32-nvidia-580xx-utils)
+  local pkgs=() nv=""
+  lspci 2>/dev/null | grep -iqE "(VGA|Display).*Intel" && pkgs+=(lib32-vulkan-intel)
+  lspci 2>/dev/null | grep -iqE "(VGA|Display).*AMD" && pkgs+=(lib32-vulkan-radeon)
+  if nvidia_gsp; then
+    nv=lib32-nvidia-utils
+  elif nvidia_legacy; then
+    nv=lib32-nvidia-580xx-utils
+  fi
+  if [[ -n $nv ]]; then
+    # A legacy card that already has the wrong lib32-nvidia provider installed
+    # (e.g. 610 from an earlier default provider pick) conflicts with the
+    # correct one — drop it before adding the right driver, then pin ours.
+    local wrong=""
+    if [[ $nv == lib32-nvidia-580xx-utils ]]; then
+      pacman -Q lib32-nvidia-utils >/dev/null 2>&1 && wrong=lib32-nvidia-utils
+    else
+      pacman -Q lib32-nvidia-580xx-utils >/dev/null 2>&1 && wrong=lib32-nvidia-580xx-utils
+    fi
+    if [[ -n $wrong ]]; then
+      info "removing conflicting $wrong (detected GPU wants $nv)"
+      sudo pacman -R --noconfirm "$wrong" >/dev/null 2>&1 || true
+    fi
+    pkgs+=("$nv")
+  fi
   if ((${#pkgs[@]})); then pkg "${pkgs[@]}"; else info "no discrete GPU drivers needed"; fi
 }
 
 do_steam() {
   info "installing Steam..."
-  pkg steam
   do_drivers
+  pkg steam
   info "starting Steam (first run takes a while)..."
   setsid gtk-launch steam >/dev/null 2>&1 &
 }
 
 do_heroic() {
   info "installing Heroic (Epic/GOG/Amazon)..."
-  aur heroic-games-launcher-bin
   do_drivers
+  aur heroic-games-launcher-bin
   setsid gtk-launch heroic >/dev/null 2>&1 &
 }
 
 do_lutris() {
   info "installing Lutris + Wine..."
-  pkg lutris umu-launcher wine-staging wine-mono wine-gecko winetricks python-protobuf
   do_drivers
+  pkg lutris umu-launcher wine-staging wine-mono wine-gecko winetricks python-protobuf
   sudo sed -i '/env python3/ c\#!/bin/python3' /usr/bin/lutris
   cat <<'EOF'
 
@@ -162,8 +181,8 @@ do_minecraft() {
 
 do_battlenet() {
   info "installing Battle.net via umu-launcher + GE-Proton (no Steam/Lutris/Heroic)..."
-  pkg umu-launcher
   do_drivers
+  pkg umu-launcher
   local PREFIX="$HOME/Games/battlenet"
   local LAUNCHER="$PREFIX/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
   if [[ -d $PREFIX && ! -f $LAUNCHER ]]; then
