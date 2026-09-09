@@ -174,7 +174,21 @@ DESC = {
 
 # Per-WM overrides for combos whose meaning legitimately differs across WMs.
 OVERRIDE = {
-    "mango": {"Mod+S": "Scroller layout"},
+    "mango": {
+        "Mod+S": "Scroller layout",
+        "Mod+Shift+T": "Vertical tile layout",
+        "Mod+Shift+S": "Vertical scroller layout",
+        "Mod+Shift+G": "Grid layout",
+        "Mod+Shift+M": "Monocle layout",
+        "Mod+Shift+D": "Deck layout",
+        "Mod+Shift+C": "Center tile layout",
+        "Mod+Shift+R": "Right tile layout",
+        "Mod+Shift+V": "Vertical grid layout",
+        "Mod+Shift+U": "Vertical deck layout",
+        "Mod+Shift+W": "Dwindle layout",
+        "Mod+Shift+Y": "Fair layout",
+        "Mod+Shift+Z": "Vertical fair layout",
+    },
     "sway": {"Mod+S": "Stacking layout"},
 }
 
