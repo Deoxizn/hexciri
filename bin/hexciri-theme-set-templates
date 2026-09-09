@@ -3,6 +3,7 @@
 # usage: hexciri-theme-set-templates [theme-dir]  (defaults to $HEXCIRI_CURRENT_THEME)
 # generated files carry a GENERATED header; user drop-ins in hooks/theme-set.d run after.
 import os, re, sys, json
+import shutil
 import tomllib
 from pathlib import Path
 
@@ -282,6 +283,16 @@ notification-error = {noc('red')}
 }
 """)
     print(f"hexciri-templates: spicetify -> {sp_themedir / 'color.ini'} (+user.css)")
+
+    # Applying is out of scope for a no-root theme set, EXCEPT when spicetify is
+    # already brought up against the hexciri theme (hexciri-spotify-setup, or a
+    # manual apply): then every theme set re-colors Spotify for real, not just
+    # the dormant color.ini.
+    if shutil.which("spicetify"):
+        import subprocess as sp
+        res = sp.run(["spicetify", "config", "current_theme"], capture_output=True, text=True)
+        if res.returncode == 0 and "hexciri" in (res.stdout + res.stderr):
+            sp.run(["spicetify", "apply"], capture_output=True, text=True)
 
 # 9. wake running kitty windows (config reload re-reads the themed include; the @
 #    socket only exists inside a kitty window, so also SIGUSR1 — works from any
