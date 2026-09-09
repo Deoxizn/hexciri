@@ -25,21 +25,6 @@ SESSION_DIR="/usr/share/wayland-sessions"
 known_wm()   { case "${1:-}" in niri|hyprland|sway|mango) return 0;; *) return 1;; esac; }
 known_shell(){ case "${1:-}" in noctalia|none) return 0;; *) return 1;; esac; }
 
-# Point the hexciri greeter theme at the target WM (Session= in its theme.conf).
-# The greeter reads this to preselect a session at login. Quiet no-op when the
-# hexciri theme isn't deployed. Runs on EVERY invocation, even when the combo
-# is unchanged — an already-swapped box still needs the pin stamped once.
-sddm_preselect() {
-  local wm="$1" tc="/usr/share/sddm/themes/hexciri/theme.conf"
-  [[ -f $tc ]] || { echo "greeter: hexciri theme not deployed (skipped preselect)"; return 0; }
-  if grep -q '^Session=' "$tc"; then
-    sudo bash -c "sed -i 's|^Session=.*|Session=$wm|' '$tc'"
-  else
-    sudo bash -c "printf '\\nSession=%s\\n' '$wm' >> '$tc'"
-  fi
-  echo "greeter: hexciri theme preselected session '$wm'"
-}
-
 # ── resolve target combo ──
 want_wm=""
 want_shell=""
@@ -63,20 +48,6 @@ fi
 known_wm "$want_wm"   || { echo "unknown WM: $want_wm (niri|hyprland|sway|mango)" >&2; exit 1; }
 known_shell "$want_shell" || { echo "unknown shell: $want_shell (noctalia|none)" >&2; exit 1; }
 
-# ── step 2b: launched from a menu (no tty) — sudo needs a visible terminal
-# (the fuzzel-launched process has no tty for the password prompt). Hand off
-# BEFORE the greeter pin and install steps so every sudo call lands in one.
-# A terminal invocation (tty attached) or a re-exec'd run runs in place.
-if [[ ${HXC_SESSION_TUI:-0} == 0 ]] && [[ ! -t 0 && ! -t 1 ]] && command -v xdg-terminal-exec >/dev/null 2>&1; then
-  export HXC_SESSION_TUI=1
-  exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-session-set" "wm=$want_wm" "shell=$want_shell"
-fi
-
-# Greeter preselect runs on EVERY pass (before the early-exit below) so an
-# already-swapped machine still gets its pin stamped — the exact case that
-# broke a mango box that had nothing left to swap.
-sddm_preselect "$want_wm"
-
 cur_wm="$("$SCRIPT_DIR/hexciri-session" wm)"
 cur_shell="$("$SCRIPT_DIR/hexciri-session" shell)"
 if [[ $want_wm == "$cur_wm" && $want_shell == "$cur_shell" ]]; then
@@ -93,6 +64,14 @@ if [[ ${HXC_SESSION_RERUN:-0} == 0 ]] && git -C "$REPO" rev-parse --is-inside-wo
     export HXC_SESSION_RERUN=1
     exec "$0" "$@"
   fi
+fi
+
+# ── step 2b: launched from a menu (no tty) — the pickers ran above, so hand
+# off the sudo work to a visible terminal now that wm/shell are resolved.
+# Direct terminal usage (one is attached) or a re-exec'd run runs in place.
+if [[ ${HXC_SESSION_TUI:-0} == 0 ]] && [[ ! -t 0 && ! -t 1 ]] && command -v xdg-terminal-exec >/dev/null 2>&1; then
+  export HXC_SESSION_TUI=1
+  exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-session-set" "wm=$want_wm" "shell=$want_shell"
 fi
 
 # ── step 3: install the target WM (only what it needs; no multi-GB preinstall) ──

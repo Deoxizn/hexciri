@@ -115,13 +115,8 @@ def key_sway(c):
     return f"{mods}{sub}"
 
 def key_mango(c):
-    # niri names -> mango: SUPER/CTRL/ALT/SHIFT mods (uppercase is fine — the
-    # shipped config mixes case and mango matches case-insensitively), then the
-    # KEY as an xkb keysym name EXACTLY as `wev` prints it. Letter and punctuation
-    # keysyms are LOWERCASE: "C" would bind keysym C (shift+c), not the c key,
-    # silently killing every letter binding. Mango's own default config uses
-    # `SUPER,r`, `Alt,space`, `Return`, `Left`… so lowercase everything except
-    # XF86* multimedia names (which keep their case).
+    # niri names -> mango: SUPER/CTRL/ALT/SHIFT (dwl-style tags via 'view'/'tag').
+    # Modifier names packed with '+', then comma separates the key name.
     m = {"Mod": "SUPER", "Ctrl": "CTRL", "Alt": "ALT", "Shift": "SHIFT"}
     mods, key = [], ""
     for p in c.split("+"):
@@ -130,8 +125,6 @@ def key_mango(c):
             mods.append(p)
         else:
             key = p
-    if not key.startswith("XF86"):
-        key = key.lower()
     return ("+".join(mods) if mods else "NONE") + "," + key
 
 lines = []

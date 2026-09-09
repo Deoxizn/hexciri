@@ -126,42 +126,6 @@ if [[ -n $noct_home && -f $noct_home/.config/kitty/kitty.conf ]] \
     log "kitty: remote control hardened to socket-only (pre-1454112 config migrated)"
 fi
 
-# ── 3a5. sddm: run the Qt6 greeter on Wayland (weston). sddm's default X11
-# ── greeter cannot reliably hand back to the greeter after a Wayland session
-# ── exits — it logs 'Authentication error ... Process crashed' and wedges with
-# ── a black screen + blinking cursor on vt1 while Xorg idles on vt2. The
-# ── Qt6 greeter (+weston compositor) ships in the sddm package itself, so no
-# ── extra greeter package exists; weston is the compositor default.conf names
-# ── for it. Fresh installs get both via install.sh (PKGS + conf); this heals
-# ── boxes that predate it. Lock-aware like the gnome-keyring downgrade: inside
-# ── an alpm hook pacman holds the lock, so a nested pacman -S would deadlock
-# ── defer. ──
-_hexciri_conf=/etc/sddm.conf.d/10-hexciri-theme.conf
-if ! pacman -Q sddm >/dev/null 2>&1 || ! pacman -Q weston >/dev/null 2>&1; then
-  if pgrep -x pacman >/dev/null; then
-    if command -v systemd-run >/dev/null 2>&1 \
-       && systemd-run --no-block --unit=hexciri-greeter-retry --on-active=1m /usr/local/bin/hexciri-sync >/dev/null 2>&1; then
-      log "weston install queued (transient timer hexciri-greeter-retry)"
-    else
-      setsid nohup bash -c 'while pgrep -x pacman >/dev/null 2>&1; do sleep 2; done; /usr/local/bin/hexciri-sync' >/dev/null 2>&1 &
-      log "weston install queued (detached retry)"
-    fi
-  else
-    pacman -S --needed --noconfirm weston >/dev/null 2>&1 && \
-      log "installed weston (Wayland greeter compositor — robust logout/login)"
-  fi
-fi
-if [[ -f $_hexciri_conf ]] && ! grep -q '^GreeterEnvironment=' "$_hexciri_conf"; then
-  # DisplayServer=wayland was the whole point, but bare it leaves the greeter
-  # without a pointer: the compositor (weston) draws the cursor, not Qt, so
-  # sddm's [Theme] CursorTheme never reaches it. Pushing XCURSOR_THEME through
-  # GreeterEnvironment is what gives weston a sprite — Adwaita ships with gtk
-  # (always present on a desktop box). Drop the useless [Theme] CursorTheme
-  # keys from the old attempt; they only acted on the X11 greeter path.
-  printf '[General]\nDisplayServer=wayland\nGreeterEnvironment=XCURSOR_THEME=Adwaita,XCURSOR_SIZE=24\n\n[Theme]\nCurrent=hexciri\n' > "$_hexciri_conf" && \
-    log "sddm: DisplayServer=wayland + GreeterEnvironment XCURSOR_THEME set (Wayland greeter) in 10-hexciri-theme.conf"
-fi
-
 # ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
 if [[ -d /boot/loader ]]; then
   ROOTUUID="$(findmnt -no UUID / 2>/dev/null || true)"
@@ -297,42 +261,6 @@ fi
 # ── idempotent. NFS needs no services — mounts are user-configured. ──
 systemctl enable smb.service >/dev/null 2>&1 || true
 systemctl enable nmb.service >/dev/null 2>&1 || true
-
-# ── 4b. SDDM greeter preselect: keep Session= in the hexciri theme.conf in
-# ── sync with the machine's WM selector (repo owner's ~/.config/hexciri/wm).
-# ── The hexciri greeter shows a real session switcher now, but without this
-# ── pin it defaults to the niri entry on a box that swapped to mango. ──
-if [[ -n $noct_home ]] && [[ -f $noct_home/.config/hexciri/wm ]]; then
-  _sel="$(tr -d '[:space:]' < "$noct_home/.config/hexciri/wm" 2>/dev/null || true)"
-  case "$_sel" in niri|hyprland|sway|mango) : ;; *) _sel="" ;; esac
-  _tc="/usr/share/sddm/themes/hexciri/theme.conf"
-  if [[ -n $_sel ]] && [[ -f $_tc ]]; then
-    if grep -q '^Session=' "$_tc"; then
-      sed -i "s|^Session=.*|Session=$_sel|" "$_tc"
-    else
-      printf '\nSession=%s\n' "$_sel" >> "$_tc"
-    fi
-    log "greeter preselect: Session=$_sel"
-  fi
-fi
-
-# ── 4c. SDDM theme files: redeploy Main.qml + assets when the live copy is
-# ── stale (e.g. installed before the session-picker combo landed, so the
-# ── greeter showed no session switcher). install.sh only writes the theme on a
-# ── fresh install; this catches boxes that predate a theme change. theme.conf
-# ── (Username=/Session= pins) is preserved — only the static assets sync. ──
-if [[ -n $REPO ]] && [[ -d $REPO/branding/sddm ]]; then
-  _tdir=/usr/share/sddm/themes/hexciri
-  _deployed=false
-  for _f in Main.qml logo.png lock.png lock-failed.png entry.png entry-failed.png bullet.png; do
-    if [[ ! -f $_tdir/$_f ]] || ! cmp -s "$REPO/branding/sddm/$_f" "$_tdir/$_f"; then
-      install -m644 "$REPO/branding/sddm/$_f" "$_tdir/$_f" 2>/dev/null && _deployed=true
-    fi
-  done
-  if $_deployed; then
-    log "sddm theme files refreshed (session-picker combo + assets)"
-  fi
-fi
 
 # ── 5. app-menu curation: re-hide utility entries the packages re-show ──
 for f in avahi-discover.desktop bssh.desktop bvnc.desktop lstopo.desktop \

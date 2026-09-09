@@ -143,7 +143,7 @@ if $SYSTEM_ONLY; then
     gtk4 gtksourceview5 poppler-glib bubblewrap ffmpegthumbnailer gst-libav gst-plugins-good graphene xdg-terminal-exec
     polkit-gnome gnome-keyring xdg-desktop-portal-gtk xdg-desktop-portal-gnome
     adw-gtk-theme
-    networkmanager openssh sddm weston fastfetch starship noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd inetutils
+    networkmanager openssh sddm fastfetch starship noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd inetutils
     gnome-disk-utility imv mupdf libreoffice-fresh
     cups hplip unzip fprintd
     bluez bluez-utils
@@ -426,20 +426,8 @@ SSHEOF
     # Prefill the greeter's username field from the install user this session;
     # the SddmComponents user model can be empty/slow on a fresh first boot.
     printf '\nUsername=%s\n' "${TARGET_USER:-}" | run tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null
-    # Preselect the installed WM in the greeter's session switcher (the hexciri
-    # theme reads Session=; hexciri-session-set keeps it in sync on a swap).
-    printf '\nSession=%s\n' "$WM_PICK" | run tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null
     run mkdir -p /etc/sddm.conf.d
-    # DisplayServer=wayland is mandatory: sddm's default X11 greeter cannot
-    # reliably hand back to the greeter when the session is a Wayland one (logs
-    # Authentication error ... "Process crashed" and wedges with a black screen +
-    # blinking cursor on logout — the session/@sddm teardown race). The distro's
-    # own default.conf already points the Wayland greeter at weston --shell=kiosk.
-    # GreeterEnvironment passes XCURSOR_THEME to weston itself (the compositor
-    # draws the pointer — sddm's [Theme] CursorTheme only reaches the X11
-    # greeter/Qt, so without this the Wayland greeter has NO cursor at all).
-    printf '[General]\nDisplayServer=wayland\nGreeterEnvironment=XCURSOR_THEME=Adwaita,XCURSOR_SIZE=24\n\n[Theme]\nCurrent=hexciri\n' \
-      | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
+    printf '[Theme]\nCurrent=hexciri\n' | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
   fi
 
   # ── version stamp (hexciri-version uses git describe from the repo; the
