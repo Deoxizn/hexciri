@@ -327,14 +327,15 @@ if sway_look.exists():
         sway_look.write_text(sw2)
         print(f"hexciri-sync: patched sway looknfeel.conf borders accent={accent} inactive={muted}")
 
-# mango: looknfeel.conf focuscolor/unfocuscolor (0xRRGGBBAA)
+# mango: looknfeel.conf focuscolor/bordercolor (0xRRGGBBAA) — mango has no
+# "unfocuscolor"; the inactive border key is bordercolor.
 mango_look = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mango" / "looknfeel.conf"
 if mango_look.exists():
     mg = mango_look.read_text()
     mg2 = re.sub(r'^(focuscolor)=0x[0-9a-fA-F]{8}',
                  lambda m: f'focuscolor=0x{accent.lstrip("#").lower()}ff', mg, flags=re.M)
-    mg2 = re.sub(r'^(unfocuscolor)=0x[0-9a-fA-F]{8}',
-                 lambda m: f'unfocuscolor=0x{muted.lstrip("#").lower()}ff', mg2, flags=re.M)
+    mg2 = re.sub(r'^(bordercolor)=0x[0-9a-fA-F]{8}',
+                 lambda m: f'bordercolor=0x{muted.lstrip("#").lower()}ff', mg2, flags=re.M)
     if mg2 != mg:
         mango_look.write_text(mg2)
         print(f"hexciri-sync: patched mango looknfeel.conf borders accent={accent} inactive={muted}")
