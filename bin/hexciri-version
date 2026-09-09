@@ -1,10 +1,29 @@
 #!/bin/bash
 # hexciri:summary=Print the installed hexciri version (git describe from the repo checkout)
 # tier 1: git describe (repo checkout) → tier 2: local state file → unknown
+# A clone with no reachable tag (e.g. an early shallow seed) still gets a
+# version: the nearest tag + the short commit, e.g. "v1.4+11f6d84" — never a
+# bare commit hash on its own.
 set -euo pipefail
 here="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-if git -C "$(dirname "$(dirname "$here")")" describe --tags --always --dirty 2>/dev/null; then
-  exit 0
+repo="$(dirname "$(dirname "$here")")"
+if git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  describe="$(git -C "$repo" describe --tags --always --dirty 2>/dev/null || true)"
+  if [[ -n $describe ]]; then
+    dirty=""
+    [[ $describe == *-dirty ]] && dirty="-dirty" && describe="${describe%-dirty}"
+    # A real describe begins with a tag; the --always fallback is a bare hash.
+    if [[ $describe =~ ^[0-9a-f]{7,40}$ ]]; then
+      tag="$(git -C "$repo" describe --tags --abbrev=0 2>/dev/null || true)"
+      if [[ -n $tag ]]; then
+        describe="${tag}+${describe}"
+      elif [[ -f $HOME/.local/state/hexciri/VERSION ]]; then
+        describe="$(cat "$HOME/.local/state/hexciri/VERSION")+${describe}"
+      fi
+    fi
+    echo "${describe}${dirty}"
+    exit 0
+  fi
 fi
 if [[ -f $HOME/.local/state/hexciri/VERSION ]]; then cat "$HOME/.local/state/hexciri/VERSION"; exit 0; fi
 echo "unknown"
