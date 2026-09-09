@@ -13,7 +13,6 @@ binds {
     Mod+8 { focus-workspace 8; }
     Mod+9 { focus-workspace 9; }
     Mod+C { spawn "sh" "-c" "wtype -M ctrl -k c"; }
-    Mod+D { spawn "noctalia" "msg" "panel-toggle" "launcher"; }
     Mod+F { maximize-column; }
     Mod+H { focus-column-left; }
     Mod+I { focus-workspace-up; }

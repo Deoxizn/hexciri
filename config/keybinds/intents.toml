@@ -11,7 +11,6 @@
 # `keys` = combo -> intent name (the only ties; a combo appears once).
 [keys]
 "Mod+Space"      = "launcher"
-"Mod+D"          = "launcher-panel"
 "Mod+Alt+Space"  = "root-menu"
 "Mod+K"          = "keybind-list"
 "Mod+Return"     = "terminal"
@@ -91,87 +90,86 @@
 "XF86MonBrightnessDown" = "brightness-down"
 
 [intents]
-launcher = { type = "spawn", command = "hexciri-fuzzel" }
-launcher-panel = { type = "spawn", command = "noctalia msg panel-toggle launcher" }
-root-menu = { type = "spawn", command = "hexciri-menu" }
-keybind-list = { type = "spawn", command = "hexciri-keybinds" }
-terminal = { type = "spawn", command = "hexciri-terminal" }
-agent = { type = "spawn", command = "hexciri-agent" }
-browser = { type = "spawn", command = "xdg-open https://" }
-editor = { type = "spawn", command = "zeditor" }
-file-manager = { type = "spawn", command = "~/.local/bin/strata" }
-webapp-messenger = { type = "spawn", command = "hexciri-launch-or-focus-webapp messenger https://www.messenger.com" }
-webapp-gemini = { type = "spawn", command = "hexciri-launch-or-focus-webapp gemini https://gemini.google.com/app" }
-webapp-photopea = { type = "spawn", command = "hexciri-launch-or-focus-webapp photopea https://photopea.com" }
+launcher = { type = "spawn", command = "hexciri-fuzzel", desc = "App launcher" }
+root-menu = { type = "spawn", command = "hexciri-menu", desc = "Root menu" }
+keybind-list = { type = "spawn", command = "hexciri-keybinds", desc = "Keybind reference (this list)" }
+terminal = { type = "spawn", command = "hexciri-terminal", desc = "Terminal" }
+agent = { type = "spawn", command = "hexciri-agent", desc = "AI agent" }
+browser = { type = "spawn", command = "xdg-open https://", desc = "Browser" }
+editor = { type = "spawn", command = "zeditor", desc = "Text editor" }
+file-manager = { type = "spawn", command = "~/.local/bin/strata", desc = "File manager" }
+webapp-messenger = { type = "spawn", command = "hexciri-launch-or-focus-webapp messenger https://www.messenger.com", desc = "Messenger webapp" }
+webapp-gemini = { type = "spawn", command = "hexciri-launch-or-focus-webapp gemini https://gemini.google.com/app", desc = "Gemini webapp" }
+webapp-photopea = { type = "spawn", command = "hexciri-launch-or-focus-webapp photopea https://photopea.com", desc = "Photopea webapp" }
 
-close-window = { type = "action", niri = "close-window", hyprland = "closeactive", sway = "kill", mango = "killclient" }
+close-window = { type = "action", niri = "close-window", hyprland = "closeactive", sway = "kill", mango = "killclient", desc = "Close window" }
 
-focus-left   = { type = "action", niri = "focus-column-left", hyprland = "movefocus l", sway = "focus left", mango = "(See NOTE — dwl stacks, no directional focus)" }
-focus-right  = { type = "action", niri = "focus-column-right", hyprland = "movefocus r", sway = "focus right", mango = "(See NOTE — dwl stacks, no directional focus)" }
-focus-down   = { type = "action", niri = "focus-window-down", hyprland = "movefocus d", sway = "focus down", mango = "(See NOTE — dwl stacks, no directional focus)" }
-focus-up     = { type = "action", niri = "focus-window-up", hyprland = "movefocus u", sway = "focus up", mango = "(See NOTE — dwl stacks, no directional focus)" }
+focus-left   = { type = "action", niri = "focus-column-left", hyprland = "movefocus l", sway = "focus left", mango = "focusdir left", desc = "Focus left" }
+focus-right  = { type = "action", niri = "focus-column-right", hyprland = "movefocus r", sway = "focus right", mango = "focusdir right", desc = "Focus right" }
+focus-down   = { type = "action", niri = "focus-window-down", hyprland = "movefocus d", sway = "focus down", mango = "focusdir down", desc = "Focus down" }
+focus-up     = { type = "action", niri = "focus-window-up", hyprland = "movefocus u", sway = "focus up", mango = "focusdir up", desc = "Focus up" }
 
-move-left  = { type = "action", niri = "move-column-left", hyprland = "movewindow l", sway = "move left", mango = "(See NOTE — no directional move)" }
-move-right = { type = "action", niri = "move-column-right", hyprland = "movewindow r", sway = "move right", mango = "(See NOTE — no directional move)" }
-move-down  = { type = "action", niri = "move-window-down", hyprland = "movewindow d", sway = "move down", mango = "(See NOTE — no directional move)" }
-move-up    = { type = "action", niri = "move-window-up", hyprland = "movewindow u", sway = "move up", mango = "(See NOTE — no directional move)" }
+move-left  = { type = "action", niri = "move-column-left", hyprland = "movewindow l", sway = "move left", mango = "exchange_client left", desc = "Move window left" }
+move-right = { type = "action", niri = "move-column-right", hyprland = "movewindow r", sway = "move right", mango = "exchange_client right", desc = "Move window right" }
+move-down  = { type = "action", niri = "move-window-down", hyprland = "movewindow d", sway = "move down", mango = "exchange_client down", desc = "Move window down" }
+move-up    = { type = "action", niri = "move-window-up", hyprland = "movewindow u", sway = "move up", mango = "exchange_client up", desc = "Move window up" }
 
-ws-1 = { type = "action", niri = "focus-workspace 1", hyprland = "workspace 1", sway = "workspace 1", mango = "view 1" }
-ws-2 = { type = "action", niri = "focus-workspace 2", hyprland = "workspace 2", sway = "workspace 2", mango = "view 2" }
-ws-3 = { type = "action", niri = "focus-workspace 3", hyprland = "workspace 3", sway = "workspace 3", mango = "view 3" }
-ws-4 = { type = "action", niri = "focus-workspace 4", hyprland = "workspace 4", sway = "workspace 4", mango = "view 4" }
-ws-5 = { type = "action", niri = "focus-workspace 5", hyprland = "workspace 5", sway = "workspace 5", mango = "view 5" }
-ws-6 = { type = "action", niri = "focus-workspace 6", hyprland = "workspace 6", sway = "workspace 6", mango = "view 6" }
-ws-7 = { type = "action", niri = "focus-workspace 7", hyprland = "workspace 7", sway = "workspace 7", mango = "view 7" }
-ws-8 = { type = "action", niri = "focus-workspace 8", hyprland = "workspace 8", sway = "workspace 8", mango = "view 8" }
-ws-9 = { type = "action", niri = "focus-workspace 9", hyprland = "workspace 9", sway = "workspace 9", mango = "view 9" }
-ws-browser = { type = "action", niri = "focus-workspace \"browser\"", hyprland = "workspace name:browser", sway = "workspace browser", mango = "view 10" }
+ws-1 = { type = "action", niri = "focus-workspace 1", hyprland = "workspace 1", sway = "workspace 1", mango = "view 1", desc = "Workspace 1" }
+ws-2 = { type = "action", niri = "focus-workspace 2", hyprland = "workspace 2", sway = "workspace 2", mango = "view 2", desc = "Workspace 2" }
+ws-3 = { type = "action", niri = "focus-workspace 3", hyprland = "workspace 3", sway = "workspace 3", mango = "view 3", desc = "Workspace 3" }
+ws-4 = { type = "action", niri = "focus-workspace 4", hyprland = "workspace 4", sway = "workspace 4", mango = "view 4", desc = "Workspace 4" }
+ws-5 = { type = "action", niri = "focus-workspace 5", hyprland = "workspace 5", sway = "workspace 5", mango = "view 5", desc = "Workspace 5" }
+ws-6 = { type = "action", niri = "focus-workspace 6", hyprland = "workspace 6", sway = "workspace 6", mango = "view 6", desc = "Workspace 6" }
+ws-7 = { type = "action", niri = "focus-workspace 7", hyprland = "workspace 7", sway = "workspace 7", mango = "view 7", desc = "Workspace 7" }
+ws-8 = { type = "action", niri = "focus-workspace 8", hyprland = "workspace 8", sway = "workspace 8", mango = "view 8", desc = "Workspace 8" }
+ws-9 = { type = "action", niri = "focus-workspace 9", hyprland = "workspace 9", sway = "workspace 9", mango = "view 9", desc = "Workspace 9" }
+ws-browser = { type = "action", niri = "focus-workspace \"browser\"", hyprland = "workspace name:browser", sway = "workspace browser", mango = "view 10", desc = "Browser workspace" }
 
-move-to-ws-1 = { type = "action", niri = "move-column-to-workspace 1", hyprland = "movetoworkspace 1", sway = "move container to workspace 1", mango = "tag 1" }
-move-to-ws-2 = { type = "action", niri = "move-column-to-workspace 2", hyprland = "movetoworkspace 2", sway = "move container to workspace 2", mango = "tag 2" }
-move-to-ws-3 = { type = "action", niri = "move-column-to-workspace 3", hyprland = "movetoworkspace 3", sway = "move container to workspace 3", mango = "tag 3" }
-move-to-ws-4 = { type = "action", niri = "move-column-to-workspace 4", hyprland = "movetoworkspace 4", sway = "move container to workspace 4", mango = "tag 4" }
-move-to-ws-5 = { type = "action", niri = "move-column-to-workspace 5", hyprland = "movetoworkspace 5", sway = "move container to workspace 5", mango = "tag 5" }
-move-to-ws-6 = { type = "action", niri = "move-column-to-workspace 6", hyprland = "movetoworkspace 6", sway = "move container to workspace 6", mango = "tag 6" }
-move-to-ws-7 = { type = "action", niri = "move-column-to-workspace 7", hyprland = "movetoworkspace 7", sway = "move container to workspace 7", mango = "tag 7" }
-move-to-ws-8 = { type = "action", niri = "move-column-to-workspace 8", hyprland = "movetoworkspace 8", sway = "move container to workspace 8", mango = "tag 8" }
-move-to-ws-9 = { type = "action", niri = "move-column-to-workspace 9", hyprland = "movetoworkspace 9", sway = "move container to workspace 9", mango = "tag 9" }
-move-to-ws-browser = { type = "action", niri = "move-column-to-workspace \"browser\"", hyprland = "movetoworkspacesilent name:browser", sway = "move container to workspace browser", mango = "tag 10" }
+move-to-ws-1 = { type = "action", niri = "move-column-to-workspace 1", hyprland = "movetoworkspace 1", sway = "move container to workspace 1", mango = "tag 1", desc = "Move window to workspace 1" }
+move-to-ws-2 = { type = "action", niri = "move-column-to-workspace 2", hyprland = "movetoworkspace 2", sway = "move container to workspace 2", mango = "tag 2", desc = "Move window to workspace 2" }
+move-to-ws-3 = { type = "action", niri = "move-column-to-workspace 3", hyprland = "movetoworkspace 3", sway = "move container to workspace 3", mango = "tag 3", desc = "Move window to workspace 3" }
+move-to-ws-4 = { type = "action", niri = "move-column-to-workspace 4", hyprland = "movetoworkspace 4", sway = "move container to workspace 4", mango = "tag 4", desc = "Move window to workspace 4" }
+move-to-ws-5 = { type = "action", niri = "move-column-to-workspace 5", hyprland = "movetoworkspace 5", sway = "move container to workspace 5", mango = "tag 5", desc = "Move window to workspace 5" }
+move-to-ws-6 = { type = "action", niri = "move-column-to-workspace 6", hyprland = "movetoworkspace 6", sway = "move container to workspace 6", mango = "tag 6", desc = "Move window to workspace 6" }
+move-to-ws-7 = { type = "action", niri = "move-column-to-workspace 7", hyprland = "movetoworkspace 7", sway = "move container to workspace 7", mango = "tag 7", desc = "Move window to workspace 7" }
+move-to-ws-8 = { type = "action", niri = "move-column-to-workspace 8", hyprland = "movetoworkspace 8", sway = "move container to workspace 8", mango = "tag 8", desc = "Move window to workspace 8" }
+move-to-ws-9 = { type = "action", niri = "move-column-to-workspace 9", hyprland = "movetoworkspace 9", sway = "move container to workspace 9", mango = "tag 9", desc = "Move window to workspace 9" }
+move-to-ws-browser = { type = "action", niri = "move-column-to-workspace \"browser\"", hyprland = "movetoworkspacesilent name:browser", sway = "move container to workspace browser", mango = "tag 10", desc = "Move window to browser workspace" }
 
-ws-prev = { type = "action", niri = "focus-workspace-down", hyprland = "workspace e+1", sway = "workspace prev", mango = "viewtoleft" }
-ws-next = { type = "action", niri = "focus-workspace-up", hyprland = "workspace e-1", sway = "workspace next", mango = "viewtoright" }
+ws-prev = { type = "action", niri = "focus-workspace-down", hyprland = "workspace e+1", sway = "workspace prev", mango = "viewtoleft", desc = "Previous workspace" }
+ws-next = { type = "action", niri = "focus-workspace-up", hyprland = "workspace e-1", sway = "workspace next", mango = "viewtoright", desc = "Next workspace" }
 
-maximize-column = { type = "action", niri = "maximize-column", hyprland = "togglefloating maximize", sway = "fullscreen toggle", mango = "(See NOTE)" }
-fullscreen   = { type = "action", niri = "fullscreen-window", hyprland = "fullscreen", sway = "fullscreen toggle", mango = "(See NOTE — fakefullscreen via windowrule)" }
-switch-column-width = { type = "action", niri = "switch-preset-column-width", hyprland = "resizeactive", sway = "(See NOTE)", mango = "(See NOTE)" }
-tabbed-column = { type = "action", niri = "toggle-column-tabbed-display", hyprland = "togglegroup", sway = "(See NOTE)", mango = "(See NOTE)" }
-toggle-float = { type = "action", niri = "toggle-window-floating", hyprland = "togglefloating", sway = "floating toggle", mango = "(See NOTE — float via windowrule open_as_floating)" }
-focus-float = { type = "action", niri = "focus-floating", hyprland = "focusmode floating", sway = "focus floating", mango = "(See NOTE)" }
-focus-tiling = { type = "action", niri = "focus-tiling", hyprland = "focusmode tiling", sway = "focus tiling", mango = "(See NOTE)" }
-consume-into-column = { type = "action", niri = "consume-window-into-column", hyprland = "swapwindow l", sway = "(See NOTE)", mango = "(See NOTE)" }
-expel-from-column = { type = "action", niri = "expel-window-from-column", hyprland = "swapwindow r", sway = "(See NOTE)", mango = "(See NOTE)" }
+maximize-column = { type = "action", niri = "maximize-column", hyprland = "togglefloating maximize", sway = "fullscreen toggle", mango = "togglemaximizescreen", desc = "Maximize column" }
+fullscreen   = { type = "action", niri = "fullscreen-window", hyprland = "fullscreen", sway = "fullscreen toggle", mango = "togglefullscreen", desc = "Fullscreen" }
+switch-column-width = { type = "action", niri = "switch-preset-column-width", hyprland = "resizeactive", sway = "(See NOTE)", mango = "switch_proportion_preset", desc = "Cycle column width" }
+tabbed-column = { type = "action", niri = "toggle-column-tabbed-display", hyprland = "togglegroup", sway = "(See NOTE)", mango = "toggleview", desc = "Tabbed column" }
+toggle-float = { type = "action", niri = "toggle-window-floating", hyprland = "togglefloating", sway = "floating toggle", mango = "togglefloating", desc = "Toggle floating" }
+focus-float = { type = "action", niri = "focus-floating", hyprland = "focusmode floating", sway = "focus floating", mango = "togglejump", desc = "Focus floating window" }
+focus-tiling = { type = "action", niri = "focus-tiling", hyprland = "focusmode tiling", sway = "focus tiling", mango = "togglejump", desc = "Focus tiling window" }
+consume-into-column = { type = "action", niri = "consume-window-into-column", hyprland = "swapwindow l", sway = "(See NOTE)", mango = "groupjoin left", desc = "Consume window into column" }
+expel-from-column = { type = "action", niri = "expel-window-from-column", hyprland = "swapwindow r", sway = "(See NOTE)", mango = "groupleave", desc = "Expel window from column" }
 
-screenshot = { type = "action", niri = "screenshot", hyprland = "(grim via hexciri-compositor)", sway = "(grim via hexciri-compositor)", mango = "(grim via hexciri-compositor)" }
-screenshot-clipboard = { type = "spawn", command = "sh -c 'grim -g \"$(slurp)\" - | wl-copy'" }
-screenrecord = { type = "spawn", command = "hexciri-screenrecord" }
-overview = { type = "action", niri = "toggle-overview", hyprland = "overview:toggle", sway = "(See NOTE)", mango = "(See NOTE)" }
+screenshot = { type = "action", niri = "screenshot", hyprland = "(grim via hexciri-compositor)", sway = "(grim via hexciri-compositor)", mango = "(grim via hexciri-compositor)", desc = "Screenshot" }
+screenshot-clipboard = { type = "spawn", command = "sh -c 'grim -g \"$(slurp)\" - | wl-copy'", desc = "Screenshot region to clipboard" }
+screenrecord = { type = "spawn", command = "hexciri-screenrecord", desc = "Screen record" }
+overview = { type = "action", niri = "toggle-overview", hyprland = "overview:toggle", sway = "(See NOTE)", mango = "toggleoverview", desc = "Overview" }
 
-copy = { type = "spawn", command = "sh -c 'wtype -M ctrl -k c'" }
-paste = { type = "spawn", command = "sh -c 'wtype -M ctrl -k v'" }
-cut = { type = "spawn", command = "sh -c 'wtype -M ctrl -k x'" }
+copy = { type = "spawn", command = "sh -c 'wtype -M ctrl -k c'", desc = "Copy" }
+paste = { type = "spawn", command = "sh -c 'wtype -M ctrl -k v'", desc = "Paste" }
+cut = { type = "spawn", command = "sh -c 'wtype -M ctrl -k x'", desc = "Cut" }
 
-lock = { type = "spawn", command = "hexciri-lock" }
-clipboard-history = { type = "spawn", command = "hexciri-clipboard" }
-power-menu = { type = "spawn", command = "hexciri-power" }
-clear-notifications = { type = "spawn", command = "noctalia msg notification-clear-active" }
-toggle-notifications = { type = "spawn", command = "noctalia msg panel-toggle notifications" }
+lock = { type = "spawn", command = "hexciri-lock", desc = "Lock screen" }
+clipboard-history = { type = "spawn", command = "hexciri-clipboard", desc = "Clipboard history" }
+power-menu = { type = "spawn", command = "hexciri-power", desc = "Power menu" }
+clear-notifications = { type = "spawn", command = "noctalia msg notification-clear-active", desc = "Clear notifications" }
+toggle-notifications = { type = "spawn", command = "noctalia msg panel-toggle notifications", desc = "Toggle notifications" }
 
-vol-up = { type = "spawn", command = "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+" }
-vol-down = { type = "spawn", command = "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-" }
-mute = { type = "spawn", command = "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle" }
-mic-mute = { type = "spawn", command = "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle" }
-play-pause = { type = "spawn", command = "playerctl play-pause" }
-prev-track = { type = "spawn", command = "playerctl previous" }
-next-track = { type = "spawn", command = "playerctl next" }
-brightness-up = { type = "spawn", command = "brightnessctl set 5%+" }
-brightness-down = { type = "spawn", command = "brightnessctl set 5%-" }
+vol-up = { type = "spawn", command = "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+", desc = "Volume up" }
+vol-down = { type = "spawn", command = "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-", desc = "Volume down" }
+mute = { type = "spawn", command = "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle", desc = "Mute" }
+mic-mute = { type = "spawn", command = "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle", desc = "Mic mute" }
+play-pause = { type = "spawn", command = "playerctl play-pause", desc = "Play / pause" }
+prev-track = { type = "spawn", command = "playerctl previous", desc = "Previous track" }
+next-track = { type = "spawn", command = "playerctl next", desc = "Next track" }
+brightness-up = { type = "spawn", command = "brightnessctl set 5%+", desc = "Brightness up" }
+brightness-down = { type = "spawn", command = "brightnessctl set 5%-", desc = "Brightness down" }

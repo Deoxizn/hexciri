@@ -1,6 +1,8 @@
 #!/bin/bash
 # hexciri:keybinds=searchable-list
-# hexciri:summary=Searchable keybinding reference — built from the intent schema for the active WM
+# hexciri:summary=Per-WM keybinding cheatsheet — only binds actually emitted for the active WM
+# Walks config/keybinds/intents.toml using the SAME bound-check rules as
+# hexciri-keybinds-render, so this lists exactly what the active WM binds now.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -8,36 +10,58 @@ INTENTS="$SCRIPT_DIR/../config/keybinds/intents.toml"
 WM="$("$SCRIPT_DIR/hexciri-session" wm)"
 
 output=$(python3 - "$INTENTS" "$WM" <<'EOF'
+import re
 import sys
-
-INTENTS_FILE, WM = sys.argv[1], sys.argv[2]
 try:
     import tomllib
 except ImportError:
     sys.stderr.write("python3 too old: tomllib unavailable\n")
     sys.exit(1)
 
-with open(INTENTS_FILE, "rb") as f:
-    cfg = tomllib.load(f)
-
+INTENTS_FILE, WM = sys.argv[1], sys.argv[2]
+cfg = tomllib.load(open(INTENTS_FILE, "rb"))
 keys, intents = cfg["keys"], cfg["intents"]
+
+def hyp_tok(action):
+    # Renderer's hyp_dsp() — returns a real dispatcher expr or None (unbound).
+    a = action.strip() if isinstance(action, str) else ""
+    if a.startswith("(") or a.startswith("overview"):
+        return None
+    bindable = re.match(
+        r"^(closeactive|movefocus [lrud]|movewindow [lrud]|movetoworkspace \d+"
+        r"|movetoworkspacesilent name:.+|workspace (.+|e[+-]\d+)|togglefloating"
+        r"|togglefloating maximize|fullscreen|resizeactive|togglegroup"
+        r"|focusmode floating|focusmode tiling|swapwindow [lr])$", a)
+    return a if bindable else None
+
+def bound(intent):
+    s = intents[intent]
+    if s.get("type") == "spawn":
+        return True
+    action = s.get(WM, s.get("niri", "(See NOTE)"))
+    if action is None:
+        return False
+    if action.endswith("via hexciri-compositor)"):
+        return True
+    if action.startswith("("):
+        return False
+    if WM == "hyprland":
+        return hyp_tok(action) is not None
+    return True
+
 rows = []
-for combo in sorted(keys, key=lambda c: (len(c.lower()), c.lower())):
-    intent_name = keys[combo]
-    spec = intents.get(intent_name)
-    if spec is None:
+for combo in sorted(keys, key=lambda c: (len(c), c)):
+    intent = keys[combo]
+    if not bound(intent):
         continue
-    if spec.get("type") == "spawn":
-        desc = spec["command"]
-    else:
-        desc = spec.get(WM, spec.get("niri", "(no mapping)"))
-    rows.append(f"{combo} — {desc}")
+    desc = intents[intent].get("desc", intent)
+    rows.append(f"{combo:<22} {desc}")
 
 if not rows:
-    print("No keybinds found in intent schema", end="", file=sys.stderr)
+    print("No keybinds bound for active WM", end="", file=sys.stderr)
     sys.exit(1)
 print("\n".join(rows))
 EOF
 ) || exit 1
 
-echo -n "$output" | "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt="Keybinds: " --width=46 --lines=30
+echo -n "$output" | "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt="Keybinds (${WM}): " --width=52 --lines=30

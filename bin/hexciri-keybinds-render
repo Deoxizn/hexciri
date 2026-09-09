@@ -12,6 +12,8 @@ case "$WM" in
   *) echo "hexciri-keybinds-render: unknown WM '$WM'" >&2; exit 1 ;;
 esac
 
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+
 python3 - "$INTENTS" "$WM" <<'EOF'
 import re
 import sys
@@ -25,27 +27,8 @@ INTENTS_FILE, WM = sys.argv[1], sys.argv[2]
 cfg = tomllib.load(open(INTENTS_FILE, "rb"))
 keys, intents = cfg["keys"], cfg["intents"]
 
-# ── per-WM syntax helpers ────────────────────────────────────────────────
-def key_niri(c):
-    return c.replace("Mod", "Mod")
-
-def key_hyp_lua(c):
-    # niri key names -> xkbcommon keysym names, joined with " + " per the 0.56
-    # Lua API (e.g. hl.bind("SUPER + Q", …)). Names are the segment after
-    # XKB_KEY_ (wiki Binds: "the name you should use is the segment after XKB_KEY_").
-    m = {"Print":"Print","Return":"Return","grave":"grave","BracketLeft":"bracketleft",
-         "BracketRight":"bracketright","Comma":"comma","Escape":"Escape","Space":"space",
-         "Up":"Up","Down":"Down","Left":"Left","Right":"Right"}
-    out = []
-    for p in c.split("+"):
-        p = m.get(p, p)
-        if p == "Mod":
-            out.append("SUPER")
-        elif p in ("Ctrl","Shift","Alt"):
-            out.append(p.upper())
-        else:
-            out.append(p)
-    return " + ".join(out)
+# ── per-WM syntax helpers (shared with hexciri-keybinds via key_translate.py)
+from key_translate import key_niri, key_hyp_lua, key_sway, key_mango  # noqa: E402
 
 def lua_str(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -113,26 +96,6 @@ def key_sway(c):
         elif p == "Alt": mods += "Mod1+"
         else: sub = m.get(p, p)
     return f"{mods}{sub}"
-
-def key_mango(c):
-    # niri names -> mango: SUPER/CTRL/ALT/SHIFT mods (uppercase is fine — the
-    # shipped config mixes case and mango matches case-insensitively), then the
-    # KEY as an xkb keysym name EXACTLY as `wev` prints it. Letter and punctuation
-    # keysyms are LOWERCASE: "C" would bind keysym C (shift+c), not the c key,
-    # silently killing every letter binding. Mango's own default config uses
-    # `SUPER,r`, `Alt,space`, `Return`, `Left`… so lowercase everything except
-    # XF86* multimedia names (which keep their case).
-    m = {"Mod": "SUPER", "Ctrl": "CTRL", "Alt": "ALT", "Shift": "SHIFT"}
-    mods, key = [], ""
-    for p in c.split("+"):
-        p = m.get(p, p)
-        if p in ("SUPER", "CTRL", "ALT", "SHIFT"):
-            mods.append(p)
-        else:
-            key = p
-    if not key.startswith("XF86"):
-        key = key.lower()
-    return ("+".join(mods) if mods else "NONE") + "," + key
 
 lines = []
 if WM in ("niri",):
