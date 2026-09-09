@@ -66,6 +66,13 @@ if [[ $want == "$cur_wm" || $want == "$run_wm" ]]; then
   exit 1
 fi
 
+# Launched from a menu (no tty): the picker ran above, so hand the sudo work
+# off to a visible terminal now that the target is resolved.
+if [[ ${HXC_SESSION_TUI:-0} == 0 ]] && [[ ! -t 0 && ! -t 1 ]] && command -v xdg-terminal-exec >/dev/null 2>&1; then
+  export HXC_SESSION_TUI=1
+  exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-session-remove" "$want"
+fi
+
 echo "removing $want:"
 echo "  packages: $(wm_pkgs "$want")"
 echo "  config:   $XDG_CONFIG_HOME/$want"

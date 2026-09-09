@@ -12,10 +12,11 @@ choice=$(
 choice=${choice%' >'}
 
 case "$choice" in
-  # Install/Remove run in a visible terminal (hexciri-hold): the pickers pop
-  # over it, then sudo/yay prompts and every message are actually visible —
-  # run from the dmenu menu they are otherwise swallowed and look like a no-op.
-  Install) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-session-set" ;;
-  Remove)  exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-session-remove" ;;
+  # Install/Remove resolve their target in the menu (fuzzel pickers), and the
+  # scripts themselves re-exec into a visible terminal only for the sudo work —
+  # so no terminal pops up before you've made any choice. Current is a plain
+  # info row: it always shows the combo, in a terminal.
+  Install) exec "$SCRIPT_DIR/hexciri-session-set" ;;
+  Remove)  exec "$SCRIPT_DIR/hexciri-session-remove" ;;
   Current) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-session" combo ;;
 esac
