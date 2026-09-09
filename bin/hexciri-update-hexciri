@@ -107,6 +107,31 @@ fi
 mkdir -p "$HOME/.config/hexciri/wallpapers"
 "$REPO/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
 
+# Keybind fragments are OWNED by the schema (config/keybinds/intents.toml) and
+# re-rendered on WM swap — so a pull that ships new intent rows/renderers must
+# refresh the ACTIVE WM's live fragment too, or the machine keeps stale binds
+# (seen in the wild: mango ran the pre-focusdir render after an update pulled
+# the fix). Deterministic + idempotent: output is byte-identical unless the
+# schema/renderer changed, and swaps already overwrite the same file. Runs on
+# every pass (even "up to date") so a stale fragment self-heals on the next press.
+render_keybinds() {
+  [[ -x "$REPO/bin/hexciri-keybinds-render" && -x "$REPO/bin/hexciri-session" ]] || return 0
+  local wm
+  wm="$("$REPO/bin/hexciri-session" wm 2>/dev/null || echo niri)"
+  case "$wm" in
+    niri)     local dst="$HOME/.config/niri/keybinds.kdl" ;;
+    hyprland) local dst="$HOME/.config/hypr/conf/keybinds.lua" ;;
+    sway)     local dst="$HOME/.config/sway/conf.d/keybinds.conf" ;;
+    mango)    local dst="$HOME/.config/mango/keybinds.conf" ;;
+    *) return 0 ;;
+  esac
+  mkdir -p "$(dirname "$dst")"
+  if "$REPO/bin/hexciri-keybinds-render" "$wm" > "$dst" 2>/dev/null; then
+    echo "re-rendered keybinds for $wm ($dst)"
+  fi
+}
+render_keybinds
+
 if (( behind == 0 )); then
   echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"
   legacy_purge
