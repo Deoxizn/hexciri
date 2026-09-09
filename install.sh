@@ -435,9 +435,10 @@ SSHEOF
     # Authentication error ... "Process crashed" and wedges with a black screen +
     # blinking cursor on logout — the session/@sddm teardown race). The distro's
     # own default.conf already points the Wayland greeter at weston --shell=kiosk.
-    # CursorTheme is required too: under weston no X server draws the pointer,
-    # so without an explicit theme the greeter shows NO cursor at all.
-    printf '[General]\nDisplayServer=wayland\n\n[Theme]\nCurrent=hexciri\nCursorTheme=Adwaita\nCursorSize=24\n' \
+    # GreeterEnvironment passes XCURSOR_THEME to weston itself (the compositor
+    # draws the pointer — sddm's [Theme] CursorTheme only reaches the X11
+    # greeter/Qt, so without this the Wayland greeter has NO cursor at all).
+    printf '[General]\nDisplayServer=wayland\nGreeterEnvironment=XCURSOR_THEME=Adwaita,XCURSOR_SIZE=24\n\n[Theme]\nCurrent=hexciri\n' \
       | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
   fi
 
