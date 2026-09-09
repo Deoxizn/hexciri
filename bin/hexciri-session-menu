@@ -14,5 +14,5 @@ choice=${choice%' >'}
 case "$choice" in
   Install) exec "$SCRIPT_DIR/hexciri-session-set" ;;
   Remove)  exec "$SCRIPT_DIR/hexciri-session-remove" ;;
-  Current) "$SCRIPT_DIR/hexciri-session" combo ;;
+  Current) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-session" combo ;;
 esac
