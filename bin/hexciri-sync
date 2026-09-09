@@ -126,26 +126,34 @@ if [[ -n $noct_home && -f $noct_home/.config/kitty/kitty.conf ]] \
     log "kitty: remote control hardened to socket-only (pre-1454112 config migrated)"
 fi
 
-# ── 3a5. sddm: require the Wayland greeter (sddm-greeter-qt6). Without it sddm
-# ── falls back to its fragile X11 greeter — one such box wedged on logout (the
-# ── session teardown hit 'Authentication error: Process crashed' and the greeter
-# ── never respawned: black screen + cursor on vt1 while Xorg idled on vt2).
-# ── Fresh installs get it via install.sh PKGS; this heals boxes that predate
-# ── that. Lock-aware like the gnome-keyring downgrade: inside an alpm hook
-# ── pacman holds the lock, so a nested pacman -S would deadlock — defer. ──
-if ! pacman -Q sddm-greeter-qt6 >/dev/null 2>&1; then
+# ── 3a5. sddm: run the Qt6 greeter on Wayland (weston). sddm's default X11
+# ── greeter cannot reliably hand back to the greeter after a Wayland session
+# ── exits — it logs 'Authentication error ... Process crashed' and wedges with
+# ── a black screen + blinking cursor on vt1 while Xorg idles on vt2. The
+# ── Qt6 greeter (+weston compositor) ships in the sddm package itself, so no
+# ── extra greeter package exists; weston is the compositor default.conf names
+# ── for it. Fresh installs get both via install.sh (PKGS + conf); this heals
+# ── boxes that predate it. Lock-aware like the gnome-keyring downgrade: inside
+# ── an alpm hook pacman holds the lock, so a nested pacman -S would deadlock
+# ── defer. ──
+_hexciri_conf=/etc/sddm.conf.d/10-hexciri-theme.conf
+if ! pacman -Q sddm >/dev/null 2>&1 || ! pacman -Q weston >/dev/null 2>&1; then
   if pgrep -x pacman >/dev/null; then
     if command -v systemd-run >/dev/null 2>&1 \
        && systemd-run --no-block --unit=hexciri-greeter-retry --on-active=1m /usr/local/bin/hexciri-sync >/dev/null 2>&1; then
-      log "sddm-greeter-qt6 install queued (transient timer hexciri-greeter-retry)"
+      log "weston install queued (transient timer hexciri-greeter-retry)"
     else
       setsid nohup bash -c 'while pgrep -x pacman >/dev/null 2>&1; do sleep 2; done; /usr/local/bin/hexciri-sync' >/dev/null 2>&1 &
-      log "sddm-greeter-qt6 install queued (detached retry)"
+      log "weston install queued (detached retry)"
     fi
   else
-    pacman -S --needed --noconfirm sddm-greeter-qt6 >/dev/null 2>&1 && \
-      log "installed sddm-greeter-qt6 (Wayland greeter — robust logout/login)"
+    pacman -S --needed --noconfirm weston >/dev/null 2>&1 && \
+      log "installed weston (Wayland greeter compositor — robust logout/login)"
   fi
+fi
+if [[ -f $_hexciri_conf ]] && ! grep -q '^DisplayServer=wayland' "$_hexciri_conf"; then
+  printf '[General]\nDisplayServer=wayland\n\n[Theme]\nCurrent=hexciri\n' > "$_hexciri_conf" && \
+    log "sddm: DisplayServer=wayland set (Wayland greeter) in 10-hexciri-theme.conf"
 fi
 
 # ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
@@ -299,6 +307,24 @@ if [[ -n $noct_home ]] && [[ -f $noct_home/.config/hexciri/wm ]]; then
       printf '\nSession=%s\n' "$_sel" >> "$_tc"
     fi
     log "greeter preselect: Session=$_sel"
+  fi
+fi
+
+# ── 4c. SDDM theme files: redeploy Main.qml + assets when the live copy is
+# ── stale (e.g. installed before the session-picker combo landed, so the
+# ── greeter showed no session switcher). install.sh only writes the theme on a
+# ── fresh install; this catches boxes that predate a theme change. theme.conf
+# ── (Username=/Session= pins) is preserved — only the static assets sync. ──
+if [[ -n $REPO ]] && [[ -d $REPO/branding/sddm ]]; then
+  _tdir=/usr/share/sddm/themes/hexciri
+  _deployed=false
+  for _f in Main.qml logo.png lock.png lock-failed.png entry.png entry-failed.png bullet.png; do
+    if [[ ! -f $_tdir/$_f ]] || ! cmp -s "$REPO/branding/sddm/$_f" "$_tdir/$_f"; then
+      install -m644 "$REPO/branding/sddm/$_f" "$_tdir/$_f" 2>/dev/null && _deployed=true
+    fi
+  done
+  if $_deployed; then
+    log "sddm theme files refreshed (session-picker combo + assets)"
   fi
 fi
 
