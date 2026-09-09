@@ -147,6 +147,8 @@ if $SYSTEM_ONLY; then
     gnome-disk-utility imv mupdf libreoffice-fresh
     cups hplip unzip fprintd
     bluez bluez-utils
+    ufw
+    samba nfs-utils
     tesseract zbar qrencode fwupd zenity kdialog qt6ct localsend
     pipewire pipewire-pulse wireplumber
     zram-generator pacman-contrib)
@@ -320,6 +322,32 @@ HOOK
   # ── bluetooth: bluez stack + rfkill; bar widget + pairing need bluetoothd ──
   run systemctl enable --now bluetooth.service 2>/dev/null || true
 
+  # ── hardening: ufw firewall + sshd key-only auth ──
+  run systemctl enable --now ufw.service 2>/dev/null || true
+  run ufw default deny incoming 2>/dev/null || true
+  run ufw default allow outgoing 2>/dev/null || true
+  run ufw allow ssh 2>/dev/null || true
+  run ufw --force enable 2>/dev/null || true
+  run mkdir -p /etc/ssh/sshd_config.d
+  if [[ ! -f /etc/ssh/sshd_config.d/99-hardening.conf ]]; then
+    cat > /etc/ssh/sshd_config.d/99-hardening.conf <<'SSHEOF'
+# hexciri: sshd hardening — key-only auth, no root password login
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+PubkeyAuthentication yes
+MaxAuthTries 3
+SSHEOF
+    info "sshd: wrote hardening drop-in (key-only, no root password)"
+  fi
+  run sshd -t 2>/dev/null || warn "sshd config test failed — check /etc/ssh/sshd_config.d/"
+  run systemctl restart sshd 2>/dev/null || true
+
+  # ── SMB (Samba) + NFS: network file sharing out of the box ──
+  run systemctl enable --now smb.service 2>/dev/null || true
+  run systemctl enable --now nmb.service 2>/dev/null || true
+  # NFS: no services to enable — mounts are manual (mount -t nfs / fstab)
+
   # ── gnome-keyring: unlock the login keyring at sddm login via pam. Without
   #    this, the "Unlock Login Keyring" popup appears whenever the first app
   #    touches secrets. Deploy the full pam stack (backup-first, idempotent). ──
@@ -335,6 +363,11 @@ HOOK
     run cp -f "$REPO_DIR/default/pam/system-auth" /etc/pam.d/system-auth
     info "system-auth: fingerprint-first for sudo/su/login"
   fi
+  # fingerprint-first login supplies NO password, so pam_gnome_keyring's
+  # auto-unlock gets no secret and Brave/Chromium prompt every boot. Seed a
+  # passwordless login keyring now (no desktop session exists yet, so no daemon
+  # to disturb). Non-destructive: existing keyrings are never touched.
+  run bash -c "su - '$TARGET_USER' -c 'bash \"$REPO_DIR/bin/hexciri-gkr-init.sh\"'"
   fi # ! $UPDATE_MODE
 
   # ── gnome-keyring: PIN the last known-good build. 50.0 has an unfixed
@@ -393,6 +426,9 @@ HOOK
     # Prefill the greeter's username field from the install user this session;
     # the SddmComponents user model can be empty/slow on a fresh first boot.
     printf '\nUsername=%s\n' "${TARGET_USER:-}" | run tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null
+    # Preselect the installed WM in the greeter's session switcher (the hexciri
+    # theme reads Session=; hexciri-session-set keeps it in sync on a swap).
+    printf '\nSession=%s\n' "$WM_PICK" | run tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null
     run mkdir -p /etc/sddm.conf.d
     printf '[Theme]\nCurrent=hexciri\n' | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
   fi
@@ -517,6 +553,13 @@ case "$WM_PICK" in
     done
     ;;
 esac
+
+# ── shell config: noctalia's bar layout, workspace hiding and shell services
+#    live in ~/.config/noctalia/config.toml. This file used to NEVER be
+#    deployed — a fresh box ran noctalia with factory defaults (no hexciri bar,
+#    empty workspaces never hidden). Same sha-tracked no-clobber logic as the
+#    WM fragments; runs on install AND update so older boxes get healed. ──
+deploy config/noctalia/config.toml "$HOME/.config/noctalia/config.toml"
 
 # ── shell spawn in the WM's autostart must match the pick: every
 # WM spawns the shell at startup only when one is actually chosen — shell=none

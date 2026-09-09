@@ -15,13 +15,32 @@ Rectangle {
     if (config.Username && config.Username.length > 0) return config.Username
     return userModel.lastUser
   }
+  // Which SDDM session to log into. Order: the hexciri-configured WM first
+  // (theme.conf "Session=", written by hexciri-session-set / install /
+  // hexciri-sync), then the legacy niri/uwsm default, then the newest session
+  // file. The switcher below reassigns it for this login only.
   property int sessionIndex: {
+    var want = (config.Session || "").toString().toLowerCase()
+    var picked = -1
+    var fallback = -1
     for (var i = 0; i < sessionModel.rowCount(); i++) {
       var name = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString()
-      if (name.indexOf("niri") !== -1 || name.indexOf("uwsm") !== -1)
-        return i
+      if (picked < 0 && want.length > 0 && name.toLowerCase().indexOf(want) !== -1)
+        picked = i
+      if (fallback < 0 && (name.indexOf("niri") !== -1 || name.indexOf("uwsm") !== -1))
+        fallback = i
     }
+    if (picked >= 0) return picked
+    if (fallback >= 0) return fallback
     return sessionModel.lastIndex
+  }
+
+  property bool multiSession: sessionModel.rowCount() > 1
+  property string sessionName: {
+    var s = root.sessionIndex
+    if (s >= 0 && s < sessionModel.rowCount())
+      return (sessionModel.data(sessionModel.index(s, 0), Qt.DisplayRole) || "").toString()
+    return ""
   }
 
   property string infoText: ""
@@ -154,6 +173,32 @@ Rectangle {
         }
       }
 
+      // Session switcher — shown only when the box has more than one WM
+      // installed (the hexciri theme used to hardcode niri, which meant it
+      // could never boot into a swapped-in mango/hyprland/sway).
+      ComboBox {
+        id: sessionCombo
+        visible: root.multiSession
+        width: 160
+        height: 26
+        anchors.horizontalCenter: parent.horizontalCenter
+        model: sessionModel
+        index: root.sessionIndex
+        font.family: "JetBrainsMono Nerd Font"
+        font.pixelSize: 13
+        color: "#151020"
+        menuColor: "#151020"
+        borderColor: "#3b2b52"
+        textColor: "#d7c6e8"
+        hoverColor: "#5a3d85"
+        arrowColor: "#b6849d"
+        onValueChanged: {
+          root.sessionIndex = id
+          root.errText = ""
+          root.infoText = ""
+        }
+      }
+
       Text {
         visible: root.infoText.length > 0 || root.errText.length > 0
         text: root.errText.length > 0 ? root.errText : root.infoText
@@ -169,12 +214,14 @@ Rectangle {
   // fprintd claims the reader and prompts immediately (no password needed).
   // If fprintd is slow, the first attempt fails with a brief red flash and
   // the reader stays armed for the next touch; Enter falls back to password.
+  // Only auto-runs when there is a single session — once a session switcher
+  // exists the user must pick one (and press Enter) so the choice is theirs.
   Timer {
     id: autoStart
     interval: 1000
     repeat: false
     onTriggered: {
-      if (root.currentUser.length > 0) {
+      if (root.currentUser.length > 0 && !root.multiSession) {
         root.infoText = "touch the reader or enter your password"
         sddm.login(root.currentUser, "", root.sessionIndex)
       }
@@ -183,6 +230,8 @@ Rectangle {
 
   Component.onCompleted: {
     password.forceActiveFocus()
+    if (root.multiSession && root.sessionName.length > 0)
+      root.infoText = "session: " + root.sessionName + " — pick one, then touch the reader or enter your password"
     autoStart.start()
   }
 }

@@ -11,6 +11,10 @@ Target = avahi
 Target = hwloc
 Target = v4l-utils
 Target = qt6ct
+Target = ufw
+Target = openssh
+Target = samba
+Target = nfs-utils
 
 [Action]
 Description = Re-applying hexciri system state (boot entries, PAM, menu curation)

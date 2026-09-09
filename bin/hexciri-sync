@@ -90,6 +90,31 @@ fi
     "$noct_home/.local/state/noctalia/settings.toml" && \
   log "arch-updater plugin: update_cmd migrated to hexciri-update"
 
+# ── 3a2. noctalia config.toml: install.sh never deployed the repo default, so a
+# ── fresh box ran noctalia with factory defaults (no hexciri bar layout, empty
+# ── workspaces not hidden). Seed it from the repo if missing — a user-edited
+# ── file is never clobbered. Runs as root (alpm hook); the config is owned by
+# ── the repo owner like the settings.toml migration above. ──
+if [[ -n $REPO && -f $REPO/config/noctalia/config.toml && -n $noct_owner && -n $noct_home ]]; then
+  ncfg="$noct_home/.config/noctalia/config.toml"
+  if [[ ! -f $ncfg ]]; then
+    mkdir -p "$noct_home/.config/noctalia"
+    nog="$(stat -c %G "$noct_home" 2>/dev/null || echo users)"
+    install -o "$noct_owner" -g "$nog" -m 644 "$REPO/config/noctalia/config.toml" "$ncfg" && \
+      log "seeded noctalia config (repo default was missing on this box)"
+  fi
+fi
+
+# ── 3a3. gnome-keyring: fingerprint-first login (pam_fprintd) has no password,
+# ── so the login keyring can never auto-unlock → "unlock your keyring" popups
+# ── (Brave/Chromium) every boot. Seed a passwordless login keyring, but ONLY
+# ── where none exists yet — non-destructive, and with no keyring there is no
+# ── daemon holding secrets, so it is safe from the alpm-hook (root) context. ──
+if [[ -n $noct_owner && -n $noct_home && -n $REPO && -x $REPO/bin/hexciri-gkr-init.sh ]]; then
+  runuser -u "$noct_owner" -- env HOME="$noct_home" "$REPO/bin/hexciri-gkr-init.sh" 2>/dev/null && \
+    echo "hexciri-gkr-init: ok" | sed 's/^/hexciri-sync: /'
+fi
+
 # ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
 if [[ -d /boot/loader ]]; then
   ROOTUUID="$(findmnt -no UUID / 2>/dev/null || true)"
@@ -189,14 +214,69 @@ if pacman -Q gnome-keyring 2>/dev/null | grep -qE '[ :]50\.'; then
   fi
 fi
 
-# ── 4. app-menu curation: re-hide utility entries the packages re-show ──
+# ── 4. hardening: re-assert ufw (deny-in/allow-out + ssh) and the sshd
+# ── key-only drop-in. ufw is a plain service, so a package update can't
+# ── drop the rules, but a reinstall of /etc/ssh (or a removed drop-in) can
+# ── silently re-open password auth. Firewall first: if ufw is disabled the
+# ── box is wide open, so re-enable without --now conflict (idempotent).
+if command -v ufw >/dev/null 2>&1; then
+  systemctl enable ufw.service >/dev/null 2>&1 && log "ufw service enabled (was disabled)"
+  if systemctl is-active --quiet ufw.service; then
+    ufw --force enable >/dev/null 2>&1 || true
+  else
+    systemctl start ufw.service >/dev/null 2>&1 && log "ufw started"
+  fi
+  ufw default deny incoming >/dev/null 2>&1 || true
+  ufw default allow outgoing >/dev/null 2>&1 || true
+  ufw allow ssh >/dev/null 2>&1 || true
+fi
+mkdir -p /etc/ssh/sshd_config.d
+if [[ ! -f /etc/ssh/sshd_config.d/99-hardening.conf ]]; then
+  cat > /etc/ssh/sshd_config.d/99-hardening.conf <<'SSHEOF'
+# hexciri: sshd hardening — key-only auth, no root password login
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+PubkeyAuthentication yes
+MaxAuthTries 3
+SSHEOF
+  log "restored sshd hardening drop-in (key-only, no root password)"
+  sshd -t 2>/dev/null && systemctl restart sshd 2>/dev/null || \
+    log "WARNING: sshd -t failed — hardening drop-in written but not activated"
+fi
+
+# ── 4a. network file sharing: Samba (smb/nmb) enabled out of the box;
+# ── a pkg removal/update won't disable a unit, but re-assert is cheap and
+# ── idempotent. NFS needs no services — mounts are user-configured. ──
+systemctl enable smb.service >/dev/null 2>&1 || true
+systemctl enable nmb.service >/dev/null 2>&1 || true
+
+# ── 4b. SDDM greeter preselect: keep Session= in the hexciri theme.conf in
+# ── sync with the machine's WM selector (repo owner's ~/.config/hexciri/wm).
+# ── The hexciri greeter shows a real session switcher now, but without this
+# ── pin it defaults to the niri entry on a box that swapped to mango. ──
+if [[ -n $noct_home ]] && [[ -f $noct_home/.config/hexciri/wm ]]; then
+  _sel="$(tr -d '[:space:]' < "$noct_home/.config/hexciri/wm" 2>/dev/null || true)"
+  case "$_sel" in niri|hyprland|sway|mango) : ;; *) _sel="" ;; esac
+  _tc="/usr/share/sddm/themes/hexciri/theme.conf"
+  if [[ -n $_sel ]] && [[ -f $_tc ]]; then
+    if grep -q '^Session=' "$_tc"; then
+      sed -i "s|^Session=.*|Session=$_sel|" "$_tc"
+    else
+      printf '\nSession=%s\n' "$_sel" >> "$_tc"
+    fi
+    log "greeter preselect: Session=$_sel"
+  fi
+fi
+
+# ── 5. app-menu curation: re-hide utility entries the packages re-show ──
 for f in avahi-discover.desktop bssh.desktop bvnc.desktop lstopo.desktop \
          qv4l2.desktop qvidcap.desktop qt6ct.desktop; do
   d="/usr/share/applications/$f"
   [[ -f $d ]] && ! grep -q '^NoDisplay=true' "$d" && printf 'NoDisplay=true\n' >> "$d" && log "hid $f"
 done
 
-# ── 5. per-PC makepkg tuning (jobs + CPU tier): write quietly on upgrades too,
+# ── 6. per-PC makepkg tuning (jobs + CPU tier): write quietly on upgrades too,
 # ── so machines that installed before 1.5 get it with a plain system update ──
 if [[ -f $REPO/lib/makepkg-tuning.sh ]]; then
   # shellcheck disable=SC1091
