@@ -80,7 +80,7 @@ DESC = {
     "Mod+I": "Next workspace",
     "Mod+F": "Maximize column",
     "Mod+Ctrl+F": "Fullscreen",
-    "Mod+R": "Cycle column width",
+    "Mod+R": "Cycle window width",
     "Mod+Shift+R": "Tabbed column",
     "Mod+Shift+Space": "Toggle floating",
     "Mod+P": "Focus floating window",
@@ -97,6 +97,70 @@ DESC = {
     "Mod+Escape": "Power menu",
     "Mod+Comma": "Clear notifications",
     "Mod+N": "Toggle notifications",
+    "Mod+Shift+Tab": "Cycle layout",
+    "Mod+T": "Tiling layout",
+    "Mod+Alt+Up": "Widen master area",
+    "Mod+Alt+Down": "Narrow master area",
+    "Mod+Ctrl+R": "Reload configuration",
+    "Mod+Tab": "Focus next window",
+    "Mod+G": "Toggle global visibility",
+    "Mod+M": "Quit mango",
+    "Mod+Shift+I": "Restore minimized window",
+    "Alt+Space": "Launcher (native rofi)",
+    "Alt+Return": "Terminal (native foot)",
+    "Alt+Q": "Close window",
+    "Alt+Tab": "Overview jump",
+    "Alt+backslash": "Toggle floating",
+    "Alt+A": "Maximize screen",
+    "Alt+E": "Scroller width",
+    "Alt+F": "Fullscreen",
+    "Alt+Shift+F": "Fake fullscreen",
+    "Alt+Z": "Toggle scratchpad",
+    "Alt+X": "Cycle scroller width",
+    "Alt+Left": "Focus left", "Alt+Right": "Focus right",
+    "Alt+Up": "Focus up", "Alt+Down": "Focus down",
+    "Alt+Shift+Left": "Focus monitor left",
+    "Alt+Shift+Right": "Focus monitor right",
+    "Mod+Alt+Left": "Move window to monitor left",
+    "Mod+Alt+Right": "Move window to monitor right",
+    "Alt+Shift+X": "Increase gaps",
+    "Alt+Shift+Z": "Decrease gaps",
+    "Alt+Shift+R": "Toggle gaps",
+    "Ctrl+Shift+Up": "Move window freely",
+    "Ctrl+Shift+Down": "Move window freely",
+    "Ctrl+Shift+Left": "Move window freely",
+    "Ctrl+Shift+Right": "Move window freely",
+    "Ctrl+Alt+Up": "Resize window freely",
+    "Ctrl+Alt+Down": "Resize window freely",
+    "Ctrl+Alt+Left": "Resize window freely",
+    "Ctrl+Alt+Right": "Resize window freely",
+    "Ctrl+Left": "View tag left",
+    "Ctrl+Right": "View tag right",
+    "Ctrl+1": "Workspace 1", "Ctrl+2": "Workspace 2", "Ctrl+3": "Workspace 3",
+    "Ctrl+4": "Workspace 4", "Ctrl+5": "Workspace 5", "Ctrl+6": "Workspace 6",
+    "Ctrl+7": "Workspace 7", "Ctrl+8": "Workspace 8", "Ctrl+9": "Workspace 9",
+    "Alt+1": "Move window to workspace 1", "Alt+2": "Move window to workspace 2",
+    "Alt+3": "Move window to workspace 3", "Alt+4": "Move window to workspace 4",
+    "Alt+5": "Move window to workspace 5", "Alt+6": "Move window to workspace 6",
+    "Alt+7": "Move window to workspace 7", "Alt+8": "Move window to workspace 8",
+    "Alt+9": "Move window to workspace 9",
+    "Mod+Shift+Q": "Kill window",
+    "Mod+D": "App launcher (native wmenu)",
+    "Mod+Shift+C": "Reload config",
+    "Mod+Shift+H": "Move window", "Mod+Shift+J": "Move window",
+    "Mod+Shift+K": "Move window", "Mod+Shift+L": "Move window",
+    "Mod+Shift+Left": "Move window", "Mod+Shift+Right": "Move window",
+    "Mod+Shift+Up": "Move window", "Mod+Shift+Down": "Move window",
+    "Mod+B": "Horizontal split",
+    "Mod+S": "Stacking layout",
+    "Mod+W": "Tabbed layout",
+    "Mod+E": "Toggle split layout",
+    "Mod+A": "Focus parent",
+    "Mod+minus": "Show scratchpad",
+    "Mod+Shift+minus": "Move window to scratchpad",
+    "Print": "Screenshot (native grim)",
+    "XF86AudioPause": "Play / pause",
+    "XF86AudioStop": "Stop playback",
     "XF86AudioRaiseVolume": "Volume up",
     "XF86AudioLowerVolume": "Volume down",
     "XF86AudioMute": "Mute",
@@ -118,7 +182,7 @@ SUB_TO_XDG = {
 
 def canon_key(token):
     t = token.strip()
-    if t in ("Mod", "SUPER", "Mod4"):
+    if t in ("Mod", "SUPER", "Mod4", "$mod"):
         return "Mod"
     if t in ("Ctrl", "CTRL"):
         return "Ctrl"
@@ -128,6 +192,8 @@ def canon_key(token):
         return "Shift"
     if t.startswith("XF86"):
         return t
+    if len(t) == 1 and t.isalpha():
+        return t.upper()
     return SUB_TO_XDG.get(t.lower(), t)
 
 def canon(combo):
