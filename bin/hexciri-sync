@@ -151,9 +151,13 @@ if ! pacman -Q sddm >/dev/null 2>&1 || ! pacman -Q weston >/dev/null 2>&1; then
       log "installed weston (Wayland greeter compositor — robust logout/login)"
   fi
 fi
-if [[ -f $_hexciri_conf ]] && ! grep -q '^DisplayServer=wayland' "$_hexciri_conf"; then
-  printf '[General]\nDisplayServer=wayland\n\n[Theme]\nCurrent=hexciri\n' > "$_hexciri_conf" && \
-    log "sddm: DisplayServer=wayland set (Wayland greeter) in 10-hexciri-theme.conf"
+if [[ -f $_hexciri_conf ]] && ! grep -q '^CursorTheme=' "$_hexciri_conf"; then
+  # DisplayServer=wayland was the whole point, but bare it leaves the greeter
+  # without a pointer: under weston no X server draws the cursor, so a
+  # CursorTheme/CursorSize must be pinned too (X11 greeter used to show one
+  # by default). Adwaita ships with gtk (always present on a desktop box).
+  printf '[General]\nDisplayServer=wayland\n\n[Theme]\nCurrent=hexciri\nCursorTheme=Adwaita\nCursorSize=24\n' > "$_hexciri_conf" && \
+    log "sddm: DisplayServer=wayland + CursorTheme set (Wayland greeter) in 10-hexciri-theme.conf"
 fi
 
 # ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
