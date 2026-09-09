@@ -73,7 +73,19 @@ pkg_install() {
     niri)     sudo pacman -S --needed --noconfirm niri 2>/dev/null || true ;;
     hyprland) sudo pacman -S --needed --noconfirm hyprland hyprlock 2>/dev/null || true ;;
     sway)     sudo pacman -S --needed --noconfirm sway swaylock 2>/dev/null || true ;;
-    mango)    echo "mango is experimental — install it yourself (yay -S mangowm); session dispatch will follow" ;;
+    mango)    # AUR-only. NOT swallowed: an install failure aborts the swap so the
+              # selector/session file are never written for a WM that isn't there.
+              local aur=""
+              command -v yay  >/dev/null 2>&1 && aur=yay
+              command -v paru >/dev/null 2>&1 && aur=paru
+              if [[ -n $aur ]]; then
+                echo "mango ships on the AUR as 'mangowm' — installing via $aur (build may take a while)..."
+                "$aur" -S --needed --noconfirm mangowm
+              else
+                echo "mango is AUR-only ('mangowm') and no yay/paru is installed — install it first, then re-run hexciri-session-set" >&2
+                return 1
+              fi
+              ;;
   esac
 }
 if [[ $want_wm != "$cur_wm" ]]; then
