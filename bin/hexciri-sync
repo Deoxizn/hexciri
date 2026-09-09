@@ -171,7 +171,22 @@ if [[ -d /boot/loader ]]; then
   fi
 fi
 
-# ── 3. SDDM + system-auth PAM: restore gnome-keyring (sddm) and put fprintd
+# ── 3. SDDM greeter: pin the X11 greeter. Boxes that ran the 09-09 Wayland
+# ── experiment have DisplayServer=wayland + GreeterEnvironment in the conf and
+# ── a stray weston compositor — revert both; sddm's default X11 greeter is the
+# ── supported baseline. ──
+_hexciri_conf=/etc/sddm.conf.d/10-hexciri-theme.conf
+if [[ -f $_hexciri_conf ]] && grep -q '^DisplayServer=wayland' "$_hexciri_conf"; then
+  printf '[Theme]\nCurrent=hexciri\n' > "$_hexciri_conf" && \
+    log "sddm: reverted 10-hexciri-theme.conf to X11 greeter ([Theme] Current=hexciri)"
+fi
+if pacman -Q weston >/dev/null 2>&1; then
+  pacman -R --noconfirm weston >/dev/null 2>&1 && \
+    log "removed weston (Wayland greeter compositor no longer used)" || \
+    log "warning: weston still installed"
+fi
+
+# ── 3b. SDDM + system-auth PAM: restore gnome-keyring (sddm) and put fprintd
 # ── first in system-auth (covers sddm/sudo/su/login in one place; sddm's own
 # ── file must NOT duplicate it or the greeter prompts twice) ──
 if [[ -f /etc/pam.d/system-auth ]] && ! grep -Ev '^\s*#' /etc/pam.d/system-auth | grep -q 'pam_fprintd.so'; then
