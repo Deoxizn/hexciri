@@ -115,6 +115,17 @@ if [[ -n $noct_owner && -n $noct_home && -n $REPO && -x $REPO/bin/hexciri-gkr-in
     echo "hexciri-gkr-init: ok" | sed 's/^/hexciri-sync: /'
 fi
 
+# ── 3a4. kitty: harden allow_remote_control ('yes' → 'socket-only'). 'yes'
+# ── exposes the control socket to any process with display access; the repo
+# ── default changed in 1454112, but a box installed before it keeps 'yes'.
+# ── Idempotent; a hardened file is left alone; user edits otherwise survive. ──
+if [[ -n $noct_home && -f $noct_home/.config/kitty/kitty.conf ]] \
+   && grep -q 'allow_remote_control yes' "$noct_home/.config/kitty/kitty.conf"; then
+  sed -i 's|allow_remote_control yes|allow_remote_control socket-only|' \
+    "$noct_home/.config/kitty/kitty.conf" && \
+    log "kitty: remote control hardened to socket-only (pre-1454112 config migrated)"
+fi
+
 # ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
 if [[ -d /boot/loader ]]; then
   ROOTUUID="$(findmnt -no UUID / 2>/dev/null || true)"

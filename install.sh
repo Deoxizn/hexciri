@@ -637,6 +637,15 @@ elif ! grep -q "state/hexciri/current/theme/kitty.conf" "$HOME/.config/kitty/kit
   mkdir -p "$bak"; cp -f "$HOME/.config/kitty/kitty.conf" "$bak/kitty.conf"
   run sed -i '1i include ~/.local/state/hexciri/current/theme/kitty.conf' "$HOME/.config/kitty/kitty.conf"
 fi
+# security heal: allow_remote_control yes opens kitty's control socket to any
+# process owning the display (arbitrary commands, terminal escape injection
+# surface). The repo default is socket-only since 1454112; migrate installs
+# that predate it. Idempotent; never touches a file that already hardened it.
+if grep -q 'allow_remote_control yes' "$HOME/.config/kitty/kitty.conf"; then
+  mkdir -p "$bak"; cp -f "$HOME/.config/kitty/kitty.conf" "$bak/kitty.conf"
+  run sed -i 's|allow_remote_control yes|allow_remote_control socket-only|' "$HOME/.config/kitty/kitty.conf"
+  info "kitty: remote control hardened to socket-only (pre-1454112 config migrated)"
+fi
 
 # ── defaults state (kitty/fish/brave-origin/strata/zed/opencode) ──
 mkdir -p "$HOME/.local/state/hexciri/defaults"
