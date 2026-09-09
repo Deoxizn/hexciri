@@ -142,10 +142,10 @@ ws-next = { type = "action", niri = "focus-workspace-up", hyprland = "workspace 
 maximize-column = { type = "action", niri = "maximize-column", hyprland = "togglefloating maximize", sway = "fullscreen toggle", mango = "togglemaximizescreen", desc = "Maximize column" }
 fullscreen   = { type = "action", niri = "fullscreen-window", hyprland = "fullscreen", sway = "fullscreen toggle", mango = "togglefullscreen", desc = "Fullscreen" }
 switch-column-width = { type = "action", niri = "switch-preset-column-width", hyprland = "resizeactive", sway = "(See NOTE)", mango = "switch_proportion_preset", desc = "Cycle column width" }
-tabbed-column = { type = "action", niri = "toggle-column-tabbed-display", hyprland = "togglegroup", sway = "(See NOTE)", mango = "toggleview", desc = "Tabbed column" }
+tabbed-column = { type = "action", niri = "toggle-column-tabbed-display", hyprland = "togglegroup", sway = "(See NOTE)", mango = "(See NOTE — mango has no tabbed display)", desc = "Tabbed column" }
 toggle-float = { type = "action", niri = "toggle-window-floating", hyprland = "togglefloating", sway = "floating toggle", mango = "togglefloating", desc = "Toggle floating" }
-focus-float = { type = "action", niri = "focus-floating", hyprland = "focusmode floating", sway = "focus floating", mango = "togglejump", desc = "Focus floating window" }
-focus-tiling = { type = "action", niri = "focus-tiling", hyprland = "focusmode tiling", sway = "focus tiling", mango = "togglejump", desc = "Focus tiling window" }
+focus-float = { type = "action", niri = "focus-floating", hyprland = "focusmode floating", sway = "focus floating", mango = "(See NOTE — mango has no float/tiling focus modes)", desc = "Focus floating window" }
+focus-tiling = { type = "action", niri = "focus-tiling", hyprland = "focusmode tiling", sway = "focus tiling", mango = "(See NOTE — mango has no float/tiling focus modes)", desc = "Focus tiling window" }
 consume-into-column = { type = "action", niri = "consume-window-into-column", hyprland = "swapwindow l", sway = "(See NOTE)", mango = "groupjoin left", desc = "Consume window into column" }
 expel-from-column = { type = "action", niri = "expel-window-from-column", hyprland = "swapwindow r", sway = "(See NOTE)", mango = "groupleave", desc = "Expel window from column" }
 

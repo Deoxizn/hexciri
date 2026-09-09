@@ -9,30 +9,19 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 INTENTS="$SCRIPT_DIR/../config/keybinds/intents.toml"
 WM="$("$SCRIPT_DIR/hexciri-session" wm)"
 
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 output=$(python3 - "$INTENTS" "$WM" <<'EOF'
-import re
 import sys
 try:
     import tomllib
+    from key_translate import hyp_dsp
 except ImportError:
-    sys.stderr.write("python3 too old: tomllib unavailable\n")
+    sys.stderr.write("python3 too old or key_translate missing: tomllib unavailable\n")
     sys.exit(1)
 
 INTENTS_FILE, WM = sys.argv[1], sys.argv[2]
 cfg = tomllib.load(open(INTENTS_FILE, "rb"))
 keys, intents = cfg["keys"], cfg["intents"]
-
-def hyp_tok(action):
-    # Renderer's hyp_dsp() — returns a real dispatcher expr or None (unbound).
-    a = action.strip() if isinstance(action, str) else ""
-    if a.startswith("(") or a.startswith("overview"):
-        return None
-    bindable = re.match(
-        r"^(closeactive|movefocus [lrud]|movewindow [lrud]|movetoworkspace \d+"
-        r"|movetoworkspacesilent name:.+|workspace (.+|e[+-]\d+)|togglefloating"
-        r"|togglefloating maximize|fullscreen|resizeactive|togglegroup"
-        r"|focusmode floating|focusmode tiling|swapwindow [lr])$", a)
-    return a if bindable else None
 
 def bound(intent):
     s = intents[intent]
@@ -46,7 +35,7 @@ def bound(intent):
     if action.startswith("("):
         return False
     if WM == "hyprland":
-        return hyp_tok(action) is not None
+        return hyp_dsp(action) is not None
     return True
 
 rows = []
