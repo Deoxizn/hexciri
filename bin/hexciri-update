@@ -40,7 +40,6 @@ update_sys() {
   # ── skips the pull so the pass always terminates. ──
   if [[ ${HXC_RERUN:-0} == 0 ]]; then
     export HXC_RERUN=1
-    echo "== framework self-update (repo pull) =="
     "$SCRIPT_DIR/hexciri-update-hexciri" || echo "framework self-update skipped/failed (continuing)"
     exec "$0" "$@"
   fi
@@ -84,7 +83,7 @@ update_sys() {
     # the legacy 580xx driver is AUR-built and updates via the yay pass below —
     # there is no separate refresh loop anymore.
     if command -v yay &>/dev/null && pacman -Qmq 2>/dev/null | grep -qv yay-bin; then
-      yay -Sua --noconfirm
+      yay -Sua --noconfirm 2>&1 | grep -v 'Missing AUR Debug Packages' || true
     fi
   } 2>&1 | tee -a "$LOG"
 
@@ -92,8 +91,9 @@ update_sys() {
   # ── package (kernel/sddm/…) actually changed, so a no-op update never ran it.
   # ── Running it here — every press — guarantees boot entries, PAM, the gnome-
   # ── keyring pin AND the per-PC makepkg tuning land even when pacman had
-  # ── nothing to do. Idempotent; the hook stays for plain `pacman -Syu`. ──
-  echo "-- re-applying hexciri state (boot entries, PAM, keyring, makepkg tuning) --"
+  # ── nothing to do. Idempotent; the hook stays for plain `pacman -Syu`. ——
+  # ── hexciri-sync now reports only real changes, so a no-op press silently
+  # ── skips — no header, no "nothing to do" theater. ──
   sudo hexciri-sync || echo "hexciri-sync step failed (continuing)"
 
   # Reboot offer only when the kernel hexciri is pinned to boot differs from the
@@ -225,7 +225,6 @@ update_self() {
     return 0
   }
 
-  echo "syncing $REPO ..."
   git -C "$REPO" fetch --tags origin --quiet 2>/dev/null || true
   local behind
   behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
@@ -236,6 +235,7 @@ update_self() {
   # ── THE deploy. Anything the pulled commit ships must run the NEW bytes of
   # ── THIS script, not the pre-pull copy that's executing now. ──
   if (( behind > 0 )) && [[ ${HXC_UPX_RERUN:-0} == 0 ]]; then
+    echo "== framework self-update (repo pull) =="
     echo "pulling $behind new commit(s)..."
     git -C "$REPO" pull --ff-only --quiet
     export HXC_UPX_RERUN=1
