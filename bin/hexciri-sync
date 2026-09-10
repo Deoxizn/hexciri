@@ -204,9 +204,10 @@ if [[ -f /etc/pam.d/sddm ]] && ! grep -Ev '^\s*#' /etc/pam.d/sddm | grep -q 'pam
 fi
 
 # ── 3c. niri-only: hexciri no longer ships hyprland/sway/mango sessions — drop
-# ── the leftover login-gate entries a pre-purge box accumulated (sddm would
-# ── happily offer them otherwise). Packages are left installed deliberately;
-# ── the user removes those by hand (pacman -Rns) when ready. ──
+# ── the leftover login-gate entries AND user config dirs a pre-purge box
+# ── accumulated (sddm would still offer/start them otherwise). Packages are
+# ── left installed deliberately; the user removes those by hand (pacman -Rns)
+# ── when ready. A WM actually running right now is left untouched. ──
 for _other in hyprland sway mango; do
   for _sessdir in /usr/share/wayland-sessions /usr/local/share/wayland-sessions; do
     if [[ -f "$_sessdir/$_other.desktop" ]]; then
@@ -215,6 +216,23 @@ for _other in hyprland sway mango; do
     fi
   done
 done
+if [[ -n $noct_home ]]; then
+  for _wm in hypr sway mango; do
+    _cfg="$noct_home/.config/$_wm"
+    [[ -e $_cfg ]] || continue
+    case "$_wm" in
+      hypr)  _bin=Hyprland ;;
+      sway)  _bin=sway ;;
+      mango) _bin=mango ;;
+    esac
+    if pgrep -x "$_bin" >/dev/null 2>&1; then
+      log "skipping '$_wm' config purge: $_bin is running right now"
+      continue
+    fi
+    rm -rf "$_cfg"
+    log "purged leftover '$_wm' config: $_cfg"
+  done
+fi
 
 # ── 3b. gnome-keyring pin + socket race. 50.0 crashes (SIGABRT on concurrent
 # ── Secret Service OpenSession/PKCS11), which is why it's parked at 48.0 via
