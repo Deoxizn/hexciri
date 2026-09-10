@@ -56,6 +56,64 @@ update_sys() {
   avail_kb=$(df -k / --output=avail | tail -n 1)
   (( avail_kb > 2*1024*1024 )) || { echo "hexciri-update: <2G free on / — free space first"; exit 1; }
 
+  # ── password-locked login keyring is the #1 recurring "browser lost sync"
+  # ── breaker: the gcr prompt UI that should ask for it crashes on this
+  # ── desktop, so Brave/Chromium can't reach Sync/credentials and keep
+  # ── re-provisioning. `--unlock` cannot rebuild an empty one on this daemon
+  # ── version, so the reliable repair is PAM: at the next sign-in
+  # ── pam_gnome_keyring re-creates the login keyring with the account password
+  # ── and auto-unlocks it. When a session bus is present we therefore detect a
+  # ── LOCKED login collection, stop the user's daemons FIRST (a live daemon
+  # ── flushes its stale in-memory keyring back over a deleted file), back the
+  # ── file up, and remove it. One log-out applies the fix. Silent when healthy. ──
+  gkr_ensure() {
+    command -v python3 >/dev/null 2>&1 || return 0
+    [[ -n ${DBUS_SESSION_BUS_ADDRESS:-} ]] || return 0
+    local locked
+    locked="$(python3 - 2>/dev/null <<'PY' || true
+import sys
+try:
+    import gi
+    gi.require_version('Gio', '2.0')
+    from gi.repository import Gio, GLib
+except Exception:
+    sys.exit(0)
+try:
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    def call(dest, obj, iface, method, args):
+        p = Gio.DBusProxy.new_sync(bus, Gio.DBusProxyFlags.NONE, None, dest, obj, iface, None)
+        return p.call_sync(method, args, 0, -1, None)
+    cols = call('org.freedesktop.secrets', '/org/freedesktop/secrets',
+                'org.freedesktop.DBus.Properties', 'Get',
+                GLib.Variant('(ss)', ('org.freedesktop.Secret.Service', 'Collections'))).unpack()[0]
+    for path in cols:
+        if path.endswith('/collection/login'):
+            locked = call('org.freedesktop.secrets', path, 'org.freedesktop.DBus.Properties', 'Get',
+                          GLib.Variant('(ss)', ('org.freedesktop.Secret.Collection', 'Locked'))).unpack()[0]
+            sys.stdout.write('LOCKED' if locked else 'OK')
+            break
+except Exception:
+    pass
+PY
+)"
+    [[ $locked == LOCKED ]] || return 0
+    local keyring="$HOME/.local/share/keyrings/login.keyring"
+    [[ -f $keyring ]] || return 0
+    local ts bk
+    ts="$(date +%m%d-%H%M%S)"
+    bk="$HOME/.local/share/keyrings-backup-locked-$ts"
+    mkdir -p "$bk"
+    cp -f "$keyring" "$bk/" 2>/dev/null || true
+    for pid in $(ps -eo pid=,comm= | awk '$2 ~ /^gnome-keyring-d/ {print $1}'); do
+      kill "$pid" 2>/dev/null || true
+    done
+    sleep 1
+    rm -f "$keyring"
+    echo "keyring: login keyring was password-locked (browser prompts/breaks) — removed, backed up to $bk"
+    echo "keyring: pam_gnome_keyring will re-create it with your account password at the NEXT sign-in; log out/reboot once to apply"
+  }
+  gkr_ensure
+
   confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
 
   # Validate sudo up front (the pacman transaction needs it anyway) so the repo
