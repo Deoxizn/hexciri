@@ -4,6 +4,8 @@
 # usage: hexciri-defaults [Browser|Editor|Images|Terminal|Shell|Files|Agent]
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 STATE_BASE="$HOME/.local/state/hexciri/defaults"
 mkdir -p "$STATE_BASE"
 get() { cat "$STATE_BASE/$1" 2>/dev/null || true; }
