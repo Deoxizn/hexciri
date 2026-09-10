@@ -47,11 +47,22 @@ try:
                    GLib.Variant('(ss)', ('org.freedesktop.Secret.Collection', 'Label'))).unpack()[0]
         if lbl == 'session':
             continue
+        default_found = True
         locked = call('org.freedesktop.secrets', path, 'org.freedesktop.DBus.Properties', 'Get',
                       GLib.Variant('(ss)', ('org.freedesktop.Secret.Collection', 'Locked'))).unpack()[0]
-        default_found = True
+        if not locked:
+            continue
+        # An empty-password keyring reports Locked=True until something first
+        # touches it at boot, then auto-unlocks with NO prompt. Distinguish
+        # that healthy case from a genuinely password-locked collection by
+        # attempting the unlock and re-reading the flag.
+        call('org.freedesktop.secrets', '/org/freedesktop/secrets',
+             'org.freedesktop.Secret.Service', 'Unlock',
+             GLib.Variant('(ao)', ([path],)))
+        locked = call('org.freedesktop.secrets', path, 'org.freedesktop.DBus.Properties', 'Get',
+                      GLib.Variant('(ss)', ('org.freedesktop.Secret.Collection', 'Locked'))).unpack()[0]
         if locked:
-            sys.exit(2)  # locked = broken
+            sys.exit(2)  # genuinely password-locked = broken
     if not default_found:
         sys.exit(1)  # missing
     sys.exit(0)  # healthy
