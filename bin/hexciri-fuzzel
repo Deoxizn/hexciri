@@ -1,12 +1,25 @@
 #!/bin/bash
 # hexciri:fuzzel=wrapper:shared-theming
-# hexciri:summary=Shared fuzzel wrapper with Noctalia theme colors
-# hexciri:internal=true
+# hexciri:summary=Fuzzel launcher wrapper: app launcher + web search + calculator + runner (Noctalia theme)
+# hexciri:args=[search [PROVIDER]|calc|run] — bare = app launcher, --dmenu passthrough preserved
+#
+# Modes (mirror the walker/elephant launcher features that matter):
+#   hexciri-fuzzel                 app launcher (default, unchanged)
+#   hexciri-fuzzel search          web search with the default provider
+#   hexciri-fuzzel search NAME     web search with provider NAME (google/github/wiki/...)
+#   hexciri-fuzzel calc            calculator via qalc; result copied to clipboard + notify
+#   hexciri-fuzzel run             execute a command ($PATH scan + free text), detached
+#   hexciri-fuzzel --dmenu ...     passthrough for dmenu consumers (hexciri-clipboard)
+#
+# Search providers: builtin table below; override/extend via
+#   ~/.config/hexciri/search-providers   lines:  name=url-template   (%s = URL-encoded query)
+#   default provider: default=NAME  in that file, else HEXCIRI_SEARCH_PROVIDER, else "google".
+# Query percent-encoding is done with python3 (already a hexciri dependency).
 set -euo pipefail
 
 CONFIG="$HOME/.config/noctalia/config.toml"
 
-# Defaults
+# ── Noctalia theme colors (unchanged) ──
 bg_color="1a1b26cc"
 text_color="c0caf5ff"
 match_color="7aa2f7ff"
@@ -14,7 +27,6 @@ sel_bg_color="33467cdd"
 sel_text_color="c0caf5ff"
 border_color="7aa2f7ff"
 
-# Parse Noctalia config.toml for override colors
 if [[ -f "$CONFIG" ]]; then
     while IFS='=' read -r key value; do
         key=$(echo "$key" | xargs)
@@ -28,7 +40,6 @@ if [[ -f "$CONFIG" ]]; then
     done < <(grep -E '^\s*(bg_color|text_color|accent_color|border_color)\s*=' "$CONFIG")
 fi
 
-# Ensure RGBA format (8 hex digits)
 ensure_rgba() {
     local color="$1"
     color="${color#\#}"
@@ -46,7 +57,8 @@ sel_bg_color=$(ensure_rgba "$sel_bg_color")
 sel_text_color=$(ensure_rgba "$sel_text_color")
 border_color=$(ensure_rgba "$border_color")
 
-exec fuzzel \
+# Shared fuzzel base arguments (theme). Mode code appends mode-specific flags.
+FZ=( fuzzel \
     --font="JetBrainsMono Nerd Font:size=11" \
     --background-color="$bg_color" \
     --text-color="$text_color" \
@@ -54,5 +66,66 @@ exec fuzzel \
     --selection-color="$sel_bg_color" \
     --selection-text-color="$sel_text_color" \
     --border-color="$border_color" \
-    --border-width=2 \
-    "$@"
+    --border-width=2 )
+
+# ── search providers ──
+# Builtin fallbacks; a user file overrides/extend these.
+declare -A PROVIDERS
+PROVIDERS[google]="https://google.com/search?q=%s"
+PROVIDERS[ddg]="https://duckduckgo.com/?q=%s"
+PROVIDERS[github]="https://github.com/search?q=%s&type=code"
+PROVIDERS[wiki]="https://en.wikipedia.org/w/index.php?search=%s"
+PROVIDERS[archwiki]="https://wiki.archlinux.org/index.php?search=%s"
+PROVIDERS[youtube]="https://www.youtube.com/results?search_query=%s"
+PROVIDERS[aur]="https://aur.archlinux.org/packages?K=%s"
+PROVIDERS[man]="https://man.archlinux.org/search?q=%s"
+DEFAULT_PROVIDER="google"
+
+SP_FILE="$HOME/.config/hexciri/search-providers"
+if [[ -f $SP_FILE ]]; then
+    while IFS== read -r name url; do
+        name="${name%%[[:space:]]*}"
+        [[ -n $name && $name != "#"* ]] || continue
+        if [[ $name == "default" ]]; then
+            DEFAULT_PROVIDER="$url"
+        else
+            PROVIDERS["$name"]="$url"
+        fi
+    done < "$SP_FILE"
+fi
+DEFAULT_PROVIDER="${HEXCIRI_SEARCH_PROVIDER:-$DEFAULT_PROVIDER}"
+
+urlenc() { python3 -c 'import sys,urllib.parse;sys.stdout.write(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
+
+mode_search() {
+    local prov="${1:-$DEFAULT_PROVIDER}"
+    local tpl="${PROVIDERS[$prov]:-${PROVIDERS[$DEFAULT_PROVIDER]}}"
+    local q
+    q="$("${FZ[@]}" --dmenu --prompt-only="Search [$prov]: " --width=70)" || exit 0
+    [[ -n $q ]] || exit 0
+    xdg-open "${tpl/\%s/$(urlenc "$q")}" &
+}
+
+mode_calc() {
+    local expr res
+    expr="$("${FZ[@]}" --dmenu --prompt-only="Calc: " --width=45)" || exit 0
+    [[ -n $expr ]] || exit 0
+    res="$(qalc -t "$expr" 2>&1 || true)"
+    printf '%s' "$res" | wl-copy
+    notify-send "Calc" "$expr = $res" 2>/dev/null || true
+}
+
+mode_run() {
+    local cmd
+    cmd="$(compgen -c 2>/dev/null | sort -u | "${FZ[@]}" --dmenu --prompt="Run: " --width=70 --lines=12)" || exit 0
+    [[ -n $cmd ]] || exit 0
+    setsid bash -c "exec $cmd" >/dev/null 2>&1 & disown
+}
+
+# ── dispatch ──
+case "${1:-}" in
+    search) mode_search "${2:-}" ;;
+    calc)   mode_calc ;;
+    run)    mode_run ;;
+    *)      exec "${FZ[@]}" "$@" ;;   # app launcher / --dmenu passthrough
+esac
