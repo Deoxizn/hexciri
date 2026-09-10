@@ -208,10 +208,12 @@ fi
 # ── happily offer them otherwise). Packages are left installed deliberately;
 # ── the user removes those by hand (pacman -Rns) when ready. ──
 for _other in hyprland sway mango; do
-  if [[ -f /usr/share/wayland-sessions/$_other.desktop ]]; then
-    rm -f "/usr/share/wayland-sessions/$_other.desktop"
-    log "purged leftover session entry /usr/share/wayland-sessions/$_other.desktop"
-  fi
+  for _sessdir in /usr/share/wayland-sessions /usr/local/share/wayland-sessions; do
+    if [[ -f "$_sessdir/$_other.desktop" ]]; then
+      rm -f "$_sessdir/$_other.desktop"
+      log "purged leftover session entry $_sessdir/$_other.desktop"
+    fi
+  done
 done
 
 # ── 3b. gnome-keyring pin + socket race. 50.0 crashes (SIGABRT on concurrent
