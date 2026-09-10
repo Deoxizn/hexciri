@@ -24,7 +24,7 @@ choice=${choice%' >'}
 
 case "$choice" in
   DNS) ;;
-  'Wi-Fi QR Code') exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-wifi-qr" ;;
+  'Wi-Fi QR Code') exec xdg-terminal-exec --app-id=TUI.float -e "$bindir/hexciri-network-qr" --terminal ;;
   *) exit 0 ;;
 esac
 

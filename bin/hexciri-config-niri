@@ -1,0 +1,39 @@
+#!/bin/bash
+# hexciri:menu=config-niri
+# hexciri:summary=Edit niri config fragments (config.kdl starts the imports)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+niri_dir="${XDG_CONFIG_HOME:-$HOME/.config}/niri"
+
+# One row per fragment of the split niri config tree (config.kdl imports them).
+declare -A NIRI_FRAGS=(
+  [config]="config.kdl"
+  [env]="env.kdl"
+  [input]="input.kdl"
+  [autostart]="autostart.kdl"
+  [monitors]="monitors.kdl"
+  [looknfeel]="looknfeel.kdl"
+  [window-rules]="window-rules.kdl"
+  [keybinds]="keybinds.kdl"
+  [cursors]="cursors.kdl"
+)
+
+if [[ $# -gt 0 ]]; then
+  # Direct dispatch from menu search
+  frag="$*"
+else
+  frag=$(
+    printf '%s\n' "${!NIRI_FRAGS[@]}" |
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Niri: ' --width=24 --lines=${#NIRI_FRAGS[@]}
+  ) || exec "$SCRIPT_DIR/hexciri-config"   # Esc = back to config menu
+fi
+frag=${frag#Niri }
+file="${NIRI_FRAGS[$frag]:-}"
+if [[ -n $file ]]; then
+  "$bindir/hexciri-edit-file" "$niri_dir/$file"
+fi

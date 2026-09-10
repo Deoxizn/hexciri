@@ -1,14 +1,16 @@
 #!/bin/bash
-# hexciri:summary=Generate a Wi-Fi QR matrix for the shell
-# hexciri:args=[--meta] [interface]
+# hexciri:summary=Generate a Wi-Fi QR code (raw matrix or terminal display)
+# hexciri:args=[--meta] [--terminal] [interface]
 set -euo pipefail
 
 interface=""
 emit_meta=false
+terminal_render=false
 for arg in "$@"; do
   case "$arg" in
-    --meta) emit_meta=true ;;
-    *) interface=$arg ;;
+    --meta)      emit_meta=true ;;
+    --terminal)  terminal_render=true ;;
+    *)           interface=$arg ;;
   esac
 done
 if [[ -z $interface ]]; then
@@ -66,10 +68,22 @@ payload+=";"
 [[ $emit_meta == "true" ]] && printf 'meta\t%s\t%s\t%s\n' "$interface" "$security" "$ssid"
 
 ascii=$(printf '%s' "$payload" | qrencode --type ASCII --margin 4 --output -)
-while IFS= read -r line; do
-  row=
-  for ((column = 0; column < ${#line}; column += 2)); do
-    [[ ${line:column:2} == *#* ]] && row+=1 || row+=0
-  done
-  printf '%s\n' "$row"
-done <<<"$ascii"
+
+if [[ $terminal_render == "true" ]]; then
+  printf '\n  Wi-Fi: %s\n\n' "$ssid"
+  python3 -c '
+import sys
+for row in sys.stdin.read().split():
+    print("".join("\033[40m  \033[0m" if module == "1" else "\033[107m  \033[0m" for module in row))
+' <<<"$ascii"
+  printf '\n  Scan with a phone camera. Press any key to close...'
+  read -rsn1
+else
+  while IFS= read -r line; do
+    row=
+    for ((column = 0; column < ${#line}; column += 2)); do
+      [[ ${line:column:2} == *#* ]] && row+=1 || row+=0
+    done
+    printf '%s\n' "$row"
+  done <<<"$ascii"
+fi

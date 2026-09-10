@@ -13,25 +13,10 @@ bindir="${bindir:-$SCRIPT_DIR}"
 here="$(readlink -f "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")"
 shipped_base="${HEXCIRI_PATH:-$(dirname "$here")}"
 
-# niri config lives as one split tree (config.kdl + per-topic imports) — each
-# fragment gets its own row.
-declare -A NIRI_FRAGS=(
-  [config]="config.kdl"
-  [env]="env.kdl"
-  [input]="input.kdl"
-  [autostart]="autostart.kdl"
-  [monitors]="monitors.kdl"
-  [looknfeel]="looknfeel.kdl"
-  [window-rules]="window-rules.kdl"
-  [keybinds]="keybinds.kdl"
-  [cursors]="cursors.kdl"
-)
-niri_dir="${XDG_CONFIG_HOME:-$HOME/.config}/niri"
 cfg_xdg="${XDG_CONFIG_HOME:-$HOME/.config}"
 
 rows=(
-  'Niri config' 'Niri env' 'Niri input' 'Niri autostart' 'Niri monitors'
-  'Niri looknfeel' 'Niri window-rules' 'Niri keybinds' 'Niri cursors'
+  'Niri >'
   'Noctalia config'
   'Fastfetch config'
   'Palettes'
@@ -52,12 +37,8 @@ else
 fi
 
 case "$choice" in
-  'Niri config'|'Niri '*)
-    frag="${choice#Niri }"
-    file="${NIRI_FRAGS[$frag]:-}"
-    if [[ -n $file ]]; then
-      "$bindir/hexciri-edit-file" "$niri_dir/$file"
-    fi ;;
+  'Niri >')                  exec "$bindir/hexciri-config-niri" ;;
+  'Niri '*)                  exec "$bindir/hexciri-config-niri" "${choice#Niri }" ;;
   'Noctalia config')  "$bindir/hexciri-edit-file" "$cfg_xdg/noctalia/config.toml" ;;
   'Fastfetch config') "$bindir/hexciri-edit-file" "$cfg_xdg/fastfetch/config.jsonc" ;;
   'Palettes')         "$bindir/hexciri-edit-file" "$cfg_xdg/noctalia/palettes/" ;;

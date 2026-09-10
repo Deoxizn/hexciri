@@ -47,8 +47,14 @@ find_preview() {
   printf '%s\n' "$cache_dir/$dir.${ext,,}"
 }
 
+# List installable themes (user dir + repo-supplied), title-cased for display.
 choice=$(
-  "$bindir/hexciri-theme-list" |
+  {
+    find "$HOME/.config/hexciri/themes/" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) \
+      -exec test -f '{}/colors.toml' \; -printf '%f\n' 2>/dev/null || true
+    find "$HEXCIRI_PATH/themes/" -mindepth 1 -maxdepth 1 -type d \
+      -exec test -f '{}/colors.toml' \; -printf '%f\n' 2>/dev/null || true
+  } | sort -u | sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' |
     while read -r name; do
       marker=""
       [[ $name == "$current" ]] && marker="▶ "
