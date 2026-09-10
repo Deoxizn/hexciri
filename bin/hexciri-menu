@@ -9,27 +9,25 @@ choice=$(
   printf '%s\n' \
     'Learn >' \
     'Packages >' \
-    'Share >' \
-    'Capture >' \
+    'Share & Capture >' \
     'Reminders >' \
     'Hardware >' \
     'Themes >' \
     'System >' \
     'Restart >' \
-    'System Update >' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='► Hexciri ' --width=28 --lines=10
+    'Update >' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='► Hexciri ' --width=28 --lines=9
 ) || exit 0
 choice=${choice%' >'}
 
 case "$choice" in
   Learn)         exec "$SCRIPT_DIR/hexciri-learn" ;;
   Packages)      exec "$SCRIPT_DIR/hexciri-packages" ;;
-  Share)         exec "$SCRIPT_DIR/hexciri-share" ;;
-  Capture)       exec "$SCRIPT_DIR/hexciri-capture" ;;
+  "Share & Capture") exec "$SCRIPT_DIR/hexciri-share" ;;
   Reminders)     exec "$SCRIPT_DIR/hexciri-reminders" ;;
   Hardware)      exec "$SCRIPT_DIR/hexciri-trigger" ;;
   Themes)        exec "$SCRIPT_DIR/hexciri-themes" ;;
   System)        exec "$SCRIPT_DIR/hexciri-system" ;;
   Restart)       exec "$SCRIPT_DIR/hexciri-restart" ;;
-  "System Update") exec "$SCRIPT_DIR/hexciri-update-menu" ;;
+  Update)        exec "$SCRIPT_DIR/hexciri-update-menu" ;;
 esac

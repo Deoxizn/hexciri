@@ -98,7 +98,7 @@ choice=$(
     sort -f |
     awk -v cur="$current" '$0 == cur { print "✓ "$0; next } { print }' |
     "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Font: ' --width=36 --lines=18
-) || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
+) || exec "$SCRIPT_DIR/hexciri-themes"   # Esc = back to Themes menu
 
 font=${choice#✓ }
 [[ -n $font ]] && set_font "$font"

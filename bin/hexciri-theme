@@ -503,13 +503,29 @@ themes_menu() { # [choice]  — interactive menu; choice arg enables menu-search
     choice="$*"
   else
     choice=$(
-      printf '%s\n' 'Theme list' 'Palette source' 'Backgrounds' |
-        "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=30 --lines=3
+      printf '%s\n' 'Theme list' 'Palette source' 'Backgrounds' 'Fonts' 'Extra themes list' 'Wallpaper dirs list' |
+        "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=32 --lines=6
     ) || exec "$SCRIPT_DIR/hexciri-menu"
   fi
 
   case "$choice" in
     "Theme list") exec "$SCRIPT_DIR/hexciri-themes-list" ;;
+    "Fonts")      exec "$SCRIPT_DIR/hexciri-font" ;;
+    "Extra themes list")
+      dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/theme-sources"
+      mkdir -p "$dir"
+      list="$dir/extra.list"
+      shipped="$HEXCIRI_PATH/config/theme-sources/extra.list"
+      [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
+      exec "$SCRIPT_DIR/hexciri-edit-file" "$list" ;;
+    "Wallpaper dirs list")
+      dir="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/wallpaper-sources"
+      mkdir -p "$dir"
+      list="$dir/extra.list"
+      shipped="$HEXCIRI_PATH/config/wallpaper-sources/extra.list"
+      [[ -f $shipped ]] || shipped="$HEXCIRI_PATH/wallpaper-sources/extra.list"
+      [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
+      exec "$SCRIPT_DIR/hexciri-edit-file" "$list" ;;
     "Backgrounds")
       dir="$HOME/.config/hexciri/wallpapers"
       mkdir -p "$dir"

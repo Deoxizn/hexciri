@@ -1,12 +1,16 @@
 #!/bin/bash
 # hexciri:menu=share
-# hexciri:summary=Share via LocalSend: clipboard, file, folder, or receive
+# hexciri:summary=Share & Capture: LocalSend (clipboard, file, folder, receive) + screenshots, recording, OCR, QR, transcode
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bindir="${HEXCIRI_BIN_DIR:-}"
 if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
 bindir="${bindir:-$SCRIPT_DIR}"
+
+note() { notify-send -a hexciri "Share & Capture" "$1" 2>/dev/null || true; }
+SHOT_DIR="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
+latest_shot() { ls -t "$SHOT_DIR" 2>/dev/null | head -n 1; }
 
 if [[ $# -gt 0 ]]; then
   # Direct dispatch from menu search
@@ -17,62 +21,109 @@ choice=$(
     'Clipboard' \
     'File' \
     'Folder' \
-    'Receive' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Share: ' --width=28 --lines=4
+    'Receive' \
+    'Screenshot region' \
+    'Screenshot screen' \
+    'Screen recording' \
+    'OCR text from screen' \
+    'Decode QR from screen' \
+    'Transcode media' |
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Share & Capture: ' --width=34 --lines=10
 ) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
 fi
 choice=${choice%' >'}
 
+# ── share ─────────────────────────────────────────────
 share_via_cli() { # <path...> — send through the localsend-cli TUI (floating terminal)
   exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" localsend-cli -f "$@"
 }
 
+share() {
+  case "$choice" in
+    "Clipboard")
+      tmp=$(mktemp --suffix=.txt)
+      if ! wl-paste >"$tmp" 2>/dev/null || [[ ! -s $tmp ]]; then
+        rm -f "$tmp"
+        note "Clipboard is empty"
+        exit 0
+      fi
+      share_via_cli "$tmp"
+      ;;
+    "File")
+      files=()
+      if command -v kdialog >/dev/null 2>&1; then
+        [[ -f "$HOME/.config/qt6ct/qt6ct.conf" ]] && export QT_QPA_PLATFORMTHEME=qt6ct
+        out=$(kdialog --getopenfilename --multiple --separate-output "$HOME" 2>/dev/null) || exit 0
+        while IFS= read -r p; do [[ -n $p ]] && files+=("$p"); done <<<"$out"
+      elif command -v zenity >/dev/null 2>&1; then
+        picked=$(zenity --file-selection --title "Share files" --multiple 2>/dev/null) || exit 0
+        while IFS= read -r p; do files+=("$p"); done < <(tr '|' '\n' <<<"$picked")
+      fi
+      if ((${#files[@]})); then
+        share_via_cli "${files[@]}"
+      else
+        exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-share-pick"
+      fi
+      ;;
+    "Folder")
+      dir=""
+      if command -v kdialog >/dev/null 2>&1; then
+        dir=$(kdialog --getexistingdirectory "$HOME/Work" 2>/dev/null) || exit 0
+      elif command -v zenity >/dev/null 2>&1; then
+        dir=$(zenity --file-selection --directory --title "Share folder" 2>/dev/null) || exit 0
+      fi
+      if [[ -n $dir ]]; then
+        share_via_cli "$dir"
+      else
+        exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-share-pick" --folder
+      fi
+      ;;
+    "Receive")
+      if command -v localsend >/dev/null 2>&1; then
+        exec localsend
+      else
+        exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" localsend-cli
+      fi
+      ;;
+  esac
+}
+
+# ── capture ────────────────────────────────────────────
+capture() {
+  local img text code
+  case "$choice" in
+    "Screenshot region")
+      "$SCRIPT_DIR/hexciri-compositor" screenshots -region >/dev/null 2>&1 && note "Region shot saved to $SHOT_DIR" || note "Screenshot failed"
+      ;;
+    "Screenshot screen")
+      "$SCRIPT_DIR/hexciri-compositor" screenshots -screen >/dev/null 2>&1 && note "Screen shot saved to $SHOT_DIR" || note "Screenshot failed"
+      ;;
+    "Screen recording")
+      exec "$SCRIPT_DIR/hexciri-screenrecord"
+      ;;
+    "OCR text from screen")
+      "$SCRIPT_DIR/hexciri-compositor" screenshots -screen >/dev/null 2>&1 || { note "Screenshot failed"; exit 1; }
+      sleep 1
+      img="$SHOT_DIR/$(latest_shot)"
+      [[ -f $img ]] || { note "No screenshot found"; exit 1; }
+      text="$(tesseract "$img" stdout 2>/dev/null)"
+      [[ -n $text ]] && { printf '%s' "$text" | wl-copy; note "OCR copied to clipboard"; } || note "No text found"
+      ;;
+    "Decode QR from screen")
+      "$SCRIPT_DIR/hexciri-compositor" screenshots -screen >/dev/null 2>&1 || { note "Screenshot failed"; exit 1; }
+      sleep 1
+      img="$SHOT_DIR/$(latest_shot)"
+      [[ -f $img ]] || { note "No screenshot found"; exit 1; }
+      code="$(zbarimg --raw --quiet "$img" 2>/dev/null | head -n 1)"
+      [[ -n $code ]] && { printf '%s' "$code" | wl-copy; note "QR copied: ${code:0:60}"; } || note "No QR found"
+      ;;
+    "Transcode media")
+      exec "$SCRIPT_DIR/hexciri-terminal" -e hexciri-transcode
+      ;;
+  esac
+}
+
 case "$choice" in
-  "Clipboard")
-    tmp=$(mktemp --suffix=.txt)
-    if ! wl-paste >"$tmp" 2>/dev/null || [[ ! -s $tmp ]]; then
-      rm -f "$tmp"
-      notify-send -a hexciri "Share" "Clipboard is empty" 2>/dev/null || true
-      exit 0
-    fi
-    share_via_cli "$tmp"
-    ;;
-  "File")
-    files=()
-    if command -v kdialog >/dev/null 2>&1; then
-      # Qt in-process dialog (Noctalia/niri): no desktop-portal dependency
-      [[ -f "$HOME/.config/qt6ct/qt6ct.conf" ]] && export QT_QPA_PLATFORMTHEME=qt6ct
-      out=$(kdialog --getopenfilename --multiple --separate-output "$HOME" 2>/dev/null) || exit 0
-      while IFS= read -r p; do [[ -n $p ]] && files+=("$p"); done <<<"$out"
-    elif command -v zenity >/dev/null 2>&1; then
-      picked=$(zenity --file-selection --title "Share files" --multiple 2>/dev/null) || exit 0
-      # zenity --multiple returns "|"-separated paths
-      while IFS= read -r p; do files+=("$p"); done < <(tr '|' '\n' <<<"$picked")
-    fi
-    if ((${#files[@]})); then
-      share_via_cli "${files[@]}"
-    else
-      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-share-pick"
-    fi
-    ;;
-  "Folder")
-    dir=""
-    if command -v kdialog >/dev/null 2>&1; then
-      dir=$(kdialog --getexistingdirectory "$HOME/Work" 2>/dev/null) || exit 0
-    elif command -v zenity >/dev/null 2>&1; then
-      dir=$(zenity --file-selection --directory --title "Share folder" 2>/dev/null) || exit 0
-    fi
-    if [[ -n $dir ]]; then
-      share_via_cli "$dir"
-    else
-      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-share-pick" --folder
-    fi
-    ;;
-  "Receive")
-    if command -v localsend >/dev/null 2>&1; then
-      exec localsend
-    else
-      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" localsend-cli
-    fi
-    ;;
+  Clipboard|File|Folder|Receive)              share ;;
+  "Screenshot region"|"Screenshot screen"|"Screen recording"|"OCR text from screen"|"Decode QR from screen"|"Transcode media") capture ;;
 esac

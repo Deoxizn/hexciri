@@ -8,7 +8,7 @@
 #   hexciri-update self     (was hexciri-update-hexciri) pull the framework repo
 #   hexciri-update-run      deprecated alias of the system update (kept)
 #   hexciri-update-hardware restart-audio/wifi/bluetooth/trackpad menu
-#   hexciri-update-menu     the Update submenu (root menu ▸ System Update)
+#   hexciri-update-menu     the Update submenu (root menu ▸ Update)
 #   hexciri-channel-current / hexciri-channel-set  package channel read/set
 #   hexciri-refresh-boot    re-apply systemd-boot entries + PAM + menu curation
 set -euo pipefail

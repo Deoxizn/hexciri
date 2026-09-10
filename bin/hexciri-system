@@ -9,21 +9,19 @@ choice=$(
   printf '%s\n' \
     'Config >' \
     'Default Apps >' \
-    'Fonts' \
     'Kernel >' \
     'Maintenance >' \
     'Windows product key' \
     'Reset defaults' \
     'Network >' \
     'Security >' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='System: ' --width=26 --lines=9
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='System: ' --width=26 --lines=8
 ) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
 choice=${choice%' >'}
 
 case "$choice" in
   "Config")       exec "$SCRIPT_DIR/hexciri-config" ;;
   "Default Apps") exec "$SCRIPT_DIR/hexciri-defaults" ;;
-  "Fonts")        exec "$SCRIPT_DIR/hexciri-font" ;;
   "Kernel")       exec "$SCRIPT_DIR/hexciri-kernel" ;;
   "Maintenance")  exec "$SCRIPT_DIR/hexciri-maintenance" ;;
   "Windows product key") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-windows-key" ;;
