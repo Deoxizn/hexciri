@@ -1,0 +1,646 @@
+#!/bin/bash
+# hexciri:summary=Theme manager: set/list/install/remove/ensure/current/extras/omarchy/wallpaper + menu
+# hexciri:args=<subcommand>  (hexciri-theme) — the hexciri-theme-* symlinks dispatch on argv[0]
+#
+# Single controller for the whole theme domain. Invoked as:
+#   hexciri-theme <sub> [args]        subcommand form
+#   hexciri-theme-set <name>          argv[0] form (symlink) — same effect
+# Every hexciri-theme-*/hexciri-themes*/hexciri-wallpaper-refresh name below is a
+# symlink into this file, so nothing that references a specific command breaks.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")" 2>/dev/null || dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-$SCRIPT_DIR}"
+
+repo_root() { # the repo checkout (caller-invariant: resolves the controller path)
+  local here
+  here="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+  dirname "$(dirname "$here")"
+}
+REPO="$(repo_root)"
+HEXCIRI_PATH="${HEXCIRI_PATH:-$REPO}"
+
+# ══════════════════════════════════════════════ hexciri-theme-set
+theme_set() { # <theme-name>
+  [[ -n ${1:-} ]] || { echo "Usage: hexciri-theme-set <theme-name>"; exit 1; }
+  local THEME_INPUT="$1" THEME_NAME SRC_DIR STATE_BASE NEXT_DIR DEST_LINK PRESERVE
+  THEME_NAME="$(printf '%s' "$THEME_INPUT" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
+
+  resolve_dir() {
+    local base
+    for base in "$HOME/.config/hexciri/themes/$THEME_NAME" "$HEXCIRI_PATH/themes/$THEME_NAME"; do
+      [[ -d $base ]] && { printf '%s' "$base"; return 0; }
+    done
+    return 1
+  }
+
+  SRC_DIR="$(resolve_dir)" || { echo "theme not found: $THEME_INPUT" >&2; exit 1; }
+  [[ -f $SRC_DIR/colors.toml ]] || { echo "theme has no colors.toml: $SRC_DIR" >&2; exit 1; }
+
+  STATE_BASE="$HOME/.local/state/hexciri/current"
+  NEXT_DIR="$STATE_BASE/next-theme"
+  DEST_LINK="$STATE_BASE/theme"
+  mkdir -p "$STATE_BASE"
+
+  # Preserve user wallpaper links across the swap: theme-set only replaces
+  # theme-owned files, so zz-user-* symlinks (store + extra dirs) survive
+  # theme changes without a re-scan of the (possibly slow NFS) sources.
+  PRESERVE="$STATE_BASE/.zz-user-snap"
+  : > "$PRESERVE"
+  if [[ -d $DEST_LINK/backgrounds ]]; then
+    while IFS= read -r -d '' lk; do
+      tgt="$(readlink "$lk")"                     # works for dangling links too
+      [[ -n $tgt ]] && printf '%s\0%s\0' "$lk" "$tgt" >> "$PRESERVE"
+    done < <(find "$DEST_LINK/backgrounds" -maxdepth 1 -name 'zz-user-*' -print0)
+  fi
+
+  rm -rf "$NEXT_DIR"
+  cp -rL "$SRC_DIR" "$NEXT_DIR"
+  rm -rf "$DEST_LINK"
+  cp -rL "$NEXT_DIR" "$DEST_LINK"
+  printf '%s' "$THEME_NAME" > "$STATE_BASE/theme.name"
+
+  # restore preserved zz-user-* links (dangling as-is, so NFS mounts resolve later)
+  if [[ -s $PRESERVE ]]; then
+    while IFS= read -r -d '' lk && IFS= read -r -d '' tgt; do
+      [[ -e $lk || -L $lk ]] || ln -s "$tgt" "$lk" 2>/dev/null || true
+    done < "$PRESERVE"
+  fi
+  rm -f "$PRESERVE"
+
+  # background: first image in backgrounds/, prefer name match, skip user links
+  local BG_LINK="$STATE_BASE/background" pick
+  if [[ -d $DEST_LINK/backgrounds ]]; then
+    pick="$(find -L "$DEST_LINK/backgrounds" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) -not -name 'zz-user-*' | sort | head -n 1)"
+    if [[ -z $pick ]]; then
+      echo "hexciri-theme-set: no background found, keeping current"
+    else
+      ln -nsf "$pick" "$BG_LINK"
+    fi
+  fi
+
+  export HEXCIRI_CURRENT_THEME="$DEST_LINK"
+  export HEXCIRI_THEME_NAME="$THEME_NAME"
+  if [[ -x $SCRIPT_DIR/hexciri-theme-set-templates ]]; then
+    "$SCRIPT_DIR/hexciri-theme-set-templates" "$DEST_LINK"
+  elif command -v hexciri-theme-set-templates &>/dev/null; then
+    hexciri-theme-set-templates "$DEST_LINK"
+  fi
+  hexciri-hook theme-set "$THEME_NAME"
+  echo "theme set: $THEME_NAME"
+}
+
+# ══════════════════════════════════════════════ hexciri-theme-ensure
+theme_ensure() {
+  local state name_file noctalia_cfg omarchy_state omarchy_current name need_apply=false
+  state="$HOME/.local/state/hexciri/current"
+  name_file="$state/theme.name"
+  noctalia_cfg="$HOME/.config/noctalia/config.toml"
+
+  # Strata's "Follow Omarchy" theme mode watches this path for live changes.
+  # Hexciri keeps its own current-theme state, so bridge it through a symlink
+  # (idempotent; a stray real dir is moved aside first).
+  omarchy_state="$HOME/.local/state/omarchy"
+  omarchy_current="$omarchy_state/current"
+  if [[ -d $omarchy_current && ! -L $omarchy_current ]]; then
+    mv "$omarchy_current" "$omarchy_current.pre-strata"
+  fi
+  mkdir -p "$omarchy_state"
+  ln -sfn "$state" "$omarchy_current"
+
+  if [[ -f $name_file ]]; then
+    name="$(<"$name_file")"
+  else
+    name="sakurazuki"
+    need_apply=true
+  fi
+
+  if [[ ! -d "$state/theme" || ! -f "$state/theme/colors.toml" ]]; then
+    need_apply=true
+  fi
+
+  # Palette source (Theme vs Wallpaper/stock) is the user's independent choice
+  # via the Themes menu — never force it back to custom at login. If the theme
+  # tree is live, we're done.
+  if $need_apply; then
+    echo "hexciri-theme-ensure: $name theme not live — re-applying $name"
+    theme_set "$name"
+  else
+    echo "hexciri-theme-ensure: theme '$name' is live"
+  fi
+}
+
+# ══════════════════════════════════════════════ hexciri-theme-current
+theme_current() {
+  local p="$HOME/.local/state/hexciri/current/theme.name"
+  if [[ -f $p ]]; then
+    sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' "$p"
+  else
+    echo "Unknown"
+  fi
+}
+
+# ══════════════════════════════════════════════ hexciri-theme-remove
+theme_remove() { # <theme-name>
+  local name
+  name="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
+  [[ -n $name ]] || { echo "Usage: hexciri-theme-remove <theme-name>"; exit 1; }
+  local dest="$HOME/.config/hexciri/themes/$name"
+  [[ -d $dest ]] || { echo "not a user theme: $name" >&2; exit 1; }
+  rm -rf "$dest"
+  echo "removed: $name"
+}
+
+# ══════════════════════════════════════════════ hexciri-theme-install
+theme_install() { # <git-url>
+  [[ -n ${1:-} ]] || { echo "Usage: hexciri-theme-install <git-url>"; exit 1; }
+
+  local url="$1" owner reponame name dest entry override shipped here re
+  [[ $url =~ ^https://github.com/([^/]+)/(.+?)(\.git)?$ ]] || { echo "url must be github.com/<owner>/<repo>[.git]" >&2; exit 1; }
+  owner="${BASH_REMATCH[1]}"
+  reponame="${BASH_REMATCH[2]}"
+  # For the dest name: keep the repo slug as-is (no omarchy-/ -theme stripping
+  # for nonconforming repos); only derive the short name from a convention repo.
+  if [[ $reponame =~ ^omarchy-(.+)-theme$ ]]; then
+    name="${BASH_REMATCH[1]}"
+  else
+    name="$reponame"
+  fi
+  name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
+  [[ -n $name ]] || { echo "bad theme name" >&2; exit 1; }
+
+  dest="$HOME/.config/hexciri/themes/$name"
+  [[ -e $dest ]] && { echo "already exists: $dest"; exit 1; }
+
+  # Track in the extras list: append owner/name shorthand for convention repos,
+  # or the raw URL for nonconforming ones so a fresh sync re-clones correctly.
+  override="$HOME/.config/hexciri/theme-sources/extra.list"
+  mkdir -p "$(dirname "$override")"
+  shipped="$HEXCIRI_PATH/theme-sources/extra.list"
+  if [[ ! -f $override && -f $shipped ]]; then
+    sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' "$shipped" | rg -v '^$' > "$override"
+  fi
+  touch "$override"
+  if [[ $reponame =~ ^omarchy-.*-theme$ ]]; then
+    entry="$owner/$name"
+    grep -qE "^$owner/$name([[:space:]]|$)" "$override" 2>/dev/null || printf '%s\n' "$entry" >> "$override"
+  else
+    entry="https://github.com/$owner/$reponame"
+    grep -qF "$entry" "$override" 2>/dev/null || printf '%s\n' "$entry" >> "$override"
+  fi
+
+  mkdir -p "$HOME/.config/hexciri/themes"
+  git clone "$url" "$dest"
+  echo "installed $name (added $entry to the extras list — delete that line to uninstall)"
+}
+
+# ══════════════════════════════════════════════ hexciri-theme-omarchy
+theme_omarchy() {
+  local here repo CATALOG THEMES_DIR SRC_BASE branch subtree src_dir LIST removed n count list_file names_in
+  THEMES_DIR="$HOME/.config/hexciri/themes"
+  SRC_BASE="$HOME/.local/state/hexciri/theme-src"
+  mkdir -p "$THEMES_DIR" "$SRC_BASE"
+  CATALOG="$HEXCIRI_PATH/config/theme-sources"
+
+  [[ -f "$CATALOG/omarchy.conf" ]] || { echo "theme-sources/omarchy.conf not found" >&2; exit 1; }
+  [[ -f "$CATALOG/omarchy.list" ]] || { echo "theme-sources/omarchy.list not found" >&2; exit 1; }
+
+  # A <source>.list is user-overridable: ~/.config/hexciri/theme-sources/<src>.list
+  # beats the shipped copy, so on-device curation never needs the repo.
+  list_file() {
+    local user="$HOME/.config/hexciri/theme-sources/omarchy.list"
+    if [[ -f $user ]]; then printf '%s\n' "$user"; else printf '%s\n' "$CATALOG/omarchy.list"; fi
+  }
+
+  names_in() {  # strip # comments, empty lines
+    sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' "$1" | rg -v '^$'
+  }
+
+  branch="$(rg '^branch[[:space:]]*=' "$CATALOG/omarchy.conf" | head -n1 | cut -d= -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  subtree="$(rg '^subtree[[:space:]]*=' "$CATALOG/omarchy.conf" | head -n1 | cut -d= -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  src_dir="$SRC_BASE/omarchy"
+  LIST="$(list_file)"
+
+  if [[ ! -d $src_dir/.git ]]; then
+    echo "seeding Omarchy default themes ..."
+    git clone --depth 1 --branch "$branch" --sparse --filter=blob:none \
+      "https://github.com/omacom/omarchy.git" "$src_dir"
+    git -C "$src_dir" sparse-checkout set "$subtree"
+  else
+    echo "updating Omarchy defaults ..."
+    git -C "$src_dir" pull --ff-only >/dev/null 2>&1 || true
+  fi
+
+  # prune any symlink into the omarchy subtree whose name is no longer in the list
+  removed=0
+  for link in "$THEMES_DIR"/*; do
+    [[ -L $link ]] || continue
+    tgt="$(readlink "$link")"
+    [[ $tgt == "$src_dir/$subtree/"* ]] || continue
+    n="$(basename "$link")"
+    if ! names_in "$LIST" | rg -qx "$n"; then
+      rm -f "$link"; removed=$((removed+1)); echo "- unlinked $n (no longer in omarchy list)"
+    fi
+  done
+
+  # relink anything named in the list
+  count=0
+  while read -r n; do
+    [[ -n $n ]] || continue
+    ln -sfn "$src_dir/$subtree/$n" "$THEMES_DIR/$n"
+    count=$((count+1))
+  done < <(names_in "$LIST")
+
+  echo "omarchy: linked $count theme(s); pruned $removed stale link(s)"
+}
+
+# ══════════════════════════════════════════════ hexciri-theme-extras
+theme_extras() { # [--run sync|remove]
+  local THEMES_DIR SRC_BASE CATALOG
+
+  THEMES_DIR="$HOME/.config/hexciri/themes"
+  SRC_BASE="$HOME/.local/state/hexciri/theme-src"
+  mkdir -p "$THEMES_DIR" "$SRC_BASE"
+
+  # Resolve where the shipped catalog lives: the repo clone IS the runtime, so
+  # the catalog is always read straight from the repo checkout.
+  CATALOG="$HEXCIRI_PATH/config/theme-sources"
+  [[ -f "$CATALOG/extra.conf" ]] || CATALOG="${HEXCIRI_PATH:-/dev/null}/theme-sources"
+  if [[ ! -f "$CATALOG/extra.conf" ]]; then
+    echo "theme-sources catalog not found (repo clone missing or no config/theme-sources)" >&2
+    exit 1
+  fi
+
+  list_for() {
+    local src="$1"
+    local user="$HOME/.config/hexciri/theme-sources/$src.list"
+    if [[ -f $user ]]; then printf '%s\n' "$user"; else printf '%s\n' "$CATALOG/$src.list"; fi
+  }
+
+  names_in() {  # strip # comments, empty lines
+    sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' "$1" | rg -v '^$'
+  }
+
+  # Names that already ship with the Omarchy defaults — an extra must never
+  # install over or remove one of these.
+  is_default() {
+    local n="$1" m
+    while read -r m; do
+      [[ $m == "$n" ]] && return 0
+    done < <(names_in "$(list_for omarchy)")
+    return 1
+  }
+
+  # The extras list accepts either the literal repo path you'd paste after
+  # github.com/ ("HANCORE-linux/omarchy-inkypinky-theme") OR the short theme name
+  # ("HANCORE-linux/inkypinky") — the omarchy-<name>-theme naming is normalized
+  # out so both spell the same theme.
+  short_name() {  # <repo-or-name> -> short theme name
+    local n="$1"
+    if [[ $n =~ ^omarchy-(.+)-theme$ ]]; then printf '%s\n' "${BASH_REMATCH[1]}"; else printf '%s\n' "$n"; fi
+  }
+
+  # Every short theme name the extra list mentions (normalized), for reconcile.
+  extra_shorts() {
+    local line owner repo short
+    while read -r line; do
+      [[ -z $line ]] && continue
+      if [[ $line =~ ^https?:// ]]; then
+        short="$(basename "$(sed 's/\.git$//' <<< "$line")")"
+      else
+        set -- $(split_line "$line"); owner="$1"; repo="$2"
+        [[ -n $repo ]] || continue
+        short="$(short_name "$repo")"
+      fi
+      printf '%s\n' "$short"
+    done < <(names_in "$(list_for extra)")
+  }
+
+  split_line() { printf '%s\n' "$1" | sed 's|^\(.*\)/\([^/]*\)$|\1 \2|'; }
+
+  op_sync_extra() {
+    local line owner name dest url count=0 pulled=0 skipped=0 removed=0 installed listed
+    echo "Syncing Extra themes from $(basename "$(list_for extra)") ..."
+    while read -r line; do
+      [[ -z $line ]] && continue
+      # Lines starting with http:// or https:// are explicit full URLs; all
+      # other lines are <owner>/<repo> (full repo path or short theme name).
+      if [[ $line =~ ^https?:// ]]; then
+        url="$(sed 's/\.git$//' <<< "$line").git"
+        name="$(short_name "$(basename "$url" .git)")"
+      else
+        set -- $(split_line "$line"); owner="$1"; repo="$2"
+        [[ -n $owner && -n $repo ]] || continue
+        name="$(short_name "$repo")"
+        url="https://github.com/$owner/omarchy-$name-theme.git"
+      fi
+      if is_default "$name"; then
+        echo "- skip $name (ships in the Omarchy defaults)"; skipped=$((skipped+1)); continue
+      fi
+      dest="$THEMES_DIR/$name"
+      if [[ -e $dest ]]; then
+        if [[ -d $dest/.git ]]; then
+          git -C "$dest" pull --ff-only &>/dev/null && { pulled=$((pulled+1)); echo "- updated $name"; } \
+            || echo "- FAILED pull for $name"
+        else
+          echo "- $name already present (not a clone — skipping)"
+        fi
+        continue
+      fi
+      # Never hang asking for a GitHub account: a missing/private repo must
+      # fail visibly instead of prompting for credentials.
+      if GIT_TERMINAL_PROMPT=0 git clone "$url" "$dest" 2>/dev/null; then
+        count=$((count+1)); echo "- installed $name"
+      else
+        echo "- FAILED $name: no usable repo at $url (typo? private repo? or a repo that doesn't follow omarchy-<name>-theme naming)"
+      fi
+    done < <(names_in "$(list_for extra)")
+
+    # Reconcile: drop any locally-cloned extra whose line was deleted from the
+    # list (the list is the source of truth). Anything with a .git that isn't in
+    # the list and isn't an omarchy default gets removed.
+    listed="$(extra_shorts || true)"
+    for installed in "$THEMES_DIR"/*/; do
+      [[ -d $installed/.git ]] || continue
+      name="$(basename "$installed")"
+      is_default "$name" && continue
+      # Match against the captured list (a here-string, not a pipe — rg -q in a
+      # pipefail pipeline breaks when rg exits early and SIGPIPEs the producer).
+      if ! rg -qx -- "$name" <<< "$listed"; then
+        echo "- removing $name (no longer in extras list)"
+        rm -rf "$installed"; removed=$((removed+1))
+      fi
+    done
+    echo "extras: installed $count, updated $pulled, skipped $skipped, removed $removed"
+  }
+
+  op_remove_extra() {
+    local line n count=0
+    echo "Removing Extra themes ..."
+    while read -r line; do
+      [[ -z $line ]] && continue
+      n="$(printf '%s\n' "$line" | sed -E 's|^.*/||')"
+      [[ -n $n ]] || continue
+      is_default "$n" && continue
+      if [[ -e $THEMES_DIR/$n ]]; then rm -rf "$THEMES_DIR/$n"; count=$((count+1)); fi
+    done < <(names_in "$(list_for extra)")
+    echo "removed $count theme(s)"
+  }
+
+  # ── --run mode: executed inside a held terminal by the menu dispatch ──
+  if [[ ${1:-} == --run ]]; then
+    local op="${2:-}"
+    case "$op" in
+      sync)   op_sync_extra ;;
+      remove) op_remove_extra ;;
+      *) echo "usage: hexciri-theme-extras --run <sync|remove>"; exit 1 ;;
+    esac
+    [[ -t 0 ]] && read -rp "press enter to close"
+    exit 0
+  fi
+
+  # no-op if invoked without --run (the menu dispatches with --run ops directly)
+  echo "usage: hexciri-theme-extras --run <sync|remove>" >&2
+  exit 1
+}
+
+# ══════════════════════════════════════════════ hexciri-wallpaper-refresh
+theme_wallpaper() { # [theme-dir]
+  local THEME_DIR="${1:-$HOME/.local/state/hexciri/current/theme}"
+  local USER_WALL BG_DIR LIST_USER entry base list SHIPPED count
+
+  USER_WALL="${HEXCIRI_WALLPAPER_DIR:-$HOME/.config/hexciri/wallpapers}"
+  BG_DIR="$THEME_DIR/backgrounds"
+  LIST_USER="$HOME/.config/hexciri/wallpaper-sources/extra.list"
+
+  [[ -d $BG_DIR ]] || { echo "hexciri-wallpaper-refresh: no backgrounds dir ($BG_DIR) — nothing to refresh"; exit 0; }
+  [[ -d $USER_WALL ]] || { echo "hexciri-wallpaper-refresh: no user wallpaper store ($USER_WALL)"; exit 0; }
+
+  resolve_list() {
+    local repo="$REPO/config/wallpaper-sources/extra.list"
+    local shipped="${HEXCIRI_PATH:-}/config/wallpaper-sources/extra.list"
+    if [[ -f $repo ]]; then printf '%s\n' "$repo"; return 0; fi
+    if [[ -n ${HEXCIRI_PATH:-} && -f $shipped ]]; then printf '%s\n' "$shipped"; return 0; fi
+    return 1
+  }
+
+  # prune every zz-user-* link (ours only — theme-owned files are untouched)
+  find "$BG_DIR" -maxdepth 1 -name 'zz-user-*' -delete
+
+  # Link by path only, never dereference: a source entry pointing at an NFS
+  # mount that isn't up yet still links now and resolves when the mount appears.
+  link_file() { # <source-path> <link-name>
+    local src="$1"; local name="$2"
+    local dest="$BG_DIR/zz-user-$name"
+    [[ -e $src || -L $src ]] || return 0
+    [[ -e $dest || -L $dest ]] && return 0   # keep first on collision
+    ln -s "$src" "$dest"
+  }
+
+  # Flatten a directory source: every image inside becomes zz-user-<dir>-<flat>.
+  # -L lets a symlinked dir (e.g. an NFS mount) be walked as its real target.
+  merge_dir() { # <dir> <link-prefix>
+    local d="$1" pfx="$2" f rel flat
+    while IFS= read -r -d '' f; do
+      rel="${f#"$d"/}"
+      flat="$(printf '%s' "$rel" | tr '/' '-')"
+      link_file "$f" "$pfx$flat"
+    done < <(find -L "$d" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) -print0 2>/dev/null || true)
+  }
+
+  # primary store
+  shopt -s nullglob
+  for entry in "$USER_WALL"/*; do
+    [[ -e $entry || -L $entry ]] || continue
+    base="$(basename "$entry")"
+    if [[ -d $entry ]]; then
+      merge_dir "$entry" "$base-"
+    else
+      case "$base" in
+        *.jpg|*.jpeg|*.png|*.webp) link_file "$entry" "$base" ;;
+      esac
+    fi
+  done
+
+  # extra dirs list (Enter extra wallpaper dirs; # comments and blanks ignored)
+  SHIPPED="$(resolve_list)" || true
+  if [[ -f $LIST_USER ]]; then
+    list="$LIST_USER"
+  elif [[ -n $SHIPPED && -f $SHIPPED ]]; then
+    list="$SHIPPED"
+  else
+    list=""
+  fi
+  if [[ -n $list ]]; then
+    local dir
+    while IFS= read -r dir || [[ -n $dir ]]; do
+      dir="${dir%%#*}"                             # strip # comments
+      dir="$(printf '%s' "$dir" | tr -d '[:space:]')"   # trim
+      [[ -z $dir ]] && continue
+      [[ $dir == \~/* ]] && dir="$HOME/${dir#\~/}"      # ~/ prefix
+      [[ -e $dir || -L $dir ]] || continue
+      base="$(basename "$dir")"
+      if [[ -d $dir ]]; then
+        merge_dir "$dir" "$base-"
+      else
+        case "$base" in
+          *.jpg|*.jpeg|*.png|*.webp) link_file "$dir" "$base" ;;
+        esac
+      fi
+    done < "$list"
+  fi
+
+  count="$(find "$BG_DIR" -maxdepth 1 -name 'zz-user-*' | wc -l | tr -d ' ')"
+  echo "wallpaper refresh: $count user wallpaper(s) linked into the active theme"
+}
+
+# ══════════════════════════════════════════════ hexciri-themes (menu)
+themes_menu() { # [choice]  — interactive menu; choice arg enables menu-search dispatch
+  local NOCTALIA_CFG choice current source_choice dir
+  NOCTALIA_CFG="${XDG_CONFIG_HOME:-$HOME/.config}/noctalia/config.toml"
+
+  if [[ $# -gt 0 ]]; then
+    choice="$*"
+  else
+    choice=$(
+      printf '%s\n' 'Theme list' 'Palette source' 'Backgrounds' |
+        "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Themes: ' --width=30 --lines=3
+    ) || exec "$SCRIPT_DIR/hexciri-menu"
+  fi
+
+  case "$choice" in
+    "Theme list") exec "$SCRIPT_DIR/hexciri-themes-list" ;;
+    "Backgrounds")
+      dir="$HOME/.config/hexciri/wallpapers"
+      mkdir -p "$dir"
+      echo "Opening $dir (drop wallpapers here; refresh via Update ▸ Wallpaper to merge them)"
+      exec xdg-open "$dir" ;;
+    "Palette source")
+      current=""
+      if [[ -f "$NOCTALIA_CFG" ]] && grep -q 'source = "custom"' "$NOCTALIA_CFG" 2>/dev/null; then
+        current="Theme"
+      else
+        current="Wallpaper"
+      fi
+      source_choice=$(
+        printf '%s\n' 'Theme (custom palette)' 'Wallpaper (Material You)' |
+          "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt="Palette ($current): " --width=30 --lines=2
+      ) || exec "$SCRIPT_DIR/hexciri-themes"
+      if [[ -z "$source_choice" ]]; then
+        exec "$SCRIPT_DIR/hexciri-themes"
+      fi
+      if [[ "$source_choice" == *"custom"* ]]; then
+        sed -i 's/^source = .*/source = "custom"/' "$NOCTALIA_CFG"
+        sed -i 's/^custom_palette = .*/custom_palette = "hexciri"/' "$NOCTALIA_CFG"
+        echo "Switched to Theme palette"
+      else
+        sed -i 's/^source = .*/source = "wallpaper"/' "$NOCTALIA_CFG"
+        echo "Switched to Wallpaper palette"
+      fi
+      theme_set "$(cat "$HOME/.local/state/hexciri/current/theme.name" 2>/dev/null || true)" >/dev/null 2>&1 || true
+      ;;
+  esac
+}
+
+# ══════════════════════════════════════════════ hexciri-themes-list (browser)
+themes_list() {
+  local cache_dir current name preview theme here bindir SCRIPT_DIR_here
+  here="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+  bindir="${HEXCIRI_BIN_DIR:-$(dirname "$here")}"
+  cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/hexciri/theme-selector/previews"
+  mkdir -p "$cache_dir"
+
+  current="$(theme_current)"
+
+  find_preview() {
+    local name=$1 dir ext src base theme_path
+
+    dir=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+
+    for ext in png jpg jpeg webp gif bmp; do
+      [[ -e $cache_dir/$dir.$ext ]] && { printf '%s\n' "$cache_dir/$dir.$ext"; return; }
+    done
+
+    theme_path=""
+    for base in "$HOME/.config/hexciri/themes" "$HEXCIRI_PATH/themes"; do
+      [[ -d $base/$dir ]] && { theme_path=$base/$dir; break; }
+    done
+    [[ -n $theme_path ]] || return 0
+
+    src=""
+    for ext in png jpg jpeg webp gif bmp; do
+      [[ -f $theme_path/preview.$ext ]] && { src=$theme_path/preview.$ext; break; }
+    done
+
+    if [[ -z $src && -d $theme_path/backgrounds ]]; then
+      src=$(find -L "$theme_path/backgrounds" -maxdepth 1 -type f \
+        \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o -iname '*.bmp' -o -iname '*.webp' \) |
+        sort | head -n 1)
+    fi
+    [[ -n $src ]] || return 0
+
+    ext=${src##*.}
+    ln -sfn "$src" "$cache_dir/$dir.${ext,,}"
+    printf '%s\n' "$cache_dir/$dir.${ext,,}"
+  }
+
+  # List installable themes (user dir + repo-supplied), title-cased for display.
+  choice=$(
+    {
+      find "$HOME/.config/hexciri/themes/" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) \
+        -exec test -f '{}/colors.toml' \; -printf '%f\n' 2>/dev/null || true
+      find "$HEXCIRI_PATH/themes/" -mindepth 1 -maxdepth 1 -type d \
+        -exec test -f '{}/colors.toml' \; -printf '%f\n' 2>/dev/null || true
+    } | sort -u | sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' |
+      while read -r name; do
+        marker=""
+        [[ $name == "$current" ]] && marker="▶ "
+        if preview=$(find_preview "$name") && [[ -n $preview ]]; then
+          printf '%s%s\0icon\x1f%s\n' "$marker" "$name" "$preview"
+        else
+          printf '%s%s\n' "$marker" "$name"
+        fi
+      done |
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --width=44 --lines=5 \
+        --line-height=150 --horizontal-pad=12 --vertical-pad=6 \
+        --hide-prompt
+  ) || exec "$SCRIPT_DIR/hexciri-themes"
+
+  theme=$(printf '%s' "$choice" | sed -E 's/icon\x1f.*//')
+  theme=${theme#▶ }
+  [[ -n $theme ]] || exit 0
+
+  nohup "$SCRIPT_DIR/hexciri-theme" set "$theme" >/dev/null 2>&1 &
+}
+
+# ══════════════════════════════════════════════ dispatch
+sub=""
+case "$(basename "$0")" in
+  hexciri-theme)        sub="${1:-}"; shift 2>/dev/null || true ;;
+  hexciri-theme-set)    sub=set ;;
+  hexciri-theme-ensure) sub=ensure ;;
+  hexciri-theme-current) sub=current ;;
+  hexciri-theme-remove) sub=remove ;;
+  hexciri-theme-install) sub=install ;;
+  hexciri-theme-extras) sub=extras ;;
+  hexciri-theme-omarchy) sub=omarchy ;;
+  hexciri-themes-list)  sub=list ;;
+  hexciri-themes)       sub=menu ;;
+  hexciri-wallpaper-refresh) sub=wallpaper ;;
+  *)                    sub="${1:-}" ;;
+esac
+
+case "$sub" in
+  set)      theme_set "$@" ;;
+  ensure)   theme_ensure ;;
+  current)  theme_current ;;
+  remove)   theme_remove "${1:-}" ;;
+  install)  theme_install "${1:-}" ;;
+  extras)   theme_extras "$@" ;;
+  omarchy)  theme_omarchy ;;
+  wallpaper) theme_wallpaper "${1:-}" ;;
+  list)     themes_list ;;
+  menu)     themes_menu "$@" ;;
+  help|"")  echo "usage: hexciri-theme <set|list|install|remove|ensure|current|extras|omarchy|wallpaper|menu> [args]"; exit 0 ;;
+  *)        echo "unknown theme subcommand: $sub" >&2; exit 1 ;;
+esac

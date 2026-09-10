@@ -19,6 +19,13 @@ relink() {
     [[ -f $f ]] || continue   # dirs (e.g. __pycache__) must not end the loop's status
     ln -sfn "$REPO/bin/$(basename "$f")" "$HOME/.local/bin/$(basename "$f")" || true
   done
+  # prune stale names: a ~/.local/bin/hexciri-* entry whose source file is gone
+  # from repo/bin (consolidation removes scripts) must not keep dangling.
+  local b
+  for b in "$HOME"/.local/bin/hexciri-*; do
+    [[ -e $b || -L $b ]] || continue
+    [[ -e "$REPO/bin/$(basename "$b")" ]] || rm -f "$b"
+  done
   return 0
 }
 
