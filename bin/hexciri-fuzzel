@@ -5,14 +5,14 @@
 #
 # Modes (mirror the walker/elephant launcher features that matter):
 #   hexciri-fuzzel                 app launcher (default, unchanged)
-#   hexciri-fuzzel search          web search with the default provider
-#   hexciri-fuzzel search NAME     web search with provider NAME (google/github/wiki/...)
+#   hexciri-fuzzel search          web search with the default provider (Mod+Shift+S)
+#   hexciri-fuzzel search NAME     web search with provider NAME (from the providers file)
 #   hexciri-fuzzel calc            calculator via qalc; result copied to clipboard + notify
 #   hexciri-fuzzel run             execute a command ($PATH scan + free text), detached
 #   hexciri-fuzzel --dmenu ...     passthrough for dmenu consumers (hexciri-clipboard)
 #
 # Search providers: builtin table below; override/extend via
-#   ~/.config/hexciri/search-providers   lines:  name=url-template   (%s = URL-encoded query)
+#   ~/.config/hexciri/search-providers   lines:  name|Display Name|url-template  (%s = URL-encoded query)
 #   default provider: default=NAME  in that file, else HEXCIRI_SEARCH_PROVIDER, else "google".
 # Query percent-encoding is done with python3 (already a hexciri dependency).
 set -euo pipefail
@@ -69,28 +69,41 @@ FZ=( fuzzel \
     --border-width=2 )
 
 # ── search providers ──
-# Builtin fallbacks; a user file overrides/extend these.
-declare -A PROVIDERS
-PROVIDERS[google]="https://google.com/search?q=%s"
-PROVIDERS[ddg]="https://duckduckgo.com/?q=%s"
-PROVIDERS[github]="https://github.com/search?q=%s&type=code"
-PROVIDERS[wiki]="https://en.wikipedia.org/w/index.php?search=%s"
-PROVIDERS[archwiki]="https://wiki.archlinux.org/index.php?search=%s"
-PROVIDERS[youtube]="https://www.youtube.com/results?search_query=%s"
-PROVIDERS[aur]="https://aur.archlinux.org/packages?K=%s"
-PROVIDERS[man]="https://man.archlinux.org/search?q=%s"
+# Builtin fallbacks to survive a missing user file (hexciri ships
+# config/hexciri/search-providers and seeds it on install + update).
+declare -A PROVIDERS LABELS
+PROVIDERS[google]="https://google.com/search?udm=8&q=%s"; LABELS[google]="Google AI"
+PROVIDERS[googleclassic]="https://google.com/search?udm=14&q=%s"; LABELS[googleclassic]="Google (classic)"
+PROVIDERS[ddg]="https://duckduckgo.com/?q=%s";         LABELS[ddg]="DuckDuckGo"
+PROVIDERS[brave]="https://search.brave.com/search?q=%s"; LABELS[brave]="Brave"
+PROVIDERS[searxng]="https://searx.be/search?q=%s";     LABELS[searxng]="SearXNG"
+PROVIDERS[github]="https://github.com/search?q=%s&type=code"; LABELS[github]="GitHub"
+PROVIDERS[wiki]="https://en.wikipedia.org/w/index.php?search=%s"; LABELS[wiki]="Wikipedia"
+PROVIDERS[archwiki]="https://wiki.archlinux.org/index.php?search=%s"; LABELS[archwiki]="Arch Wiki"
+PROVIDERS[youtube]="https://www.youtube.com/results?search_query=%s"; LABELS[youtube]="YouTube"
+PROVIDERS[aur]="https://aur.archlinux.org/packages?K=%s"; LABELS[aur]="AUR"
+PROVIDERS[man]="https://man.archlinux.org/search?q=%s"; LABELS[man]="Arch Man Pages"
 DEFAULT_PROVIDER="google"
 
+# User file (config/hexciri/search-providers): lines are either
+#   default=name
+#   name|Display Name|url-template        (%s = URL-encoded query)
+#   name=url-template                     (legacy, no label)
+# Comments (#) and blanks ignored. The file is the single source of truth
+# once it exists; builtins above only serve a box that never got it seeded.
 SP_FILE="$HOME/.config/hexciri/search-providers"
 if [[ -f $SP_FILE ]]; then
-    while IFS== read -r name url; do
-        name="${name%%[[:space:]]*}"
-        [[ -n $name && $name != "#"* ]] || continue
-        if [[ $name == "default" ]]; then
-            DEFAULT_PROVIDER="$url"
-        else
-            PROVIDERS["$name"]="$url"
-        fi
+    while IFS= read -r line; do
+        line="$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+        [[ -n $line && $line != "#"* ]] || continue
+        case "$line" in
+            default=*) DEFAULT_PROVIDER="${line#default=}" ;;
+            *\|*)
+                name="${line%%|*}"; rest="${line#*|}"
+                label="${rest%%|*}"; url="${rest#*|}"
+                PROVIDERS["$name"]="$url"; LABELS["$name"]="$label" ;;
+            *=*) name="${line%%=*}"; PROVIDERS["$name"]="${line#*=}" ;;
+        esac
     done < "$SP_FILE"
 fi
 DEFAULT_PROVIDER="${HEXCIRI_SEARCH_PROVIDER:-$DEFAULT_PROVIDER}"
@@ -100,8 +113,9 @@ urlenc() { python3 -c 'import sys,urllib.parse;sys.stdout.write(urllib.parse.quo
 mode_search() {
     local prov="${1:-$DEFAULT_PROVIDER}"
     local tpl="${PROVIDERS[$prov]:-${PROVIDERS[$DEFAULT_PROVIDER]}}"
+    local lbl="${LABELS[$prov]:-$prov}"
     local q
-    q="$("${FZ[@]}" --dmenu --prompt-only="Search [$prov]: " --width=70)" || exit 0
+    q="$("${FZ[@]}" --dmenu --prompt-only="Search [$lbl]: " --width=70)" || exit 0
     [[ -n $q ]] || exit 0
     xdg-open "${tpl/\%s/$(urlenc "$q")}" &
 }

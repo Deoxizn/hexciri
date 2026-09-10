@@ -113,7 +113,49 @@ into niri's config, so they never drift.
 | `Alt`+Print | record the screen |
 | `Mod`+Escape | power menu (shutdown/reboot/logout…) |
 
-Volume, brightness and mic keys work as labeled.
+**Fuzzel mode launchers** (`hexciri-fuzzel`, walker/elephant-style — same themed box as the app launcher):
+
+| key | mode |
+|---|---|
+| `Mod`+Shift+S | web search (default provider) |
+| `Mod`+Shift+C | calculator (qalc → clipboard + notify) |
+
+Search providers and the default are configurable — `~/.config/hexciri/search-providers`
+(one line per provider, see the file's comments) and **System ▸ Config ▸ Search
+provider** picker. The same picker sets which provider the `Mod`+Shift+S bind
+uses; per-provider search is also available on demand via
+`hexciri-fuzzel search <name>`. Volume, brightness and mic keys work as labeled.
+
+## Menus
+
+Everything reachable from `Mod`+Alt+Space (root menu). `hexciri-*` commands
+dispatch the same menus from a terminal.
+
+```
+Root menu (Mod+Alt+Space)
+├─ Applications            (hexciri-launch)
+├─ System
+│  ├─ Config
+│  │  ├─ Niri              (all fragments)
+│  │  ├─ Noctalia config
+│  │  ├─ Search provider   (pick the default web search)
+│  │  ├─ Search providers file  (edit the provider list)
+│  │  ├─ Fastfetch config
+│  │  ├─ Hexciri lockscreen
+│  │  └─ Hooks
+│  ├─ Default Apps
+│  ├─ Kernel
+│  ├─ Maintenance
+│  ├─ Network
+│  ├─ Security
+│  └─ Reset defaults
+├─ Themes                  (hexciri-theme-set)
+├─ Update                  (hexciri-update)
+├─ Clipboards              (hexciri-clipboard)
+└─ Power menu              (Mod+Escape → hexciri-power)
+```
+
+Submenus are `> `-suffixed rows in fuzzel; `Mod`+K lists every keybind.
 
 ## Channels
 

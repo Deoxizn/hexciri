@@ -30,6 +30,8 @@ DESC = {
     "Mod+D": "App launcher (Noctalia)",
     "Mod+Alt+Space": "Root menu",
     "Mod+K": "Keybind reference (this list)",
+    "Mod+Shift+S": "Web search (default provider)",
+    "Mod+Shift+C": "Calculator (fuzzel)",
     "Mod+Return": "Terminal",
     "Mod+grave": "AI agent",
     "Mod+Shift+B": "Browser",
