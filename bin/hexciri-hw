@@ -342,50 +342,58 @@ windows_key() {
 
 # ══════════════════════════════════════════ menus
 hw_menu() {
-  local menu="" choice cmd args=()
+  local menu="" choice cmd=""
+  declare -A cmd_for=()
 
   if (($# > 0)); then
     # Direct dispatch (menu search passes the chosen label as $*)
     choice="$*"
-  else
-    menu=""
-    declare -A cmd_for=()
-
-    add() {
-      local label=$1 cond=$2
-      shift 2
-      [[ -n $cond ]] && ! "$cond" >/dev/null 2>&1 && return 0
-      cmd_for[$label]="$*"
-      menu+="$label"$'\n'
-    }
-
-    add 'Touchpad'        touchpad_device     "$SCRIPT_DIR/hexciri-hw" toggle-input touchpad toggle
-    add 'Touchscreen'     touchscreen_device  "$SCRIPT_DIR/hexciri-hw" toggle-input touchscreen toggle
-    add 'Hybrid GPU'      hybrid_gpu          "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hw" toggle-hybrid-gpu
-    add 'Network download' ""                 "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com'
-    add 'Network upload'  ""                  "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com'
-    add 'Disk speed test' ""                  xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-hw" disk-speedtest
-
-    [[ -n $menu ]] || return 0
-
-    choice=$(
-      printf '%s' "$menu" |
-        "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Hardware: ' --width=26 --lines=${#cmd_for[@]}
-    ) || exec "$SCRIPT_DIR/hexciri-menu"
+    case "$choice" in
+      "Disk"|"Disk speed test")
+         exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-hw" disk-speedtest ;;
+      "Network download"|"Network upload")
+         exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com' ;;
+      "Hybrid GPU")
+         exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hw" toggle-hybrid-gpu ;;
+      "Touchpad")      exec "$SCRIPT_DIR/hexciri-hw" toggle-input touchpad toggle ;;
+      "Touchscreen")   exec "$SCRIPT_DIR/hexciri-hw" toggle-input touchscreen toggle ;;
+      *) return 0 ;;
+    esac
   fi
+
+  add() {
+    local label=$1 cond=$2
+    shift 2
+    [[ -n $cond ]] && ! "$cond" >/dev/null 2>&1 && return 0
+    cmd_for[$label]="$*"
+    menu+="$label"$'\n'
+  }
+
+  add 'Touchpad'        touchpad_device     "$SCRIPT_DIR/hexciri-hw" toggle-input touchpad toggle
+  add 'Touchscreen'     touchscreen_device  "$SCRIPT_DIR/hexciri-hw" toggle-input touchscreen toggle
+  add 'Hybrid GPU'      hybrid_gpu          "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hw" toggle-hybrid-gpu
+  add 'Network download' ""                 "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com'
+  add 'Network upload'  ""                  "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com'
+  add 'Disk speed test' ""                  xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-hw" disk-speedtest
+
+  [[ -n $menu ]] || return 0
+
+  choice=$(
+    printf '%s' "$menu" |
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Hardware: ' --width=26 --lines=${#cmd_for[@]}
+  ) || exec "$SCRIPT_DIR/hexciri-menu"
 
   case "$choice" in
     "Disk"|"Disk speed test")
-       exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-hw" disk-speedtest ;;
+       cmd="xdg-terminal-exec --app-id=TUI.float -e $SCRIPT_DIR/hexciri-hold $SCRIPT_DIR/hexciri-hw disk-speedtest" ;;
     "Network download"|"Network upload")
-       exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com' ;;
+       cmd="$SCRIPT_DIR/hexciri-launch-webapp 'https://fast.com'" ;;
     "Hybrid GPU")
-       exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hw" toggle-hybrid-gpu ;;
-    "Touchpad")      exec "$SCRIPT_DIR/hexciri-hw" toggle-input touchpad toggle ;;
-    "Touchscreen")   exec "$SCRIPT_DIR/hexciri-hw" toggle-input touchscreen toggle ;;
+       cmd="$SCRIPT_DIR/hexciri-terminal -e $SCRIPT_DIR/hexciri-hw toggle-hybrid-gpu" ;;
+    "Touchpad")      cmd="$SCRIPT_DIR/hexciri-hw toggle-input touchpad toggle" ;;
+    "Touchscreen")   cmd="$SCRIPT_DIR/hexciri-hw toggle-input touchscreen toggle" ;;
+    *)               cmd="${cmd_for[$choice]:-}" ;;
   esac
-
-  cmd=${cmd_for[$choice]:-}
   [[ -n $cmd ]] && eval exec "$cmd"
 }
 
