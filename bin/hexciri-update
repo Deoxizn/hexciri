@@ -207,7 +207,7 @@ update_self() {
   purge_other_wms() {
     local wm cfg bin purged=false
     for wm in hypr sway mango; do
-      cfg="$XDG_CONFIG_HOME/$wm"
+      cfg="${XDG_CONFIG_HOME:-$HOME/.config}/$wm"
       [[ -e $cfg ]] || continue
       case "$wm" in
         hypr)  bin=Hyprland ;;
