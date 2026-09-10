@@ -1,120 +1,443 @@
 #!/bin/bash
-# hexciri:summary=Safe system update: repo pkgs + AUR + reboot prompt on kernel change
-# usage: hexciri-update [--yes]
+# hexciri:summary=Update controller: system update (bare), framework sync (self), hardware, channel, menu
+# hexciri:args=[self|sys|hardware|menu|channel-current|channel-set |refresh-boot|help] [args]
+#
+# One controller for every update-related command. Names that used to be
+# separate scripts are now symlinks into this file and dispatch on argv[0]:
+#   hexciri-update          full system update (repo pkgs + AUR + reboot offer)
+#   hexciri-update self     (was hexciri-update-hexciri) pull the framework repo
+#   hexciri-update-run      deprecated alias of the system update (kept)
+#   hexciri-update-hardware restart-audio/wifi/bluetooth/trackpad menu
+#   hexciri-update-menu     the Update submenu (root menu ▸ System Update)
+#   hexciri-channel-current / hexciri-channel-set  package channel read/set
+#   hexciri-refresh-boot    re-apply systemd-boot entries + PAM + menu curation
 set -euo pipefail
 
-# ── one-shot self-heal: pull the framework, then RE-EXEC our freshly-pulled
-# ── bytes so every step below (confirm, migrations, pacman) runs the NEWEST
-# ── code in this press. A self-updating script keeps running its own old bytes
-# ── until it re-execs; without this, a fix shipped by the pull (updater rename,
-# ── plugin update_cmd migration, whatever ships next) only lands on the NEXT
-# ── press — the "press once, walk away" hole. HXC_RERUN=1 on the re-exec
-# ── skips the pull so the pass always terminates. ──
-if [[ ${HXC_RERUN:-0} == 0 ]]; then
-  export HXC_RERUN=1
-  echo "== framework self-update (repo pull) =="
-  hexciri-update-hexciri || echo "framework self-update skipped/failed (continuing)"
-  exec "$0" "$@"
-fi
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd || dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+bindir="${HEXCIRI_BIN_DIR:-$SCRIPT_DIR}"
 
 # ── migrate the noctalia arch-updater plugin to the renamed updater ──
 # Runs unconditionally and BEFORE any prompt/gate: a user who cancels the
 # system update at the "Run system update?" confirm (or runs in a context
 # without input) should still pay off a stale update_cmd — otherwise the press
-# that pulls the fix silently defers it. The funnel (hexciri-update-hexciri)
-# does this on its own for every entry point; this copy is belt-and-braces for
-# when the funnel was skipped/failed but we continue anyway. Idempotent.
+# that pulls the fix silently defers it. Idempotent.
 ST="$HOME/.local/state/noctalia/settings.toml"
 if [[ -f $ST ]] && grep -q 'update_cmd = "hexciri-update-run"' "$ST"; then
   sed -i 's|update_cmd = "hexciri-update-run"|update_cmd = "hexciri-update"|' "$ST"
   echo "arch-updater plugin: update_cmd migrated to hexciri-update"
 fi
 
-YES=false
-[[ ${1:-} == "--yes" || ${1:-} == "-y" ]] && YES=true
-confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
-
-LOG="$HOME/.local/state/hexciri/update.log"
-mkdir -p "$(dirname "$LOG")"
-
-# ~2G free on / or stop before a half-finished transaction
-avail_kb=$(df -k / --output=avail | tail -n 1)
-(( avail_kb > 2*1024*1024 )) || { echo "hexciri-update: <2G free on / — free space first"; exit 1; }
-
-confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
-
-# Validate sudo up front (the pacman transaction needs it anyway) so the repo
-# sync's one-time legacy /usr/local/bin purge (sudo -n) succeeds here, where
-# root is already granted.
-sudo -v || { echo "sudo needed for the system update"; exit 1; }
-
-# Re-apply the alpm hook from the pulled tree now that root is granted. The
-# hook only self-refreshes while a package transaction actually runs, so a
-# no-op update (nothing to upgrade) never fired it — a stale hook (e.g. missing
-# the gnome-keyring target) would linger on boxes that keep coming up empty.
-REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
-if [[ -f $REPO/default/alpm/hexciri-sync.hook ]] && ! cmp -s "$REPO/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook 2>/dev/null; then
-  sudo install -m644 "$REPO/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook && \
-    echo "alpm hook re-applied (newer targets active from the next transaction)"
-fi
-
-# Pull + apply framework commits already happened at the top (self-heal re-exec),
-# and the plugin update_cmd migration ran unconditionally before the confirm.
-
-{
-  echo "=== $(date -Is) channel: $(hexciri-channel-current 2>/dev/null || echo ?) ==="
-  sudo pacman -Syu --noconfirm
-  # kernels are plain repo packages now (stock/lts/omarchy*) and update above;
-  # the legacy 580xx driver is AUR-built and updates via the yay pass below —
-  # there is no separate refresh loop anymore.
-  if command -v yay &>/dev/null && pacman -Qmq 2>/dev/null | grep -qv yay-bin; then
-    yay -Sua --noconfirm
+# ══════════════════════════════════════════════ hexciri-update (bare)
+# Safe system update: repo pkgs + AUR + reboot prompt on kernel change.
+# usage: hexciri-update [self|...] ; bare = system update (--yes accepted)
+update_sys() {
+  # ── one-shot self-heal: pull the framework, then RE-EXEC our freshly-pulled
+  # ── bytes so every step below (confirm, migrations, pacman) runs the NEWEST
+  # ── code in this press. A self-updating script keeps running its own old bytes
+  # ── until it re-execs; without this, a fix shipped by the pull (updater rename,
+  # ── plugin update_cmd migration, whatever ships next) only lands on the NEXT
+  # ── press — the "press once, walk away" hole. HXC_RERUN=1 on the re-exec
+  # ── skips the pull so the pass always terminates. ──
+  if [[ ${HXC_RERUN:-0} == 0 ]]; then
+    export HXC_RERUN=1
+    echo "== framework self-update (repo pull) =="
+    "$SCRIPT_DIR/hexciri-update-hexciri" || echo "framework self-update skipped/failed (continuing)"
+    exec "$0" "$@"
   fi
-} 2>&1 | tee -a "$LOG"
 
-# ── re-apply hexciri sync state: the alpm hook only fires when a tracked
-# ── package (kernel/sddm/…) actually changed, so a no-op update never ran it.
-# ── Running it here — every press — guarantees boot entries, PAM, the gnome-
-# ── keyring pin AND the per-PC makepkg tuning land even when pacman had
-# ── nothing to do. Idempotent; the hook stays for plain `pacman -Syu`. ──
-echo "-- re-applying hexciri state (boot entries, PAM, keyring, makepkg tuning) --"
-sudo hexciri-sync || echo "hexciri-sync step failed (continuing)"
+  local YES=false
+  [[ ${1:-} == "--yes" || ${1:-} == "-y" ]] && YES=true
+  confirm() { $YES && return 0; read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
 
-# Reboot offer only when the kernel hexciri is pinned to boot differs from the
-# one currently running. hexciri's single-kernel policy means normally exactly
-# one module dir exists; if a second kernel is present (e.g. a stock `linux`
-# staged during install that was never de-picked), "newest module dir" would
-# wrongly claim the kernel changed — the pin (hexciri-kernel choice recorded in
-# /usr/share/hexciri/boot-default, else the loader default) is authoritative.
-running=$(uname -r)
-expected=""
+  local LOG="$HOME/.local/state/hexciri/update.log"
+  mkdir -p "$(dirname "$LOG")"
 
-pin=/usr/share/hexciri/boot-default
-entry=""
-if [[ -r $pin ]]; then
-  e="$(cat "$pin" 2>/dev/null || true)"
-  [[ -f /boot/loader/entries/$e ]] && entry="$e"
-fi
-if [[ -z $entry && -r /boot/loader/loader.conf ]]; then
-  e="$(awk '$1=="default"{print $2}' /boot/loader/loader.conf 2>/dev/null)"
-  [[ -f /boot/loader/entries/$e ]] && entry="$e"
-fi
+  # ~2G free on / or stop before a half-finished transaction
+  local avail_kb
+  avail_kb=$(df -k / --output=avail | tail -n 1)
+  (( avail_kb > 2*1024*1024 )) || { echo "hexciri-update: <2G free on / — free space first"; exit 1; }
 
-if [[ -n $entry ]]; then
-  vmlinuz="$(awk '$1=="linux"{print $2; exit}' "/boot/loader/entries/$entry" 2>/dev/null)"
-  pkg="${vmlinuz##*/}"; pkg="${pkg#vmlinuz-}"
-  for d in /usr/lib/modules/*; do
-    [[ -d $d ]] || continue
-    if pacman -Qqo "$d" 2>/dev/null | grep -qx "$pkg"; then
-      expected="${d##*/}"; break
+  confirm "Run system update? (repo + AUR)" || { echo "cancelled"; exit 0; }
+
+  # Validate sudo up front (the pacman transaction needs it anyway) so the repo
+  # sync's one-time legacy /usr/local/bin purge (sudo -n) succeeds here, where
+  # root is already granted.
+  sudo -v || { echo "sudo needed for the system update"; exit 1; }
+
+  # Re-apply the alpm hook from the pulled tree now that root is granted. The
+  # hook only self-refreshes while a package transaction actually runs, so a
+  # no-op update (nothing to upgrade) never fired it — a stale hook (e.g. missing
+  # the gnome-keyring target) would linger on boxes that keep coming up empty.
+  local REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+  if [[ -f $REPO/default/alpm/hexciri-sync.hook ]] && ! cmp -s "$REPO/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook 2>/dev/null; then
+    sudo install -m644 "$REPO/default/alpm/hexciri-sync.hook" /usr/share/libalpm/hooks/hexciri-sync.hook && \
+      echo "alpm hook re-applied (newer targets active from the next transaction)"
+  fi
+
+  # Pull + apply framework commits already happened at the top (self-heal re-exec),
+  # and the plugin update_cmd migration ran unconditionally before the confirm.
+
+  {
+    echo "=== $(date -Is) channel: $(hexciri-channel-current 2>/dev/null || echo ?) ==="
+    sudo pacman -Syu --noconfirm
+    # kernels are plain repo packages now (stock/lts/omarchy*) and update above;
+    # the legacy 580xx driver is AUR-built and updates via the yay pass below —
+    # there is no separate refresh loop anymore.
+    if command -v yay &>/dev/null && pacman -Qmq 2>/dev/null | grep -qv yay-bin; then
+      yay -Sua --noconfirm
     fi
-  done
-fi
-[[ -n $expected ]] || expected="$(ls -1 /usr/lib/modules/ 2>/dev/null | sort -V | tail -n 1)"
+  } 2>&1 | tee -a "$LOG"
 
-if [[ -n $expected && $expected != "$running" ]]; then
-  echo "kernel: $running -> $expected (a different kernel is now the boot default)"
-  confirm "Reboot now?" && systemctl reboot
+  # ── re-apply hexciri sync state: the alpm hook only fires when a tracked
+  # ── package (kernel/sddm/…) actually changed, so a no-op update never ran it.
+  # ── Running it here — every press — guarantees boot entries, PAM, the gnome-
+  # ── keyring pin AND the per-PC makepkg tuning land even when pacman had
+  # ── nothing to do. Idempotent; the hook stays for plain `pacman -Syu`. ──
+  echo "-- re-applying hexciri state (boot entries, PAM, keyring, makepkg tuning) --"
+  sudo hexciri-sync || echo "hexciri-sync step failed (continuing)"
+
+  # Reboot offer only when the kernel hexciri is pinned to boot differs from the
+  # one currently running.
+  local running expected entry pin e vmlinuz pkg d
+  running=$(uname -r)
+  expected=""
+
+  pin=/usr/share/hexciri/boot-default
+  entry=""
+  if [[ -r $pin ]]; then
+    e="$(cat "$pin" 2>/dev/null || true)"
+    [[ -f /boot/loader/entries/$e ]] && entry="$e"
+  fi
+  if [[ -z $entry && -r /boot/loader/loader.conf ]]; then
+    e="$(awk '$1=="default"{print $2}' /boot/loader/loader.conf 2>/dev/null)"
+    [[ -f /boot/loader/entries/$e ]] && entry="$e"
+  fi
+
+  if [[ -n $entry ]]; then
+    vmlinuz="$(awk '$1=="linux"{print $2; exit}' "/boot/loader/entries/$entry" 2>/dev/null)"
+    pkg="${vmlinuz##*/}"; pkg="${pkg#vmlinuz-}"
+    for d in /usr/lib/modules/*; do
+      [[ -d $d ]] || continue
+      if pacman -Qqo "$d" 2>/dev/null | grep -qx "$pkg"; then
+        expected="${d##*/}"; break
+      fi
+    done
+  fi
+  [[ -n $expected ]] || expected="$(ls -1 /usr/lib/modules/ 2>/dev/null | sort -V | tail -n 1)"
+
+  if [[ -n $expected && $expected != "$running" ]]; then
+    echo "kernel: $running -> $expected (a different kernel is now the boot default)"
+    confirm "Reboot now?" && systemctl reboot
+  else
+    echo "update complete."
+  fi
+}
+
+# ══════════════════════════════════════════════ hexciri-update-hexciri
+# Hexciri repo sync: pull newer commits. Nothing new → says up to date and stops.
+update_self() {
+  local REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+  if [[ ! -d $REPO ]]; then
+    echo "hexciri repo not found at: $REPO"
+    echo "expected the bootstrap clone at ~/.local/opt/hexciri"
+    exit 1
+  fi
+
+  relink() {
+    mkdir -p "$HOME/.local/bin"
+    for f in "$REPO"/bin/*; do
+      [[ -f $f ]] || continue   # dirs (e.g. __pycache__) must not end the loop's status
+      ln -sfn "$REPO/bin/$(basename "$f")" "$HOME/.local/bin/$(basename "$f")" || true
+    done
+    # prune stale names: a ~/.local/bin/hexciri-* entry whose source file is gone
+    # from repo/bin (consolidation removes scripts) must not keep dangling.
+    local b
+    for b in "$HOME"/.local/bin/hexciri-*; do
+      [[ -e $b || -L $b ]] || continue
+      [[ -e "$REPO/bin/$(basename "$b")" ]] || rm -f "$b"
+    done
+    return 0
+  }
+
+  # One-time legacy migration: pre-symlink installs hard-copied every command to
+  # /usr/local/bin and mirrored catalog/themes/default into /usr/share/hexciri.
+  legacy_purge() {
+    local stale=false f
+    for f in /usr/local/bin/hexciri-*; do
+      [[ -f $f && ! -L $f ]] && stale=true && break
+    done
+    $stale || return 0
+    echo "legacy root command copies found — clearing /usr/local/bin + /usr/share/hexciri (one-time)"
+    if sudo -n rm -f /usr/local/bin/hexciri-* 2>/dev/null; then
+      sudo -n ln -sfn "$REPO/bin/hexciri-sync" /usr/local/bin/hexciri-sync 2>/dev/null || true
+      sudo -n rm -rf /usr/share/hexciri/themes /usr/share/hexciri/theme-sources \
+        /usr/share/hexciri/default /usr/share/hexciri/VERSION 2>/dev/null || true
+      echo "legacy /usr/local/bin copies + /usr/share/hexciri mirror removed (hook relinked to the repo)"
+    else
+      echo "note: stale /usr/local/bin/hexciri-* remain (no sudo session) — a system update will clear them"
+    fi
+    # pre-0.1.3 one-time: legacy configs have no environment PATH line, so niri
+    # can't find the ~/.local/bin hexciri-* commands after the stale root copies
+    # go away. Inject ~/.local/bin PATH only if missing; idempotent.
+    "$REPO/bin/hexciri-migrate-niri-path" 2>/dev/null || true
+  }
+
+  # The shorthand Omarchy default set is part of the framework, so it rides along
+  # with the repo sync. Non-fatal so a sync proceeds even if it hits a snag.
+  sync_themes() {
+    if [[ -x "$REPO/bin/hexciri-theme-omarchy" ]]; then
+      HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-omarchy" </dev/null 2>&1 || \
+        echo "omarchy themes sync skipped/failed (continuing)" >&2
+    fi
+  }
+
+  # Keybind fragment: shipped file seeds the live config only when absent —
+  # the live file is a per-machine authoring and must never be clobbered.
+  sync_keybinds() {
+    local src="$REPO/config/niri/keybinds.kdl"
+    local dst="$HOME/.config/niri/keybinds.kdl"
+    [[ -f $src ]] || return 0
+    [[ -f $dst ]] && return 0
+    mkdir -p "$(dirname "$dst")"
+    cp -f "$src" "$dst"
+    echo "seeded niri keybinds ($dst)"
+  }
+
+  # niri-only purge: leftover per-WM config dirs from older builds are garbage.
+  purge_other_wms() {
+    local wm cfg bin purged=false
+    for wm in hypr sway mango; do
+      cfg="$XDG_CONFIG_HOME/$wm"
+      [[ -e $cfg ]] || continue
+      case "$wm" in
+        hypr)  bin=Hyprland ;;
+        sway)  bin=sway ;;
+        mango) bin=mango ;;
+      esac
+      if pgrep -x "$bin" >/dev/null 2>&1; then
+        echo "warning: '$wm' is running right now — leaving $cfg in place"
+        continue
+      fi
+      rm -rf "$cfg"
+      echo "purged leftover '${wm}' config: $cfg"
+      purged=true
+    done
+    return 0
+  }
+
+  echo "syncing $REPO ..."
+  git -C "$REPO" fetch --tags origin --quiet 2>/dev/null || true
+  local behind
+  behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
+
+  # ── once, after the pull: re-exec from the freshly-pulled tree. Every entry
+  # ── point funnels through this script (hexciri-update, the Repo/Hexciri menu,
+  # ── hxup, and the alpm hook's hexciri-sync all invoke it), so a pull here is
+  # ── THE deploy. Anything the pulled commit ships must run the NEW bytes of
+  # ── THIS script, not the pre-pull copy that's executing now. ──
+  if (( behind > 0 )) && [[ ${HXC_UPX_RERUN:-0} == 0 ]]; then
+    echo "pulling $behind new commit(s)..."
+    git -C "$REPO" pull --ff-only --quiet
+    export HXC_UPX_RERUN=1
+    exec "$0" "$@"
+  fi
+
+  relink
+  sync_themes
+
+  # ── deploy-side migrations (run every pass; idempotent). ──
+  ST="$HOME/.local/state/noctalia/settings.toml"
+  if [[ -f $ST ]] && grep -q 'update_cmd = "hexciri-update-run"' "$ST"; then
+    sed -i 's|update_cmd = "hexciri-update-run"|update_cmd = "hexciri-update"|' "$ST"
+    echo "arch-updater plugin: update_cmd migrated to hexciri-update"
+  fi
+
+  # State the sync must keep live (idempotent; a plain pull/re-link is all the
+  # deploy a repo-runtime project does, so this is the deploy):
+  #   * Strata bridge: omarchy/current symlink → our state (Follow Omarchy mode)
+  #   * user wallpaper store merged into the active theme's backgrounds
+  #   * legacy niri config PATH migration (so a kept pre-0.1.3 config can't kill keybinds)
+  "$REPO/bin/hexciri-theme-ensure" >/dev/null 2>&1 || true
+  mkdir -p "$HOME/.config/hexciri/wallpapers"
+  "$REPO/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
+
+  sync_keybinds
+  purge_other_wms
+
+  if (( behind == 0 )); then
+    echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"
+    legacy_purge
+    exit 0
+  fi
+  echo "framework sync complete (HEAD $(git -C "$REPO" rev-parse --short HEAD))"
+}
+
+# ══════════════════════════════════════════════ hexciri-update-hardware
+update_hardware() { # [choice]
+  if [[ $# -gt 0 ]]; then
+    # Direct dispatch from menu search
+    local choice="$*"
+  else
+    local choice
+    choice=$(
+      printf '%s\n' 'Audio' 'Wi-Fi' 'Bluetooth' 'Trackpad' |
+        "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Restart: ' --width=26 --lines=4
+    ) || exec "$SCRIPT_DIR/hexciri-update"
+  fi
+
+  case "$choice" in
+    Audio)     exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'systemctl --user restart pipewire pipewire-pulse; echo "pipewire restarted"; read -rp "press enter to close"' ;;
+    Wi-Fi)     exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'sudo systemctl restart NetworkManager; echo "NetworkManager restarted"; read -rp "press enter to close"' ;;
+    Bluetooth) exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'sudo systemctl restart bluetooth; echo "bluetooth restarted"; read -rp "press enter to close"' ;;
+    Trackpad)  exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c 'sudo modprobe -r i2c-hid-acpi && sudo modprobe i2c-hid-acpi; echo "trackpad stack reloaded"; read -rp "press enter to close"' ;;
+  esac
+}
+
+# ══════════════════════════════════════════════ hexciri-update-menu
+update_menu() { # [choice]
+  local current entries choice channel chan_choice
+  current=$("$bindir/hexciri-channel-current" 2>/dev/null)
+
+  entries=('Hexciri' "Channel${current:+ ($current)} >" 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
+
+  if [[ $# -gt 0 ]]; then
+    choice="$*"
+  else
+    choice=$(
+      printf '%s\n' "${entries[@]}" |
+        "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Update: ' --width=30 --lines=${#entries[@]}
+    ) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
+  fi
+  choice=${choice%' >'}
+
+  case "$choice" in
+    "Hexciri")   exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update" ;;
+    "Hardware")  exec "$SCRIPT_DIR/hexciri-update-hardware" ;;
+    "Firmware")  exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" fwupdmgr update ;;
+    "Repo")      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update-hexciri" ;;
+    "Themes")    exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c "'$SCRIPT_DIR/hexciri-theme-omarchy' && '$SCRIPT_DIR/hexciri-theme-extras' --run sync" ;;
+    "Wallpaper") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-wallpaper-refresh" "$HOME/.local/state/hexciri/current/theme" ;;
+    Channel*)    ;;
+    *)           exit 0 ;;
+  esac
+
+  # Channel picker; switching needs sudo, so run it in a terminal.
+  chan_choice=$(
+    printf '%s\n' stable bleeding |
+      awk -v cur="$current" '$0 == cur { print "✓ " $0; next } { print }' |
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Channel: ' --width=22 --lines=2
+  ) || exec "$SCRIPT_DIR/hexciri-update-menu"   # Esc = back to Update menu
+
+  channel=${chan_choice#✓ }
+  [[ -n $channel ]] && exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-channel-set" "$channel"
+}
+
+# ══════════════════════════════════════════════ hexciri-channel-current
+update_channel_current() {
+  # channel = which mirror feed we track: stable is the omarchy month-hold
+  # snapshot, bleeding is official Arch (since 1.5). The repo state is
+  # informational only.
+  local mirror
+  mirror=$(grep -hoE "https://(stable-mirror|mirror)\.omarchy\.org/|https://geo\.mirror\.pkgbuild\.com/" /etc/pacman.d/mirrorlist 2>/dev/null | head -n1)
+  case "$mirror" in
+    *stable-mirror.omarchy.org*) echo "stable" ;;
+    *geo.mirror.pkgbuild.com*) echo "bleeding" ;;
+    *mirror.omarchy.org*) echo "bleeding" ;; # legacy curved picked up pre-1.5
+    "") echo "unknown" ;;
+  esac
+}
+
+# ══════════════════════════════════════════════ hexciri-channel-set
+update_channel_set() { # <stable|bleeding>
+  local HEXCIRI_PATH="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+  [[ -d "$HEXCIRI_PATH" ]] || HEXCIRI_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+  usage() { echo "Usage: hexciri-channel-set [stable|bleeding]"; }
+
+  (( $# > 0 )) || { usage; exit 1; }
+  local channel="$1" src_conf src_mirror
+
+  case "$channel" in
+    stable)
+      src_conf="$HEXCIRI_PATH/default/pacman/pacman-stable.conf"
+      src_mirror="$HEXCIRI_PATH/default/pacman/mirrorlist-stable"
+      ;;
+    bleeding)
+      src_conf="$HEXCIRI_PATH/default/pacman/pacman-bleeding.conf"
+      src_mirror="$HEXCIRI_PATH/default/pacman/mirrorlist-bleeding"
+      ;;
+    *) echo "Unknown channel: $channel" >&2; usage >&2; exit 1 ;;
+  esac
+
+  [[ -f $src_conf && -f $src_mirror ]] || { echo "channel files missing in $HEXCIRI_PATH/default/pacman" >&2; exit 1; }
+
+  echo "Setting channel to $channel"
+  sudo cp -f /etc/pacman.conf /etc/pacman.conf.bak
+  sudo cp -f /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
+  sudo cp -f "$src_conf" /etc/pacman.conf
+  sudo cp -f "$src_mirror" /etc/pacman.d/mirrorlist
+
+  hexciri-hook pre-refresh-pacman 2>/dev/null || true
+
+  sudo pacman -Syyuu --noconfirm
+}
+
+# ══════════════════════════════════════════════ hexciri-refresh-boot
+update_refresh_boot() {
+  # hexciri no longer ships plymouth; the equivalent "reset the boot-time config
+  # to shipped defaults" is the same post-package-transaction sync that keeps
+  # systemd-boot entries, PAM (keyring + fingerprint) and app-menu hiding curated.
+  local sync_cmd
+  if [[ -x "$SCRIPT_DIR/hexciri-sync" ]]; then
+    sync_cmd="$SCRIPT_DIR/hexciri-sync"
+  else
+    sync_cmd="hexciri-sync"
+  fi
+  echo "Re-asserting hexciri boot state (systemd-boot entries, PAM, menu curation)..."
+  sudo "$sync_cmd"
+  echo "Boot config reset — your chosen default boot entry is preserved."
+}
+
+# ══════════════════════════════════════════════ dispatch
+sub="${1:-}"
+case "$(basename "$0")" in
+  hexciri-update-hexciri) sub=self ;;
+  hexciri-update-run)     sub=run ;;
+  hexciri-update-hardware) sub=hardware ;;
+  hexciri-update-menu)    sub=menu ;;
+  hexciri-channel-current) sub=channel-current ;;
+  hexciri-channel-set)    sub=channel-set ;;
+  hexciri-refresh-boot)   sub=refresh-boot ;;
+  *)                      : ;;  # hexciri-update bare, or unknown → decide below
+esac
+
+# hexciri-update bare: $1 may be a subcommand OR nothing. Unknown first-arg —
+# e.g. --yes — means the bare system update (args pass through untouched).
+known_sub() {
+  case "$1" in
+    sys|self|run|hardware|menu|channel-current|channel-set|refresh-boot|help) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+if [[ $(basename "$0") == hexciri-update ]]; then
+  if [[ -n $sub ]] && known_sub "$sub"; then
+    shift 2>/dev/null || true   # consume the subcommand word
+  else
+    sub=""                     # bare system update; args (--yes) stay in "$@"
+  fi
 else
-  echo "update complete."
+  # other arg0 names keep their own argument stream (e.g. hexciri-update-menu Audio)
+  :
 fi
+
+case "$sub" in
+  sys|""|run)   update_sys "$@" ;;
+  self)         update_self "$@" ;;
+  hardware)     update_hardware "$@" ;;
+  menu)         update_menu "$@" ;;
+  channel-current) update_channel_current ;;
+  channel-set)  update_channel_set "${1:-}" ;;
+  refresh-boot) update_refresh_boot ;;
+  help)         echo "usage: hexciri-update <self|sys|hardware|menu|channel-set|channel-current|refresh-boot|help>"; exit 0 ;;
+  *)            echo "unknown update subcommand: $sub" >&2; exit 1 ;;
+esac

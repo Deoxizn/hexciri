@@ -1,16 +1,1 @@
-#!/bin/bash
-# hexciri:summary=Print the active hexciri channel (stable|bleeding|unknown)
-set -euo pipefail
-
-# channel = which mirror feed we track: stable is the omarchy month-hold
-# snapshot, bleeding is official Arch (since 1.5; the omarchy mirror was swapped
-# out for geo.mirror.pkgbuild.com). The repo state is informational only —
-# stable carries the [omarchy] repo (responsive, month-held), bleeding has none.
-mirror=$(grep -hoE "https://(stable-mirror|mirror)\.omarchy\.org/|https://geo\.mirror\.pkgbuild\.com/" /etc/pacman.d/mirrorlist 2>/dev/null | head -n1)
-
-case "$mirror" in
-  *stable-mirror.omarchy.org*) echo "stable" ;;
-  *geo.mirror.pkgbuild.com*) echo "bleeding" ;;
-  *mirror.omarchy.org*) echo "bleeding" ;; # legacy curved picked up pre-1.5
-  "") echo "unknown" ;;
-esac
+hexciri-update

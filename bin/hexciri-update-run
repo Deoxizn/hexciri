@@ -1,10 +1,1 @@
-#!/bin/bash
-# hexciri:summary=Deprecated alias of hexciri-update (kept for pre-rename refs)
-# The system updater was renamed hexciri-update-run → hexciri-update. Keep this
-# name as a zero-fat shim so anything still holding the old reference — a
-# noctalia arch-updater plugin whose update_cmd was seeded before the rename,
-# a fish alias, muscle memory — keeps working. New code should call
-# hexciri-update directly; the updater migrates the plugin's stored update_cmd
-# on its next real run anyway.
-set -euo pipefail
-exec "$(dirname "$(readlink -f "$0")")/hexciri-update" "$@"
+hexciri-update
