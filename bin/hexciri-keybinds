@@ -1,50 +1,33 @@
 #!/bin/bash
 # hexciri:keybinds=searchable-list
-# hexciri:summary=Per-WM keybinding cheatsheet — parsed from the ACTIVE WM's live keybinds config
-# Reads the hand-written keybinds file for the current WM (live ~/.config copy,
-# falling back to the repo snapshot) and renders a searchable cheat list. The
-# hexciri core combos are identical across WMs; combos below the core are shown
-# with the action they run so per-WM extras stay discoverable.
+# hexciri:summary=Niri keybinding cheatsheet — parsed from the live keybinds config
+# Reads the hand-written niri keybinds file (~/.config/niri/keybinds.kdl, falling
+# back to the repo snapshot) and renders a searchable cheat list. Hexciri ships
+# a single compositor (niri); "Mod" = Super.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 REPO="${HEXCIRI_PATH:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
-WM="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || true)"
+WM="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri)"
 
-case "$WM" in
-  niri)
-    LIVE="$CFG/niri/keybinds.kdl"
-    FALLBACK="$REPO/config/niri/keybinds.kdl" ;;
-  hyprland)
-    LIVE="$CFG/hypr/conf/keybinds.lua"
-    FALLBACK="$REPO/config/hypr/conf/keybinds.lua" ;;
-  sway)
-    LIVE="$CFG/sway/conf.d/keybinds.conf"
-    FALLBACK="$REPO/config/sway/conf.d/keybinds.conf" ;;
-  mango)
-    LIVE="$CFG/mango/keybinds.conf"
-    FALLBACK="$REPO/config/mango/keybinds.conf" ;;
-  *)
-    echo "hexciri-keybinds: unknown WM '$WM' (niri|hyprland|sway|mango)" >&2
-    exit 1 ;;
-esac
 FILE=""
-[[ -f $LIVE ]]     && FILE="$LIVE"
-[[ -z $FILE ]] && [[ -f $FALLBACK ]] && FILE="$FALLBACK"
+[[ -f $CFG/niri/keybinds.kdl ]] && FILE="$CFG/niri/keybinds.kdl"
+[[ -z $FILE && -f $REPO/config/niri/keybinds.kdl ]] && FILE="$REPO/config/niri/keybinds.kdl"
 if [[ -z $FILE ]]; then
-  echo "hexciri-keybinds: no keybinds config found for $WM ($LIVE)" >&2
+  echo "hexciri-keybinds: no niri keybinds config found ($CFG/niri/keybinds.kdl)" >&2
   exit 1
 fi
 
-output=$(KEYBINDS_FILE="$FILE" WM="$WM" python3 <<'EOF'
+output=$(KEYBINDS_FILE="$FILE" python3 <<'EOF'
 import os, re, sys
 
-file, wm = os.environ["KEYBINDS_FILE"], os.environ["WM"]
+file = os.environ["KEYBINDS_FILE"]
 
-# ── hexciri core: canonical combo -> description (mirrors the hand-written configs) ──
+# ── hexciri core: canonical combo -> description (mirrors the hand-written config) ──
 DESC = {
-    "Mod+Space": "App launcher",
+    "Mod+Space": "App launcher (fuzzel)",
+    "Mod+D": "App launcher (Noctalia)",
     "Mod+Alt+Space": "Root menu",
     "Mod+K": "Keybind reference (this list)",
     "Mod+Return": "Terminal",
@@ -96,100 +79,22 @@ DESC = {
     "Mod+Ctrl+V": "Clipboard history",
     "Mod+Escape": "Power menu",
     "Mod+Comma": "Clear notifications",
+    "Mod+Ctrl+Comma": "Clear notifications",
+    "Mod+Ctrl+Period": "Clear notification history",
     "Mod+N": "Toggle notifications",
-    "Mod+Shift+Tab": "Cycle layout",
-    "Mod+T": "Tiling layout",
-    "Mod+Alt+Up": "Widen master area",
-    "Mod+Alt+Down": "Narrow master area",
-    "Mod+Ctrl+R": "Reload configuration",
-    "Mod+Tab": "Focus next window",
-    "Mod+G": "Toggle global visibility",
-    "Mod+M": "Quit mango",
-    "Mod+Shift+I": "Restore minimized window",
-    "Alt+Space": "Launcher (native rofi)",
-    "Alt+Return": "Terminal (native foot)",
-    "Alt+Q": "Close window",
-    "Alt+Tab": "Overview jump",
-    "Alt+backslash": "Toggle floating",
-    "Alt+A": "Maximize screen",
-    "Alt+E": "Scroller width",
-    "Alt+F": "Fullscreen",
-    "Alt+Shift+F": "Fake fullscreen",
-    "Alt+Z": "Toggle scratchpad",
-    "Alt+X": "Cycle scroller width",
-    "Alt+Left": "Focus left", "Alt+Right": "Focus right",
-    "Alt+Up": "Focus up", "Alt+Down": "Focus down",
-    "Alt+Shift+Left": "Focus monitor left",
-    "Alt+Shift+Right": "Focus monitor right",
-    "Mod+Alt+Left": "Move window to monitor left",
-    "Mod+Alt+Right": "Move window to monitor right",
-    "Alt+Shift+X": "Increase gaps",
-    "Alt+Shift+Z": "Decrease gaps",
-    "Alt+Shift+R": "Toggle gaps",
-    "Ctrl+Shift+Up": "Move window freely",
-    "Ctrl+Shift+Down": "Move window freely",
-    "Ctrl+Shift+Left": "Move window freely",
-    "Ctrl+Shift+Right": "Move window freely",
-    "Ctrl+Alt+Up": "Resize window freely",
-    "Ctrl+Alt+Down": "Resize window freely",
-    "Ctrl+Alt+Left": "Resize window freely",
-    "Ctrl+Alt+Right": "Resize window freely",
-    "Ctrl+Left": "View tag left",
-    "Ctrl+Right": "View tag right",
-    "Ctrl+1": "Workspace 1", "Ctrl+2": "Workspace 2", "Ctrl+3": "Workspace 3",
-    "Ctrl+4": "Workspace 4", "Ctrl+5": "Workspace 5", "Ctrl+6": "Workspace 6",
-    "Ctrl+7": "Workspace 7", "Ctrl+8": "Workspace 8", "Ctrl+9": "Workspace 9",
-    "Alt+1": "Move window to workspace 1", "Alt+2": "Move window to workspace 2",
-    "Alt+3": "Move window to workspace 3", "Alt+4": "Move window to workspace 4",
-    "Alt+5": "Move window to workspace 5", "Alt+6": "Move window to workspace 6",
-    "Alt+7": "Move window to workspace 7", "Alt+8": "Move window to workspace 8",
-    "Alt+9": "Move window to workspace 9",
-    "Mod+Shift+Q": "Kill window",
-    "Mod+D": "App launcher (native wmenu)",
-    "Mod+Shift+C": "Reload config",
-    "Mod+Shift+H": "Move window", "Mod+Shift+J": "Move window",
-    "Mod+Shift+K": "Move window", "Mod+Shift+L": "Move window",
-    "Mod+Shift+Left": "Move window", "Mod+Shift+Right": "Move window",
-    "Mod+Shift+Up": "Move window", "Mod+Shift+Down": "Move window",
-    "Mod+B": "Horizontal split",
-    "Mod+S": "Stacking layout",
-    "Mod+W": "Tabbed layout",
-    "Mod+E": "Toggle split layout",
-    "Mod+A": "Focus parent",
-    "Mod+minus": "Show scratchpad",
-    "Mod+Shift+minus": "Move window to scratchpad",
-    "Print": "Screenshot (native grim)",
-    "XF86AudioPause": "Play / pause",
-    "XF86AudioStop": "Stop playback",
-    "XF86AudioRaiseVolume": "Volume up",
-    "XF86AudioLowerVolume": "Volume down",
+    "Mod+Shift+Up": "Move window to workspace above",
+    "Mod+Shift+Down": "Move window to workspace below",
+    "Mod+WheelScrollUp": "Previous workspace (scroll)",
+    "Mod+WheelScrollDown": "Next workspace (scroll)",
+    "XF86AudioPlay": "Play / pause",
+    "XF86AudioNext": "Next track",
+    "XF86AudioPrev": "Previous track",
     "XF86AudioMute": "Mute",
     "XF86AudioMicMute": "Mic mute",
-    "XF86AudioPlay": "Play / pause",
-    "XF86AudioPrev": "Previous track",
-    "XF86AudioNext": "Next track",
+    "XF86AudioRaiseVolume": "Volume up",
+    "XF86AudioLowerVolume": "Volume down",
     "XF86MonBrightnessUp": "Brightness up",
     "XF86MonBrightnessDown": "Brightness down",
-}
-
-# Per-WM overrides for combos whose meaning legitimately differs across WMs.
-OVERRIDE = {
-    "mango": {
-        "Mod+S": "Scroller layout",
-        "Mod+Shift+T": "Vertical tile layout",
-        "Mod+Shift+S": "Vertical scroller layout",
-        "Mod+Shift+G": "Grid layout",
-        "Mod+Shift+M": "Monocle layout",
-        "Mod+Shift+D": "Deck layout",
-        "Mod+Shift+C": "Center tile layout",
-        "Mod+Shift+R": "Right tile layout",
-        "Mod+Shift+V": "Vertical grid layout",
-        "Mod+Shift+U": "Vertical deck layout",
-        "Mod+Shift+W": "Dwindle layout",
-        "Mod+Shift+Y": "Fair layout",
-        "Mod+Shift+Z": "Vertical fair layout",
-    },
-    "sway": {"Mod+S": "Stacking layout"},
 }
 
 SUB_TO_XDG = {
@@ -222,30 +127,16 @@ def canon(combo):
     return "+".join(canon_key(t) for t in toks)
 
 binds = []
-if wm == "niri":
-    for m in re.finditer(r"^\s*([^\s{}]+)\s*\{\s*([^;{}]*)", open(file).read(), re.M):
-        name = m.group(1).strip()
-        if name in ("binds", "binds+", "binds-columns"):  # the binds { } block opener
-            continue
-        binds.append((name, m.group(2).strip()))
-elif wm == "hyprland":
-    for m in re.finditer(r'^hl\.bind\(\s*"([^"]+)"\s*,\s*([^)]*)\)', open(file).read(), re.M):
-        binds.append((m.group(1), m.group(2).strip()))
-elif wm == "sway":
-    for m in re.finditer(r"^bindsym\s+(\S+)\s+(.*)$", open(file).read(), re.M):
-        binds.append((m.group(1), m.group(2).strip()))
-elif wm == "mango":
-    for m in re.finditer(r"^bind=(?:\[[a-z0-9]+\])?([^,]*),([^,]+),(.*)$", open(file).read(), re.M):
-        mods, key, act = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
-        combo = (mods + "+" if mods and mods != "NONE" else "") + key
-        binds.append((combo, act))
+for m in re.finditer(r"^\s*([^\s{}]+)\s*\{\s*([^;{}]*)", open(file).read(), re.M):
+    name = m.group(1).strip()
+    if name in ("binds", "binds+", "binds-columns"):  # the binds { } block opener
+        continue
+    binds.append((name, m.group(2).strip()))
 
 rows = []
 for combo, action in binds:
     c = canon(combo)
-    desc = DESC.get(c, action)
-    desc = OVERRIDE.get(wm, {}).get(c, desc)
-    rows.append(f"{c:<22} {desc}")
+    rows.append(f"{c:<22} {DESC.get(c, action)}")
 
 if not rows:
     print(f"No keybinds found in {file}", file=sys.stderr)

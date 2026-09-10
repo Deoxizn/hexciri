@@ -21,10 +21,8 @@ add() { # add <label> <url> <binary-or-''> — '' means always show (framework i
 add "Hexciri" "https://hexciri.dirty.pizza" ""
 add "Noctalia docs" "https://docs.noctalia.dev/noctalia/" noctalia
 
-# WM row — whichever WM is installed shows its docs.
+# WM row — niri is the shipped compositor.
 add "Niri wiki" "https://github.com/YaLTeR/niri/wiki" niri
-add "Hyprland wiki" "https://wiki.hyprland.org" Hyprland
-add "Sway wiki" "https://github.com/swaywm/sway/wiki" sway
 
 # Terminal row — kitty is the shipped default; a swap to alacritty/foot just
 # changes which docs show.

@@ -7,11 +7,12 @@
 #   no flags       Already-on-Arch: system via sudo (real terminal), then user.
 #
 # usage: ./install.sh [-y] [--dry-run] [--channel stable|bleeding] [--kernel stock|lts]
-#                  [--wm niri|hyprland|sway|mango] [--shell noctalia|none]
 # (kernel is always stock on fresh installs — --kernel is internal/support only;
 #  custom kernels are post-install via System ▸ Kernel)
-# (wm/shell default to niri+noctalia; --shell=none means no shell is spawned at startup)
 #
+# hexciri ships niri + Noctalia: niri is the single compositor and Noctalia is
+# always the desktop shell (bar, lock, OSD, notifications) spawned at login.
+
 # FIX POLICY: every bug fix ships BOTH here — covering fresh installs — AND in
 # bin/hexciri-sync (see its matching header), covering existing machines via a
 # plain system update. Sync this file whenever you touch one or the other.
@@ -20,8 +21,6 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 CHANNEL="stable"
 KERNEL_PICK=""
-WM_PICK="niri"
-SHELL_PICK="noctalia"
 YES=false
 DRY_RUN=false
 SYSTEM_ONLY=false
@@ -38,10 +37,6 @@ while (($#)); do
     --channel) CHANNEL="${2:-}"; shift 2 ;;
     --kernel=*) KERNEL_PICK="${1#*=}"; shift ;;
     --kernel) KERNEL_PICK="${2:-}"; shift 2 ;;
-    --wm=*) WM_PICK="${1#*=}"; shift ;;
-    --wm) WM_PICK="${2:-}"; shift 2 ;;
-    --shell=*) SHELL_PICK="${1#*=}"; shift ;;
-    --shell) SHELL_PICK="${2:-}"; shift 2 ;;
     stable|bleeding) CHANNEL="$1"; shift ;;
     --) shift ;;
     *) shift ;;
@@ -57,8 +52,6 @@ case "${KERNEL_PICK,,}" in
   lts|linux-lts) KERNEL_PICK=lts ;;
 esac
 [[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts)$ ]] || { echo "kernel must be stock|lts (omarchy kernels are post-install, via the Kernel menu)"; exit 1; }
-[[ $WM_PICK =~ ^(niri|hyprland|sway|mango)$ ]] || { echo "wm must be niri|hyprland|sway|mango"; exit 1; }
-[[ $SHELL_PICK =~ ^(noctalia|none)$ ]] || { echo "shell must be noctalia|none"; exit 1; }
 
 info() { echo -e "\e[0;36m[hexciri]\e[0m $*"; }
 ok()   { echo -e "\e[0;32m[hexciri]\e[0m $*"; }
@@ -83,8 +76,8 @@ if ! $SYSTEM_ONLY && ! $USER_ONLY; then
 re_exec_flags=""
 $DRY_RUN && re_exec_flags+=" --dry-run"
 $UPDATE_MODE && re_exec_flags+=" --update"
-sudo HEXCIRI_USER="$USER" "$0" --system-only ${YES:+ -y} $re_exec_flags --channel "$CHANNEL" ${KERNEL_PICK:+--kernel "$KERNEL_PICK"} --wm "$WM_PICK" --shell "$SHELL_PICK"
-  exec "$0" --user-only ${YES:+ -y} $re_exec_flags --channel "$CHANNEL" --wm "$WM_PICK" --shell "$SHELL_PICK"
+sudo HEXCIRI_USER="$USER" "$0" --system-only ${YES:+ -y} $re_exec_flags --channel "$CHANNEL" ${KERNEL_PICK:+--kernel "$KERNEL_PICK"}
+  exec "$0" --user-only ${YES:+ -y} $re_exec_flags --channel "$CHANNEL"
 fi
 
 if $SYSTEM_ONLY; then
@@ -124,16 +117,8 @@ if $SYSTEM_ONLY; then
   run pacman -Syyuu --noconfirm
 
   # ── packages (all repo packages; Brave built from AUR as the user, installed as root) ──
-  case "$WM_PICK" in
-    niri)     WM_PKGS=(niri xwayland-satellite) ;;
-    hyprland) WM_PKGS=(hyprland hyprlock xwayland-satellite) ;;
-    sway)     WM_PKGS=(sway swaylock) ;;
-    mango)    WM_PKGS=(mangowm) ;;  # AUR (yay -S mangowm); pacman skips unless built
-  esac
-  case "$SHELL_PICK" in
-    noctalia) SHELL_PKGS=(noctalia) ;;
-    none) SHELL_PKGS=() ;;
-  esac
+  WM_PKGS=(niri xwayland-satellite)
+  SHELL_PKGS=(noctalia)
   PKGS=(base-devel git gnupg
     "${WM_PKGS[@]}" "${SHELL_PKGS[@]}" kitty fish fuzzel zed opencode
     grim slurp wl-clipboard cliphist wtype playerctl brightnessctl mpv v4l-utils jq fzf ffmpeg
@@ -300,20 +285,14 @@ HOOK
   # without --now is intentional here (we're in the install chroot, no systemd
   # PID 1), so sshd comes up automatically on first real boot.
   # ── session: sddm rejects login pre-PAM when no session is selectable,
-  #    which reads exactly like a wrong password on first try. The picked WM
-  #    ships its desktop file; guarantee one exists as a fallback minimal entry ──
+  #    which reads exactly like a wrong password on first try. niri ships its
+  #    desktop file; guarantee a fallback entry exists anyway ──
   run mkdir -p /usr/share/wayland-sessions
-  case "$WM_PICK" in
-    niri)     _wm_exec=/usr/bin/niri;    _wm_comment="Scrollable-tiling Wayland compositor" ;;
-    hyprland) _wm_exec=/usr/bin/Hyprland;_wm_comment="Dynamic tiling Wayland compositor" ;;
-    sway)     _wm_exec=/usr/bin/sway;    _wm_comment="i3-compatible Wayland compositor" ;;
-    mango)    _wm_exec=/usr/bin/mango;   _wm_comment="Wayland compositor" ;;
-  esac
-  if [[ ! -f /usr/share/wayland-sessions/$WM_PICK.desktop ]]; then
+  if [[ ! -f /usr/share/wayland-sessions/niri.desktop ]]; then
     printf '[Desktop Entry]\nName=%s\nComment=%s\nExec=%s\nType=Application\n' \
-      "$WM_PICK" "$_wm_comment" "$_wm_exec" \
-      | run tee "/usr/share/wayland-sessions/$WM_PICK.desktop" >/dev/null
-    ok "$WM_PICK session file missing — created fallback /usr/share/wayland-sessions/$WM_PICK.desktop"
+      "niri" "Scrollable-tiling Wayland compositor" "/usr/bin/niri" \
+      | run tee "/usr/share/wayland-sessions/niri.desktop" >/dev/null
+    ok "niri session file missing — created fallback /usr/share/wayland-sessions/niri.desktop"
   fi
   # ── printing: cups socket activation + HP (hplip); lp/scanner groups let the
   #    user manage queues/admin and access the HP scanner over sane ──
@@ -511,45 +490,18 @@ ok "commands linked"
 mkdir -p ~/.config/hexciri/branding
 run cp -f "$REPO_DIR/branding/"*.png ~/.config/hexciri/branding/
 
-# ── WM config: split into per-concern fragments (~/.config/<wm>/config.kdl for
-# niri, hyprland.lua + conf/*.lua for hyprland, config + conf.d/* for sway,
-# config.conf + source'd fragments for mango), all included/sourced by the
-# entry file, each deploying independently with the sha-tracked "keep user
-# edits" logic. Deploys the picked WM's config dir; other WMs' configs come
-# into existence via the swap path (hexciri-session-set / System > Session),
-# never on a fresh install.
-case "$WM_PICK" in
-  niri)
-    for _f in config cursors env monitors input looknfeel window-rules keybinds autostart; do
-      deploy "config/niri/$_f.kdl" "$HOME/.config/niri/$_f.kdl"
-    done
-    # pre-0.1.3 one-time: a kept legacy config.kdl has no environment PATH line, so niri
-    # can't find the ~/.local/bin hexciri-* commands the install just linked (the old
-    # /usr/local/bin copies are gone). Inject the PATH only if missing; idempotent.
-    run "$REPO_DIR/bin/hexciri-migrate-niri-path" 2>/dev/null || true
-    # Monitor scaling ships preconfigured in config/niri/config.kdl (eDP-1 scale 2,
-    # mode/VRR commented) — no runtime detection, nothing to discover in a chroot.
-    ;;
-  hyprland)
-    deploy config/hypr/hyprland.lua "$HOME/.config/hypr/hyprland.lua"
-    for _f in env input monitors looknfeel window-rules keybinds autostart; do
-      deploy "config/hypr/conf/$_f.lua" "$HOME/.config/hypr/conf/$_f.lua"
-    done
-    ;;
-  sway)
-    deploy config/sway/config "$HOME/.config/sway/config"
-    for _f in input monitors looknfeel window-rules keybinds autostart; do
-      deploy "config/sway/conf.d/$_f.conf" "$HOME/.config/sway/conf.d/$_f.conf"
-    done
-    deploy config/sway/environment.d/10-hexciri.conf "$HOME/.config/environment.d/10-hexciri.conf"
-    ;;
-  mango)
-    deploy config/mango/config.conf "$HOME/.config/mango/config.conf"
-    for _f in env input monitors looknfeel window-rules keybinds autostart; do
-      deploy "config/mango/$_f.conf" "$HOME/.config/mango/$_f.conf"
-    done
-    ;;
-esac
+# ── WM config: niri's split tree (~/.config/niri/<topic>.kdl, all imported by
+# config.kdl), each fragment deploying independently with the sha-tracked "keep
+# user edits" logic.
+for _f in config cursors env monitors input looknfeel window-rules keybinds autostart; do
+  deploy "config/niri/$_f.kdl" "$HOME/.config/niri/$_f.kdl"
+done
+# pre-0.1.3 one-time: a kept legacy config.kdl has no environment PATH line, so niri
+# can't find the ~/.local/bin hexciri-* commands the install just linked (the old
+# /usr/local/bin copies are gone). Inject the PATH only if missing; idempotent.
+run "$REPO_DIR/bin/hexciri-migrate-niri-path" 2>/dev/null || true
+# Monitor scaling ships preconfigured in config/niri/config.kdl (eDP-1 scale 2,
+# mode/VRR commented) — no runtime detection, nothing to discover in a chroot.
 
 # ── shell config: noctalia's bar layout, workspace hiding and shell services
 #    live in ~/.config/noctalia/config.toml. This file used to NEVER be
@@ -558,60 +510,21 @@ esac
 #    WM fragments; runs on install AND update so older boxes get healed. ──
 deploy config/noctalia/config.toml "$HOME/.config/noctalia/config.toml"
 
-# ── shell spawn in the WM's autostart must match the pick: every
-# WM spawns the shell at startup only when one is actually chosen — shell=none
-# comments the line out. Idempotent; re-installing over a different pick
-# converges the deployed autostart. ──
-case "$WM_PICK" in
-  niri)
-    _autostart="$HOME/.config/niri/autostart.kdl"
-    if [[ -f $_autostart ]]; then
-      if [[ $SHELL_PICK == none ]]; then
-        run sed -i 's|^spawn-at-startup "noctalia".*|// spawn-at-startup "noctalia"   // shell=none: no shell spawned|' "$_autostart"
-      else
-        run sed -i 's|^// \?spawn-at-startup "noctalia".*|spawn-at-startup "noctalia"|' "$_autostart"
-      fi
-    fi
-    ;;
-  hyprland)
-    _autostart="$HOME/.config/hypr/conf/autostart.lua"
-    if [[ -f $_autostart ]]; then
-      if [[ $SHELL_PICK == none ]]; then
-        run sed -i 's|^    hl.exec_cmd("noctalia")|    -- hl.exec_cmd("noctalia")   -- shell=none: no shell spawned|' "$_autostart"
-      else
-        run sed -i 's|^    -- hl.exec_cmd("noctalia").*|    hl.exec_cmd("noctalia")|' "$_autostart"
-      fi
-    fi
-    ;;
-  sway)
-    _autostart="$HOME/.config/sway/conf.d/autostart.conf"
-    if [[ -f $_autostart ]]; then
-      if [[ $SHELL_PICK == none ]]; then
-        run sed -i 's|^exec noctalia|# exec noctalia   # shell=none: no shell spawned|' "$_autostart"
-      else
-        run sed -i 's|^# \?exec noctalia.*|exec noctalia|' "$_autostart"
-      fi
-    fi
-    ;;
-  mango)
-    _autostart="$HOME/.config/mango/autostart.conf"
-    if [[ -f $_autostart ]]; then
-      if [[ $SHELL_PICK == none ]]; then
-        run sed -i 's|^exec-once=noctalia|# exec-once=noctalia   # shell=none: no shell spawned|' "$_autostart"
-      else
-        run sed -i 's|^# \?exec-once=noctalia.*|exec-once=noctalia|' "$_autostart"
-      fi
-    fi
-    ;;
-esac
+# ── shell spawn: Noctalia is always the shell — niri's autostart spawns it at
+# startup. Idempotent; re-installing over a box that ran during the no-shell
+# era un-comments the line so every install converges on the shipped combo. ──
+_autostart="$HOME/.config/niri/autostart.kdl"
+if [[ -f $_autostart ]]; then
+  run sed -i 's|^// \?spawn-at-startup "noctalia".*|spawn-at-startup "noctalia"|' "$_autostart"
+fi
 
-# ── hexciri WM/shell selector (authoritative source for hexciri-session) ──
+# ── hexciri selector (shell is read by hexciri-session; wm is always niri) ──
 mkdir -p "$HOME/.config/hexciri"
-printf '%s\n' "$WM_PICK"    > "$HOME/.config/hexciri/wm"
-printf '%s\n' "$SHELL_PICK" > "$HOME/.config/hexciri/shell"
+printf '%s\n' "niri"     > "$HOME/.config/hexciri/wm"
+printf '%s\n' "noctalia" > "$HOME/.config/hexciri/shell"
 
-# fastfetch: shows the WM/shell in the fastfetch header, so keep its display
-# in sync with the selector (the WM module is a script reading the selector)
+# fastfetch: shows the shell next to a fixed "Niri" in the header; the shell
+# module reads the selector, the WM module is niri-only.
 run mkdir -p "$HOME/.config/fastfetch"
 run cp -f "$REPO_DIR/branding/hexciri-nb.png" "$HOME/.config/fastfetch/hexciri-nb.png"
 deploy config/fastfetch/config.jsonc "$HOME/.config/fastfetch/config.jsonc"

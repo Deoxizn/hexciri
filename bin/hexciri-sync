@@ -203,6 +203,17 @@ if [[ -f /etc/pam.d/sddm ]] && ! grep -Ev '^\s*#' /etc/pam.d/sddm | grep -q 'pam
   log "restored sddm PAM (gnome-keyring)"
 fi
 
+# ── 3c. niri-only: hexciri no longer ships hyprland/sway/mango sessions — drop
+# ── the leftover login-gate entries a pre-purge box accumulated (sddm would
+# ── happily offer them otherwise). Packages are left installed deliberately;
+# ── the user removes those by hand (pacman -Rns) when ready. ──
+for _other in hyprland sway mango; do
+  if [[ -f /usr/share/wayland-sessions/$_other.desktop ]]; then
+    rm -f "/usr/share/wayland-sessions/$_other.desktop"
+    log "purged leftover session entry /usr/share/wayland-sessions/$_other.desktop"
+  fi
+done
+
 # ── 3b. gnome-keyring pin + socket race. 50.0 crashes (SIGABRT on concurrent
 # ── Secret Service OpenSession/PKCS11), which is why it's parked at 48.0 via
 # ── IgnorePkg. The version pin alone doesn't stop the run: the

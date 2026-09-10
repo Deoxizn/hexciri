@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hexciri — your WM, your shell. On Arch.</title>
-<meta name="description" content="Niri, Hyprland, Sway or Mango + the Noctalia shell — switch anytime, your monitors, keybinds and theme follow. Arch, one curl line away.">
+<title>Hexciri — Niri + Noctalia on Arch</title>
+<meta name="description" content="Arch + Niri + the Noctalia shell — scrollable tiling, monitors, keybinds and theme, all one config. One curl line away.">
 <meta name="author" content="Deoxizn">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://hexciri.dirty.pizza/">
@@ -12,12 +12,12 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Hexciri">
 <meta property="og:url" content="https://hexciri.dirty.pizza/">
-<meta property="og:title" content="Hexciri — your WM, your shell. On Arch.">
-<meta property="og:description" content="Niri, Hyprland, Sway or Mango + Noctalia shell — swap anytime, monitors, keybinds and theme follow.">
+<meta property="og:title" content="Hexciri — Niri + Noctalia on Arch">
+<meta property="og:description" content="Arch + Niri + Noctalia — scrollable tiling, monitors, keybinds and theme in one config.">
 <meta property="og:image" content="https://hexciri.dirty.pizza/brand.png">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Hexciri — your WM, your shell. On Arch.">
-<meta name="twitter:description" content="Niri, Hyprland, Sway or Mango + Noctalia shell — swap anytime.">
+<meta name="twitter:title" content="Hexciri — Niri + Noctalia on Arch">
+<meta name="twitter:description" content="Arch + Niri + Noctalia, one curl line away.">
 <meta name="twitter:image" content="https://hexciri.dirty.pizza/brand.png">
 <link rel="icon" type="image/png" href="brand.png">
 <style>
@@ -79,10 +79,10 @@
 <body>
 <header class="hero">
   <img src="brand.png" alt="Hexciri emblem">
-  <h1>Your WM. Your shell. Your keyboard.</h1>
-  <p class="tag">Stop reading about desktop Linux. Just pick one, and use it.</p>
+  <h1>Arch × Niri × Noctalia</h1>
+  <p class="tag">One compositor, one shell, one theme engine — everything follows.</p>
   <div class="chips">
-    <span class="chip">Niri</span><span class="chip">Hyprland</span><span class="chip">Sway</span><span class="chip">Mango</span><span class="chip">Noctalia shell</span>
+    <span class="chip">Niri</span><span class="chip">Noctalia shell</span><span class="chip">Arch</span>
   </div>
   <pre class="curl">curl -LO https://hexciri.dirty.pizza/hexciri &amp;&amp; sh hexciri</pre>
   <p class="hero-sub">Arch × your rules × nothing you didn't ask for.</p>
@@ -91,26 +91,26 @@
 <section>
   <h2>Why Hexciri</h2>
   <div class="grid">
-    <div class="card"><h3>Switch WMs on a whim</h3><p>Niri, Hyprland, Sway, Mango. One menu pick — your monitors, keybinds and theme follow. Try Sway for a week. Go back. Nobody's judging.</p></div>
-    <div class="card"><h3>Keybinds that move with you</h3><p>Same keys in every WM. Press <code>Mod+K</code> for the full list, any time. Muscle memory survives a swap.</p></div>
+    <div class="card"><h3>One combo, done right</h3><p>Niri + the Noctalia shell, shipped together. Monitors, keybinds and theme are one config — no swap menus, nothing to set up twice.</p></div>
+    <div class="card"><h3>Keybinds, one list</h3><p>The same keys, always. Press <code>Mod+K</code> for the full list, any time.</p></div>
     <div class="card"><h3>One click colors 30+ apps</h3><p>Terminals, Discord, GTK, the works. <code>hexciri-theme-set</code> your entire desktop in one go.</p></div>
-    <div class="card"><h3>Wallpapers you keep</h3><p>Drop your own in. They survive theme changes, WM swaps, everything.</p></div>
+    <div class="card"><h3>Wallpapers you keep</h3><p>Drop your own in. They survive theme changes, everything.</p></div>
     <div class="card"><h3>Gaming, ready</h3><p>Steam, Heroic, Minecraft, GeForce NOW, controllers, GPU setup — handled.</p></div>
     <div class="card"><h3>It's Arch. Only calmer.</h3><p>Same package manager, same knowledge — everything that runs on Arch runs here. But the default repo holds packages back a month, so updates don't surprise you.</p></div>
   </div>
 </section>
 <section>
-  <h2>The swap</h2>
-  <p class="sub">One command. Log out, pick the new WM at the login screen, done.</p>
-  <pre class="curl" style="margin:10px 0;max-width:100%;"><code>hexciri-session-set wm=sway shell=noctalia</code></pre>
+  <h2>One config</h2>
+  <p class="sub">Nothing to swap, nothing to re-learn. Niri + Noctalia, out of the box.</p>
+  <pre class="curl" style="margin:10px 0;max-width:100%;"><code>hexciri-session combo   # → niri+noctalia</code></pre>
 </section>
 <section>
   <h2>Defaults</h2>
   <p class="sub">The boring stuff, decided for you.</p>
   <table>
     <tr><th>slot</th><th>default</th><th>change it</th></tr>
-    <tr><td>WM</td><td><code>niri</code> (Hyprland / Sway / Mango too)</td><td><code>hexciri-session-set wm=…</code></td></tr>
-    <tr><td>shell</td><td><code>noctalia</code></td><td><code>hexciri-session-set shell=…</code></td></tr>
+    <tr><td>compositor</td><td><code>niri</code></td><td>— (shipped)</td></tr>
+    <tr><td>shell</td><td><code>noctalia</code></td><td>— (shipped)</td></tr>
     <tr><td>terminal</td><td><code>kitty</code></td><td><code>hexciri-defaults</code></td></tr>
     <tr><td>shell</td><td><code>bash</code> (login) · <code>fish</code> (kitty)</td><td><code>hexciri-defaults</code></td></tr>
     <tr><td>browser</td><td><code>brave-origin</code></td><td><code>hexciri-defaults</code></td></tr>
@@ -125,7 +125,7 @@
 </section>
 <section>
   <h2>The keys that matter</h2>
-  <p class="sub">Mod = Super. <code>Mod+K</code> lists everything — in whatever WM you're on.</p>
+  <p class="sub">Mod = Super. <code>Mod+K</code> lists everything.</p>
   <table>
     <tr><th>key</th><th>does</th></tr>
     <tr><td><code>Mod+D</code></td><td>launch apps</td></tr>

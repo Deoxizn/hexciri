@@ -15,7 +15,7 @@ tolerates `caelestia` only via `pgrep quickshell`). The obvious 1.5 additions:
 |-------|----------|------------------------------|
 | `noctalia` | native shell (default) | `noctalia` — done |
 | `none` | no shell | comment the spawn out — done |
-| `caelestia` | **Quickshell-based** shell (the omarchy x caelestia remux on this machine; hyprland-tied) | `quickshell -c caelestia` + its config under `~/.config/caelestia/` |
+| `caelestia` | **Quickshell-based** shell (the omarchy x caelestia remux on this machine) | `quickshell -c caelestia` + its config under `~/.config/caelestia/` |
 | `quickshell` | the toolkit itself — bare quickshell example/Zui config, no shell branding | `quickshell` (whatever its default config is) |
 | `dankshell` | Quickshell-based homegrown shell (DankMaterialShell) | custom QML config + spawn — **needs research: exact package, config path, theming surface** |
 
@@ -26,9 +26,8 @@ config into the repo, teach the spawn/theme/IPC layers the new name.
 ### What "add a shell" touches (from v1.4 machinery)
 
 1. **package list** in `install.sh` per pick (today: `noctalia` under `SHELL_PKGS`).
-2. **autostart spawn per WM** — `install.sh` swaps the spawn line per WM and
-   comments it for `shell=none` (niri KDL / hyprland `hl.exec_cmd` / sway `exec`
-   / mango `exec-once`). A new shell = a new spawn value in that same line.
+2. **autostart spawn** — `install.sh` sets the spawn line in niri's autostart
+   (niri KDL). A new shell = a new spawn value in that same line.
 3. **theme hook** `hooks/theme-set.d/hexciri-sync.sh` — step 1 is the shell
    render (palette → shell config). A Quickshell shell needs its own QML/color
    surface; noctalia's `config.toml` + qt6ct + wallpaper steps stay untouched.
@@ -36,16 +35,13 @@ config into the repo, teach the spawn/theme/IPC layers the new name.
    **lock** is the shell-owned op. Quickshell shells would need lock via their own
    session-lock surface or the generic `swaylock` fallback.
 
-Keybindings are WM-side already (`intents.toml` → per-WM render) — a shell swap
-touches nothing there.
+Keybindings are compositor-side already (hand-written niri `keybinds.kdl`,
+read live by `hexciri-keybinds`) — a shell swap touches nothing there.
 
 ### Open questions
 
 - Is `quickshell` (bare toolkit) a meaningful choice, or should 1.5 only ship
-  caelestia + dankshell? (bare toolkit = no bar/lock/OSD — the `none` corner
-  with extra steps)
-- Caelestia is Hyprland-tied (the remux is); dankshell support matrix TBD. Do
-  these live only under `wm=hyprland`, or is any-WM × any-shell still the rule?
+  caelestia + dankshell? (bare toolkit = a toolkit without its own bar/lock/OSD)
 - Theming: DankMaterialShell's palette hooks (config path, live-reload) are
   unknown here — research needed before a per-shell render is scoped.
 
@@ -88,5 +84,4 @@ never stages them.
 4. Theme hook: add per-shell render fragment, noctalia paths untouched.
 5. Kernel: ✅ done (see §2) — omarchy-edge kernels + AUR 580xx, scheduler
    autodetect, makepkg tuning.
-6. Validate: hyprland+caelestia (this machine's ground truth), niri+noctalia
-   (default), both channels.
+6. Validate: niri+noctalia (default), niri+caelestia, both channels.

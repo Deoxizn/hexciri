@@ -14,8 +14,7 @@ here="$(readlink -f "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")"
 shipped_base="${HEXCIRI_PATH:-$(dirname "$here")}"
 
 # niri config lives as one split tree (config.kdl + per-topic imports) — each
-# fragment gets its own row; the other WMs are single-file trees so a dir-level
-# edit (picker) is enough.
+# fragment gets its own row.
 declare -A NIRI_FRAGS=(
   [config]="config.kdl"
   [env]="env.kdl"
@@ -33,7 +32,6 @@ cfg_xdg="${XDG_CONFIG_HOME:-$HOME/.config}"
 rows=(
   'Niri config' 'Niri env' 'Niri input' 'Niri autostart' 'Niri monitors'
   'Niri looknfeel' 'Niri window-rules' 'Niri keybinds' 'Niri cursors'
-  'Hyprland config' 'Sway config'
   'Noctalia config'
   'Fastfetch config'
   'Palettes'
@@ -60,8 +58,6 @@ case "$choice" in
     if [[ -n $file ]]; then
       "$bindir/hexciri-edit-file" "$niri_dir/$file"
     fi ;;
-  'Hyprland config')  "$bindir/hexciri-edit-file" "$cfg_xdg/hypr/" ;;
-  'Sway config')      "$bindir/hexciri-edit-file" "$cfg_xdg/sway/" ;;
   'Noctalia config')  "$bindir/hexciri-edit-file" "$cfg_xdg/noctalia/config.toml" ;;
   'Fastfetch config') "$bindir/hexciri-edit-file" "$cfg_xdg/fastfetch/config.jsonc" ;;
   'Palettes')         "$bindir/hexciri-edit-file" "$cfg_xdg/noctalia/palettes/" ;;

@@ -107,32 +107,52 @@ fi
 mkdir -p "$HOME/.config/hexciri/wallpapers"
 "$REPO/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
 
-# Keybind fragments are OWNED by the hand-written per-WM configs
-# (config/<wm>/keybinds.{kdl,lua,conf}) and copied whole on WM swap — so a
-# pull that ships a newer hand-written keybind file must refresh the ACTIVE
-# WM's live fragment too, or the machine keeps stale binds. Deterministic +
-# idempotent: bytes identical unless the shipped file changed, and swaps
-# overwrite the same path. Runs on every pass (even "up to date") so a stale
-# fragment self-heals on the next press.
+# Keybind fragment is OWNED by the hand-written niri keybinds file
+# (config/niri/keybinds.kdl) and copied whole into ~/.config/niri/keybinds.kdl.
+# Pull that ships a newer hand-written keybind file must refresh the live
+# fragment too, or the machine keeps stale binds. Deterministic + idempotent:
+# bytes identical unless the shipped file changed. Runs on every pass (even
+# "up to date") so a stale fragment self-heals on the next press.
 sync_keybinds() {
   [[ -x "$REPO/bin/hexciri-session" ]] || return 0
-  local wm src dst
-  wm="$("$REPO/bin/hexciri-session" wm 2>/dev/null || echo niri)"
-  case "$wm" in
-    niri)     src="$REPO/config/niri/keybinds.kdl";          dst="$HOME/.config/niri/keybinds.kdl" ;;
-    hyprland) src="$REPO/config/hypr/conf/keybinds.lua";     dst="$HOME/.config/hypr/conf/keybinds.lua" ;;
-    sway)     src="$REPO/config/sway/conf.d/keybinds.conf";  dst="$HOME/.config/sway/conf.d/keybinds.conf" ;;
-    mango)    src="$REPO/config/mango/keybinds.conf";        dst="$HOME/.config/mango/keybinds.conf" ;;
-    *) return 0 ;;
-  esac
+  src="$REPO/config/niri/keybinds.kdl"
+  dst="$HOME/.config/niri/keybinds.kdl"
   [[ -f $src ]] || return 0
   mkdir -p "$(dirname "$dst")"
   if ! cmp -s "$src" "$dst"; then
     cp -f "$src" "$dst"
-    echo "synced keybinds for $wm ($dst)"
+    echo "synced niri keybinds ($dst)"
   fi
 }
 sync_keybinds
+
+# ── niri-only purge: hexciri no longer ships hyprland/sway/mango, so the
+# leftover per-WM config dirs from older builds are garbage. Config dirs the
+# user never chose to keep → remove on every sync so a box that once swapped
+# WMs heals silently. (~/.config/swaync stays — that's the notification daemon,
+# unrelated to the sway compositor.) System-side session files go in the root
+# hexciri-sync (they need sudo); packages are left installed on purpose.
+purge_other_wms() {
+  local wm cfg bin purged=false
+  for wm in hypr sway mango; do
+    cfg="$XDG_CONFIG_HOME/$wm"
+    [[ -e $cfg ]] || continue
+    case "$wm" in
+      hypr)  bin=Hyprland ;;
+      sway)  bin=sway ;;
+      mango) bin=mango ;;
+    esac
+    if pgrep -x "$bin" >/dev/null 2>&1; then
+      echo "warning: '$wm' is running right now — leaving $cfg in place"
+      continue
+    fi
+    rm -rf "$cfg"
+    echo "purged leftover '${wm}' config: $cfg"
+    purged=true
+  done
+  return 0
+}
+purge_other_wms
 
 if (( behind == 0 )); then
   echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"

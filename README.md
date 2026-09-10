@@ -10,10 +10,9 @@ Arch × Niri × Noctalia
 
 ## Highlights
 
-- **Your WM, your shell — never locked in** — ships on Niri + Noctalia,
-  but Hyprland, Sway and Mango are installed-and-configured options too,
-  with or without a desktop shell. Switch with one command or one menu pick:
-  your monitors, keybindings and theme follow you to the new one.
+- **Ships on Niri + Noctalia, out of the box** — the scrollable-tiling
+  Wayland compositor with the Noctalia desktop shell. No swapping, no lock-in
+  to learn around: monitors, keybindings and theme all follow one config.
 - **Themes that color everything** — one click (or `hexciri-theme-set <name>`)
   recolors the whole desktop, 30+ apps in all. 22 themes ship included; extras
   are one line each in a list.
@@ -25,8 +24,8 @@ Arch × Niri × Noctalia
   behind it, so your wallpaper shows through.
 - **Gaming, ready** — Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net,
   GeForce NOW, Xbox Cloud, controllers, GPU setup.
-- **A minimal Arch experience** — your system starts clean: Arch, your chosen
-  WM, and the Noctalia shell — nothing you didn't ask for; add the rest on
+- **A minimal Arch experience** — your system starts clean: Arch, Niri,
+  and the Noctalia shell — nothing you didn't ask for; add the rest on
   demand.
 - **It's Arch. Only calmer.** — same package manager, same knowledge:
   everything that runs on Arch runs here. But the default repo holds packages
@@ -41,30 +40,18 @@ Boot the Arch ISO, then run:
 curl -LO https://hexciri.dirty.pizza/hexciri && sh hexciri
 ```
 
-## Your WM, your shell
+## Niri + Noctalia
 
-Hexciri is not tied to one window manager. You pick the pair:
+Hexciri ships one combo, done right:
 
-| WM | shell |
+| compositor | shell |
 |---|---|
 | `niri` (default) | `noctalia` (default) |
-| `hyprland` | `none` (bare WM) |
-| `sway` | |
-| `mango` | |
 
-Switching is one menu pick (**System ▸ Session**) or one command:
-
-```bash
-hexciri-session-set wm=sway shell=noctalia
-```
-
-What happens: the new WM is installed, a login entry is created, and your
-monitors, environment, input settings, keybindings and theme are carried over
-into that WM's own config format. Your current session is untouched — log out,
-pick the new WM at the login screen, done. Switch back any time.
-
-Fresh installs pick with `install.sh --wm sway --shell none`; nothing is
-installed for a WM you never choose.
+No swap menus, no competing configs — niri's scrollable-tiling compositor with
+the Noctalia shell (bar, lock, OSD, notifications) spawning at login. Your
+monitors, keybindings and theme are all one config, and `hexciri-session combo`
+prints the active pair.
 
 ## Themes
 
@@ -101,8 +88,8 @@ theme changes.
 
 | slot | default | change it |
 |---|---|---|
-| WM | `niri` | `hexciri-session-set wm=…` (System ▸ Session) |
-| shell | `noctalia` | `hexciri-session-set shell=…` |
+| WM | `niri` | — (shipped) |
+| shell | `noctalia` | — (shipped) |
 | terminal | `kitty` | `hexciri-defaults` → Terminal |
 | shell | `bash` (login) · `fish` (kitty) | `hexciri-defaults` → Shell |
 | browser | `brave-origin` | `hexciri-defaults` → Browser |
@@ -111,7 +98,7 @@ theme changes.
 | agent | `opencode` (`Mod`+backtick) | `hexciri-defaults` → Agent |
 | kernel | auto: `linux` (stock) on fresh installs | `hexciri-kernel` (custom post-install) |
 | gpu | autodetect (mesa/vulkan per vendor; nvidia-open Turing+, 580xx legacy Maxwell/Pascal/Volta via AUR build) | `hexciri-gpu` |
-| monitors | preconfigured (scale 2) | in your WM's own config |
+| monitors | preconfigured (scale 2) | `~/.config/niri/monitors.kdl` |
 | bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |
 | channel | `stable` | `hexciri-channel-set` |
@@ -119,8 +106,8 @@ theme changes.
 | prompt/fetch | starship + fastfetch w/ emblem | `~/.config/starship.toml`, `~/.config/fastfetch/config.jsonc` |
 
 `Mod` is the Super key. Press **`Mod`+K** — or run `hexciri-keybinds` — for a
-searchable list of every keybind for whichever WM you're on. Keybindings are
-one and the same across WMs, so muscle memory survives a switch.
+searchable list of every keybind. Keybindings are one source of truth, rendered
+into niri's config, so they never drift.
 
 **Main ones:**
 
@@ -191,4 +178,4 @@ Repo**, or `hxup`'s system update pulls the repo as part of `pacman -Syu`).
 
 ## Sources
 
-[Omarchy](https://github.com/omacom/omarchy) × [Niri](https://github.com/YaLTeR/niri) × [Hyprland](https://github.com/hyprwm/Hyprland) × [Sway](https://github.com/swaywm/sway) × [MangoWM](https://github.com/mangowm/mango) × [dwl](https://github.com/djpohly/dwl) × [Noctalia](https://github.com/) × [Quickshell](https://github.com/outfoxxed/quickshell) × [theme-hook-plugin-manager](https://github.com/OldJobobo/theme-hook-plugin-manager) × [base16-Discord](https://github.com/imbypass/base16-discord) × [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7) × [system24](https://github.com/refact0r/system24) × [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme) × [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) × [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam)
+[Omarchy](https://github.com/omacom/omarchy) × [Niri](https://github.com/YaLTeR/niri) × [Noctalia](https://github.com/) × [Quickshell](https://github.com/outfoxxed/quickshell) × [theme-hook-plugin-manager](https://github.com/OldJobobo/theme-hook-plugin-manager) × [base16-Discord](https://github.com/imbypass/base16-discord) × [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7) × [system24](https://github.com/refact0r/system24) × [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme) × [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) × [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam)
