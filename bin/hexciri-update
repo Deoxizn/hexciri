@@ -56,16 +56,18 @@ update_sys() {
   avail_kb=$(df -k / --output=avail | tail -n 1)
   (( avail_kb > 2*1024*1024 )) || { echo "hexciri-update: <2G free on / — free space first"; exit 1; }
 
-  # ── password-locked login keyring is the #1 recurring "browser lost sync"
+  # ── password-locked default keyring is the #1 recurring "browser lost sync"
   # ── breaker: the gcr prompt UI that should ask for it crashes on this
   # ── desktop, so Brave/Chromium can't reach Sync/credentials and keep
-  # ── re-provisioning. `--unlock` cannot rebuild an empty one on this daemon
-  # ── version, so the reliable repair is PAM: at the next sign-in
-  # ── pam_gnome_keyring re-creates the login keyring with the account password
-  # ── and auto-unlocks it. When a session bus is present we therefore detect a
-  # ── LOCKED login collection, stop the user's daemons FIRST (a live daemon
-  # ── flushes its stale in-memory keyring back over a deleted file), back the
-  # ── file up, and remove it. One log-out applies the fix. Silent when healthy. ──
+  # ── re-provisioning. On a fingerprint-login machine pam_gnome_keyring
+  # ── never receives the account password, so PAM can neither create nor
+  # ── auto-unlock a login keyring — that path is a dead end on this
+  # ── hardware. The correct fix is an empty-password default keyring which
+  # ── gnome-keyring auto-opens at every boot with no prompt and no PAM.
+  # ── We detect a locked default collection here, report it clearly, and
+  # ── tell the user how to recreate via `secret-tool store` + the gcr
+  # ── dialog (leave password blank). We do NOT kill daemons (causes
+  # ── SIGSEGV when the prompt object races the service) or delete files. ──
   gkr_ensure() {
     command -v python3 >/dev/null 2>&1 || return 0
     [[ -n ${DBUS_SESSION_BUS_ADDRESS:-} ]] || return 0
@@ -87,30 +89,25 @@ try:
                 'org.freedesktop.DBus.Properties', 'Get',
                 GLib.Variant('(ss)', ('org.freedesktop.Secret.Service', 'Collections'))).unpack()[0]
     for path in cols:
-        if path.endswith('/collection/login'):
-            locked = call('org.freedesktop.secrets', path, 'org.freedesktop.DBus.Properties', 'Get',
-                          GLib.Variant('(ss)', ('org.freedesktop.Secret.Collection', 'Locked'))).unpack()[0]
-            sys.stdout.write('LOCKED' if locked else 'OK')
+        lbl = call('org.freedesktop.secrets', path, 'org.freedesktop.DBus.Properties', 'Get',
+                   GLib.Variant('(ss)', ('org.freedesktop.Secret.Collection', 'Label'))).unpack()[0]
+        if lbl == 'session':
+            continue
+        locked = call('org.freedesktop.secrets', path, 'org.freedesktop.DBus.Properties', 'Get',
+                      GLib.Variant('(ss)', ('org.freedesktop.Secret.Collection', 'Locked'))).unpack()[0]
+        if locked:
+            sys.stdout.write('LOCKED')
             break
 except Exception:
     pass
 PY
-)"
+  )"
     [[ $locked == LOCKED ]] || return 0
-    local keyring="$HOME/.local/share/keyrings/login.keyring"
-    [[ -f $keyring ]] || return 0
-    local ts bk
-    ts="$(date +%m%d-%H%M%S)"
-    bk="$HOME/.local/share/keyrings-backup-locked-$ts"
-    mkdir -p "$bk"
-    cp -f "$keyring" "$bk/" 2>/dev/null || true
-    for pid in $(ps -eo pid=,comm= | awk '$2 ~ /^gnome-keyring-d/ {print $1}'); do
-      kill "$pid" 2>/dev/null || true
-    done
-    sleep 1
-    rm -f "$keyring"
-    echo "keyring: login keyring was password-locked (browser prompts/breaks) — removed, backed up to $bk"
-    echo "keyring: pam_gnome_keyring will re-create it with your account password at the NEXT sign-in; log out/reboot once to apply"
+    echo "keyring: default keyring is password-locked — browser prompts/breaks every boot"
+    echo "keyring: fix in one step:"
+    echo "keyring:   secret-tool store --label=default fixcheck fixkey"
+    echo "keyring:   leave password BLANK in both fields, confirm"
+    echo "keyring:   an empty-password keyring auto-opens every boot — no prompts, no PAM"
   }
   gkr_ensure
 
