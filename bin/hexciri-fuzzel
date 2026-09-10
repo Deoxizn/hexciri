@@ -6,14 +6,15 @@
 # Modes (mirror the walker/elephant launcher features that matter):
 #   hexciri-fuzzel                 app launcher (default, unchanged)
 #   hexciri-fuzzel search          web search with the default provider (Mod+Shift+S)
-#   hexciri-fuzzel search NAME     web search with provider NAME (from the providers file)
+#   hexciri-fuzzel search NAME     web search with provider NAME (from the builtin table)
 #   hexciri-fuzzel calc            calculator via qalc; result copied to clipboard + notify
 #   hexciri-fuzzel run             execute a command ($PATH scan + free text), detached
+#   hexciri-fuzzel providers       print the builtin provider table (name<TAB>label<TAB>url)
 #   hexciri-fuzzel --dmenu ...     passthrough for dmenu consumers (hexciri-clipboard)
 #
-# Search providers: builtin table below; override/extend via
-#   ~/.config/hexciri/search-providers   lines:  name|Display Name|url-template  (%s = URL-encoded query)
-#   default provider: default=NAME  in that file, else HEXCIRI_SEARCH_PROVIDER, else "google".
+# Search providers: the builtin table below is the single source of truth.
+# Which one Mod+Shift+S uses: ~/.local/state/hexciri/search-provider (written
+# by hexciri-search-provider picker), else HEXCIRI_SEARCH_PROVIDER, else google.
 # Query percent-encoding is done with python3 (already a hexciri dependency).
 set -euo pipefail
 
@@ -69,8 +70,9 @@ FZ=( fuzzel \
     --border-width=2 )
 
 # ── search providers ──
-# Builtin fallbacks to survive a missing user file (hexciri ships
-# config/hexciri/search-providers and seeds it on install + update).
+# Builtin table only — the single source of truth for web searches. The picker
+# (hexciri-search-provider) reads it via the hidden `providers` subcommand and
+# writes the chosen default to a state file.
 declare -A PROVIDERS LABELS
 PROVIDERS[google]="https://google.com/search?udm=8&q=%s"; LABELS[google]="Google AI"
 PROVIDERS[googleclassic]="https://google.com/search?udm=14&q=%s"; LABELS[googleclassic]="Google (classic)"
@@ -83,28 +85,13 @@ PROVIDERS[archwiki]="https://wiki.archlinux.org/index.php?search=%s"; LABELS[arc
 PROVIDERS[youtube]="https://www.youtube.com/results?search_query=%s"; LABELS[youtube]="YouTube"
 PROVIDERS[aur]="https://aur.archlinux.org/packages?K=%s"; LABELS[aur]="AUR"
 PROVIDERS[man]="https://man.archlinux.org/search?q=%s"; LABELS[man]="Arch Man Pages"
-DEFAULT_PROVIDER="google"
 
-# User file (config/hexciri/search-providers): lines are either
-#   default=name
-#   name|Display Name|url-template        (%s = URL-encoded query)
-#   name=url-template                     (legacy, no label)
-# Comments (#) and blanks ignored. The file is the single source of truth
-# once it exists; builtins above only serve a box that never got it seeded.
-SP_FILE="$HOME/.config/hexciri/search-providers"
-if [[ -f $SP_FILE ]]; then
-    while IFS= read -r line; do
-        line="$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-        [[ -n $line && $line != "#"* ]] || continue
-        case "$line" in
-            default=*) DEFAULT_PROVIDER="${line#default=}" ;;
-            *\|*)
-                name="${line%%|*}"; rest="${line#*|}"
-                label="${rest%%|*}"; url="${rest#*|}"
-                PROVIDERS["$name"]="$url"; LABELS["$name"]="$label" ;;
-            *=*) name="${line%%=*}"; PROVIDERS["$name"]="${line#*=}" ;;
-        esac
-    done < "$SP_FILE"
+# default provider: state file (written by the picker), else env, else google
+DEFAULT_PROVIDER="google"
+SP_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/hexciri/search-provider"
+if [[ -f $SP_STATE ]]; then
+    read -r DEFAULT_PROVIDER < "$SP_STATE" || true
+    [[ -n $DEFAULT_PROVIDER ]] || DEFAULT_PROVIDER="google"
 fi
 DEFAULT_PROVIDER="${HEXCIRI_SEARCH_PROVIDER:-$DEFAULT_PROVIDER}"
 
@@ -136,10 +123,19 @@ mode_run() {
     setsid bash -c "exec $cmd" >/dev/null 2>&1 & disown
 }
 
+mode_providers() {
+    # name<TAB>label<TAB>url — machine-readable table for hexciri-search-provider
+    local n
+    for n in "${!PROVIDERS[@]}"; do
+        printf '%s\t%s\t%s\n' "$n" "${LABELS[$n]:-$n}" "${PROVIDERS[$n]}"
+    done | LC_ALL=C sort
+}
+
 # ── dispatch ──
 case "${1:-}" in
     search) mode_search "${2:-}" ;;
     calc)   mode_calc ;;
     run)    mode_run ;;
+    providers) mode_providers ;;
     *)      exec "${FZ[@]}" "$@" ;;   # app launcher / --dmenu passthrough
 esac

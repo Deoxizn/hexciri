@@ -490,11 +490,6 @@ ok "commands linked"
 mkdir -p ~/.config/hexciri/branding
 run cp -f "$REPO_DIR/branding/"*.png ~/.config/hexciri/branding/
 
-# ── hexciri search providers (search engine + default for fuzzel search).
-#    Sha-tracked like the WM fragments: untouched files get repo updates,
-#    user-edited files are kept (repo default written alongside). ──
-deploy config/hexciri/search-providers "$HOME/.config/hexciri/search-providers"
-
 # ── WM config: niri's split tree (~/.config/niri/<topic>.kdl, all imported by
 # config.kdl), each fragment deploying independently with the sha-tracked "keep
 # user edits" logic.

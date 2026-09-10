@@ -118,21 +118,7 @@ if [[ -n $noct_owner && -n $noct_home && -n $REPO && -x $REPO/bin/hexciri-gkr-in
   runuser -u "$noct_owner" -- env HOME="$noct_home" "$REPO/bin/hexciri-gkr-init.sh" 2>/dev/null || true
 fi
 
-# ── 3a4. search providers: seed the fuzzel search-provider config if the
-# ── repo owner's box never got one (fresh installs deploy it; older boxes
-# ── predating the feature get it here). Never clobbers an existing file. ──
-if [[ -n $REPO && -f $REPO/config/hexciri/search-providers && -n $noct_owner && -n $noct_home ]]; then
-  sp="$noct_home/.config/hexciri/search-providers"
-  if [[ ! -f $sp ]]; then
-    mkdir -p "$noct_home/.config/hexciri"
-    nog="$(stat -c %G "$noct_home" 2>/dev/null || echo users)"
-    install -o "$noct_owner" -g "$nog" -m 644 \
-      "$REPO/config/hexciri/search-providers" "$sp" 2>/dev/null && \
-      log "seeded search providers (repo default was missing on this box)"
-  fi
-fi
-
-# ── 3a5. ~/.local/bin link sweep: every hexciri-* command in the repo gets a
+# ── 3a4. ~/.local/bin link sweep: every hexciri-* command in the repo gets a
 # ── symlink in the owner's ~/.local/bin (same as install.sh's linking step).
 # ── Idempotent; ensures new/renamed commands on already-installed boxes. ──
 if [[ -n $REPO && -d $REPO/bin && -n $noct_owner && -n $noct_home ]]; then
@@ -146,7 +132,7 @@ if [[ -n $REPO && -d $REPO/bin && -n $noct_owner && -n $noct_home ]]; then
   log "~/.local/bin link sweep done"
 fi
 
-# ── 3a6. kitty: harden allow_remote_control ('yes' → 'socket-only'). 'yes'
+# ── 3a5. kitty: harden allow_remote_control ('yes' → 'socket-only'). 'yes'
 # ── exposes the control socket to any process with display access; the repo
 # ── default changed in 1454112, but a box installed before it keeps 'yes'.
 # ── Idempotent; a hardened file is left alone; user edits otherwise survive. ──

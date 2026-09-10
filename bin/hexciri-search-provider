@@ -1,81 +1,52 @@
 #!/bin/bash
 # hexciri:menu=config-search
 # hexciri:summary=Choose the default web search provider for hexciri-fuzzel search
-# Usage: hexciri-search-provider            pick from the configured providers
+# Usage: hexciri-search-provider            pick from the builtin providers
 #        hexciri-search-provider NAME       set the default directly
-# Reads ~/.config/hexciri/search-providers (parser mirrors bin/hexciri-fuzzel),
-# edits only its `default=` line, keeps everything else untouched.
+#
+# Providers are a rolling hardcoded table inside bin/hexciri-fuzzel (read here
+# via its hidden `providers` subcommand). The chosen default is persisted to
+# ~/.local/state/hexciri/search-provider; no user-editable config file exists.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd || dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 bindir="${HEXCIRI_BIN_DIR:-$SCRIPT_DIR}"
-sp_file="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/search-providers"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/hexciri/search-provider"
 
-# Seed from the shipped default if the user file is missing (first ever run).
-if [[ ! -f $sp_file ]]; then
-  repo_default="${HEXCIRI_PATH}/config/hexciri/search-providers"
-  candidate=()
-  [[ -f $repo_default ]] && candidate=("$repo_default")
-  [[ ${#candidate[@]} == 0 && -f $(dirname "$SCRIPT_DIR")/config/hexciri/search-providers ]] && \
-    candidate=("$(dirname "$SCRIPT_DIR")/config/hexciri/search-providers")
-  if [[ ${#candidate[@]} == 1 ]]; then
-    mkdir -p "$(dirname "$sp_file")"
-    cp -f "${candidate[0]}" "$sp_file"
-    echo "hexciri-search-provider: seeded default providers from the repo"
-  fi
+default="$(cat "$STATE" 2>/dev/null || true)"
+[[ -n $default ]] || default="google"
+
+# one pass over `hexciri-fuzzel providers` → parallel name/label arrays
+names=(); labels=()
+while IFS=$'\t' read -r name label _url; do
+  [[ -n $name ]] || continue
+  names+=("$name"); labels+=("$label")
+done < <("$bindir/hexciri-fuzzel" providers 2>/dev/null || true)
+
+(( ${#names[@]} > 0 )) || { echo "hexciri-search-provider: hexciri-fuzzel listed no providers" >&2; exit 1; }
+
+idx_of() { # NAME → index in names[] or empty
+  local n i
+  for i in "${!names[@]}"; do [[ ${names[$i]} == "$1" ]] && { printf '%s' "$i"; return; }; done
+  return 1
+}
+
+pick="${1:-}"
+if [[ -z $pick ]]; then
+  rows=()
+  for i in "${!names[@]}"; do
+    star=" "; [[ ${names[$i]} == "$default" ]] && star="*"
+    rows+=("${names[$i]}|$star ${labels[$i]}")
+  done
+  pick=$(printf '%s\n' "${rows[@]}" | LC_ALL=C sort -t'|' -k2 |
+    "$bindir/hexciri-fuzzel" --dmenu --prompt='Search provider: ' \
+      --width=50 --lines=12 --nth-delimiter='|' --with-nth=2 --accept-nth=1 2>/dev/null) || exit 0
 fi
 
-declare -A PROVIDERS LABELS OWN
-DEFAULT_PROVIDER=""
-if [[ -f $sp_file ]]; then
-    while IFS= read -r line; do
-        line="$(printf '%s' "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-        [[ -n $line && $line != "#"* ]] || continue
-        case "$line" in
-            default=*) DEFAULT_PROVIDER="${line#default=}" ;;
-            *\|*)
-                own="${line%%|*}"; rest="${line#*|}"
-                label="${rest%%|*}"; url="${rest#*|}"
-                PROVIDERS["$own"]="$url"; LABELS["$own"]="$label"; OWN["$own"]="$line" ;;
-            *=*)
-                own="${line%%=*}"
-                PROVIDERS["$own"]="${line#*=}"; LABELS["$own"]="$own"; OWN["$own"]="$line" ;;
-        esac
-    done < "$sp_file"
-fi
-[[ -n $DEFAULT_PROVIDER ]] || DEFAULT_PROVIDER="google"
+[[ -n $pick ]] || exit 0
+i="$(idx_of "$pick")" || { echo "hexciri-search-provider: unknown provider '$pick'" >&2; exit 1; }
 
-pick_set=""
-if [[ $# -gt 0 ]]; then
-  pick_set="$1"
-elif [[ ${#PROVIDERS[@]} -gt 0 ]]; then
-  # rows: name|* Label   → display column 2 (star + label), accept column 1 (name)
-  choice=$(
-    for n in "${!PROVIDERS[@]}"; do
-      star=" "; [[ $n == "$DEFAULT_PROVIDER" ]] && star="*"
-      printf '%s|%s %s\n' "$n" "$star" "${LABELS[$n]:-$n}"
-    done | LC_ALL=C sort -t'|' -k2 |
-      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Search provider: ' \
-        --width=50 --lines=12 --nth-delimiter='|' --with-nth=2 --accept-nth=1
-  ) || exit 0
-  pick_set="$choice"
-fi
+mkdir -p "$(dirname "$STATE")"
+printf '%s' "$pick" > "$STATE"
 
-[[ -n $pick_set ]] || exit 0
-if [[ -z ${PROVIDERS[$pick_set]:-} ]]; then
-  echo "hexciri-search-provider: unknown provider '$pick_set'" >&2
-  exit 1
-fi
-
-if [[ -f $sp_file ]]; then
-  awk -v want="$pick_set" '
-    /^default=/ { printf "default=%s\n", want; seen=1; next }
-    { print }
-    END { if (!seen) printf "default=%s\n", want }
-  ' "$sp_file" > "$sp_file.tmp" && mv "$sp_file.tmp" "$sp_file"
-else
-  mkdir -p "$(dirname "$sp_file")"
-  printf 'default=%s\n' "$pick_set" > "$sp_file"
-fi
-
-notify-send "Search provider" "Default web search is now ${LABELS[$pick_set]:-$pick_set} (Mod+Shift+S)" 2>/dev/null || true
+notify-send "Search provider" "Default web search is now ${labels[$i]} (Mod+Shift+S)" 2>/dev/null || true

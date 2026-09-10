@@ -19,7 +19,6 @@ rows=(
   'Niri >'
   'Noctalia config'
   'Search provider'
-  'Search providers file'
   'Fastfetch config'
   'Hexciri lockscreen'
   'Hooks'
@@ -31,7 +30,7 @@ if [[ $# -gt 0 ]]; then
 else
   choice=$(
     printf '%s\n' "${rows[@]}" |
-      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=28 --lines=7
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=28 --lines=6
   ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
@@ -40,7 +39,6 @@ case "$choice" in
   'Niri '*)                  exec "$bindir/hexciri-config-niri" "${choice#Niri }" ;;
   'Noctalia config')  "$bindir/hexciri-edit-file" "$cfg_xdg/noctalia/config.toml" ;;
   'Search provider')  exec "$bindir/hexciri-search-provider" ;;
-  'Search providers file')  "$bindir/hexciri-edit-file" "$cfg_xdg/hexciri/search-providers" ;;
   'Fastfetch config') "$bindir/hexciri-edit-file" "$cfg_xdg/fastfetch/config.jsonc" ;;
   'Hexciri lockscreen')
     dir="$cfg_xdg/hexciri"
