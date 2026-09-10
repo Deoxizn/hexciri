@@ -24,7 +24,6 @@ CHECK=0
 [[ ${1:-} == "--check" ]] && CHECK=1
 
 if [[ -f $KEYRING ]]; then
-  echo "hexciri-gkr-init: login keyring present ($KEYRING) — left untouched"
   exit 0
 fi
 

@@ -44,6 +44,7 @@ fi
 [[ -d $REPO ]] || REPO=""
 export HEXCIRI_REPO="$REPO"
 if [[ -d $REPO/.git ]]; then
+  head_before="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
   if [[ $EUID -eq 0 ]]; then
     owner="$(stat -c %U "$REPO" 2>/dev/null || echo root)"
     if command -v runuser >/dev/null && [[ $owner != root ]]; then
@@ -62,14 +63,17 @@ if [[ -d $REPO/.git ]]; then
 
   # ── 2b. one-shot self-heal: this process ran the PRE-pull bytes of this script
   # ── (the pull could not also be its own upgrade). Re-exec from the JUST-pulled
-  # ── checkout so every step below — hook re-apply, plugin update_cmd migration,
-  # ── and anything future fixes add here — runs the NEWEST code within THIS same
-  # ── transaction, not the next one. HXC_SYNC_RERUN guards the single re-exec;
-  # ── the second pass pulls again (fast-forward, no-op) and proceeds. ──
-  if [[ ${HXC_SYNC_RERUN:-0} == 0 ]]; then
-    export HXC_SYNC_RERUN=1
-    if [[ -x $REPO/bin/hexciri-sync ]]; then
-      log "re-execing with pulled framework (latest fixes take effect now)"
+  # ── checkout ONLY when the pull actually advanced HEAD, so every step below —
+  # ── hook re-apply, plugin update_cmd migration, and anything future fixes add
+  # ── here — runs the NEWEST code within THIS same transaction, not the next one.
+  # ── An unchanged HEAD (repo already current) just proceeds with the copy that
+  # ── is running; nothing to re-exec. HXC_SYNC_RERUN guards the descending pass
+  # ── (its pull is a fast-forward no-op, so it matches and moves on). ──
+  if [[ ${HXC_SYNC_RERUN:-0} == 0 ]] && [[ -x $REPO/bin/hexciri-sync ]]; then
+    head_after="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
+    if [[ -n $head_before && -n $head_after && $head_before != $head_after ]]; then
+      export HXC_SYNC_RERUN=1
+      log "re-execing with pulled framework (new commits applied)"
       exec "$REPO/bin/hexciri-sync" "$@"
     fi
   fi
@@ -111,8 +115,7 @@ fi
 # ── where none exists yet — non-destructive, and with no keyring there is no
 # ── daemon holding secrets, so it is safe from the alpm-hook (root) context. ──
 if [[ -n $noct_owner && -n $noct_home && -n $REPO && -x $REPO/bin/hexciri-gkr-init.sh ]]; then
-  runuser -u "$noct_owner" -- env HOME="$noct_home" "$REPO/bin/hexciri-gkr-init.sh" 2>/dev/null && \
-    echo "hexciri-gkr-init: ok" | sed 's/^/hexciri-sync: /'
+  runuser -u "$noct_owner" -- env HOME="$noct_home" "$REPO/bin/hexciri-gkr-init.sh" 2>/dev/null || true
 fi
 
 # ── 3a4. kitty: harden allow_remote_control ('yes' → 'socket-only'). 'yes'
