@@ -1,0 +1,435 @@
+#!/bin/bash
+# hexciri:hw=hardware
+# hexciri:summary=Hardware controller: input gates, toggles, hybrid-GPU switch, speed tests, OEM Windows key
+# hexciri:subcommands=menu fingerprint hybrid-gpu toggle-input toggle-hybrid-gpu disk-speedtest windows-key help
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+# ══════════════════════════════════════════ state gates
+fingerprint() {
+  # Return true when a fingerprint reader is present. Detects straight from
+  # sysfs so this works before fprintd/usbutils are installed. USB vendor IDs
+  # listed here ship fingerprint readers; multi-purpose vendors (e.g. Elan/ST,
+  # which also make USB touchscreens) are left out to avoid nagging laptops
+  # with no reader — those still match on product string when present.
+  local fingerprint_vendors=" 27c6 138a 06cb 08ff 1c7a 147e "
+  local usb_devices_path="${HEXCIRI_USB_DEVICES_PATH:-/sys/bus/usb/devices}"
+  local dev product vendor intf driver
+
+  has_kernel_driver() {
+    for intf in "$1"/*:*; do
+      [[ -e $intf/driver ]] || continue
+      driver=$(readlink -f "$intf/driver")
+      [[ ${driver##*/} == "usbfs" ]] || return 0
+    done
+    return 1
+  }
+
+  for dev in "$usb_devices_path"/*; do
+    if [[ -r $dev/product ]]; then
+      product=$(<"$dev/product")
+      product=${product,,}
+      [[ $product == *fingerprint* || $product == *biometric* || $product == *elan:arm-m4* || $product == "fpc "* ]] && return 0
+    fi
+    if [[ -r $dev/idVendor ]]; then
+      vendor=$(<"$dev/idVendor")
+      [[ $fingerprint_vendors == *" $vendor "* ]] &&
+        ! has_kernel_driver "$dev" && return 0
+    fi
+  done
+  return 1
+}
+
+hybrid_gpu() {
+  # Return true when an active hybrid GPU configuration exists. supergfxctl
+  # is authoritative; a wedged daemon must not hide hardware, so fall back to
+  # counting GPUs when it cannot answer.
+  local modes status
+
+  multiple_gpus() {
+    (($(lspci 2>/dev/null | grep -cE 'VGA|3D|Display') >= 2))
+  }
+
+  if command -v supergfxctl >/dev/null 2>&1; then
+    modes=$(timeout --kill-after=1s 1s supergfxctl -s 2>/dev/null)
+    status=$?
+    if ((status == 124 || status == 137)); then
+      multiple_gpus
+    else
+      grep -qw Hybrid <<<"$modes"
+    fi
+  else
+    multiple_gpus
+  fi
+}
+
+touchpad_device() {
+  # Print detected touchpad/trackpad device name without libinput/hyprctl.
+  grep -i -B4 -A3 'touchpad\|trackpad' /proc/bus/input/devices 2>/dev/null |
+    grep -m1 'Name=' | sed 's/^Name=//'
+}
+
+touchscreen_device() {
+  # Print detected touchscreen/tablet device name without libinput/hyprctl.
+  grep -i -B4 -A3 'touchscreen\|tablet' /proc/bus/input/devices 2>/dev/null |
+    grep -m1 'Name=' | sed 's/^Name=//'
+}
+
+# ══════════════════════════════════════════ toggles
+toggle_input() {
+  # Enable, disable, or toggle a Niri input device via config + reload.
+  # <touchpad|touchscreen> [on|off|toggle]
+  local kind="${1:-}" action="${2:-toggle}"
+  local label config state_file
+
+  usage() {
+    echo "Usage: hexciri-hw toggle-input <touchpad|touchscreen> [on|off|toggle]" >&2
+  }
+
+  case "$kind" in
+    touchpad) label="Touchpad" ;;
+    touchscreen) label="Touchscreen" ;;
+    *) usage; return 1 ;;
+  esac
+
+  config="${HOME}/.config/niri/config.kdl"
+  [[ -f $config ]] || { echo "no niri config at $config" >&2; return 1; }
+  state_file="$HOME/.local/state/hexciri/toggles/$kind-disabled"
+
+  flip() { # <config> <block> <on|off>
+    python3 - "$config" "$kind" "$1" <<'EOF'
+import re, sys
+path, block, on = sys.argv[1], sys.argv[2], sys.argv[3] == "on"
+label = block.capitalize()
+marker_key = "off"
+marker_re = re.compile(r"^\s*" + marker_key + r"\s+//\s+" + re.escape(label) + r" disabled \(toggle via menu\)$", re.M)
+src = open(path).read()
+m = re.search(r"input\s*\{", src, re.S)
+if not m:
+    sys.exit(0)
+head, tail = src[:m.end()], src[m.end():]
+depth = 1
+end = i = 0
+while i < len(tail):
+    c = tail[i]
+    if c == "{":
+        depth += 1
+    elif c == "}":
+        depth -= 1
+        if depth == 0:
+            end = i
+            break
+    i += 1
+body, rest = tail[:end], tail[end:]
+bm = re.search(rf"{block}\s*\{{(.*?)\n(\s*)\}}", body, re.S)
+if bm:
+    inner, close_indent = bm.group(1), bm.group(2)
+    if on:
+        inner = marker_re.sub("", inner)
+        if inner.strip() == "":
+            body = body[:bm.start()].rstrip(" \t\n") + "\n" + body[bm.end():].lstrip("\n")
+        else:
+            inner = re.sub(r"[ \t]+$", "", inner, flags=re.M).rstrip("\n")
+            body = body[:bm.start()] + block + " {" + inner + "\n" + close_indent + "}" + body[bm.end():]
+    elif not marker_re.search(inner):
+        inner = inner.rstrip("\n") + "\n" + "        " + marker_key + "                                    // " + label + " disabled (toggle via menu)"
+        body = body[:bm.start()] + block + " {" + inner + "\n" + close_indent + "}" + body[bm.end():]
+elif not on:
+    marker = "        " + marker_key + "                                    // " + label + " disabled (toggle via menu)"
+    body = body.rstrip("\n") + "\n    " + block + " {\n" + marker + "\n    }\n"
+open(path, "w").write(head + body + rest)
+EOF
+  }
+
+  device_off() { [[ -f $state_file ]] || grep -q "// $kind disabled (toggle via menu).*" "$config" 2>/dev/null; }
+
+  enable() {
+    flip on
+    rm -f "$state_file"
+    "$SCRIPT_DIR/hexciri-compositor" load-config >/dev/null 2>&1 || true
+    notify-send -a hexciri "$label enabled" 2>/dev/null || true
+  }
+
+  disable() {
+    flip off
+    mkdir -p "$(dirname "$state_file")"
+    touch "$state_file"
+    "$SCRIPT_DIR/hexciri-compositor" load-config >/dev/null 2>&1 || true
+    notify-send -a hexciri "$label disabled" 2>/dev/null || true
+  }
+
+  case "$action" in
+    on) enable ;;
+    off) disable ;;
+    toggle) if device_off; then enable; else disable; fi ;;
+    *) usage; return 1 ;;
+  esac
+}
+
+toggle_hybrid_gpu() {
+  # Toggle dedicated vs integrated GPU mode via supergfxd. Requires sudo.
+  if ! command -v supergfxctl >/dev/null 2>&1; then
+    echo "Installing supergfxctl..."
+    sudo pacman -S --noconfirm supergfxctl || { echo "supergfxctl is not in the configured repos" >&2; return 1; }
+
+    sudo tee /etc/supergfxd.conf >/dev/null <<'CONF'
+{
+  "mode": "Hybrid",
+  "vfio_enable": true,
+  "vfio_save": false,
+  "always_reboot": false,
+  "no_logind": false,
+  "logout_timeout_s": 180,
+  "hotplug_type": "None"
+}
+CONF
+
+    sudo systemctl enable --now supergfxd
+  fi
+
+  local gpu_mode="" attempt
+  for attempt in {1..3}; do
+    if gpu_mode=$(timeout --kill-after=1s 3s supergfxctl -g 2>/dev/null) && [[ -n $gpu_mode ]]; then
+      break
+    fi
+    gpu_mode=""
+    ((attempt < 3)) && sleep 1
+  done
+
+  if [[ -z $gpu_mode ]]; then
+    echo "supergfxd is not responding. Check: systemctl status supergfxd" >&2
+    return 1
+  fi
+
+  confirm() { read -rp "$1 [y/N] " r; [[ $r =~ ^[Yy]$ ]]; }
+
+  case "$gpu_mode" in
+    "Integrated")
+      if confirm "Enable dedicated GPU and reboot?"; then
+        sudo sed -i "s/\"mode\": \".*\"/\"mode\": \"Hybrid\"/" /etc/supergfxd.conf
+        sudo rm -rf /usr/lib/systemd/system-sleep/force-igpu
+        sudo rm -rf /etc/systemd/system/supergfxd.service.d/delay-start.conf
+        systemctl reboot
+      fi
+      ;;
+    "Hybrid")
+      if confirm "Use only integrated GPU and reboot?"; then
+        sudo sed -i "s/\"mode\": \".*\"/\"mode\": \"Integrated\"/" /etc/supergfxd.conf
+        sudo sed -i 's/"vfio_enable": false/"vfio_enable": true/' /etc/supergfxd.conf
+        sudo mkdir -p /usr/lib/systemd/system-sleep
+        sudo mkdir -p /etc/systemd/system/supergfxd.service.d
+        sudo tee /usr/lib/systemd/system-sleep/force-igpu >/dev/null <<'SH'
+#!/bin/sh
+# force integrated GPU after system sleep (dgpu could otherwise activate)
+case "$1" in
+post) echo IG >> /proc/acpi/call || true ;;
+esac
+SH
+        sudo chmod +x /usr/lib/systemd/system-sleep/force-igpu
+        sudo tee /etc/systemd/system/supergfxd.service.d/delay-start.conf >/dev/null <<'CNF'
+[Service]
+ExecStartPre=/bin/sleep 10
+CNF
+        systemctl reboot
+      fi
+      ;;
+    *)
+      echo "Hybrid GPU not found or in unknown mode." >&2
+      return 1
+      ;;
+  esac
+}
+
+# ══════════════════════════════════════════ speed / info
+disk_speedtest() {
+  # Measure live disk read and write speed (dd-based). args=[target-dir]
+  local target_dir="${1:-${XDG_CACHE_HOME:-$HOME/.cache}/hexciri}"
+  mkdir -p "$target_dir"
+
+  local size_mb=256 block_mb=4
+  local file="$target_dir/hexciri-disk-speedtest.tmp"
+  local src=/dev/shm/hexciri-speedtest-src
+
+  cleanup() {
+    rm -f "$file" "$src" 2>/dev/null || true
+  }
+  trap cleanup EXIT
+
+  if [[ ! -w $target_dir ]]; then
+    echo "Cannot write to $target_dir" >&2
+    return 1
+  fi
+
+  dd_rate() { # <args...> — dd to a device sink, print the resulting MB/s
+    dd "$@" 2>&1 >/dev/null |
+      grep -oE '[0-9]+(\.[0-9]+)? (MB|MiB)/s' |
+      tail -n1 | awk '{print $1}'
+  }
+
+  echo "writing $size_mb MiB to $target_dir ..."
+  dd if=/dev/urandom of="$src" bs=${block_mb}M count=$((size_mb / block_mb)) status=none
+
+  local write_rate read_rate
+  write_rate=$(dd_rate if="$src" of="$file" bs=${block_mb}M oflag=direct conv=notrunc)
+  echo "write: ${write_rate:-?} MiB/s"
+
+  echo "dropping caches (needs sudo) ..."
+  sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null || echo "  (skipped — cached read will overstate)"
+
+  read_rate=$(dd_rate if="$file" of=/dev/null bs=${block_mb}M iflag=direct)
+  echo "read: ${read_rate:-?} MiB/s"
+}
+
+windows_key() {
+  # Print the OEM Windows product key from firmware (MSDM ACPI/OA3 EFI, older-BIOS fallback sweep).
+  local key="" path reader
+  local -a sources=()
+
+  extract_key() {
+    grep -aoEm1 '[A-Z0-9]{5}(-[A-Z0-9]{5}){4}'
+  }
+
+  scan_file() { # <path> — strings first, cat fallback; sudo for root-only files
+    local path="$1" reader=strings
+    command -v strings >/dev/null 2>&1 || reader=cat
+    if [[ -r $path ]]; then
+      "$reader" "$path" 2>/dev/null | extract_key
+    else
+      sudo "$reader" "$path" 2>/dev/null | extract_key
+    fi
+  }
+
+  sources=("${HEXCIRI_MSDM_PATH:-/sys/firmware/acpi/tables/MSDM}")
+  if compgen -G '/sys/firmware/efi/efivars/OA3MSDMvariable-*' >/dev/null 2>&1; then
+    for path in /sys/firmware/efi/efivars/OA3MSDMvariable-*; do
+      [[ -e $path ]] && sources+=("$path")
+    done
+  fi
+  sources+=("/sys/class/dmi/id/oem_strings")
+
+  sweep_acpi_tables() {
+    local cmd
+    if command -v strings >/dev/null 2>&1; then
+      cmd='for f in /sys/firmware/acpi/tables/*; do [ -f "$f" ] && cat "$f" 2>/dev/null; done | strings'
+    else
+      cmd='for f in /sys/firmware/acpi/tables/*; do [ -f "$f" ] && cat "$f" 2>/dev/null; done'
+    fi
+    sudo bash -c "$cmd" 2>/dev/null | extract_key
+  }
+
+  key=""
+  for path in "${sources[@]}"; do
+    [[ -e $path && -f $path ]] || continue
+    key="$(scan_file "$path" || true)"
+    [[ -n $key ]] && break
+  done
+
+  if [[ -z $key ]] && compgen -G '/sys/firmware/acpi/tables/*' >/dev/null 2>&1; then
+    key="$(sweep_acpi_tables || true)"
+  fi
+
+  if [[ -z $key ]]; then
+    echo "No Windows license key found in firmware (checked MSDM/OA3/SMBIOS + all ACPI tables)." >&2
+    return 1
+  fi
+
+  printf '%s\n' "$key"
+}
+
+# ══════════════════════════════════════════ menus
+hw_menu() {
+  local menu="" choice cmd args=()
+
+  if (($# > 0)); then
+    # Direct dispatch (menu search passes the chosen label as $*)
+    choice="$*"
+  else
+    menu=""
+    declare -A cmd_for=()
+
+    add() {
+      local label=$1 cond=$2
+      shift 2
+      [[ -n $cond ]] && ! "$cond" >/dev/null 2>&1 && return 0
+      cmd_for[$label]="$*"
+      menu+="$label"$'\n'
+    }
+
+    add 'Touchpad'        touchpad_device     "$SCRIPT_DIR/hexciri-hw" toggle-input touchpad toggle
+    add 'Touchscreen'     touchscreen_device  "$SCRIPT_DIR/hexciri-hw" toggle-input touchscreen toggle
+    add 'Hybrid GPU'      hybrid_gpu          "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hw" toggle-hybrid-gpu
+    add 'Network download' ""                 "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com'
+    add 'Network upload'  ""                  "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com'
+    add 'Disk speed test' ""                  xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-hw" disk-speedtest
+
+    [[ -n $menu ]] || return 0
+
+    choice=$(
+      printf '%s' "$menu" |
+        "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Hardware: ' --width=26 --lines=${#cmd_for[@]}
+    ) || exec "$SCRIPT_DIR/hexciri-menu"
+  fi
+
+  case "$choice" in
+    "Disk"|"Disk speed test")
+       exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-hw" disk-speedtest ;;
+    "Network download"|"Network upload")
+       exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com' ;;
+    "Hybrid GPU")
+       exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hw" toggle-hybrid-gpu ;;
+    "Touchpad")      exec "$SCRIPT_DIR/hexciri-hw" toggle-input touchpad toggle ;;
+    "Touchscreen")   exec "$SCRIPT_DIR/hexciri-hw" toggle-input touchscreen toggle ;;
+  esac
+
+  cmd=${cmd_for[$choice]:-}
+  [[ -n $cmd ]] && eval exec "$cmd"
+}
+
+# ══════════════════════════════════════════ dispatch
+sub="${1:-}"
+known_sub() {
+  case "$1" in
+    menu|fingerprint|hybrid-gpu|touchpad|touchscreen|toggle-input|toggle-hybrid-gpu|disk-speedtest|windows-key|default|help) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+case "$(basename "$0")" in
+  hexciri-hw)            : ;;  # controller invoked as itself — sub from $1
+  hexciri-hardware)      sub=menu ;;
+  hexciri-trigger)       sub=menu ;;
+  hexciri-speedtest)     sub=menu ;;
+  hexciri-hw-fingerprint)   sub=fingerprint ;;
+  hexciri-hw-hybrid-gpu)    sub=hybrid-gpu ;;
+  hexciri-hw-touchpad)      sub=touchpad ;;
+  hexciri-hw-touchscreen)   sub=touchscreen ;;
+  hexciri-toggle-input-device) sub=toggle-input ;;
+  hexciri-toggle-hybrid-gpu)   sub=toggle-hybrid-gpu ;;
+  hexciri-disk-speedtest)     sub=disk-speedtest ;;
+  hexciri-windows-key)        sub=windows-key ;;
+  *)                      : ;;
+esac
+
+if [[ $(basename "$0") == hexciri-hw ]]; then
+  if [[ -n $sub ]] && known_sub "$sub"; then
+    shift 2>/dev/null || true
+  fi
+fi
+
+case "$sub" in
+  menu)            hw_menu "$@" ;;
+  fingerprint)     fingerprint; exit $? ;;
+  hybrid-gpu)      hybrid_gpu; exit $? ;;
+  touchpad)        touchpad_device; exit $? ;;
+  touchscreen)     touchscreen_device; exit $? ;;
+  toggle-input)    toggle_input "$@" ;;
+  toggle-hybrid-gpu) toggle_hybrid_gpu ;;
+  disk-speedtest)  disk_speedtest "$@" ;;
+  windows-key)     windows_key; exit $? ;;
+  help|"")         echo "usage: hexciri-hw <menu|fingerprint|hybrid-gpu|touchpad|touchscreen|toggle-input|toggle-hybrid-gpu|disk-speedtest|windows-key|help>"; exit 0 ;;
+  *)               echo "unknown hw subcommand: $sub" >&2; exit 1 ;;
+esac
