@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-09-08+ — hexciri v1.5 (omarchy-edge kernels + AUR 580xx)
+## 2026-09-08+ — hexciri v1.4 (omarchy-edge kernels + AUR 580xx)
 
 - **Kernels come from the omarchy edge repo on bleeding** — `pacman-bleeding.conf` ships `[omarchy]` → `https://pkgs.omarchy.org/edge/$arch` (omarchy-keyring bootstrapped on install when the deployed conf carries the repo). `System ▸ Kernel` offers Stock, LTS, `linux-omarchy` (EEVDF) and `linux-omarchy-bore` (BORE); `hexciri-scheduler` recommends BORE for NVIDIA/X3D else EEVDF. Because they are ordinary repo packages they update with plain `pacman -Syu` — no fetch loop, no AUR rebuild. Stable stays stock/lts only (vetted repo); omarchy kernels are a bleeding extra.
 - **Legacy 580xx installed from the AUR** — the driver went EOL in official Arch repos when the 590 release dropped below Turing (the line now lives on AUR), so `hexciri-gpu`'s legacy branch builds the `nvidia-580xx` split (`nvidia-580xx-utils` → `-dkms` → `lib32-utils` → opencl → lib32-opencl) in dependency order as a regular user: temporary passwordless-pacman sudoers rule, import of the signing keys (`E18447AC…`, `E8B9AA39…`), `makepkg -si` per package, `--skippgpcheck` fallback if the keyserver is unreachable, rule removed after. Updates ride the existing `yay -Sua` pass, so `hexciri-update` has no separate driver-refresh loop.

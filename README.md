@@ -40,18 +40,6 @@ Boot the Arch ISO, then run:
 curl -LO https://hexciri.dirty.pizza/hexciri && sh hexciri
 ```
 
-## Niri + Noctalia
-
-Hexciri ships one combo, done right:
-
-| compositor | shell |
-|---|---|
-| `niri` (default) | `noctalia` (default) |
-
-No swap menus, no competing configs — niri's scrollable-tiling compositor with
-the Noctalia shell (bar, lock, OSD, notifications) spawning at login. Your
-monitors, keybindings and theme are all one config.
-
 ## Themes
 
 Switch themes from the **Themes** menu or `hexciri-theme-set <name>` — colors,
