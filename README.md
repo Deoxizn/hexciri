@@ -50,8 +50,7 @@ Hexciri ships one combo, done right:
 
 No swap menus, no competing configs — niri's scrollable-tiling compositor with
 the Noctalia shell (bar, lock, OSD, notifications) spawning at login. Your
-monitors, keybindings and theme are all one config, and `hexciri-session combo`
-prints the active pair.
+monitors, keybindings and theme are all one config.
 
 ## Themes
 
