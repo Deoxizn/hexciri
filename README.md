@@ -75,8 +75,6 @@ theme changes.
 
 | slot | default | change it |
 |---|---|---|
-| WM | `niri` | — (shipped) |
-| shell | `noctalia` | — (shipped) |
 | terminal | `kitty` | `hexciri-defaults` → Terminal |
 | shell | `bash` (login) · `fish` (kitty) | `hexciri-defaults` → Shell |
 | browser | `brave-origin` | `hexciri-defaults` → Browser |
