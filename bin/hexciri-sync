@@ -132,7 +132,21 @@ if [[ -n $REPO && -f $REPO/config/hexciri/search-providers && -n $noct_owner && 
   fi
 fi
 
-# ── 3a5. kitty: harden allow_remote_control ('yes' → 'socket-only'). 'yes'
+# ── 3a5. ~/.local/bin link sweep: every hexciri-* command in the repo gets a
+# ── symlink in the owner's ~/.local/bin (same as install.sh's linking step).
+# ── Idempotent; ensures new/renamed commands on already-installed boxes. ──
+if [[ -n $REPO && -d $REPO/bin && -n $noct_owner && -n $noct_home ]]; then
+  localbin="$noct_home/.local/bin"
+  mkdir -p "$localbin"
+  for f in "$REPO"/bin/*; do
+    [[ -f $f && -x $f ]] || continue
+    name="$(basename "$f")"
+    ln -sfn "$REPO/bin/$name" "$localbin/$name"
+  done
+  log "~/.local/bin link sweep done"
+fi
+
+# ── 3a6. kitty: harden allow_remote_control ('yes' → 'socket-only'). 'yes'
 # ── exposes the control socket to any process with display access; the repo
 # ── default changed in 1454112, but a box installed before it keeps 'yes'.
 # ── Idempotent; a hardened file is left alone; user edits otherwise survive. ──
