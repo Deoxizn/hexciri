@@ -1,0 +1,281 @@
+#!/bin/bash
+# hexciri:webapp=webapps
+# hexciri:summary=Web app controller: create/remove desktop launchers, launch URL as app window, or focus if open
+# hexciri:subcommands=install remove launch launch-or-focus help
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+# ══════════════════════════════════════════ install
+webapp_install() {
+  # Create a desktop launcher for a web app. args=[name url icon-url-or-name [custom-exec] [mime-types]]
+  local ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
+  local APP_NAME="" APP_URL="" ICON_REF="" CUSTOM_EXEC="" MIME_TYPES="" INTERACTIVE_MODE=false
+  local ICON_VALUE="" EXEC_COMMAND=""
+  local DESKTOP_DIR="$HOME/.local/share/applications"
+
+  safe_icon_name() {
+    printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^[:alnum:]]\+/-/g; s/^-//; s/-$//'
+  }
+
+  require_plain_name() {
+    if [[ $1 == */* ]]; then echo "App name cannot contain '/': $1" >&2; exit 1; fi
+  }
+
+  icon_name_from_ref() {
+    local name
+    name=$(basename "$1")
+    [[ $name == *.* ]] && safe_icon_name "${name%.*}" || printf '%s\n' "$name"
+  }
+
+  install_user_icon() {
+    local ext="${1##*.}"
+    [[ $ext == "$1" ]] && ext="png"
+    mkdir -p "$ICON_DIR"
+    cp "$1" "$ICON_DIR/$2.$ext"
+    gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" &>/dev/null || true
+    printf '%s\n' "$2"
+  }
+
+  download_icon() {
+    curl -fsSL --max-time 10 -o "$2" "$1" 2>/dev/null &&
+      [[ -s $2 && $(file -b --mime-type "$2") == image/* ]]
+  }
+
+  normalize_webapp_url() {
+    local url=$1
+    [[ $url =~ ^[a-zA-Z][a-zA-Z0-9+.-]*: ]] || url="https://$url"
+    printf '%s' "$url"
+  }
+
+  require_http_url() {
+    [[ $1 =~ [[:space:]] ]] && { echo "Error: web app URL must not contain whitespace." >&2; exit 1; }
+    [[ ${1,,} =~ ^https?:// ]] || { echo "Error: web app URL must be http or https." >&2; exit 1; }
+  }
+
+  fetch_site_icon() {
+    local site_url="$1" dest="$2" origin page icon_url
+    origin=$(sed -E 's|^(https?://[^/]+).*|\1|' <<<"$site_url")
+    page=$(curl -fsSL --max-time 5 "$site_url" 2>/dev/null | head -c 100000 | tr '\n' ' ')
+    icon_url=$(grep -oiE "<link[^>]*rel=[\"'][^\"']*apple-touch-icon[^\"']*[\"'][^>]*>" <<<"$page" |
+      grep -oiE "href=[\"'][^\"']+" | head -1 | sed -E "s/^href=[\"']//")
+    case $icon_url in
+      http://*|https://*) ;;
+      //*) icon_url="https:$icon_url" ;;
+      /*) icon_url="$origin$icon_url" ;;
+      ?*) icon_url="$origin/$icon_url" ;;
+    esac
+    { [[ -n $icon_url ]] && download_icon "$icon_url" "$dest"; } ||
+      download_icon "$origin/apple-touch-icon.png" "$dest" ||
+      download_icon "https://www.google.com/s2/favicons?domain=${site_url}&sz=256" "$dest"
+  }
+
+  desktop_string_escape() {
+    local value="$1"
+    value=${value//\\/\\\\}
+    value=${value//$'\t'/\\t}
+    value=${value//$'\r'/\\r}
+    value=${value//$'\n'/\\n}
+    [[ $value == " "* ]] && value="\\s${value# }"
+    printf '%s' "$value"
+  }
+
+  desktop_exec_arg() {
+    printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/`/\\`/g' -e 's/\$/\\$/g' -e 's/%/%%/g')"
+  }
+
+  if (($# < 3)); then
+    echo -e "\e[32mNew web app for the launcher (SUPER + SPACE).\n\e[0m"
+    read -rp "Name> " APP_NAME
+    require_plain_name "$APP_NAME"
+    read -rp "URL> " APP_URL
+    APP_URL=$(normalize_webapp_url "$APP_URL")
+    require_http_url "$APP_URL"
+    mkdir -p "$ICON_DIR"
+    ICON_VALUE=$(safe_icon_name "$APP_NAME")
+    if fetch_site_icon "$APP_URL" "$ICON_DIR/$ICON_VALUE.png"; then
+      gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" &>/dev/null || true
+      ICON_REF="$ICON_VALUE"
+    else
+      read -rp "Icon URL/name (auto-fetch failed)> " ICON_REF
+    fi
+    CUSTOM_EXEC=""
+    MIME_TYPES=""
+    INTERACTIVE_MODE=true
+  else
+    APP_NAME="$1"
+    APP_URL=$(normalize_webapp_url "$2")
+    require_http_url "$APP_URL"
+    ICON_REF="$3"
+    CUSTOM_EXEC="${4:-}"
+    MIME_TYPES="${5:-}"
+    INTERACTIVE_MODE=false
+  fi
+
+  [[ -n $APP_NAME && -n $APP_URL ]] || { echo "App name and URL are required." >&2; exit 1; }
+  require_plain_name "$APP_NAME"
+
+  if [[ -z $ICON_REF ]]; then
+    ICON_VALUE=$(safe_icon_name "$APP_NAME")
+    mkdir -p "$ICON_DIR"
+    fetch_site_icon "$APP_URL" "$ICON_DIR/$ICON_VALUE.png" || { echo "Error: failed to download icon." >&2; exit 1; }
+    gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" &>/dev/null || true
+  elif [[ $ICON_REF =~ ^https?:// ]]; then
+    ICON_VALUE=$(safe_icon_name "$APP_NAME")
+    mkdir -p "$ICON_DIR"
+    download_icon "$ICON_REF" "$ICON_DIR/$ICON_VALUE.png" || { echo "Error: failed to download icon." >&2; exit 1; }
+    gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" &>/dev/null || true
+  elif [[ -f $ICON_REF ]]; then
+    ICON_VALUE=$(install_user_icon "$ICON_REF" "$(safe_icon_name "$APP_NAME")")
+  else
+    ICON_VALUE=$(icon_name_from_ref "$ICON_REF")
+  fi
+
+  if [[ -n $CUSTOM_EXEC ]]; then
+    EXEC_COMMAND=$CUSTOM_EXEC
+  else
+    EXEC_COMMAND="hexciri-launch-webapp $(desktop_exec_arg "$APP_URL")"
+  fi
+
+  mkdir -p "$DESKTOP_DIR"
+  {
+    echo "[Desktop Entry]"
+    echo "Version=1.0"
+    echo "Name=$(desktop_string_escape "$APP_NAME")"
+    echo "Comment=$(desktop_string_escape "$APP_NAME")"
+    echo "Exec=$(desktop_string_escape "$EXEC_COMMAND")"
+    echo "Terminal=false"
+    echo "Type=Application"
+    echo "Icon=$(desktop_string_escape "$ICON_VALUE")"
+    echo "StartupNotify=true"
+    [[ -n $MIME_TYPES ]] && printf 'MimeType=%s\n' "$(desktop_string_escape "$MIME_TYPES")"
+  } >"$DESKTOP_DIR/$APP_NAME.desktop"
+  chmod +x "$DESKTOP_DIR/$APP_NAME.desktop"
+  update-desktop-database "$DESKTOP_DIR" &>/dev/null || true
+
+  [[ $INTERACTIVE_MODE == true ]] && echo -e "Find $APP_NAME with the app launcher (SUPER + SPACE).\n"
+}
+
+# ══════════════════════════════════════════ remove
+webapp_remove() {
+  # Remove a web app desktop launcher. args=[name]
+  local ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
+  local DESKTOP_DIR="$HOME/.local/share/applications"
+  local -a WEB_APPS=() WEB_APP_PATHS=()
+  local file APP_NAME="" icon_name desktop_file
+
+  while IFS= read -r -d '' file; do
+    if grep -q '^Exec=.*hexciri-launch-webapp.*' "$file"; then
+      WEB_APPS+=("$(basename "${file%.desktop}")")
+      WEB_APP_PATHS+=("$file")
+    fi
+  done < <(find "$DESKTOP_DIR" -name '*.desktop' -print0 2>/dev/null)
+
+  path_for_web_app() {
+    local i
+    for i in "${!WEB_APPS[@]}"; do
+      [[ ${WEB_APPS[$i]} == "$1" ]] && { printf '%s\n' "${WEB_APP_PATHS[$i]}"; return 0; }
+    done
+  }
+
+  if (($# == 0)); then
+    ((${#WEB_APPS[@]})) || { echo "No web apps to remove."; exit 1; }
+    APP_NAME="$(printf '%s\n' "${WEB_APPS[@]}" | sort | "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Remove web app: ' --width=30 --lines=8)" || exit 0
+  else
+    APP_NAME="$*"
+  fi
+  [[ -n ${APP_NAME:-} ]] || { echo "Select a web app to remove." >&2; exit 1; }
+
+  icon_name=$(printf '%s\n' "$APP_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^[:alnum:]]\+/-/g; s/^-//; s/-$//')
+  desktop_file=$(path_for_web_app "$APP_NAME")
+  rm -f "${desktop_file:-$DESKTOP_DIR/$APP_NAME.desktop}"
+  rm -f "$ICON_DIR/$icon_name.png" "$ICON_DIR/$APP_NAME.png"
+  notify-send "Hexciri" "Web app removed: $APP_NAME" 2>/dev/null || true
+  update-desktop-database "$DESKTOP_DIR" &>/dev/null || true
+}
+
+# ══════════════════════════════════════════ launch
+launch_webapp() {
+  # Launch a URL as a web app window (Chromium-family --app=). args=<url> [extra...]
+  (($# >= 1)) || { echo "usage: hexciri-webapp launch <url> [extra browser args...]" >&2; return 1; }
+
+  local browser bin d
+  browser="$(xdg-settings get default-web-browser 2>/dev/null || true)"
+  case "$browser" in
+    brave-origin*|brave*|google-chrome*|chromium*|microsoft-edge*|opera*|vivaldi*) ;;
+    *)
+      browser=""
+      for d in brave-origin.desktop com.brave.Origin.desktop brave-origin-beta.desktop brave-browser.desktop chromium.desktop google-chrome.desktop; do
+        if [[ -f $HOME/.local/share/applications/$d || -f /usr/share/applications/$d ]]; then browser="$d"; break; fi
+      done
+      [[ -n $browser ]] || { echo "hexciri-launch-webapp: no Chromium-family browser (brave-origin/chromium) installed" >&2; return 1; }
+      ;;
+  esac
+
+  bin=""
+  for d in "$HOME/.local/share/applications/$browser" "/usr/share/applications/$browser"; do
+    [[ -f $d ]] || continue
+    bin="$(sed -n 's/^Exec=\([^ ]*\).*/\1/p' "$d" | head -1)"
+    [[ -n $bin ]] && break
+  done
+  [[ -n $bin ]] || { echo "hexciri-launch-webapp: cannot find browser binary for $browser" >&2; return 1; }
+
+  exec setsid "$bin" --app="$1" "${@:2}" >/dev/null 2>&1 &
+}
+
+launch_or_focus() {
+  # Launch a URL as a web app, or focus it if already open.
+  # args=<window-pattern> <url-and-flags...>
+  if (($# == 0)); then
+    echo "Usage: hexciri-webapp launch-or-focus [window-pattern] [url-and-flags...]"
+    return 1
+  fi
+
+  local pattern="$1"
+  shift
+
+  local id
+  id=$("$SCRIPT_DIR/hexciri-compositor" window-id-for "$pattern") || true
+
+  if [[ -n $id ]]; then
+    "$SCRIPT_DIR/hexciri-compositor" focus-window "$id"
+  else
+    launch_webapp "$@"
+  fi
+}
+
+# ══════════════════════════════════════════ dispatch
+sub="${1:-}"
+known_sub() {
+  case "$1" in
+    install|remove|launch|launch-or-focus|help) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+case "$(basename "$0")" in
+  hexciri-webapp)            : ;;
+  hexciri-webapp-install)    sub=install ;;
+  hexciri-webapp-remove)     sub=remove ;;
+  hexciri-launch-webapp)     sub=launch ;;
+  hexciri-launch-or-focus-webapp) sub=launch-or-focus ;;
+  *)                         : ;;
+esac
+
+if [[ $(basename "$0") == hexciri-webapp ]]; then
+  if [[ -n $sub ]] && known_sub "$sub"; then
+    shift 2>/dev/null || true
+  fi
+fi
+
+case "$sub" in
+  install)         webapp_install "$@" ;;
+  remove)          webapp_remove "$@" ;;
+  launch)          launch_webapp "$@" ;;
+  launch-or-focus) launch_or_focus "$@" ;;
+  help|"")         echo "usage: hexciri-webapp <install|remove|launch|launch-or-focus|help>"; exit 0 ;;
+  *)               echo "unknown webapp subcommand: $sub" >&2; exit 1 ;;
+esac

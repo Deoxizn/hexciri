@@ -1,0 +1,123 @@
+#!/bin/bash
+# hexciri:pkg=packages
+# hexciri:summary=Package controller: fuzzy pacman/AUR install and remove pickers
+# hexciri:subcommands=install remove aur help
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+# ══════════════════════════════════════════ pickers
+pkg_install() {
+  # Install repo packages via live fuzzy picker (multi-select, pacman -Sii preview).
+  command -v fzf >/dev/null 2>&1 || { echo "fzf not installed yet: sudo pacman -S fzf"; return 1; }
+
+  local fzf_args picked
+  fzf_args=(
+    --multi
+    --preview 'pacman -Sii {1} | head -40'
+    --preview-label='alt-p: toggle preview, tab: multi-select, alt-j/k: scroll'
+    --preview-label-pos='bottom'
+    --preview-window 'down:60%:wrap'
+    --bind 'alt-p:toggle-preview'
+    --bind 'alt-d:preview-half-page-down,alt-u:preview-half-page-up'
+    --bind 'alt-k:preview-up,alt-j:preview-down'
+  )
+
+  picked=$(pacman -Slq 2>/dev/null | LC_ALL=C sort -f | fzf "${fzf_args[@]}") || return 0
+  [[ -n $picked ]] || return 0
+  echo "$picked" | tr '\n' ' ' | xargs sudo pacman -S --noconfirm
+  notify-send -a hexciri "Packages" "installed $(echo "$picked" | wc -l) package(s)" 2>/dev/null || true
+}
+
+pkg_remove() {
+  # Remove explicitly-installed packages (live fuzzy picker, multi-select, pacman -Qi preview).
+  command -v fzf >/dev/null 2>&1 || { echo "fzf not installed yet: sudo pacman -S fzf"; return 1; }
+
+  local fzf_args picked
+  fzf_args=(
+    --multi
+    --preview 'pacman -Qi {1} | head -25'
+    --preview-label='alt-p: toggle preview, tab: multi-select, alt-j/k: scroll'
+    --preview-label-pos='bottom'
+    --preview-window 'down:60%:wrap'
+    --bind 'alt-p:toggle-preview'
+    --bind 'alt-d:preview-half-page-down,alt-u:preview-half-page-up'
+    --bind 'alt-k:preview-up,alt-j:preview-down'
+  )
+
+  picked=$(pacman -Qqe 2>/dev/null | LC_ALL=C sort -f | fzf "${fzf_args[@]}") || return 0
+  [[ -n $picked ]] || return 0
+  echo "$picked" | tr '\n' ' ' | xargs sudo pacman -Rns --noconfirm
+  notify-send -a hexciri "Packages" "removed $(echo "$picked" | wc -l) package(s)" 2>/dev/null || true
+}
+
+pkg_aur_install() {
+  # Install AUR packages via a live fuzzy picker (requires yay or paru).
+  command -v fzf >/dev/null 2>&1 || { echo "fzf not installed yet: sudo pacman -S fzf"; return 1; }
+
+  local -a aur=()
+  command -v yay >/dev/null 2>&1 && aur+=(yay)
+  command -v paru >/dev/null 2>&1 && aur+=(paru)
+
+  if ((${#aur[@]} == 0)); then
+    echo "No AUR helper installed. Install one, e.g.: sudo pacman -S --needed base-devel git"
+    echo "then: git clone https://aur.archlinux.org/yay-bin.git && cd yay-bin && makepkg -si"
+    return 1
+  fi
+  local au="${aur[0]}" list fzf_args picked
+
+  list=$("$au" -Slqa 2>/dev/null || true)
+  if [[ -z $list ]]; then
+    echo "No AUR listing available from $au (try first: $au -Syu)"
+    return 1
+  fi
+
+  fzf_args=(
+    --multi
+    --preview "$au -Si {1} | head -30"
+    --preview-label='alt-p: toggle preview, tab: multi-select, alt-j/k: scroll'
+    --preview-label-pos='bottom'
+    --preview-window 'down:60%:wrap'
+    --bind 'alt-p:toggle-preview'
+    --bind 'alt-d:preview-half-page-down,alt-u:preview-half-page-up'
+    --bind 'alt-k:preview-up,alt-j:preview-down'
+  )
+
+  picked=$(printf '%s\n' "$list" | LC_ALL=C sort -f | fzf "${fzf_args[@]}") || return 0
+  [[ -n $picked ]] || return 0
+  echo "$picked" | sed 's/^/aur\//' | tr '\n' ' ' | xargs "$au" -S --noconfirm
+}
+
+# ══════════════════════════════════════════ dispatch
+sub="${1:-}"
+known_sub() {
+  case "$1" in
+    install|remove|aur|help) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+case "$(basename "$0")" in
+  hexciri-pkg)          : ;;   # controller invoked as itself — sub from $1
+  hexciri-pkg-install)  sub=install ;;
+  hexciri-pkg-remove)   sub=remove ;;
+  hexciri-pkg-aur-install) sub=aur ;;
+  *)                    : ;;
+esac
+
+if [[ $(basename "$0") == hexciri-pkg ]]; then
+  if [[ -n $sub ]] && known_sub "$sub"; then
+    shift 2>/dev/null || true
+  fi
+fi
+
+case "$sub" in
+  install)  pkg_install ;;
+  remove)   pkg_remove ;;
+  aur)      pkg_aur_install ;;
+  help|"")  echo "usage: hexciri-pkg <install|remove|aur|help>"; exit 0 ;;
+  *)        echo "unknown pkg subcommand: $sub" >&2; exit 1 ;;
+esac

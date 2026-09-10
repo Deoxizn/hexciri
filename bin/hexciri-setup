@@ -1,0 +1,500 @@
+#!/bin/bash
+# hexciri:setup=setup
+# hexciri:summary=Setup controller: Spotify+Spicetify bring-up, per-user Strata install/update, Battle.net launch, gaming setup menu
+# hexciri:subcommands=gaming strata spotify battlenet help
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+# ══════════════════════════════════════════ Spotify
+spotify_setup() {
+  # Spotify+Spicetify bring-up: point spicetify at the bundle, backup+apply, set hexciri theme.
+  # One-shot; idempotent.
+  local spc SP_DIR cur prefs
+  spc=$(command -v spicetify || true)
+  [[ -n $spc ]] || { echo "spicetify-cli not installed (yay -S spicetify-cli)" >&2; return 1; }
+
+  SP_DIR=""
+  for d in /opt/spotify /usr/share/spotify "$HOME/snap/spotify/current/usr/share/spotify"; do
+    [[ -d $d && -f $d/spotify ]] && { SP_DIR="$d"; break; }
+  done
+  [[ -n $SP_DIR ]] || { echo "spotify bundle not found (install spotify first)" >&2; return 1; }
+
+  cur=$(spicetify config spotify_path 2>/dev/null | awk '{printf "%s", $2}' | sed 's:/*$::')
+  [[ $cur == "$SP_DIR" ]] || { spicetify config spotify_path "$SP_DIR" >/dev/null 2>&1; echo "spotify_path → $SP_DIR"; }
+
+  prefs="$HOME/.config/spotify/prefs"
+  mkdir -p "$(dirname "$prefs")"
+  [[ -f $prefs ]] || : > "$prefs"
+  spicetify config prefs_path "$prefs" >/dev/null 2>&1 || true
+
+  if ! spicetify backup apply >/dev/null 2>&1; then
+    if sudo -n spicetify backup apply >/dev/null 2>&1; then
+      echo "backup+apply done (via sudo)"
+    else
+      echo "backup+apply needs a root pass — run 'sudo spicetify backup apply' once" >&2
+    fi
+  fi
+
+  if [[ -d $HOME/.config/spicetify/Themes/hexciri ]]; then
+    spicetify config current_theme hexciri >/dev/null 2>&1 || true
+  fi
+  spicetify apply >/dev/null 2>&1 || \
+    echo "spicetify apply had a problem (Spotify running? try 'spicetify doctor')" >&2
+
+  echo "done — restart Spotify to pick up the patched bundle."
+}
+
+# ══════════════════════════════════════════ Strata
+strata_main() {
+  # Install/update Strata from GitHub release archives (per-user).
+  local REPO=lgse/strata
+  local ARCH="${HEXCIRI_ARCH:-$(uname -m)}" target
+  case "$ARCH" in
+    x86_64) target=x86_64-unknown-linux-gnu ;;
+    aarch64) target=aarch64-unknown-linux-gnu ;;
+    *) echo "hexciri-strata-install: unsupported arch $ARCH" >&2; return 1 ;;
+  esac
+
+  local BIN="$HOME/.local/bin/strata"
+  local DESKTOP="$HOME/.local/share/applications/io.github.lgse.Strata.desktop"
+  local ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
+  local ICON="$ICON_DIR/io.github.lgse.Strata.svg"
+  local VER_FILE="$HOME/.local/state/hexciri/strata.version"
+  local CACHE="$HOME/.cache/hexciri/strata"
+
+  local PORTAL_META="${XDG_DATA_HOME:-$HOME/.local/share}/xdg-desktop-portal/portals/strata.portal"
+  local PORTAL_OPT_IN="${XDG_CONFIG_HOME:-$HOME/.config}/strata/portal-opt-in-v1"
+
+  info() { echo "hexciri-strata-install: $*"; }
+  warn() { echo "hexciri-strata-install: WARNING: $*" >&2; }
+
+  ensure_file_chooser() {
+    [[ -f $PORTAL_META ]] && return 0
+    [[ $(cat "$PORTAL_OPT_IN" 2>/dev/null) == "0" ]] && return 0
+    info "enabling Strata as the system file chooser (hexciri default)..."
+    if ! "$BIN" --install-portal; then
+      warn "file-chooser setup failed (no user session/dbus?) — retried on next run"
+    fi
+  }
+
+  print_installed() {
+    if [[ -x $BIN ]]; then
+      cat "$VER_FILE" 2>/dev/null || echo "present (version unknown)"
+    else
+      echo "not installed"
+    fi
+  }
+
+  local latest_tag installed
+  latest_tag="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
+    | python3 -c 'import sys,json
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+print(d.get("tag_name",""))' 2>/dev/null || true)"
+  if [[ -z $latest_tag ]]; then
+    echo "hexciri-strata-install: could not reach GitHub API (offline?)" >&2
+    return 2
+  fi
+  installed="$(print_installed)"
+
+  case "${1:-}" in
+    --version)
+      echo "$installed"
+      [[ $installed == not* ]] && return 1
+      return 0
+      ;;
+    --check|--force)
+      if [[ ${1:-} != --force ]] && [[ $latest_tag == "$installed" ]]; then
+        info "already on $latest_tag (${ARCH}) — nothing to do"
+        ensure_file_chooser
+        return 0
+      fi
+      ;;
+    *)
+      [[ -x $BIN ]] && [[ $latest_tag == "$installed" ]] && {
+        info "already on $latest_tag (${ARCH}) — nothing to do"
+        ensure_file_chooser
+        return 0
+      }
+      ;;
+  esac
+
+  info "installing Strata $latest_tag ($target)..."
+
+  mkdir -p "$CACHE"
+  cd "$CACHE"
+  local ver="${latest_tag#v}"
+  local tarball="strata-$ver-$target.tar.gz"
+  local url="https://github.com/$REPO/releases/download/$latest_tag/$tarball"
+  if [[ ! -f $tarball ]]; then
+    curl -fsSL -O "$url"
+    curl -fsSL -O "$url.sha256"
+  fi
+
+  if ! sha256sum -c "$tarball.sha256" >/dev/null 2>&1; then
+    echo "hexciri-strata-install: checksum mismatch for $tarball" >&2
+    rm -f "$tarball" "$tarball.sha256"
+    return 1
+  fi
+
+  rm -rf "strata-extract-$latest_tag"
+  mkdir -p "strata-extract-$latest_tag"
+  tar -xzf "$tarball" -C "strata-extract-$latest_tag" --strip-components=1
+  local extract="strata-extract-$latest_tag"
+
+  mkdir -p "$(dirname "$BIN")" "$(dirname "$DESKTOP")" "$ICON_DIR"
+  install -m755 "$extract/strata" "$BIN"
+  install -m644 "$extract/io.github.lgse.Strata.desktop" "$DESKTOP"
+  install -m644 "$extract/io.github.lgse.Strata.svg" "$ICON"
+
+  printf '%s\n' "$latest_tag" > "$VER_FILE"
+  update-desktop-database "$(dirname "$DESKTOP")" 2>/dev/null || true
+  gtk-update-icon-cache -qtf "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+
+  sed -i "s|^Exec=strata |Exec=$BIN |" "$DESKTOP" 2>/dev/null || true
+  sed -i "s|^Exec=strata$|Exec=$BIN|" "$DESKTOP" 2>/dev/null || true
+
+  info "installed Strata $latest_tag → $BIN (in-app Updates can self-update daily)"
+  info "xdg-mime: io.github.lgse.Strata.desktop → inode/directory"
+  xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
+  ensure_file_chooser
+
+  rm -rf "$extract"
+}
+
+# ══════════════════════════════════════════ Battle.net
+launch_battlenet() {
+  # Launch installed Battle.net via umu-launcher + GE-Proton.
+  local PREFIX="$HOME/Games/battlenet"
+  local LAUNCHER="$PREFIX/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
+
+  [[ -f $LAUNCHER ]] || {
+    echo "hexciri-launch-battlenet: Battle.net not installed — run 'hexciri-gaming run battlenet' first" >&2
+    command -v notify-send >/dev/null 2>&1 &&
+      notify-send -a hexciri -h string:x-kanon-stack-tag:hexciri-battlenet \
+        "Battle.net not installed" "Run 'hexciri-gaming run battlenet' first." 2>/dev/null || true
+    return 1
+  }
+
+  exec env WINEPREFIX="$PREFIX" PROTONPATH=GE-Proton GAMEID=umu-battlenet PROTON_VERB=run umu-run "$LAUNCHER"
+}
+
+# ══════════════════════════════════════════ Gaming
+gaming_main() {
+  # Gaming setup: Steam/Heroic/Lutris/RetroArch/Minecraft/Battle.net/GeForce NOW/Xbox Cloud,
+  # GPU lib32 drivers, Xbox controllers. usage: hexciri-setup gaming [run <app>]
+  local FUZZEL="$SCRIPT_DIR/hexciri-fuzzel"
+
+  info() { echo -e "\e[0;36m[hexciri:gaming]\e[0m $*"; }
+  err()  { echo -e "\e[0;31m[hexciri:gaming]\e[0m $*" >&2; }
+
+  pkg() {
+    local missing=()
+    for p in "$@"; do pacman -Q "$p" &>/dev/null || missing+=("$p"); done
+    ((${#missing[@]})) || return 0
+    info "pacman: ${missing[*]}"
+    sudo pacman -S --noconfirm --needed "${missing[@]}"
+    for p in "${missing[@]}"; do
+      pacman -Q "$p" &>/dev/null || { err "package '$p' did not install"; exit 1; }
+    done
+  }
+
+  aur() {
+    command -v yay &>/dev/null || {
+      info "installing yay..."
+      sudo pacman -S --noconfirm --needed base-devel git
+      (cd /tmp && rm -rf yay-bin && git clone -q https://aur.archlinux.org/yay-bin.git && cd yay-bin && makepkg -si --noconfirm)
+    }
+    local missing=()
+    for p in "$@"; do pacman -Q "$p" &>/dev/null || missing+=("$p"); done
+    ((${#missing[@]})) || return 0
+    info "AUR: ${missing[*]}"
+    yay -S --noconfirm --needed "${missing[@]}"
+  }
+
+  local PCI_PATH="${HEXCIRI_PCI_DEVICES_PATH:-/sys/bus/pci/devices}"
+  nvidia_gsp() { # Turing+ (device >= 0x1e00)
+    local d
+    for d in "$PCI_PATH"/*; do
+      [[ $(<"$d/vendor") == "0x10de" ]] || continue
+      [[ $(<"$d/class") == 0x03* ]] || continue
+      (( $(<"$d/device") >= 0x1e00 )) && return 0
+    done
+    return 1
+  }
+  nvidia_legacy() { # Maxwell/Pascal/Volta (0x1340..0x1e00) -> 580xx
+    local d id
+    for d in "$PCI_PATH"/*; do
+      [[ $(<"$d/vendor") == "0x10de" ]] || continue
+      [[ $(<"$d/class") == 0x03* ]] || continue
+      id=$(<"$d/device")
+      (( id >= 0x1340 && id < 0x1e00 )) && return 0
+    done
+    return 1
+  }
+
+  do_drivers() {
+    info "detecting GPUs for lib32 drivers..."
+    local pkgs=() nv="" wrong
+    lspci 2>/dev/null | grep -iqE "(VGA|Display).*Intel" && pkgs+=(lib32-vulkan-intel)
+    lspci 2>/dev/null | grep -iqE "(VGA|Display).*AMD" && pkgs+=(lib32-vulkan-radeon)
+    if nvidia_gsp; then
+      nv=lib32-nvidia-utils
+    elif nvidia_legacy; then
+      nv=lib32-nvidia-580xx-utils
+    fi
+    if [[ -n $nv ]]; then
+      wrong=""
+      if [[ $nv == lib32-nvidia-580xx-utils ]]; then
+        pacman -Q lib32-nvidia-utils >/dev/null 2>&1 && wrong=lib32-nvidia-utils
+      else
+        pacman -Q lib32-nvidia-580xx-utils >/dev/null 2>&1 && wrong=lib32-nvidia-580xx-utils
+      fi
+      if [[ -n $wrong ]]; then
+        info "removing conflicting $wrong (detected GPU wants $nv)"
+        sudo pacman -R --noconfirm "$wrong" >/dev/null 2>&1 || true
+      fi
+      pkgs+=("$nv")
+    fi
+    if ((${#pkgs[@]})); then pkg "${pkgs[@]}"; else info "no discrete GPU drivers needed"; fi
+  }
+
+  do_steam() {
+    info "installing Steam..."
+    do_drivers
+    pkg steam
+    info "starting Steam (first run takes a while)..."
+    setsid gtk-launch steam >/dev/null 2>&1 &
+  }
+
+  do_heroic() {
+    info "installing Heroic (Epic/GOG/Amazon)..."
+    do_drivers
+    aur heroic-games-launcher-bin
+    setsid gtk-launch heroic >/dev/null 2>&1 &
+  }
+
+  do_lutris() {
+    info "installing Lutris + Wine..."
+    do_drivers
+    pkg lutris umu-launcher wine-staging wine-mono wine-gecko winetricks python-protobuf
+    sudo sed -i '/env python3/ c\#!/bin/python3' /usr/bin/lutris
+    cat <<'EOF'
+
+Lutris opens now and fetches DXVK/VKD3D runtimes in the background
+(watch the bottom status bar), then press + to add games.
+
+EOF
+    setsid lutris >/dev/null 2>&1 &
+  }
+
+  do_retroarch() {
+    info "installing RetroArch + core set..."
+    pkg retroarch retroarch-assets-glui retroarch-assets-ozone retroarch-assets-xmb \
+      libretro-beetle-pce libretro-beetle-pce-fast libretro-beetle-psx libretro-beetle-psx-hw \
+      libretro-beetle-supergrafx libretro-blastem libretro-bsnes libretro-bsnes-hd \
+      libretro-core-info libretro-desmume libretro-dolphin libretro-flycast \
+      libretro-gambatte libretro-genesis-plus-gx libretro-kronos libretro-mame \
+      libretro-melonds libretro-mesen libretro-mesen-s libretro-mgba libretro-mupen64plus-next \
+      libretro-nestopia libretro-overlays libretro-parallel-n64 libretro-picodrive \
+      libretro-play libretro-ppsspp libretro-sameboy libretro-scummvm \
+      libretro-shaders-slang libretro-snes9x libretro-yabause
+    aur libretro-cap32-git libretro-fbneo-git libretro-uae-git \
+      libretro-vice-x128-git libretro-vice-x64-git libretro-vice-x64dtv-git libretro-vice-x64sc-git \
+      libretro-vice-xcbm2-git libretro-vice-xcbm5x0-git libretro-vice-xpet-git \
+      libretro-vice-xplus4-git libretro-vice-xscpu64-git libretro-vice-xvic-git \
+      libretro-database-git retroarch-joypad-autoconfig-git
+
+    mkdir -p "$HOME/Games/bios" "$HOME/Games/roms"
+    local CFG="$HOME/.config/retroarch/retroarch.cfg"
+    mkdir -p "$(dirname "$CFG")"; touch "$CFG"
+    set_cfg() {
+      if grep -q "^$1 = " "$CFG"; then sed -i "s|^$1 = .*|$1 = \"$2\"|" "$CFG"
+      else echo "$1 = \"$2\"" >>"$CFG"; fi
+    }
+    set_cfg rgui_browser_directory "$HOME/Games/roms"
+    set_cfg system_directory "$HOME/Games/bios"
+    set_cfg libretro_directory "/usr/lib/libretro"
+    set_cfg libretro_info_path "/usr/share/libretro/info"
+    set_cfg overlay_directory "/usr/share/libretro/overlays"
+    set_cfg video_driver "vulkan"
+    set_cfg menu_driver "xmb"
+    set_cfg video_shader_enable "true"
+    set_cfg auto_shaders_enable "true"
+    set_cfg content_show_images "false"
+    set_cfg content_show_video "false"
+    info "put ROMs/BIOS in ~/Games, start RetroArch with Super+Space"
+    setsid xdg-open "$HOME/Games" >/dev/null 2>&1 &
+  }
+
+  do_xbox() {
+    info "installing Xbox controller support (xpadneo)..."
+    local headers=()
+    for k in linux linux-lts linux-omarchy linux-omarchy-bore; do
+      pacman -Q "$k" &>/dev/null && headers+=("$k-headers")
+    done
+    pkg "${headers[@]}" xpadneo-dkms
+    echo blacklist xpad | sudo tee /etc/modprobe.d/blacklist-xpad.conf >/dev/null
+    echo hid_xpadneo | sudo tee /etc/modules-load.d/xpadneo.conf >/dev/null
+    id -nG "$USER" | grep -qw input || sudo usermod -aG input "$USER"
+    lsmod | grep -q '^xpad ' && sudo modprobe -r xpad 2>/dev/null || true
+    sudo modprobe hid_xpadneo 2>/dev/null || {
+      echo "Reboot to finish controller setup, then pair with Bluetooth."
+      return 0
+    }
+    info "pair your controller over Bluetooth."
+  }
+
+  do_minecraft() {
+    info "installing Minecraft..."
+    pkg minecraft-launcher
+    info "starting Minecraft (first run downloads the launcher client)..."
+    setsid gtk-launch minecraft-launcher >/dev/null 2>&1 &
+  }
+
+  do_battlenet() {
+    info "installing Battle.net via umu-launcher + GE-Proton (no Steam/Lutris/Heroic)..."
+    do_drivers
+    pkg umu-launcher
+    local PREFIX="$HOME/Games/battlenet"
+    local LAUNCHER="$PREFIX/drive_c/Program Files (x86)/Battle.net/Battle.net Launcher.exe"
+    local CACHE ICON_DIR wipe
+    if [[ -d $PREFIX && ! -f $LAUNCHER ]]; then
+      info "found a partial Battle.net prefix (no Launcher.exe) — its installer can't resume from this state"
+      read -rp "wipe the partial prefix and start fresh? [y/N] " wipe </dev/tty
+      if [[ $wipe =~ ^[Yy]$ ]]; then
+        pkill -f "$PREFIX" 2>/dev/null || true
+        sleep 1
+        rm -rf "$PREFIX"
+      else
+        err "aborting — re-run when ready to wipe"
+        return 1
+      fi
+    fi
+    mkdir -p "$PREFIX"
+    if [[ -f $LAUNCHER ]]; then
+      info "Battle.net is already installed at $PREFIX"
+    else
+      CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/hexciri"
+      mkdir -p "$CACHE"
+      info "downloading installer..."
+      curl --fail --location --retry 3 -o "$CACHE/Battle.net-Setup.exe" \
+        "https://downloader.battle.net/download/getInstallerForGame?os=win&gameProgram=BATTLENET_APP&version=Live"
+      info "launching setup wizard — click through; log: /tmp/hexciri-battlenet-installer.log"
+      setsid -f sh -c "WINEPREFIX=\"$PREFIX\" PROTONPATH=GE-Proton GAMEID=umu-battlenet PROTON_VERB=run umu-run \"$CACHE/Battle.net-Setup.exe\" >/tmp/hexciri-battlenet-installer.log 2>&1" </dev/null >/dev/null 2>&1
+    fi
+    mkdir -p "$HOME/.local/share/applications"
+    ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
+    mkdir -p "$ICON_DIR"
+    if [[ ! -f $ICON_DIR/battle-net.png ]]; then
+      curl --fail --location --retry 2 --max-time 20 -o "$ICON_DIR/battle-net.png" \
+        "https://www.google.com/s2/favicons?domain=battle.net&sz=256" 2>/dev/null || rm -f "$ICON_DIR/battle-net.png"
+    fi
+    gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" &>/dev/null || true
+    cat > "$HOME/.local/share/applications/hexciri-battlenet.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Battle.net
+GenericName=Game Launcher
+Comment=Blizzard game launcher (umu-launcher + GE-Proton)
+Exec=hexciri-launch-battlenet
+Icon=battle-net
+Terminal=false
+Categories=Game;
+StartupNotify=true
+StartupWMClass=battle.net.exe
+EOF
+    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+    info "done — open with 'hexciri-launch-battlenet' or 'hexciri-gaming run battlenet'"
+  }
+
+  do_geforcenow() {
+    info "installing NVIDIA GeForce NOW..."
+    pkg flatpak
+    local CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/hexciri"
+    mkdir -p "$CACHE"
+    curl --fail --location --retry 3 -o "$CACHE/GeForceNOWSetup.bin" \
+      "https://international.download.nvidia.com/GFNLinux/GeForceNOWSetup.bin"
+    chmod +x "$CACHE/GeForceNOWSetup.bin"
+    info "launching GeForce NOW installer..."
+    setsid "$CACHE/GeForceNOWSetup.bin" >/dev/null 2>&1 &
+    info "opening a browser tab so GeForce NOW doesn't hang on login..."
+    (setsid xdg-open "https://play.geforcenow.com" >/dev/null 2>&1 &)
+  }
+
+  do_xboxcloud() {
+    info "installing Xbox Cloud Gaming as a web app..."
+    "$SCRIPT_DIR/hexciri-webapp-install" "Xbox Cloud Gaming" "https://www.xbox.com/en-US/play" \
+      "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/xbox.png"
+    "$SCRIPT_DIR/hexciri-launch-webapp" "https://www.xbox.com/en-US/play" >/dev/null 2>&1 &
+  }
+
+  if [[ ${1:-} == run ]]; then
+    shift
+    case ${1:-} in
+      steam) do_steam ;; heroic) do_heroic ;; lutris) do_lutris ;;
+      retroarch) do_retroarch ;; minecraft) do_minecraft ;;
+      battlenet) do_battlenet ;; geforcenow) do_geforcenow ;;
+      xboxcloud) do_xboxcloud ;; drivers) do_drivers ;; xbox) do_xbox ;;
+      *) err "unknown: ${1:-}"; return 1 ;;
+    esac
+    return 0
+  fi
+
+  local choice
+  choice=$(
+    printf '%s\n' 'Steam' 'Heroic' 'Lutris' 'RetroArch' 'Minecraft' 'Battle.net' 'GeForce NOW' 'Xbox Cloud' 'GPU setup' 'Xbox controllers' |
+      "$FUZZEL" --dmenu --prompt='Gaming: ' --width=30 --lines=10
+  ) || return 0
+  case "$choice" in
+    Steam) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run steam ;;
+    Heroic) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run heroic ;;
+    Lutris) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run lutris ;;
+    RetroArch) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run retroarch ;;
+    Minecraft) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run minecraft ;;
+    "Battle.net") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run battlenet ;;
+    "GeForce NOW") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run geforcenow ;;
+    "Xbox Cloud") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run xboxcloud ;;
+    "GPU setup") exec hexciri-gpu ;;
+    "Xbox controllers") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run xbox ;;
+  esac
+}
+
+# ══════════════════════════════════════════ dispatch
+sub="${1:-}"
+known_sub() {
+  case "$1" in
+    gaming|strata|spotify|battlenet|help) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+case "$(basename "$0")" in
+  hexciri-setup)             : ;;
+  hexciri-gaming)            sub=gaming ;;
+  hexciri-strata-install)    sub=strata ;;
+  hexciri-spotify-setup)     sub=spotify ;;
+  hexciri-launch-battlenet)  sub=battlenet ;;
+  *)                         : ;;
+esac
+
+if [[ $(basename "$0") == hexciri-setup ]]; then
+  if [[ -n $sub ]] && known_sub "$sub"; then
+    shift 2>/dev/null || true
+  fi
+fi
+
+case "$sub" in
+  gaming)    gaming_main "$@" ;;
+  strata)    strata_main "$@" ;;
+  spotify)   spotify_setup ;;
+  battlenet) launch_battlenet ;;
+  help|"")   echo "usage: hexciri-setup <gaming|strata|spotify|battlenet|help>"; exit 0 ;;
+  *)         echo "unknown setup subcommand: $sub" >&2; exit 1 ;;
+esac
