@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-09-09 — hexciri v1.4 (controller consolidation + menu tree)
+## 2026-09-09 — hexciri v1.4.1 (controller consolidation + menu tree)
 
 - **The command base is now 7 arg0-dispatched controllers + 92 names** — hardware, network, package, webapp, and setup each fold into one controller (`hexciri-hw`, `hexciri-network`, `hexciri-pkg`, `hexciri-webapp`, `hexciri-setup`) with the old names kept as dispatch symlinks: same commands, one file per domain. The dispatcher only shifts a first argument when it's a known subcommand, so bare invocations (e.g. `hexciri-update --yes`) run as themselves instead of being eaten or forwarded with a stray `--yes`.
 - **Menu tree reshaped** — `Share >` + `Capture >` merge into one `Share & Capture >` (LocalSend clipboard/file/folder/receive plus screenshots, recording, OCR, QR, transcode). Config's duplicate `Palettes` row and the `Extra themes list` / `Wallpaper dirs list` editors move under Themes (extra.themes pointing at the real `config/theme-sources` catalog, fixing a silent no-seed path). `Fonts` moves under Themes, and the root `System Update >` becomes `Update >`.
