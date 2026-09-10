@@ -282,7 +282,7 @@ fi
 # ── silently re-open password auth. Firewall first: if ufw is disabled the
 # ── box is wide open, so re-enable without --now conflict (idempotent).
 if command -v ufw >/dev/null 2>&1; then
-  systemctl enable ufw.service >/dev/null 2>&1 && log "ufw service enabled (was disabled)"
+  systemctl is-enabled --quiet ufw.service || { systemctl enable ufw.service >/dev/null 2>&1 && log "ufw service enabled (was disabled)" || true; }
   if systemctl is-active --quiet ufw.service; then
     ufw --force enable >/dev/null 2>&1 || true
   else
