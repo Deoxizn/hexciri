@@ -118,44 +118,63 @@ into niri's config, so they never drift.
 | key | mode |
 |---|---|
 | `Mod`+Shift+S | web search (default provider) |
-| `Mod`+Shift+C | calculator (qalc → clipboard + notify) |
+| `Mod`+Shift+C | calculator (`qalc` → clipboard + notify) |
 
-Search providers and the default are configurable — `~/.config/hexciri/search-providers`
-(one line per provider, see the file's comments) and **System ▸ Config ▸ Search
-provider** picker. The same picker sets which provider the `Mod`+Shift+S bind
-uses; per-provider search is also available on demand via
-`hexciri-fuzzel search <name>`. Volume, brightness and mic keys work as labeled.
+Which search engine `Mod`+Shift+S opens is set by **System ▸ Config ▸ Search
+provider** — the picker lists every provider (Google AI, Google classic,
+DuckDuckGo, Brave, SearXNG, GitHub, Wikipedia, Arch Wiki, YouTube, AUR, Arch
+Man Pages). Per-provider search on demand: `hexciri-fuzzel search <name>`.
+Volume, brightness and mic keys work as labeled.
 
 ## Menus
 
-Everything reachable from `Mod`+Alt+Space (root menu). `hexciri-*` commands
-dispatch the same menus from a terminal.
+Everything reachable from the root menu (`Mod`+Alt+Space). Each row ending in
+`>` opens the next submenu; `Esc` walks back. `hexciri-*` commands dispatch the
+same menus from a terminal.
 
 ```
-Root menu (Mod+Alt+Space)
-├─ Applications            (hexciri-launch)
+► Hexciri
+├─ Learn                    (docs for what's installed — Hexciri, Noctalia,
+│                            Niri, kitty/foot/alacritty, fish, Zed, OpenCode,
+│                            Arch wiki, Starship)
+├─ Packages ▸ Install / Remove
+├─ Share & Capture          (Clipboard / File / Folder / Receive via LocalSend,
+│                            Screenshot region+screen, Screen recording,
+│                            OCR text, Decode QR, Transcode media)
+├─ Reminders                (Set a reminder, Quick reminder, Clear all)
+├─ Hardware                 (Touchpad / Touchscreen toggle, Hybrid GPU,
+│                            Network download/upload, Disk speed test)
+├─ Themes ▸ Theme list / Palette source / Backgrounds / Fonts /
+│            Extra themes list / Wallpaper dirs list
 ├─ System
 │  ├─ Config
-│  │  ├─ Niri              (all fragments)
+│  │  ├─ Niri ▸            (config, env, input, autostart, monitors,
+│  │  │                      looknfeel, window-rules, keybinds, cursors)
 │  │  ├─ Noctalia config
-│  │  ├─ Search provider   (pick the default web search)
-│  │  ├─ Search providers file  (edit the provider list)
+│  │  ├─ Search provider   (pick what Mod+Shift+S searches)
 │  │  ├─ Fastfetch config
 │  │  ├─ Hexciri lockscreen
 │  │  └─ Hooks
-│  ├─ Default Apps
-│  ├─ Kernel
-│  ├─ Maintenance
-│  ├─ Network
-│  ├─ Security
-│  └─ Reset defaults
-├─ Themes                  (hexciri-theme-set)
-├─ Update                  (hexciri-update)
-├─ Clipboards              (hexciri-clipboard)
-└─ Power menu              (Mod+Escape → hexciri-power)
+│  ├─ Default Apps ▸       (Browser / Editor / Terminal / Shell / Files / Images / Agent)
+│  ├─ Kernel ▸             (Recommended auto-detect, Stock, LTS, Omarchy EEVDF, BORE, Status)
+│  ├─ Maintenance ▸        (Sync system clock, System Cleaner, User password, Reset boot config)
+│  ├─ Windows product key  (reads the OEM key from firmware)
+│  ├─ Reset defaults       (hexciri-reinstall)
+│  ├─ Network ▸ DNS (DHCP/Cloudflare/Google/Custom), Wi-Fi QR Code
+│  └─ Security ▸           (Fingerprint, Fido2, SSHD, Passwordless Sudo)
+├─ Restart ▸               (Reload Niri, Restart Noctalia, Refresh theme)
+└─ Update
+   ├─ Hexciri / Repo       (system update / framework git pull)
+   ├─ Channel ▸            (stable ↔ bleeding)
+   ├─ Themes               (re-sync Omarchy + extras)
+   ├─ Wallpaper            (re-merge user wallpapers into the theme)
+   ├─ Hardware ▸           (Audio / Wi-Fi / Bluetooth / Trackpad restart)
+   └─ Firmware             (fwupdmgr update)
 ```
 
-Submenus are `> `-suffixed rows in fuzzel; `Mod`+K lists every keybind.
+The fuzzel launcher modes (`Mod`+Shift+S web search, `Mod`+Shift+C calc) are
+not menu rows — they're quick binds to `hexciri-fuzzel search` / `calc` (see the
+keybind table). `Mod`+K lists every keybind.
 
 ## Channels
 
