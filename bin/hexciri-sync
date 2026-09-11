@@ -305,6 +305,11 @@ if command -v ufw >/dev/null 2>&1; then
   ufw default deny incoming >/dev/null 2>&1 || true
   ufw default allow outgoing >/dev/null 2>&1 || true
   ufw allow ssh >/dev/null 2>&1 || true
+  # LocalSend (53317): allow from anywhere, not a hardcoded subnet — this box
+  # moves between networks, and a stale subnet silently breaks transfers while
+  # discovery (UDP broadcast) keeps working. ufw re-adds idempotently.
+  ufw allow proto tcp to any port 53317 >/dev/null 2>&1 || true
+  ufw allow proto udp to any port 53317 >/dev/null 2>&1 || true
 fi
 mkdir -p /etc/ssh/sshd_config.d
 if [[ ! -f /etc/ssh/sshd_config.d/99-hardening.conf ]]; then

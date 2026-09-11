@@ -306,6 +306,10 @@ HOOK
   run ufw default deny incoming 2>/dev/null || true
   run ufw default allow outgoing 2>/dev/null || true
   run ufw allow ssh 2>/dev/null || true
+  # LocalSend (53317) from anywhere — this box moves between networks and a
+  # hardcoded subnet silently breaks transfers once the network changes.
+  run ufw allow proto tcp to any port 53317 2>/dev/null || true
+  run ufw allow proto udp to any port 53317 2>/dev/null || true
   run ufw --force enable 2>/dev/null || true
   run mkdir -p /etc/ssh/sshd_config.d
   if [[ ! -f /etc/ssh/sshd_config.d/99-hardening.conf ]]; then
