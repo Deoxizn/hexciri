@@ -124,12 +124,15 @@ fi
 if [[ -n $REPO && -d $REPO/bin && -n $noct_owner && -n $noct_home ]]; then
   localbin="$noct_home/.local/bin"
   mkdir -p "$localbin"
+  changed=0
   for f in "$REPO"/bin/*; do
     [[ -f $f && -x $f ]] || continue
     name="$(basename "$f")"
-    ln -sfn "$REPO/bin/$name" "$localbin/$name"
+    if [[ ! -L "$localbin/$name" || "$(readlink "$localbin/$name")" != "$REPO/bin/$name" ]]; then
+      ln -sfn "$REPO/bin/$name" "$localbin/$name" && changed=1
+    fi
   done
-  log "~/.local/bin link sweep done"
+  [[ $changed == 1 ]] && log "~/.local/bin links refreshed"
 fi
 
 # ── 3a5. curated repo packages: re-assert the set install.sh ships, so a
