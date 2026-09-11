@@ -155,6 +155,16 @@ if [[ -n $REPO && -f $REPO/lib/packages ]]; then
   fi
 fi
 
+# ── 3a5b. imv image MIME heal: a box installed before the imv default, or where
+# ── a browser grabbed image/* (Brave ships its own association), opens images
+# ── in the browser despite the state saying imv. Re-runs the same helper
+# ── install.sh uses (as the repo owner — sync runs as root), but it only acts
+# ── when a browser/no handler owns the MIME, so a deliberate pick survives. ──
+if [[ -n $REPO && -x $REPO/bin/hexciri-imv-defaults && -n $noct_owner && -n $noct_home ]]; then
+  runuser -u "$noct_owner" -- env HOME="$noct_home" HEXCIRI_PATH="$REPO" \
+    "$REPO/bin/hexciri-imv-defaults" >/dev/null 2>&1 || true
+fi
+
 # ── 3a6. kitty: harden allow_remote_control ('yes' → 'socket-only'). 'yes'
 # ── exposes the control socket to any process with display access; the repo
 # ── default changed in 1454112, but a box installed before it keeps 'yes'.

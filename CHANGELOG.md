@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-11 — hexciri v1.4.1 (package/reassuring + imv image defaults)
+
+- **hexciri-sync now enforces the curated repo-package set** — the list lives in `lib/packages`, shared with `install.sh` (same source, can't drift). A package removed — or never landed because the box pre-dated it — is restored on the next sync/update press (skipped inside the pacman lock so the hook can't deadlock). AUR builds stay install.sh-only; sync can't build under the lock.
+- **Images open in imv again** — the MIME bindings were first-install-only, so any box installed before the imv default shipped Brave as the image handler and the menu's `images: imv` was just a state file. New `bin/hexciri-imv-defaults` deploys the displayable override + icon and pins `image/*` to imv — run from `install.sh` on install AND from `hexciri-sync` (3a5b) on every update, plus the Defaults ▸ Images picker. It only overrides when a browser or nothing owns the MIME, so a deliberate pick (qimgv, etc.) is never clobbered.
+- **LocalSend allowed everywhere** — the firewall rule was scoped to one hardcoded subnet, so a network change silently broke transfers while discovery kept working; the rule is now `proto tcp/udp to any port 53317` in both `install.sh` and `hexciri-sync`.
+
 ## 2026-09-10 — hexciri v1.4.1 (fuzzel launcher modes + keyring fix)
 
 - **`hexciri-fuzzel` grew walker/elephant-style modes** — the themed launcher now also does **web search** (`hexciri-fuzzel search [provider]`, `Mod`+Shift+S) and **calculator** (`hexciri-fuzzel calc`, `qalc` → clipboard + notify, `Mod`+Shift+C), all in the same Noctalia-theme box. A **run command** mode (`hexciri-fuzzel run`, `$PATH` scan + free text) exists as a command only — it was trimmed from the keybind set (see below), so reach it from a terminal, not a key. The `--dmenu` passthrough (clipboard, menus) is untouched.

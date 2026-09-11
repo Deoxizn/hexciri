@@ -1,0 +1,52 @@
+#!/bin/bash
+# hexciri:summary=Point image/* MIME at imv (heals browser-stolen image defaults, user-phase)
+# imv ships NoDisplay=true, so it never wins as a hidden default and Brave wins
+# image MIME by default. This deploys a displayable user-level override with the
+# bundled icons and pins image/* to imv — but ONLY when a browser currently owns
+# the MIME or nothing handles it. A deliberate pick (qimgv, swayimg, a photo
+# editor…) is never overridden. Idempotent and safe to run on every sync.
+set -euo pipefail
+
+REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+
+BROWSER_PATTERN='(brave|chromium|chrome|firefox|falkon|palemoon|librewolf|vivaldi|edge)'
+
+imv_present() { [[ -f /usr/share/applications/imv.desktop || -f $HOME/.local/share/applications/imv.desktop ]]; }
+
+deploy_override() {
+  mkdir -p "$HOME/.local/share/applications"
+  mkdir -p "$HOME/.local/share/icons/hicolor/256x256/apps"
+  cp -f "$REPO/branding/imv.png" "$HOME/.local/share/icons/hicolor/256x256/apps/imv.png" 2>/dev/null || true
+  cp -f "$REPO/branding/imv-dir.png" "$HOME/.local/share/icons/hicolor/256x256/apps/imv-dir.png" 2>/dev/null || true
+  gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" &>/dev/null || true
+  awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv.desktop 2>/dev/null | sed 's|^Icon=.*|Icon=imv|' \
+    > "$HOME/.local/share/applications/imv.desktop" 2>/dev/null || true
+  awk '/^NoDisplay=/{next} {print}' /usr/share/applications/imv-dir.desktop 2>/dev/null | sed 's|^Icon=.*|Icon=imv-dir|' \
+    > "$HOME/.local/share/applications/imv-dir.desktop" 2>/dev/null || true
+}
+
+IMAGE_MIMES=(image/png image/x-png image/jpeg image/jpg image/pjpeg image/gif image/bmp image/x-bmp \
+  image/webp image/avif image/heif image/tiff image/tiff-fx image/svg+xml image/x-farbfeld image/jxl image/qoi image/*)
+
+# if a browser owns the MIME, that's the "broken" state to heal; anything else
+# in the slot is a user's deliberate choice and stays.
+needs_healing() { # <mime>
+  local cur
+  cur="$(xdg-mime query default "$1" 2>/dev/null || true)"
+  [[ -z $cur ]] && return 0
+  [[ $cur =~ $BROWSER_PATTERN ]]
+}
+
+healed_any=0
+if imv_present; then
+  deploy_override
+  for mt in "${IMAGE_MIMES[@]}"; do
+    if needs_healing "$mt"; then
+      xdg-mime default imv.desktop "$mt" 2>/dev/null || true
+      healed_any=1
+    fi
+  done
+fi
+
+[[ $healed_any == 1 ]] && echo "imv defaults applied (browser-stolen image MIME healed)"
+exit 0
