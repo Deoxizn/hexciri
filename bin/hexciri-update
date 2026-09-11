@@ -160,7 +160,12 @@ PY
   # ── nothing to do. Idempotent; the hook stays for plain `pacman -Syu`. ——
   # ── hexciri-sync now reports only real changes, so a no-op press silently
   # ── skips — no header, no "nothing to do" theater. ──
-  sudo hexciri-sync || echo "hexciri-sync step failed (continuing)"
+  local sync_out
+  sync_out="$(sudo hexciri-sync 2>&1)" || sync_out+=$'\nhexciri-sync step failed (continuing)'
+  if [[ -n $sync_out ]]; then
+    echo "[Hexciri]"
+    printf '%s\n' "$sync_out"
+  fi
 
   # Reboot offer only when the kernel hexciri is pinned to boot differs from the
   # one currently running.
@@ -207,6 +212,12 @@ update_self() {
     echo "hexciri repo not found at: $REPO"
     echo "expected the bootstrap clone at ~/.local/opt/hexciri"
     exit 1
+  fi
+
+  # Section header printed once per pass (survives the pull/re-exec via env).
+  if [[ ${HXC_SECTION:-0} == 0 ]]; then
+    echo "[Hexciri]"
+    export HXC_SECTION=1
   fi
 
   relink() {
