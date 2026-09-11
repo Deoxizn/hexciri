@@ -117,26 +117,14 @@ if $SYSTEM_ONLY; then
   run pacman -Syyuu --noconfirm
 
   # ── packages (all repo packages; Brave built from AUR as the user, installed as root) ──
-  WM_PKGS=(niri xwayland-satellite)
-  SHELL_PKGS=(noctalia)
-  PKGS=(base-devel git gnupg
-    "${WM_PKGS[@]}" "${SHELL_PKGS[@]}" kitty fish fuzzel zed opencode
-    grim slurp wl-clipboard cliphist wtype playerctl brightnessctl mpv v4l-utils jq fzf ffmpeg
-    gpu-screen-recorder
-    mesa vulkan-icd-loader lib32-mesa lib32-vulkan-icd-loader
-    libnotify gtk3 xdg-utils desktop-file-utils
-    gtk4 gtksourceview5 poppler-glib bubblewrap ffmpegthumbnailer gst-libav gst-plugins-good graphene xdg-terminal-exec
-    polkit-gnome gnome-keyring xdg-desktop-portal-gtk xdg-desktop-portal-gnome
-    adw-gtk-theme
-    networkmanager openssh sddm fastfetch starship noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd inetutils
-    gnome-disk-utility imv mupdf libreoffice-fresh
-    cups hplip unzip fprintd
-    bluez bluez-utils
-    ufw
-    samba nfs-utils
-    tesseract zbar qrencode fwupd zenity kdialog qt6ct localsend
-    pipewire pipewire-pulse wireplumber
-    zram-generator pacman-contrib)
+  # The curated repo-package set lives in lib/packages (shared with hexciri-sync,
+  # which re-asserts it on every system update). AUR builds are handled below.
+  PKGS=()
+  if [[ -f "$REPO_DIR/lib/packages" ]]; then
+    while IFS= read -r p; do
+      [[ -n $p && $p != \#* ]] && PKGS+=("$p")
+    done < "$REPO_DIR/lib/packages"
+  fi
   MISSING=()
   for p in "${PKGS[@]}"; do pacman -Q "$p" &>/dev/null || MISSING+=("$p"); done
   if ((${#MISSING[@]})); then

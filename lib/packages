@@ -1,0 +1,114 @@
+# hexciri curated repo-package set — one per line, blank/`#` lines ignored.
+# Shared by install.sh (first install + --update) and hexciri-sync (re-asserts
+# on every system update, so a removed package is restored on the next press).
+# AUR builds (brave-origin-bin, yay-bin, maplemono-nf) are NOT here: sync runs
+# inside the pacman lock and cannot build; those stay install.sh-only.
+base-devel
+git
+gnupg
+
+# window manager + X11 bridge
+niri
+xwayland-satellite
+
+# shell + launcher
+noctalia
+kitty
+fish
+fuzzel
+zed
+opencode
+
+# capture / media / OCR / share
+grim
+slurp
+wl-clipboard
+cliphist
+wtype
+playerctl
+brightnessctl
+mpv
+v4l-utils
+jq
+fzf
+ffmpeg
+gpu-screen-recorder
+
+# gfx stack
+mesa
+vulkan-icd-loader
+lib32-mesa
+lib32-vulkan-icd-loader
+
+# portal / desktop integration
+libnotify
+gtk3
+xdg-utils
+desktop-file-utils
+gtk4
+gtksourceview5
+poppler-glib
+bubblewrap
+ffmpegthumbnailer
+gst-libav
+gst-plugins-good
+graphene
+xdg-terminal-exec
+polkit-gnome
+gnome-keyring
+xdg-desktop-portal-gtk
+xdg-desktop-portal-gnome
+adw-gtk-theme
+
+# base desktop = networking, auth, display manager, fonts, prompt
+networkmanager
+openssh
+sddm
+fastfetch
+starship
+noto-fonts
+noto-fonts-emoji
+ttf-jetbrains-mono-nerd
+inetutils
+
+# everyday apps
+gnome-disk-utility
+imv
+mupdf
+libreoffice-fresh
+
+# printing / scanner / biometrics
+cups
+hplip
+unzip
+fprintd
+
+# bluetooth
+bluez
+bluez-utils
+
+# firewall
+ufw
+
+# file sharing
+samba
+nfs-utils
+
+# share & capture extras
+tesseract
+zbar
+qrencode
+fwupd
+zenity
+kdialog
+qt6ct
+localsend
+
+# audio
+pipewire
+pipewire-pulse
+wireplumber
+
+# swap / housekeeping
+zram-generator
+pacman-contrib

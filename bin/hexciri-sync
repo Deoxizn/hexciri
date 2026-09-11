@@ -132,7 +132,30 @@ if [[ -n $REPO && -d $REPO/bin && -n $noct_owner && -n $noct_home ]]; then
   log "~/.local/bin link sweep done"
 fi
 
-# ── 3a5. kitty: harden allow_remote_control ('yes' → 'socket-only'). 'yes'
+# ── 3a5. curated repo packages: re-assert the set install.sh ships, so a
+# ── package that was removed (or never landed on a box that installed before
+# ── it was added) comes back on the next system update. Shares lib/packages
+# ── with install.sh — the same list drives both, so they can't drift. AUR
+# ── builds (brave/yay/maplemono) are excluded deliberately: sync runs inside
+# ── the pacman lock as root and cannot build AUR packages. ──
+if [[ -n $REPO && -f $REPO/lib/packages ]]; then
+  missing_pkgs=()
+  while IFS= read -r p; do
+    [[ -n $p && $p != \#* ]] || continue
+    pacman -Q "$p" >/dev/null 2>&1 || missing_pkgs+=("$p")
+  done < "$REPO/lib/packages"
+  if ((${#missing_pkgs[@]})); then
+    if pgrep -x pacman >/dev/null 2>&1; then
+      log "curated packages missing ($(IFS=','; echo "${missing_pkgs[*]}")) — pacman holds the lock (hook run); run 'sudo hexciri-sync' after the transaction to restore"
+    else
+      pacman -S --noconfirm --needed "${missing_pkgs[@]}" >/dev/null 2>&1 && \
+        log "installed missing curated packages: ${missing_pkgs[*]}" || \
+        log "WARNING: failed to install ${missing_pkgs[*]}"
+    fi
+  fi
+fi
+
+# ── 3a6. kitty: harden allow_remote_control ('yes' → 'socket-only'). 'yes'
 # ── exposes the control socket to any process with display access; the repo
 # ── default changed in 1454112, but a box installed before it keeps 'yes'.
 # ── Idempotent; a hardened file is left alone; user edits otherwise survive. ──
