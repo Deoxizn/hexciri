@@ -8,7 +8,14 @@
 set -euo pipefail
 
 CFG="${NIRI_CONFIG:-$HOME/.config/niri/config.kdl}"
-ENV_CFG="${NIRI_ENV_CONFIG:-$HOME/.config/niri/env.kdl}"
+# cfg/ layout (only config.kdl at top); fall back to the pre-cfg/ flat path.
+if [[ -n ${NIRI_ENV_CONFIG:-} ]]; then
+  ENV_CFG="$NIRI_ENV_CONFIG"
+elif [[ -f $HOME/.config/niri/cfg/env.kdl ]]; then
+  ENV_CFG="$HOME/.config/niri/cfg/env.kdl"
+else
+  ENV_CFG="$HOME/.config/niri/env.kdl"
+fi
 HEXCIRI_BIN="${HEXCIRI_BIN:-$HOME/.local/bin}"
 STOCK_PATH="$HEXCIRI_BIN:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"
 

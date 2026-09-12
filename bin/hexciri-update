@@ -268,11 +268,28 @@ update_self() {
     fi
   }
 
+  # cfg/ layout: only config.kdl lives in ~/.config/niri/, fragments live in
+  # ~/.config/niri/cfg/ (CachyOS-with-niri layout). One-time: move flat live
+  # fragments the old layout left behind into cfg/ — never clobber: a cfg/
+  # copy already there always wins, and the live file is a per-machine
+  # authoring.
+  migrate_niri_cfg_dir() {
+    local ndir="${XDG_CONFIG_HOME:-$HOME/.config}/niri" frag
+    [[ -d $ndir ]] || return 0
+    mkdir -p "$ndir/cfg"
+    for frag in autostart cursors env input looknfeel monitors window-rules keybinds; do
+      [[ -f "$ndir/$frag.kdl" && ! -f "$ndir/cfg/$frag.kdl" ]] || continue
+      mv -f "$ndir/$frag.kdl" "$ndir/cfg/$frag.kdl" && \
+        echo "moved niri fragment into cfg/ ($frag.kdl)"
+    done
+  }
+
   # Keybind fragment: shipped file seeds the live config only when absent —
   # the live file is a per-machine authoring and must never be clobbered.
   sync_keybinds() {
-    local src="$REPO/config/niri/keybinds.kdl"
-    local dst="$HOME/.config/niri/keybinds.kdl"
+    migrate_niri_cfg_dir
+    local src="$REPO/config/niri/cfg/keybinds.kdl"
+    local dst="$HOME/.config/niri/cfg/keybinds.kdl"
     [[ -f $src ]] || return 0
     [[ -f $dst ]] && return 0
     mkdir -p "$(dirname "$dst")"

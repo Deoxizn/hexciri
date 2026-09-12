@@ -1,9 +1,9 @@
 #!/bin/bash
 # hexciri:keybinds=searchable-list
 # hexciri:summary=Niri keybinding cheatsheet — parsed from the live keybinds config
-# Reads the hand-written niri keybinds file (~/.config/niri/keybinds.kdl, falling
-# back to the repo snapshot) and renders a searchable cheat list. Hexciri ships
-# a single compositor (niri); "Mod" = Super.
+# Reads the hand-written niri keybinds file (~/.config/niri/cfg/keybinds.kdl,
+# falling back to the pre-cfg/ flat path, then the repo snapshot) and renders
+# a searchable cheat list. Hexciri ships a single compositor (niri); "Mod" = Super.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -12,10 +12,11 @@ CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
 WM="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri)"
 
 FILE=""
-[[ -f $CFG/niri/keybinds.kdl ]] && FILE="$CFG/niri/keybinds.kdl"
-[[ -z $FILE && -f $REPO/config/niri/keybinds.kdl ]] && FILE="$REPO/config/niri/keybinds.kdl"
+[[ -f $CFG/niri/cfg/keybinds.kdl ]] && FILE="$CFG/niri/cfg/keybinds.kdl"
+[[ -z $FILE && -f $CFG/niri/keybinds.kdl ]] && FILE="$CFG/niri/keybinds.kdl"
+[[ -z $FILE && -f $REPO/config/niri/cfg/keybinds.kdl ]] && FILE="$REPO/config/niri/cfg/keybinds.kdl"
 if [[ -z $FILE ]]; then
-  echo "hexciri-keybinds: no niri keybinds config found ($CFG/niri/keybinds.kdl)" >&2
+  echo "hexciri-keybinds: no niri keybinds config found ($CFG/niri/cfg/keybinds.kdl)" >&2
   exit 1
 fi
 
