@@ -284,17 +284,138 @@ update_self() {
     done
   }
 
-  # Keybind fragment: shipped file seeds the live config only when absent —
-  # the live file is a per-machine authoring and must never be clobbered.
+  # Keybind fragment: shipped file seeds the live config only when absent.
+  # A live file from elsewhere (e.g. stock CachyOS-with-niri binds) is adapted
+  # to ours ONCE: rebuilt as repo base + stock-only combos appended under a
+  # marker. Later runs and later user edits are never touched again.
   sync_keybinds() {
     migrate_niri_cfg_dir
     local src="$REPO/config/niri/cfg/keybinds.kdl"
     local dst="$HOME/.config/niri/cfg/keybinds.kdl"
     [[ -f $src ]] || return 0
-    [[ -f $dst ]] && return 0
-    mkdir -p "$(dirname "$dst")"
-    cp -f "$src" "$dst"
-    echo "seeded niri keybinds ($dst)"
+    if [[ ! -f $dst && ! -L $dst ]]; then
+      mkdir -p "$(dirname "$dst")"
+      cp -f "$src" "$dst"
+      echo "seeded niri keybinds ($dst)"
+      return 0
+    fi
+    adapt_stock_keybinds "$src" "$dst"
+  }
+
+  adapt_stock_keybinds() {
+    local src="$1" dst="$2"
+    grep -q 'hexciri-adapted-stock' "$dst" 2>/dev/null && return 0
+    cmp -s "$src" "$dst" && return 0
+    REPO_BINDS="$src" LIVE_BINDS="$dst" \
+      REMOVED_PKGS="$REPO/lib/packages.remove" python3 <<'EOF'
+import os, re, shutil, time
+
+src = os.environ["REPO_BINDS"]
+dst = os.environ["LIVE_BINDS"]
+
+removed = []
+rf = os.environ.get("REMOVED_PKGS", "")
+if rf and os.path.isfile(rf):
+    removed = [l.strip() for l in open(rf)
+               if l.strip() and not l.startswith("#")]
+
+def combo_key(pre):
+    """Combo compare key: strip quoted values + k=v bind attributes, upper."""
+    pre = re.sub(r'"[^"]*"', '', pre)
+    toks = [t for t in pre.split() if '=' not in t]
+    return ''.join(toks).upper() or None
+
+def dangles(entry):
+    """Package the entry spawns that hexciri removed (firefox/nautilus/…)."""
+    for p in removed:
+        if re.search(r'spawn(-sh)?\s+"?%s(?![\w-])' % re.escape(p), entry):
+            return p
+    return None
+
+def entries(text):
+    """(key, full entry text) for each bind in top-level binds{} blocks."""
+    out, depth, in_binds, at = [], 0, False, 0
+    cur = None
+    for line in text.splitlines():
+        s = line.strip()
+        bare = re.sub(r'"[^"]*"', '""', line)
+        bal = bare.count('{') - bare.count('}')
+        if cur is None:
+            if re.match(r'^binds\s*\{', s) and depth == 0:
+                in_binds, at = True, depth
+            elif (in_binds and depth == at + 1 and s
+                    and not s.startswith(("//", "/-"))):
+                m = re.match(r'^(.+?)\s*\{(.*)$', s)
+                if m and ';' not in re.sub(r'"[^"]*"', '', m.group(1)):
+                    key = combo_key(m.group(1))
+                    if key and key != "BINDS":
+                        cur = [key, [line], bal]
+                        if cur[2] <= 0:
+                            out.append((cur[0], "\n".join(cur[1])))
+                            cur = None
+                        depth += bal
+                        continue
+        else:
+            cur[1].append(line)
+            cur[2] += bal
+            if cur[2] <= 0:
+                out.append((cur[0], "\n".join(cur[1])))
+                cur = None
+        depth += bal
+        if in_binds and depth <= at:
+            in_binds = False
+    return out
+
+repo = open(src).read()
+live = open(dst).read()
+repo_combos = {c for c, _ in entries(repo)}
+extras, dropped = [], []
+for c, t in entries(live):
+    if c in repo_combos:
+        continue
+    pkg = dangles(t)
+    if pkg:
+        dropped.append((c, pkg))
+        continue
+    extras.append(t)
+
+shutil.copyfile(dst, "%s.bak.%d" % (dst, int(time.time())))
+if os.path.islink(dst):
+    os.unlink(dst)
+mark = ("// ── adapted from stock binds (one-time): combos the previous "
+        "config shipped that ours doesn't define — kept below, edit freely. "
+        "// hexciri-adapted-stock")
+# niri allows ONE binds{} node per file (a second is a parse error), so splice
+# extras INSIDE the base file's binds block, before its closing brace.
+lines = repo.rstrip().split("\n")
+depth, open_idx, close_idx = 0, None, None
+for i, line in enumerate(lines):
+    s = line.strip()
+    bare = re.sub(r'"[^"]*"', '""', line)
+    if open_idx is None and re.match(r'^binds\s*\{', s) and depth == 0:
+        open_idx = i
+    depth += bare.count('{') - bare.count('}')
+    if open_idx is not None and depth == 0:
+        close_idx = i
+        break
+unplaced = 0
+if extras and open_idx is not None and close_idx is not None:
+    ins = ["", mark] + list(extras)
+    body = "\n".join(lines[:close_idx] + ins + lines[close_idx:]) + "\n"
+else:
+    if extras:
+        unplaced = len(extras)
+        extras = []
+    body = repo.rstrip() + "\n\n" + mark + "\n"
+with open(dst, "w") as f:
+    f.write(body)
+print("adapted stock niri binds: base is ours, kept %d stock-only bind(s), dropped %d dangling (spawns removed apps) (%s)"
+      % (len(extras), len(dropped), dst))
+for c, pkg in dropped:
+    print("  dropped %s (spawns removed %s)" % (c, pkg))
+if unplaced:
+    print("  WARNING: base binds block not found — %d extras NOT placed" % unplaced)
+EOF
   }
 
   # niri-only purge: leftover per-WM config dirs from older builds are garbage.

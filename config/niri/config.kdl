@@ -16,8 +16,9 @@
 //   include "cfg/autostart.kdl"      // spawn-at-startup — boot-time services & shell
 //
 // Split so each concern is easy to find, edit and back up on its own.
-// To add MORE custom keybinds without touching the schema, append a
-// `binds { ... }` block here after the includes — extra bind sections merge.
+// To add MORE custom keybinds, append entries INSIDE the binds { } block in
+// cfg/keybinds.kdl — niri allows only one binds node per file (a second is a
+// parse error); binds merge across included files, not within one.
 
 include "cfg/cursors.kdl"
 include "cfg/env.kdl"
