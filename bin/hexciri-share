@@ -34,8 +34,27 @@ fi
 choice=${choice%' >'}
 
 # ── share ─────────────────────────────────────────────
-share_via_cli() { # <path...> — send through the localsend-cli TUI (floating terminal)
-  exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" localsend-cli -f "$@"
+share_via_cli() { # <path...> — send through a TUI sender (floating terminal)
+  local cli term
+  cli="$(command -v localsend-cli || command -v jocalsend || true)"
+  [[ -n $cli ]] || { note "share needs a sender: yay -S jocalsend"; exit 1; }
+  term="$(command -v xdg-terminal-exec || true)"
+  if [[ $(basename "$cli") == jocalsend ]] && (("$#" > 1)); then
+    local f
+    for f in "$@"; do
+      if [[ -n $term ]]; then
+        "$term" --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$cli" -f "$f" || true
+      else
+        "$cli" -f "$f" || true
+      fi
+    done
+    exit 0
+  fi
+  if [[ -n $term ]]; then
+    exec "$term" --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$cli" -f "$@"
+  else
+    exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" "$cli" -f "$@"
+  fi
 }
 
 share() {

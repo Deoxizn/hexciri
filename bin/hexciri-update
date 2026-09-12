@@ -407,6 +407,21 @@ EOF
     echo "seeded kitty config ($dst)"
   }
 
+  # Repo hook scripts (theme bridge, app hooks): seed each into
+  # ~/.config/hexciri/hooks/<path> only when absent — user files there are
+  # theirs and are never clobbered. Without this, theme-set fires no hooks.
+  sync_hooks() {
+    local src="$REPO/hooks" dst="$HOME/.config/hexciri/hooks" f rel
+    [[ -d $src ]] || return 0
+    find "$src" -type f 2>/dev/null || true | while IFS= read -r f; do
+      rel="${f#$src/}"
+      if [[ -f "$dst/$rel" ]]; then continue; fi
+      mkdir -p "$(dirname "$dst/$rel")"
+      cp -f "$f" "$dst/$rel" 2>/dev/null && echo "seeded hook ($rel)" || true
+    done
+    return 0
+  }
+
   git -C "$REPO" fetch --tags origin --quiet 2>/dev/null || true
   local behind
   behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
@@ -445,6 +460,7 @@ EOF
 
   sync_keybinds
   sync_kitty
+  sync_hooks
 
   if (( behind == 0 )); then
     echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"

@@ -61,7 +61,7 @@ fi
 # that declared dep, reinstalling vim undoes it). fuzzel + gtksourceview5 are
 # layer needs (menu would be dead without fuzzel; strata won't launch without
 # the lib).
-_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel"
+_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel xdg-terminal-exec gpu-screen-recorder tesseract imv"
 _hexciri_removals="cachyos-niri-noctalia xdg-desktop-portal-gnome nautilus alacritty firefox meld cachyos-micro-settings micro"
 _hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro nautilus:$HOME/.config/nautilus"
 if command -v pacman >/dev/null 2>&1; then
@@ -133,6 +133,9 @@ if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&
   sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \
     info "kept brave-bin (removal failed) — remove by hand if unwanted"
 fi
+# Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
+# localsend current delivers it — nothing extra to install. The blades resolve
+# localsend-cli || jocalsend live and fail with a clear message otherwise.
 # Update deploy (one-time here; afterwards run it by hand or from the menu):
 # keybinds adapt, kitty seed, themes, then the full system update it offers.
 if [[ -x "$REPO/bin/hexciri-update" ]]; then

@@ -1,6 +1,6 @@
 #!/bin/bash
 # hexciri:menu=config-niri
-# hexciri:summary=Edit niri config fragments (config.kdl starts the imports)
+# hexciri:summary=Edit niri config fragments (live scan — CachyOS and repo names both work)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,30 +10,28 @@ bindir="${bindir:-$SCRIPT_DIR}"
 
 niri_dir="${XDG_CONFIG_HOME:-$HOME/.config}/niri"
 
-# One row per fragment of the split niri config tree (config.kdl imports them).
-declare -A NIRI_FRAGS=(
-  [config]="config.kdl"
-  [env]="cfg/env.kdl"
-  [input]="cfg/input.kdl"
-  [autostart]="cfg/autostart.kdl"
-  [monitors]="cfg/monitors.kdl"
-  [looknfeel]="cfg/looknfeel.kdl"
-  [window-rules]="cfg/window-rules.kdl"
-  [keybinds]="cfg/keybinds.kdl"
-  [cursors]="cfg/cursors.kdl"
-)
+# Live scan, not a fixed table: CachyOS names its fragments differently
+# (display/rules/layout) than the repo (monitors/window-rules/looknfeel).
+# Offer whatever is actually on disk; config.kdl first.
+rows=()
+[[ -f $niri_dir/config.kdl ]] && rows+=("config.kdl")
+while IFS= read -r f; do
+  [[ $f == config.kdl ]] && continue
+  rows+=("$f")
+done < <(cd "$niri_dir" 2>/dev/null && ls cfg/*.kdl *.kdl 2>/dev/null | sort -u || true)
+[[ ${#rows[@]} -gt 0 ]] || { echo "no niri config found in $niri_dir" >&2; exit 1; }
 
 if [[ $# -gt 0 ]]; then
   # Direct dispatch from menu search
   frag="$*"
 else
   frag=$(
-    printf '%s\n' "${!NIRI_FRAGS[@]}" |
-      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Niri: ' --width=24 --lines=${#NIRI_FRAGS[@]}
+    printf '%s\n' "${rows[@]}" |
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Niri: ' --width=24 --lines=${#rows[@]}
   ) || exec "$SCRIPT_DIR/hexciri-config"   # Esc = back to config menu
 fi
-frag=${frag#Niri }
-file="${NIRI_FRAGS[$frag]:-}"
+file=""
+for r in "${rows[@]}"; do [[ $r == "$frag" ]] && file="$r"; done
 if [[ -n $file ]]; then
   "$bindir/hexciri-edit-file" "$niri_dir/$file"
 fi

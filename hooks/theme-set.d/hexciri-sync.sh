@@ -284,6 +284,11 @@ noct_kdl = Path.home() / ".config" / "niri" / "noctalia.kdl"
 if noct_kdl.exists():
     patch_kdl(noct_kdl, accent, muted)
 
+# CachyOS fragment names carry the same theme surface under different files.
+cachy_layout = Path.home() / ".config" / "niri" / "cfg" / "layout.kdl"
+if cachy_layout.exists():
+    patch_kdl(cachy_layout, accent, muted)
+
 # ── 4. Wallpaper sync ──
 # If the user has custom wallpapers merged (zz-user-* links from the store or
 # extra dirs list), leave the wallpaper alone — a theme switch must not stomp
