@@ -169,13 +169,41 @@ SSHEOF
 fi
 
 # ── 5. app-menu curation: re-hide utility entries the packages re-show ──
-# NOTE: nautilus can't be uninstalled (xdg-desktop-portal-gnome, required by
-# niri itself, depends on it) — so it stays installed but hidden here.
+# NOTE: where xdg-desktop-portal-gnome (required via niri's stack) pins
+# nautilus, it can't be uninstalled — hiding keeps it out of the menu either
+# way; the -f guard skips it silently where it's gone.
 for f in avahi-discover.desktop avahi-zeroconf-browser.desktop bssh.desktop \
          bvnc.desktop btop.desktop lstopo.desktop org.gnome.Nautilus.desktop \
          qv4l2.desktop qvidcap.desktop qt6ct.desktop; do
   d="/usr/share/applications/$f"
   [[ -f $d ]] && ! grep -q '^NoDisplay=true' "$d" && printf 'NoDisplay=true\n' >> "$d" && log "hid $f"
 done
+
+# ── 6. SDDM greeter theme: ship ours + select it. Never touches stock themes;
+# ── deleting /etc/sddm.conf.d/10-hexciri-theme.conf restores prior behavior.
+# ── Fingerprint auto-submit is stamped per-box (reader → true, else false) so
+# ── readerless boxes never red-flash an empty submit.
+if [[ -n $REPO && -d $REPO/branding/sddm ]]; then
+  tdir=/usr/share/sddm/themes/hexciri
+  if [[ ! -f $tdir/Main.qml ]] || ! cmp -s "$REPO/branding/sddm/Main.qml" "$tdir/Main.qml" 2>/dev/null; then
+    mkdir -p "$tdir"
+    cp -rf "$REPO/branding/sddm/." "$tdir/" && log "sddm theme deployed"
+  fi
+  fp=false
+  if grep -ril finger /sys/bus/usb/devices/*/product 2>/dev/null | grep -q .; then fp=true; fi
+  if ! grep -Eq "^Fingerprint=$fp\$" "$tdir/theme.conf" 2>/dev/null; then
+    if grep -Eq '^Fingerprint=' "$tdir/theme.conf" 2>/dev/null; then
+      sed -i -E "s/^Fingerprint=.*/Fingerprint=$fp/" "$tdir/theme.conf"
+    else
+      printf 'Fingerprint=%s\n' "$fp" >> "$tdir/theme.conf"
+    fi
+    log "sddm theme Fingerprint=$fp"
+  fi
+  drop=/etc/sddm.conf.d/10-hexciri-theme.conf
+  if [[ ! -f $drop ]] || ! grep -Eq '^Current=hexciri$' "$drop" 2>/dev/null; then
+    mkdir -p /etc/sddm.conf.d
+    printf '[Theme]\nCurrent=hexciri\n' > "$drop" && log "sddm greeter → hexciri theme"
+  fi
+fi
 
 exit 0
