@@ -1,6 +1,6 @@
 #!/bin/bash
-# hexciri:summary=Update controller: system update (bare), framework sync (self), hardware, channel, menu
-# hexciri:args=[self|sys|hardware|menu|channel-current|channel-set |refresh-boot|help] [args]
+# hexciri:summary=Update controller: system update (bare), framework sync (self), hardware, menu
+# hexciri:args=[self|sys|hardware|menu|refresh-boot|help] [args]
 #
 # One controller for every update-related command. Names that used to be
 # separate scripts are now symlinks into this file and dispatch on argv[0]:
@@ -9,8 +9,7 @@
 #   hexciri-update-run      deprecated alias of the system update (kept)
 #   hexciri-update-hardware restart-audio/wifi/bluetooth/trackpad menu
 #   hexciri-update-menu     the Update submenu (root menu ▸ Update)
-#   hexciri-channel-current / hexciri-channel-set  package channel read/set
-#   hexciri-refresh-boot    re-apply systemd-boot entries + PAM + menu curation
+#   hexciri-refresh-boot    re-apply layer state (links, menu curation, firewall, sshd)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd || dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
@@ -143,10 +142,9 @@ PY
   # and the plugin update_cmd migration ran unconditionally before the confirm.
 
   {
-    echo "=== $(date -Is) channel: $(hexciri-channel-current 2>/dev/null || echo ?) ==="
+    echo "=== $(date -Is) ==="
     sudo pacman -Syu --noconfirm
-    # kernels are plain repo packages now (stock/lts/omarchy*) and update above;
-    # the legacy 580xx driver is AUR-built and updates via the yay pass below —
+    # Kernels and drivers are CachyOS's and update above like everything else;
     # there is no separate refresh loop anymore.
     if command -v yay &>/dev/null && pacman -Qmq 2>/dev/null | grep -qv yay-bin; then
       yay -Sua --noconfirm 2>&1 | grep -v 'Missing AUR Debug Packages' || true
@@ -154,10 +152,10 @@ PY
   } 2>&1 | tee -a "$LOG"
 
   # ── re-apply hexciri sync state: the alpm hook only fires when a tracked
-  # ── package (kernel/sddm/…) actually changed, so a no-op update never ran it.
-  # ── Running it here — every press — guarantees boot entries, PAM, the gnome-
-  # ── keyring pin AND the per-PC makepkg tuning land even when pacman had
-  # ── nothing to do. Idempotent; the hook stays for plain `pacman -Syu`. ——
+  # ── package actually changed, so a no-op update never ran it. Running it
+  # ── here — every press — guarantees links, menu curation, firewall and sshd
+  # ── land even when pacman had nothing to do. Idempotent; the hook stays
+  # ── for plain `pacman -Syu`. ──
   # ── hexciri-sync now reports only real changes, so a no-op press silently
   # ── skips — no header, no "nothing to do" theater. ──
   local sync_out
@@ -492,10 +490,9 @@ update_hardware() { # [choice]
 
 # ══════════════════════════════════════════════ hexciri-update-menu
 update_menu() { # [choice]
-  local current entries choice channel chan_choice
-  current=$("$bindir/hexciri-channel-current" 2>/dev/null)
+  local entries choice
 
-  entries=('Hexciri' "Channel${current:+ ($current)} >" 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
+  entries=('Hexciri' 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
 
   if [[ $# -gt 0 ]]; then
     choice="$*"
@@ -514,85 +511,25 @@ update_menu() { # [choice]
     "Repo")      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update-hexciri" ;;
     "Themes")    exec "$SCRIPT_DIR/hexciri-terminal" -e bash -c "'$SCRIPT_DIR/hexciri-theme-omarchy' && '$SCRIPT_DIR/hexciri-theme-extras' --run sync" ;;
     "Wallpaper") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-wallpaper-refresh" "$HOME/.local/state/hexciri/current/theme" ;;
-    Channel*)    ;;
     *)           exit 0 ;;
   esac
-
-  # Channel picker; switching needs sudo, so run it in a terminal.
-  chan_choice=$(
-    printf '%s\n' stable bleeding |
-      awk -v cur="$current" '$0 == cur { print "✓ " $0; next } { print }' |
-      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Channel: ' --width=22 --lines=2
-  ) || exec "$SCRIPT_DIR/hexciri-update-menu"   # Esc = back to Update menu
-
-  channel=${chan_choice#✓ }
-  [[ -n $channel ]] && exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" "$bindir/hexciri-channel-set" "$channel"
 }
 
-# ══════════════════════════════════════════════ hexciri-channel-current
-update_channel_current() {
-  # channel = which mirror feed we track: stable is the omarchy month-hold
-  # snapshot, bleeding is official Arch (since 1.5). The repo state is
-  # informational only.
-  local mirror
-  mirror=$(grep -hoE "https://(stable-mirror|mirror)\.omarchy\.org/|https://geo\.mirror\.pkgbuild\.com/" /etc/pacman.d/mirrorlist 2>/dev/null | head -n1)
-  case "$mirror" in
-    *stable-mirror.omarchy.org*) echo "stable" ;;
-    *geo.mirror.pkgbuild.com*) echo "bleeding" ;;
-    *mirror.omarchy.org*) echo "bleeding" ;; # legacy curved picked up pre-1.5
-    "") echo "unknown" ;;
-  esac
-}
-
-# ══════════════════════════════════════════════ hexciri-channel-set
-update_channel_set() { # <stable|bleeding>
-  local HEXCIRI_PATH="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
-  [[ -d "$HEXCIRI_PATH" ]] || HEXCIRI_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-  usage() { echo "Usage: hexciri-channel-set [stable|bleeding]"; }
-
-  (( $# > 0 )) || { usage; exit 1; }
-  local channel="$1" src_conf src_mirror
-
-  case "$channel" in
-    stable)
-      src_conf="$HEXCIRI_PATH/default/pacman/pacman-stable.conf"
-      src_mirror="$HEXCIRI_PATH/default/pacman/mirrorlist-stable"
-      ;;
-    bleeding)
-      src_conf="$HEXCIRI_PATH/default/pacman/pacman-bleeding.conf"
-      src_mirror="$HEXCIRI_PATH/default/pacman/mirrorlist-bleeding"
-      ;;
-    *) echo "Unknown channel: $channel" >&2; usage >&2; exit 1 ;;
-  esac
-
-  [[ -f $src_conf && -f $src_mirror ]] || { echo "channel files missing in $HEXCIRI_PATH/default/pacman" >&2; exit 1; }
-
-  echo "Setting channel to $channel"
-  sudo cp -f /etc/pacman.conf /etc/pacman.conf.bak
-  sudo cp -f /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak 2>/dev/null || true
-  sudo cp -f "$src_conf" /etc/pacman.conf
-  sudo cp -f "$src_mirror" /etc/pacman.d/mirrorlist
-
-  hexciri-hook pre-refresh-pacman 2>/dev/null || true
-
-  sudo pacman -Syyuu --noconfirm
-}
+# (mirror channels removed — CachyOS has no stable/bleeding feeds; its own
+# repos stay exactly as installed.)
 
 # ══════════════════════════════════════════════ hexciri-refresh-boot
 update_refresh_boot() {
-  # hexciri no longer ships plymouth; the equivalent "reset the boot-time config
-  # to shipped defaults" is the same post-package-transaction sync that keeps
-  # systemd-boot entries, PAM (keyring + fingerprint) and app-menu hiding curated.
+  # Re-run the root sync pass on demand (links, menu curation, firewall, sshd).
   local sync_cmd
   if [[ -x "$SCRIPT_DIR/hexciri-sync" ]]; then
     sync_cmd="$SCRIPT_DIR/hexciri-sync"
   else
     sync_cmd="hexciri-sync"
   fi
-  echo "Re-asserting hexciri boot state (systemd-boot entries, PAM, menu curation)..."
+  echo "Re-asserting hexciri layer state (links, menu curation, firewall, sshd)..."
   sudo "$sync_cmd"
-  echo "Boot config reset — your chosen default boot entry is preserved."
+  echo "Layer re-applied."
 }
 
 # ══════════════════════════════════════════════ dispatch
@@ -602,8 +539,6 @@ case "$(basename "$0")" in
   hexciri-update-run)     sub=run ;;
   hexciri-update-hardware) sub=hardware ;;
   hexciri-update-menu)    sub=menu ;;
-  hexciri-channel-current) sub=channel-current ;;
-  hexciri-channel-set)    sub=channel-set ;;
   hexciri-refresh-boot)   sub=refresh-boot ;;
   *)                      : ;;  # hexciri-update bare, or unknown → decide below
 esac
@@ -612,7 +547,7 @@ esac
 # e.g. --yes — means the bare system update (args pass through untouched).
 known_sub() {
   case "$1" in
-    sys|self|run|hardware|menu|channel-current|channel-set|refresh-boot|help) return 0 ;;
+    sys|self|run|hardware|menu|refresh-boot|help) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -632,9 +567,7 @@ case "$sub" in
   self)         update_self "$@" ;;
   hardware)     update_hardware "$@" ;;
   menu)         update_menu "$@" ;;
-  channel-current) update_channel_current ;;
-  channel-set)  update_channel_set "${1:-}" ;;
   refresh-boot) update_refresh_boot ;;
-  help)         echo "usage: hexciri-update <self|sys|hardware|menu|channel-set|channel-current|refresh-boot|help>"; exit 0 ;;
+  help)         echo "usage: hexciri-update <self|sys|hardware|menu|refresh-boot|help>"; exit 0 ;;
   *)            echo "unknown update subcommand: $sub" >&2; exit 1 ;;
 esac

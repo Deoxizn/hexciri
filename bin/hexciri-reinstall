@@ -22,8 +22,7 @@ confirmation="$("$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Reinstall? ' --wi
   <<<$'Confirm\nCancel')" || exit 0
 [[ $confirmation == Confirm ]] || exit 0
 
-current="$(hexciri-channel-current 2>/dev/null || echo stable)"
-"$REPO/install.sh" --channel "$current" -y
+"$REPO/install.sh" -y
 
 src="$REPO/config"
 if [[ -d $src ]]; then
