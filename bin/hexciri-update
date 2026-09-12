@@ -419,6 +419,18 @@ if unplaced:
 EOF
   }
 
+  # Kitty config: seed once when absent — live file is per-machine after that.
+  sync_kitty() {
+    local src="$REPO/config/kitty/kitty.conf"
+    local dst="$HOME/.config/kitty/kitty.conf"
+    [[ -f $src ]] || return 0
+    command -v kitty >/dev/null 2>&1 || return 0   # no kitty here — push nothing
+    [[ -f $dst ]] && return 0
+    mkdir -p "$(dirname "$dst")"
+    cp -f "$src" "$dst"
+    echo "seeded kitty config ($dst)"
+  }
+
   # niri-only purge: leftover per-WM config dirs from older builds are garbage.
   # Mango is NOT purged — it's a supported experiment.
   purge_other_wms() {
@@ -478,6 +490,7 @@ EOF
   "$REPO/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
 
   sync_keybinds
+  sync_kitty
   purge_other_wms
 
   if (( behind == 0 )); then
