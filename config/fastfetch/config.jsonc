@@ -115,19 +115,7 @@
       "type": "command",
       "key": "OS",
       "keyWidth": 18,
-      "text": "echo \"Hexciri\"",
-    },
-    {
-      "type": "command",
-      "key": "CHANNEL",
-      "keyWidth": 18,
-      "text": "hexciri-channel-current",
-    },
-    {
-      "type": "command",
-      "key": "VERSION",
-      "keyWidth": 18,
-      "text": "hexciri-version 2>/dev/null | awk '{print $1}' || echo \"?\"",
+      "text": "os=$(grep '^NAME=' /etc/os-release | cut -d= -f2 | tr -d '\"'); theme=$(hexciri-theme-current 2>/dev/null || echo \"?\"); echo \"$os $(uname -m) | Hexciri $theme\"",
     },
     {
       "type": "command",
