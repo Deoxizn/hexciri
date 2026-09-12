@@ -161,7 +161,7 @@ PY
   # ── hexciri-sync now reports only real changes, so a no-op press silently
   # ── skips — no header, no "nothing to do" theater. ──
   local sync_out
-  sync_out="$(sudo hexciri-sync 2>&1)" || sync_out+=$'\nhexciri-sync step failed (continuing)'
+  sync_out="$(sudo "$REPO/bin/hexciri-sync" 2>&1)" || sync_out+=$'\nhexciri-sync step failed (continuing)'
   if [[ -n $sync_out ]]; then
     echo "[Hexciri]"
     printf '%s\n' "$sync_out"
