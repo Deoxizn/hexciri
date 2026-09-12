@@ -161,59 +161,9 @@ if [[ -n $noct_home && -f $noct_home/.config/kitty/kitty.conf ]] \
     log "kitty: remote control hardened to socket-only (pre-1454112 config migrated)"
 fi
 
-# ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel.
-# ── Skipped unless loader.conf exists: a bare /boot/loader dir with no config
-# ── (e.g. Limine-booted CachyOS) means systemd-boot isn't live here, and there
-# ── is nothing to regenerate for. ──
-if [[ -f /boot/loader/loader.conf ]]; then
-  mkdir -p /boot/loader/entries
-  # NOTE: `|| true` is load-bearing — on boxes with a vestigial /boot/loader dir
-  # but no loader.conf (e.g. Limine-booted CachyOS), cat fails and pipefail
-  # would fail the assignment, aborting the whole sync silently under set -e.
-  before="$( (cat /boot/loader/loader.conf 2>/dev/null; for f in /boot/loader/entries/hexciri-*.conf; do [[ -e $f ]] && { echo "== $f"; cat "$f"; }; done) | md5sum || true )"
-  ROOTUUID="$(findmnt -no UUID / 2>/dev/null || true)"
-  ROOTOPTS="root=UUID=$ROOTUUID rw quiet"
-  MICRO="$(ls /boot/*-ucode.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null || true)"
-  if [[ -z $ROOTUUID ]]; then
-    log "warning: no root UUID resolvable, skipping loader entries"
-  elif compgen -G '/boot/vmlinuz-*' >/dev/null; then
-    rm -f /boot/loader/entries/hexciri-*.conf
-    for img in /boot/vmlinuz-*; do
-      k="${img#/boot/vmlinuz-}"
-      {
-        echo "title   Hexciri ($k)"
-        echo "linux   /vmlinuz-$k"
-        [[ -n $MICRO ]] && echo "initrd  /$MICRO"
-        echo "initrd  /initramfs-$k.img"
-        echo "options $ROOTOPTS"
-      } > "/boot/loader/entries/hexciri-$k.conf"
-    done
-    # default = newest kernel by initramfs mtime, UNLESS the user pinned one via
-    # hexciri-kernel/hexciri-gpu (recorded in /usr/share/hexciri/boot-default) —
-    # that choice wins as long as its entry still exists. A pinned default is how
-    # a deliberate bore/LTS pick survives a later stock-kernel rebuild (which
-    # would otherwise steal the default by having the freshest mtime).
-    default=""
-    if [[ -r /usr/share/hexciri/boot-default ]]; then
-      pin="$(cat /usr/share/hexciri/boot-default 2>/dev/null || true)"
-      [[ -f /boot/loader/entries/$pin ]] && default="$pin"
-    fi
-    if [[ -z $default ]]; then
-      newest="$(ls -1t /boot/initramfs-*.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null | sed 's/^initramfs-//; s/\.img$//' || echo linux)"
-      default="hexciri-$newest.conf"
-    fi
-    # console-mode max = highest GOP resolution = smallest/most readable text.
-    # systemd-boot's default can pick a low-res console mode that renders an
-    # ~1 inch tall font on high-density panels. A user-set `console-mode` in the
-    # current loader.conf wins (their override survives regeneration); otherwise
-    # we stamp max.
-    cmode="$(awk '$1=="console-mode"{print $2; exit}' /boot/loader/loader.conf 2>/dev/null)"
-    [[ -n $cmode ]] || cmode="max"
-    echo -e "default $default\ntimeout 3\nconsole-mode $cmode" > /boot/loader/loader.conf
-    after="$( (cat /boot/loader/loader.conf 2>/dev/null; for f in /boot/loader/entries/hexciri-*.conf; do [[ -e $f ]] && { echo "== $f"; cat "$f"; }; done) | md5sum || true )"
-    [[ $before != $after ]] && log "systemd-boot entries regenerated (default: $default)" || true
-  fi
-fi
+# ── boot entries + boot default are CachyOS's (kernel, bootloader, default).
+# ── hexciri used to regenerate systemd-boot entries here; cut — owning the
+# ── boot path on someone else's OS is exactly what this layer doesn't do. ──
 
 # ── 3. SDDM greeter: pin the X11 greeter. Boxes that ran the 09-09 Wayland
 # ── experiment have DisplayServer=wayland + GreeterEnvironment in the conf and
