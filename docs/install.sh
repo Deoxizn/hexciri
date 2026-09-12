@@ -43,4 +43,10 @@ if [[ -x "$REPO/bin/hexciri-sync" ]]; then
   info "re-applying layer via hexciri-sync"
   HEXCIRI_REPO="$REPO" "$REPO/bin/hexciri-sync" || info "sync returned non-zero; re-run after reboot"
 fi
+# Per-user Strata file manager (GitHub release; sets itself default for
+# inode/directory + file chooser). Best-effort: offline boxes still finish.
+if [[ -x "$REPO/bin/hexciri-setup" ]]; then
+  info "installing Strata file manager (default)"
+  "$REPO/bin/hexciri-setup" strata 2>&1 | sed 's/^/  /' || info "Strata skipped (offline?) — run 'hexciri-setup strata' later"
+fi
 info "done — menu + theme hook live. Update: git -C $REPO pull && sh $REPO/install.sh"
