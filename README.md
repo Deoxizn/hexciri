@@ -2,226 +2,78 @@
 
 <img src="branding/hexciri-nb.png" alt="Hexciri" width="650">
 
-Arch × Niri × Noctalia
+**CachyOS × Niri × Noctalia**
 
-[hexciri.dirty.pizza](https://hexciri.dirty.pizza)
+A post-install layer for CachyOS: the menu, the theming, and the keybinding
+source of truth. Not a distro. Not an installer. CachyOS brings the desktop
+with no desktop, the kernels, the GPU stack, the firmware and the drivers —
+hexciri layers the shell on top.
 
 </div>
 
-## Highlights
+## What this is
 
-- **Ships on Niri + Noctalia, out of the box** — the scrollable-tiling
-  Wayland compositor with the Noctalia desktop shell. No swapping, no lock-in
-  to learn around: monitors, keybindings and theme all follow one config.
-- **Themes that color everything** — one click (or `hexciri-theme-set <name>`)
-  recolors the whole desktop, 30+ apps in all. 22 themes ship included; extras
-  are one line each in a list.
+hexciri turns a **CachyOS install with no desktop** into the desktop you
+already know: Niri (the WM) + the Noctalia shell, all wired to one keybinding
+menu and one theming system. Everything CachyOS already handles — GPU/HW
+autodetection, driver install (its installer reads this machine's hardware and
+pins the right mesa/nvidia stack itself), firmware, microcode, kernels and the
+rolling release — is left to CachyOS. hexciri does not install, rebuild, hold
+or swap any of it.
+
+What hexciri does own:
+
+- **The menu** — every option in the root menu dispatches to a real controller
+  in `bin/`: share & capture, hardware toggles, packages picker, power, lock,
+  keybinds, network, themes, reminders, screen recording. Nothing dangles.
+- **The theming** — one click (or `hexciri-theme-set <name>`) recolors the whole
+  desktop, 30+ apps in all. 22 themes ship included; extras are one line each
+  in a list.
 - **Your wallpapers survive theme changes** — drop your own images into
   `~/.config/hexciri/wallpapers`, or point it at your own folder via
-  `wallpaper-sources/extra.list`, and they show up in the picker and stay across
-  every theme swap.
-- **Transparent terminals** — kitty at reduced background opacity with blur
-  behind it, so your wallpaper shows through.
-- **Gaming, ready** — Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net,
-  GeForce NOW, Xbox Cloud, controllers, GPU setup.
-- **A minimal Arch experience** — your system starts clean: Arch, Niri,
-  and the Noctalia shell — nothing you didn't ask for; add the rest on
-  demand.
-- **It's Arch. Only calmer.** — same package manager, same knowledge:
-  everything that runs on Arch runs here. But the default repo holds packages
-  back a month, so updates don't surprise you. Rolling release is one `--channel
-  bleeding` away.
+  `config/wallpaper-sources/extra.list`, and they show up in the picker and
+  stay across every theme swap.
+- **The keybindings, one source of truth** — rendered into Niri's config so
+  they never drift. `hexciri-keybinds` prints them all; `Mod`+K searches them
+  from a picker.
+
+It owns nothing that CachyOS's installer, kernel or package manager already
+does. Rolling release stays CachyOS's rolling release; stock kernels stay
+stock.
 
 ## Install
 
-Boot the Arch ISO, then run:
-
-```bash
-curl -LO https://hexciri.dirty.pizza/hexciri && sh hexciri
-```
-
-## Themes
-
-Switch themes from the **Themes** menu or `hexciri-theme-set <name>` — colors,
-windows, terminals and apps (30+) all change together. 22 ship included; pick
-up extras and keep your own wallpapers with the list below.
-
-## Extra themes & wallpapers
-
-Both are plain text lists — add a line, run **Update ▸ Themes** (themes) or
-**Update ▸ Wallpaper** (wallpapers), done. Remove a line and it's gone.
-
-**Extra themes** — `~/.config/hexciri/theme-sources/extra.list`:
-
-```text
-# one theme per line, owner/name form
-HANCORE-linux/aamis
-OldJobobo/dracula
-```
-
-**Extra wallpaper folders** — `~/.config/hexciri/wallpaper-sources/extra.list`:
-
-```text
-# one folder per line; ~ means your home
-~/Pictures/Wallpapers
-/mnt/Photos/wallpapers
-```
-
-Not a list person? The plain `~/.config/hexciri/wallpapers` folder works too —
-drop files in and they're picked up, no list entry needed, and they stay across
-theme changes.
-
-## Defaults
-
-| slot | default | change it |
-|---|---|---|
-| terminal | `kitty` | `hexciri-defaults` → Terminal |
-| shell | `bash` (login) · `fish` (kitty) | `hexciri-defaults` → Shell |
-| browser | `brave-origin` | `hexciri-defaults` → Browser |
-| files | `strata` | `hexciri-defaults` → Files |
-| editor | `zed` | `hexciri-defaults` → Editor |
-| agent | `opencode` (`Mod`+backtick) | `hexciri-defaults` → Agent |
-| kernel | auto: `linux` (stock) on fresh installs | `hexciri-kernel` (custom post-install) |
-| gpu | autodetect (mesa/vulkan per vendor; nvidia-open Turing+, 580xx legacy for all pre-Turing NVIDIA via AUR build) | `hexciri-gpu` |
-| monitors | preconfigured (scale 2) | `~/.config/niri/monitors.kdl` |
-| bluetooth | on (bluez + bar widget) | — |
-| theme | `sakurazuki` | `hexciri-theme-set` |
-| channel | `stable` | `hexciri-channel-set` |
-| boot | systemd-boot, SDDM password/fingerprint greeter | — |
-| prompt/fetch | starship + fastfetch w/ emblem | `~/.config/starship.toml`, `~/.config/fastfetch/config.jsonc` |
-
-`Mod` is the Super key. Press **`Mod`+K** — or run `hexciri-keybinds` — for a
-searchable list of every keybind. Keybindings are one source of truth, rendered
-into niri's config, so they never drift.
-
-**Main ones:**
-
-| key | does |
-|---|---|
-| `Mod`+D | open the app launcher |
-| `Mod`+Return | open a terminal |
-| `Mod`+Space | quick run bar (fuzzel) |
-| `Mod`+Q | close the focused window |
-| `Mod`+F | fullscreen the window |
-| `Mod`+1 … `Mod`+9, `Mod`+0 | jump to a workspace |
-| `Mod`+Shift+1 … 9 | move the window to a workspace |
-| `Mod`+Left/Right or H/L | move between windows |
-| `Mod`+Ctrl+arrows | drag a window along |
-| `Mod`+Ctrl+L | lock the screen |
-| `Mod`+Print | screenshot the screen |
-| `Ctrl`+Print | screenshot and copy a chosen area |
-| `Alt`+Print | record the screen |
-| `Mod`+Escape | power menu (shutdown/reboot/logout…) |
-
-**Fuzzel mode launchers** (`hexciri-fuzzel`, walker/elephant-style — same themed box as the app launcher):
-
-| key | mode |
-|---|---|
-| `Mod`+Shift+S | web search (default provider) |
-| `Mod`+Shift+C | calculator (`qalc` → clipboard + notify) |
-
-Which search engine `Mod`+Shift+S opens is set by **System ▸ Config ▸ Search
-provider** — the picker lists every provider (Google AI, Google classic,
-DuckDuckGo, Brave, SearXNG, GitHub, Wikipedia, Arch Wiki, YouTube, AUR, Arch
-Man Pages). Per-provider search on demand: `hexciri-fuzzel search <name>`.
-Volume, brightness and mic keys work as labeled.
-
-## Menus
-
-Everything reachable from the root menu (`Mod`+Alt+Space). Each row ending in
-`>` opens the next submenu; `Esc` walks back. `hexciri-*` commands dispatch the
-same menus from a terminal.
-
-```
-► Hexciri
-├─ Learn                    (docs for what's installed — Hexciri, Noctalia,
-│                            Niri, kitty/foot/alacritty, fish, Zed, OpenCode,
-│                            Arch wiki, Starship)
-├─ Packages ▸ Install / Remove
-├─ Share & Capture          (Clipboard / File / Folder / Receive via LocalSend,
-│                            Screenshot region+screen, Screen recording,
-│                            OCR text, Decode QR, Transcode media)
-├─ Reminders                (Set a reminder, Quick reminder, Clear all)
-├─ Hardware                 (Touchpad / Touchscreen toggle, Hybrid GPU,
-│                            Network download/upload, Disk speed test)
-├─ Themes ▸ Theme list / Palette source / Backgrounds / Fonts /
-│            Extra themes list / Wallpaper dirs list
-├─ System
-│  ├─ Config
-│  │  ├─ Niri ▸            (config, env, input, autostart, monitors,
-│  │  │                      looknfeel, window-rules, keybinds, cursors)
-│  │  ├─ Noctalia config
-│  │  ├─ Search provider   (pick what Mod+Shift+S searches)
-│  │  ├─ Fastfetch config
-│  │  ├─ Hexciri lockscreen
-│  │  └─ Hooks
-│  ├─ Default Apps ▸       (Browser / Editor / Terminal / Shell / Files / Images / Agent)
-│  ├─ Kernel ▸             (Recommended auto-detect, Stock, LTS, Omarchy EEVDF, BORE, Status)
-│  ├─ Maintenance ▸        (Sync system clock, System Cleaner, User password, Reset boot config)
-│  ├─ Windows product key  (reads the OEM key from firmware)
-│  ├─ Reset defaults       (hexciri-reinstall)
-│  ├─ Network ▸ DNS (DHCP/Cloudflare/Google/Custom), Wi-Fi QR Code
-│  └─ Security ▸           (Fingerprint, Fido2, SSHD, Passwordless Sudo)
-├─ Restart ▸               (Reload Niri, Restart Noctalia, Refresh theme)
-└─ Update
-   ├─ Hexciri / Repo       (system update / framework git pull)
-   ├─ Channel ▸            (stable ↔ bleeding)
-   ├─ Themes               (re-sync Omarchy + extras)
-   ├─ Wallpaper            (re-merge user wallpapers into the theme)
-   ├─ Hardware ▸           (Audio / Wi-Fi / Bluetooth / Trackpad restart)
-   └─ Firmware             (fwupdmgr update)
-```
-
-The fuzzel launcher modes (`Mod`+Shift+S web search, `Mod`+Shift+C calc) are
-not menu rows — they're quick binds to `hexciri-fuzzel search` / `calc` (see the
-keybind table). `Mod`+K lists every keybind.
-
-## Channels
-
-| channel | Arch mirror | pkgs | kernel menu |
-|---|---|---|---|
-| `stable` (default) | `stable-mirror.omarchy.org` (month-held) | `pkgs.omarchy.org/stable` | `linux`, `linux-lts` |
-| `bleeding` | official Arch (`geo.mirror.pkgbuild.com`) | `pkgs.omarchy.org/edge` | `linux`, `linux-lts`, omarchy EEVDF + BORE |
-
-Stable — month-held packages (kept for users who want slower, vetted releases);
-bleeding — normal Arch rolling release plus the omarchy **edge** repo, which
-carries omarchy's own kernel line as ordinary repo packages: `linux-omarchy`
-(EEVDF) and `linux-omarchy-bore` (BORE). Install/update them via
-**System ▸ Kernel** (or `hexciri-kernel`), where **Recommended (auto-detect)**
-has `hexciri-scheduler` read this machine (NVIDIA dGPU / X3D → BORE, else
-EEVDF) and pick the matching build. Because they're real repo packages they
-update with plain `pacman -Syu` — no fetch loop, no AUR rebuilds, and the
-omarchy keyring is bootstrapped on install. Stock `linux`/`linux-lts` stay the
-kernel-menu base everywhere; omarchy kernels are a bleeding-channel extra.
-Legacy 580xx drivers are AUR-built in dependency order by `hexciri-gpu`.
-
-## Already on Arch?
-Vanilla Arch with systemd-boot + NetworkManager? Skip the ISO flow:
+1. **Install CachyOS** with the **no desktop** option (their installer does the
+   GPU/HW detection, drivers, firmware and kernels for you).
+2. Clone hexciri and run the layer:
 
 ```bash
 git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
-~/.local/opt/hexciri/install.sh  # stable channel
-~/.local/opt/hexciri/install.sh --channel bleeding  # Rolling Release
+~/.local/opt/hexciri/install.sh
 ```
 
-The clone is the runtime — install.sh symlinks its commands into `~/.local/bin`
-and wires the configs, once at bootstrap. Updating is just a pull (**Update ▸
-Repo**, or `hxup`'s system update pulls the repo as part of `pacman -Syu`).
+That symlinks the controllers into `~/.local/bin` and wires the configs once.
+Updating is just a pull plus the layer re-apply.
 
-> **Upgrading an install older than v0.1.3?** Old installs hard-copied commands
-> into `/usr/local/bin`; newer ones use symlinks, so a plain `pacman -Syu`
-> won't fix a stale one. Run this once:
->
-> ```bash
-> git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
-> ~/.local/opt/hexciri/install.sh --update
-> ```
->
-> That replaces the old copies with symlinks and keeps your settings as they
-> are (it never touches installed packages, kernels, services or the channel).
-> Afterwards, the normal pull-based updates apply. What changed, release by
-> release? Read `CHANGELOG.md`.
+Because it's a clone, not a served artifact, there's no bootstrapping URL, no
+channel ceremony, no release cadence. Version is the git SHA.
+
+## Highlights
+
+- **Themes that color everything** — one click recolors the whole desktop,
+  30+ apps in all. 22 themes ship included; extras are one line each in a list.
+- **Your wallpapers survive theme changes** — drop your own images into
+  `~/.config/hexciri/wallpapers`, or point it at your own folder via
+  `config/wallpaper-sources/extra.list`, and they stay across every theme swap.
+- **Transparent terminals** — kitty at reduced background opacity with blur
+  behind it, so your wallpaper shows through.
+- **The keybindings, one source of truth** — rendered into Niri's config so
+  they never drift. `hexciri-keybinds` lists every one; `Mod`+K searches it.
+- **It's CachyOS. Only calmer.** — same package manager, same knowledge:
+  everything that runs on CachyOS runs here. The stock channels CachyOS ships
+  stay the default; hexciri just makes it look like home.
 
 ## Sources
 
 [Omarchy](https://github.com/omacom/omarchy) × [Niri](https://github.com/YaLTeR/niri) × [Noctalia](https://github.com/) × [Quickshell](https://github.com/outfoxxed/quickshell) × [theme-hook-plugin-manager](https://github.com/OldJobobo/theme-hook-plugin-manager) × [base16-Discord](https://github.com/imbypass/base16-discord) × [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7) × [system24](https://github.com/refact0r/system24) × [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme) × [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) × [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam)
+</content>
