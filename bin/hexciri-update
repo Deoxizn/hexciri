@@ -236,29 +236,6 @@ update_self() {
     return 0
   }
 
-  # One-time legacy migration: pre-symlink installs hard-copied every command to
-  # /usr/local/bin and mirrored catalog/themes/default into /usr/share/hexciri.
-  legacy_purge() {
-    local stale=false f
-    for f in /usr/local/bin/hexciri-*; do
-      [[ -f $f && ! -L $f ]] && stale=true && break
-    done
-    $stale || return 0
-    echo "legacy root command copies found — clearing /usr/local/bin + /usr/share/hexciri (one-time)"
-    if sudo -n rm -f /usr/local/bin/hexciri-* 2>/dev/null; then
-      sudo -n ln -sfn "$REPO/bin/hexciri-sync" /usr/local/bin/hexciri-sync 2>/dev/null || true
-      sudo -n rm -rf /usr/share/hexciri/themes /usr/share/hexciri/theme-sources \
-        /usr/share/hexciri/default /usr/share/hexciri/VERSION 2>/dev/null || true
-      echo "legacy /usr/local/bin copies + /usr/share/hexciri mirror removed (hook relinked to the repo)"
-    else
-      echo "note: stale /usr/local/bin/hexciri-* remain (no sudo session) — a system update will clear them"
-    fi
-    # pre-0.1.3 one-time: legacy configs have no environment PATH line, so niri
-    # can't find the ~/.local/bin hexciri-* commands after the stale root copies
-    # go away. Inject ~/.local/bin PATH only if missing; idempotent.
-    "$REPO/bin/hexciri-migrate-niri-path" 2>/dev/null || true
-  }
-
   # The shorthand Omarchy default set is part of the framework, so it rides along
   # with the repo sync. Non-fatal so a sync proceeds even if it hits a snag.
   sync_themes() {
@@ -291,6 +268,9 @@ update_self() {
   sync_keybinds() {
     command -v niri >/dev/null 2>&1 || return 0   # no niri here (e.g. MangoWM box) — push no niri configs
     migrate_niri_cfg_dir
+    # pre-0.1.3 one-time: legacy configs have no environment PATH line, so niri
+    # can't find the ~/.local/bin commands. Inject only if missing; idempotent.
+    "$REPO/bin/hexciri-migrate-niri-path" 2>/dev/null || true
     local src="$REPO/config/niri/cfg/keybinds.kdl"
     local dst="$HOME/.config/niri/cfg/keybinds.kdl"
     [[ -f $src ]] || return 0
@@ -427,28 +407,6 @@ EOF
     echo "seeded kitty config ($dst)"
   }
 
-  # niri-only purge: leftover per-WM config dirs from older builds are garbage.
-  # Mango is NOT purged — it's a supported experiment.
-  purge_other_wms() {
-    local wm cfg bin purged=false
-    for wm in hypr sway; do
-      cfg="${XDG_CONFIG_HOME:-$HOME/.config}/$wm"
-      [[ -e $cfg ]] || continue
-      case "$wm" in
-        hypr)  bin=Hyprland ;;
-        sway)  bin=sway ;;
-      esac
-      if pgrep -x "$bin" >/dev/null 2>&1; then
-        echo "warning: '$wm' is running right now — leaving $cfg in place"
-        continue
-      fi
-      rm -rf "$cfg"
-      echo "purged leftover '${wm}' config: $cfg"
-      purged=true
-    done
-    return 0
-  }
-
   git -C "$REPO" fetch --tags origin --quiet 2>/dev/null || true
   local behind
   behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
@@ -487,11 +445,9 @@ EOF
 
   sync_keybinds
   sync_kitty
-  purge_other_wms
 
   if (( behind == 0 )); then
     echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"
-    legacy_purge
     exit 0
   fi
   echo "framework sync complete (HEAD $(git -C "$REPO" rev-parse --short HEAD))"
