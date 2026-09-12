@@ -4,14 +4,13 @@
 
 **CachyOS dotfiles: theme hook + menu**
 
-Install CachyOS with a WM/Shell (Niri today, MangoWM planned), clone the
-dots, run one script.
+Install CachyOS with a WM, clone the dots, run one script.
 
 </div>
 
 ## What this is
 
-hexciri is dots + scripts for a CachyOS box that already has a WM/Shell. What
+hexciri is dots + scripts for a CachyOS box that already has a WM. What
 the repo actually does: every menu option dispatches to a real controller in
 `bin/`, and `hexciri-theme-set` recolors the desktop in one hook. It never
 touches the installer, kernel, GPU stack, or package manager — those stay
@@ -35,7 +34,7 @@ What hexciri does own:
 
 ## Install
 
-1. **Install CachyOS** with a WM/Shell (Niri today, MangoWM planned).
+1. **Install CachyOS** with a WM.
 2. Bring the dots — curl or clone, same script:
 
 ```bash
