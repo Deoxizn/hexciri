@@ -560,35 +560,78 @@ EOF
   # in .hexciri-manifest drives it, so no manual rm-to-refresh, ever.
   sync_hooks() {
     local src="$REPO/hooks" dst="$HOME/.config/hexciri/hooks"
-    local rev manifest f rel oldrev
+    local rev manifest f rel entry oldrev found r
     [[ -d $src ]] || return 0
-    rev="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    rev="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
     manifest="$dst/.hexciri-manifest"
-    oldrev=""
-    [[ -f $manifest ]] && oldrev="$(head -n 1 "$manifest" 2>/dev/null || true)"
+    owned() { # owned <rel> -> prints recorded rev or nothing
+      [[ -f $manifest ]] || return 1
+      entry="$(grep -E "^[0-9a-f]{40} $rel\$" "$manifest" 2>/dev/null | head -n 1 || true)"
+      [[ -n $entry ]] || return 1
+      printf '%s' "${entry%% *}"
+    }
+    record_owned() { # record_owned <rel> <rev>
+      mkdir -p "$dst"
+      grep -vE "^[0-9a-f]{40} $2\$|^! $2\$|^#[0-9a-f]+$" "$manifest" 2>/dev/null > "$manifest.tmp" || true
+      printf '%s %s\n' "$1" "$2" >> "$manifest.tmp"
+      mv -f "$manifest.tmp" "$manifest"
+    }
+    record_custom() { # record_custom <rel>
+      mkdir -p "$dst"
+      if ! grep -qxF "! $1" "$manifest" 2>/dev/null; then
+        printf '! %s\n' "$1" >> "$manifest"
+      fi
+    }
+    is_custom() {
+      grep -qxF "! $1" "$manifest" 2>/dev/null
+    }
     { find "$src" -type f 2>/dev/null || true; } | while IFS= read -r f; do
       rel="${f#$src/}"
       if [[ ! -f "$dst/$rel" ]]; then
         mkdir -p "$(dirname "$dst/$rel")"
-        cp -f "$f" "$dst/$rel" 2>/dev/null && echo "seeded hook ($rel)" || true
+        if cp -f "$f" "$dst/$rel" 2>/dev/null; then
+          echo "seeded hook ($rel)"
+          [[ $rev != unknown ]] && record_owned "$rev" "$rel"
+        fi
         continue
       fi
-      if [[ $rev != unknown && -n $oldrev && $rev != "$oldrev" ]]; then
+      if is_custom "$rel"; then
+        continue
+      fi
+      if oldrev="$(owned "$rel")"; then
         if git -C "$REPO" show "$oldrev:hooks/$rel" 2>/dev/null | cmp -s - "$dst/$rel"; then
-          if cmp -s "$f" "$dst/$rel" 2>/dev/null; then
-            : # identical already — nothing to do
-          else
+          if ! cmp -s "$f" "$dst/$rel" 2>/dev/null; then
             cp -f "$f" "$dst/$rel" 2>/dev/null && echo "refreshed hook ($rel)" || true
           fi
+          [[ $rev != unknown ]] && record_owned "$rev" "$rel"
+          continue
         else
+          record_custom "$rel"
           echo "kept custom hook ($rel)"
+          continue
         fi
       fi
+      # No record (pre-manifest seed or user file): classify via history.
+      found=""
+      if [[ $rev != unknown ]]; then
+        while IFS= read -r r; do
+          [[ -n $r ]] || continue
+          if git -C "$REPO" show "$r:hooks/$rel" 2>/dev/null | cmp -s - "$dst/$rel"; then
+            found="$r"
+            break
+          fi
+        done < <(git -C "$REPO" log --format=%H -- "hooks/$rel" 2>/dev/null || true)
+      fi
+      if [[ -z $found ]]; then
+        record_custom "$rel"
+        echo "kept custom hook ($rel)"
+      elif cmp -s "$f" "$dst/$rel" 2>/dev/null; then
+        record_owned "$found" "$rel"
+      else
+        cp -f "$f" "$dst/$rel" 2>/dev/null && echo "refreshed hook ($rel)" || true
+        [[ $rev != unknown ]] && record_owned "$rev" "$rel"
+      fi
     done
-    if [[ $rev != unknown ]]; then
-      mkdir -p "$dst"
-      printf '%s\n' "$rev" > "$manifest"
-    fi
     return 0
   }
 
