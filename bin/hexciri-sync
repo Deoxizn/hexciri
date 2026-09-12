@@ -161,8 +161,12 @@ if [[ -n $noct_home && -f $noct_home/.config/kitty/kitty.conf ]] \
     log "kitty: remote control hardened to socket-only (pre-1454112 config migrated)"
 fi
 
-# ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
-if [[ -d /boot/loader ]]; then
+# ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel.
+# ── Skipped unless loader.conf exists: a bare /boot/loader dir with no config
+# ── (e.g. Limine-booted CachyOS) means systemd-boot isn't live here, and there
+# ── is nothing to regenerate for. ──
+if [[ -f /boot/loader/loader.conf ]]; then
+  mkdir -p /boot/loader/entries
   # NOTE: `|| true` is load-bearing — on boxes with a vestigial /boot/loader dir
   # but no loader.conf (e.g. Limine-booted CachyOS), cat fails and pipefail
   # would fail the assignment, aborting the whole sync silently under set -e.
