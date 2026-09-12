@@ -49,4 +49,25 @@ if [[ -x "$REPO/bin/hexciri-setup" ]]; then
   info "installing Strata file manager (default)"
   "$REPO/bin/hexciri-setup" strata 2>&1 | sed 's/^/  /' || info "Strata skipped (offline?) — run 'hexciri-setup strata' later"
 fi
+# Brave Origin (not Brave): the hexciri browser. One-time installer step —
+# sync never touches packages. Installs via yay/paru as you, then drops the
+# brave-bin stand-in once origin is present. Best-effort, never fatal.
+if command -v brave-origin >/dev/null 2>&1; then
+  info "Brave Origin already present — keeping it, no Brave stand-in wanted"
+else
+  _aur=""
+  for _h in yay paru; do command -v "$_h" >/dev/null 2>&1 && { _aur=$_h; break; }; done
+  if [[ -n $_aur ]]; then
+    info "installing Brave Origin (via $_aur)"
+    "$_aur" -S --needed --noconfirm brave-origin-bin 2>&1 | sed 's/^/  /' || \
+      info "Brave Origin skipped — run 'yay -S brave-origin-bin' by hand later"
+  else
+    info "Brave Origin skipped (no yay/paru) — run 'yay -S brave-origin-bin' by hand later"
+  fi
+fi
+if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&1; then
+  info "removing Brave stand-in (Origin is present)"
+  sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \
+    info "kept brave-bin (removal failed) — remove by hand if unwanted"
+fi
 info "done — menu + theme hook live. Update: git -C $REPO pull && sh $REPO/install.sh"
