@@ -311,7 +311,9 @@ MaxAuthTries 3
 SSHEOF
     info "sshd: wrote hardening drop-in (key-only, no root password)"
   fi
-  run sshd -t 2>/dev/null || warn "sshd config test failed — check /etc/ssh/sshd_config.d/"
+  run sshd -t 2>/dev/null \
+    || { ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1 && warn "sshd config test failed — check /etc/ssh/sshd_config.d/"; } \
+    || true
   run systemctl restart sshd 2>/dev/null || true
 
   # ── SMB (Samba) + NFS: network file sharing out of the box ──
@@ -337,8 +339,14 @@ SSHEOF
   # fingerprint-first login supplies NO password, so pam_gnome_keyring's
   # auto-unlock gets no secret and Brave/Chromium prompt every boot. Seed a
   # passwordless login keyring now (no desktop session exists yet, so no daemon
-  # to disturb). Non-destructive: existing keyrings are never touched.
-  run bash -c "su - '$TARGET_USER' -c 'bash \"$REPO_DIR/bin/hexciri-gkr-init.sh\"'"
+  # to disturb). Non-destructive: existing keyrings are never touched. The
+  # script is staged to /tmp first: in the install chroot REPO_DIR is
+  # /root/hexciri-install and /root is mode 700, so the target user could
+  # never read it in place.
+  run cp -f "$REPO_DIR/bin/hexciri-gkr-init.sh" /tmp/hexciri-gkr-init.sh
+  run chmod 644 /tmp/hexciri-gkr-init.sh
+  run bash -c "su - '$TARGET_USER' -c 'bash /tmp/hexciri-gkr-init.sh'"
+  run rm -f /tmp/hexciri-gkr-init.sh
   fi # ! $UPDATE_MODE
 
   # ── gnome-keyring: PIN the last known-good build. 50.0 has an unfixed
