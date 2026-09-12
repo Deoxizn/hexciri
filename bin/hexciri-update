@@ -520,16 +520,34 @@ EOF
     echo "seeded kitty config ($dst)"
   }
 
-  # fastfetch config: seed once when absent (repo ships one, CachyOS boxes
-  # have none live) — live file is per-machine after that.
+  # fastfetch config: seed when absent; refresh when the live file matches a
+  # past repo revision (unmodified seed — safe to advance); keep silently when
+  # it matches the current one, and keep-as-custom when it matches none (the
+  # user made it theirs). No manifest, no rm dance — git history is the record.
   sync_fastfetch() {
     local src="$REPO/config/fastfetch/config.jsonc"
     local dst="$HOME/.config/fastfetch/config.jsonc"
+    local r found=""
     [[ -f $src ]] || return 0
-    [[ -f $dst ]] && return 0
-    mkdir -p "$(dirname "$dst")"
-    cp -f "$src" "$dst"
-    echo "seeded fastfetch config ($dst)"
+    if [[ ! -f $dst ]]; then
+      mkdir -p "$(dirname "$dst")"
+      cp -f "$src" "$dst" && echo "seeded fastfetch config ($dst)"
+      return 0
+    fi
+    cmp -s "$src" "$dst" 2>/dev/null && return 0
+    while IFS= read -r r; do
+      [[ -n $r ]] || continue
+      if git -C "$REPO" show "$r:config/fastfetch/config.jsonc" 2>/dev/null | cmp -s - "$dst"; then
+        found="$r"
+        break
+      fi
+    done < <(git -C "$REPO" log --format=%H -- config/fastfetch/config.jsonc 2>/dev/null || true)
+    if [[ -z $found ]]; then
+      echo "kept custom fastfetch config ($dst)"
+      return 0
+    fi
+    cp -f "$src" "$dst" && echo "refreshed fastfetch config ($dst)"
+    return 0
   }
 
   # Noctalia bar config + plugin settings: adopt once. A missing live config

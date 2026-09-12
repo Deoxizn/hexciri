@@ -115,7 +115,7 @@
       "type": "command",
       "key": "OS",
       "keyWidth": 18,
-      "text": "os=$(grep '^NAME=' /etc/os-release | cut -d= -f2 | tr -d '\"'); echo \"$os $(uname -m)\"",
+      "text": "os=$(grep '^PRETTY_NAME=' /etc/os-release | cut -d= -f2 | tr -d '\"'); echo \"$os | Hexciri\"",
     },
     {
       "type": "command",
