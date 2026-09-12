@@ -91,20 +91,8 @@ fi
     "$noct_home/.local/state/noctalia/settings.toml" && \
   log "arch-updater plugin: update_cmd migrated to hexciri-update"
 
-# ── 3a2. noctalia config.toml: install.sh never deployed the repo default, so a
-# ── fresh box ran noctalia with factory defaults (no hexciri bar layout, empty
-# ── workspaces not hidden). Seed it from the repo if missing — a user-edited
-# ── file is never clobbered. Runs as root (alpm hook); the config is owned by
-# ── the repo owner like the settings.toml migration above. ──
-if [[ -n $REPO && -f $REPO/config/noctalia/config.toml && -n $noct_owner && -n $noct_home ]]; then
-  ncfg="$noct_home/.config/noctalia/config.toml"
-  if [[ ! -f $ncfg ]]; then
-    mkdir -p "$noct_home/.config/noctalia"
-    nog="$(stat -c %G "$noct_home" 2>/dev/null || echo users)"
-    install -o "$noct_owner" -g "$nog" -m 644 "$REPO/config/noctalia/config.toml" "$ncfg" && \
-      log "seeded noctalia config (repo default was missing on this box)"
-  fi
-fi
+# ── noctalia bar config + plugin settings live in hexciri-update
+# ── (sync_noctalia: user context, adopt-once with stock backup). ──
 
 # ── 3a4. ~/.local/bin link sweep: every hexciri-* command in the repo gets a
 # ── symlink in the owner's ~/.local/bin (same as install.sh's linking step).

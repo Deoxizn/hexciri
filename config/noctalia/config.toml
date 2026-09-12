@@ -116,7 +116,7 @@ mode = "dark"
 # ──────────────────────────────────────────────
 # Plugins (noctalia community "arch-updater" bar widget)
 #   Enabled declaratively here; its plugin-level settings are owned by the
-#   state dir and are seeded by install.sh into
+#   state dir and are seeded by hexciri-update (from arch-updater.toml) into
 #   ~/.local/state/noctalia/settings.toml (terminal=kitty,
 #   update_cmd=hexciri-update). No service.luau patching — the current
 #   plugin honors both keys natively.

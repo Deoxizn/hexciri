@@ -421,6 +421,28 @@ EOF
     echo "seeded fastfetch config ($dst)"
   }
 
+  # Noctalia bar config + plugin settings: adopt once. A missing live config
+  # is seeded; a present non-hexciri one is backed up to .stock and replaced.
+  # Anything carrying our header afterwards is the user's and is never touched.
+  sync_noctalia() {
+    local src="$REPO/config/noctalia/config.toml"
+    local dst="$HOME/.config/noctalia/config.toml"
+    [[ -f $src ]] || return 0
+    mkdir -p "$(dirname "$dst")"
+    if [[ ! -f $dst ]]; then
+      cp -f "$src" "$dst" && echo "seeded noctalia config ($dst)"
+    elif ! grep -q '^# Hexciri — Noctalia config' "$dst" 2>/dev/null; then
+      [[ -f $dst.stock ]] || cp -f "$dst" "$dst.stock"
+      cp -f "$src" "$dst" && echo "adopted noctalia config (stock backed up to $dst.stock)"
+    fi
+    local psrc="$REPO/config/noctalia/arch-updater.toml" pdst="$HOME/.local/state/noctalia/settings.toml"
+    if [[ -f $psrc && ! -f $pdst ]]; then
+      mkdir -p "$(dirname "$pdst")"
+      cp -f "$psrc" "$pdst" && echo "seeded noctalia plugin settings ($pdst)"
+    fi
+    return 0
+  }
+
   # Repo hook scripts (theme bridge, app hooks): seed each into
   # ~/.config/hexciri/hooks/<path> only when absent — user files there are
   # theirs and are never clobbered. Without this, theme-set fires no hooks.
@@ -475,6 +497,7 @@ EOF
   sync_keybinds
   sync_kitty
   sync_fastfetch
+  sync_noctalia
   sync_hooks
 
   if (( behind == 0 )); then
