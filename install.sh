@@ -61,7 +61,9 @@ fi
 # that declared dep, reinstalling vim undoes it). fuzzel + gtksourceview5 are
 # layer needs (menu would be dead without fuzzel; strata won't launch without
 # the lib).
-_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel xdg-terminal-exec gpu-screen-recorder tesseract imv"
+# NOTE: xdg-terminal-exec is NOT in CachyOS repos (aborts the whole transaction
+# when named) — blades fall back to hexciri-terminal, which needs only kitty.
+_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv"
 _hexciri_removals="cachyos-niri-noctalia xdg-desktop-portal-gnome nautilus alacritty firefox meld cachyos-micro-settings micro"
 _hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro nautilus:$HOME/.config/nautilus"
 if command -v pacman >/dev/null 2>&1; then
