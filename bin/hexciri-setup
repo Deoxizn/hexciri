@@ -153,6 +153,7 @@ print(d.get("tag_name",""))' 2>/dev/null || true)"
   install -m644 "$extract/io.github.lgse.Strata.desktop" "$DESKTOP"
   install -m644 "$extract/io.github.lgse.Strata.svg" "$ICON"
 
+  mkdir -p "$(dirname "$VER_FILE")"
   printf '%s\n' "$latest_tag" > "$VER_FILE"
   update-desktop-database "$(dirname "$DESKTOP")" 2>/dev/null || true
   gtk-update-icon-cache -qtf "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
