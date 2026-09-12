@@ -163,7 +163,10 @@ fi
 
 # ── 1. systemd-boot: regenerate one hexciri-<kernel>.conf per installed kernel ──
 if [[ -d /boot/loader ]]; then
-  before="$( (cat /boot/loader/loader.conf 2>/dev/null; for f in /boot/loader/entries/hexciri-*.conf; do [[ -e $f ]] && { echo "== $f"; cat "$f"; }; done) | md5sum )"
+  # NOTE: `|| true` is load-bearing — on boxes with a vestigial /boot/loader dir
+  # but no loader.conf (e.g. Limine-booted CachyOS), cat fails and pipefail
+  # would fail the assignment, aborting the whole sync silently under set -e.
+  before="$( (cat /boot/loader/loader.conf 2>/dev/null; for f in /boot/loader/entries/hexciri-*.conf; do [[ -e $f ]] && { echo "== $f"; cat "$f"; }; done) | md5sum || true )"
   ROOTUUID="$(findmnt -no UUID / 2>/dev/null || true)"
   ROOTOPTS="root=UUID=$ROOTUUID rw quiet"
   MICRO="$(ls /boot/*-ucode.img 2>/dev/null | head -n 1 | xargs basename 2>/dev/null || true)"
@@ -203,7 +206,7 @@ if [[ -d /boot/loader ]]; then
     cmode="$(awk '$1=="console-mode"{print $2; exit}' /boot/loader/loader.conf 2>/dev/null)"
     [[ -n $cmode ]] || cmode="max"
     echo -e "default $default\ntimeout 3\nconsole-mode $cmode" > /boot/loader/loader.conf
-    after="$( (cat /boot/loader/loader.conf 2>/dev/null; for f in /boot/loader/entries/hexciri-*.conf; do [[ -e $f ]] && { echo "== $f"; cat "$f"; }; done) | md5sum )"
+    after="$( (cat /boot/loader/loader.conf 2>/dev/null; for f in /boot/loader/entries/hexciri-*.conf; do [[ -e $f ]] && { echo "== $f"; cat "$f"; }; done) | md5sum || true )"
     [[ $before != $after ]] && log "systemd-boot entries regenerated (default: $default)" || true
   fi
 fi
