@@ -45,7 +45,9 @@ create_dynamic_theme() {
     fi
 
     color_luma() {
-        local hex_input="$1"
+        local hex_input="${1#\#}"
+        # Non-colors score 0 (dark/unknown) instead of crashing arithmetic.
+        if [[ ! $hex_input =~ ^[0-9a-fA-F]{6}$ ]]; then echo 0; return 0; fi
         local r=$((16#${hex_input:0:2}))
         local g=$((16#${hex_input:2:2}))
         local b=$((16#${hex_input:4:2}))

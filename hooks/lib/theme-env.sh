@@ -223,6 +223,9 @@ clamp_rgb() {
 change_shade() {
     local hex_input=$1
     local shade=$2
+    hex_input="${hex_input#\#}"
+    # Non-colors (empty/missing keys) pass through untouched — never crash.
+    [[ $hex_input =~ ^[0-9a-fA-F]{6}$ ]] || { printf '%s' "$1"; return 0; }
     local r=$((16#${hex_input:0:2}))
     local g=$((16#${hex_input:2:2}))
     local b=$((16#${hex_input:4:2}))
