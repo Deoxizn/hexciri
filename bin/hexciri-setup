@@ -461,7 +461,6 @@ EOF
     "Battle.net") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run battlenet ;;
     "GeForce NOW") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run geforcenow ;;
     "Xbox Cloud") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run xboxcloud ;;
-    "GPU setup") exec hexciri-gpu ;;
     "Xbox controllers") exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run xbox ;;
   esac
 }
