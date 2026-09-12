@@ -41,27 +41,34 @@ term_exec() { # "$@" — run in a floating terminal without needing xdg-terminal
     exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" "$@"
   fi
 }
-share_via_cli() { # <path...> — send through a TUI sender (floating terminal)
+share_via_cli() { # <path...> — send through a CLI sender, else the GUI app
   local cli term
   cli="$(command -v localsend-cli || command -v jocalsend || true)"
-  [[ -n $cli ]] || { note "share needs a sender: yay -S jocalsend"; exit 1; }
-  term="$(command -v xdg-terminal-exec || true)"
-  if [[ $(basename "$cli") == jocalsend ]] && (("$#" > 1)); then
-    local f
-    for f in "$@"; do
-      if [[ -n $term ]]; then
-        "$term" --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$cli" -f "$f" || true
-      else
-        "$cli" -f "$f" || true
-      fi
-    done
-    exit 0
+  if [[ -n $cli ]]; then
+    term="$(command -v xdg-terminal-exec || true)"
+    if [[ $(basename "$cli") == jocalsend ]] && (("$#" > 1)); then
+      local f
+      for f in "$@"; do
+        if [[ -n $term ]]; then
+          "$term" --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$cli" -f "$f" || true
+        else
+          "$cli" -f "$f" || true
+        fi
+      done
+      exit 0
+    fi
+    if [[ -n $term ]]; then
+      exec "$term" --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$cli" -f "$@"
+    else
+      exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" "$cli" -f "$@"
+    fi
   fi
-  if [[ -n $term ]]; then
-    exec "$term" --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$cli" -f "$@"
-  else
-    exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" "$cli" -f "$@"
+  # No CLI sender: the GUI accepts file/URI args (Exec=localsend %U).
+  if command -v localsend >/dev/null 2>&1; then
+    exec localsend "$@"
   fi
+  note "nothing to send with — install localsend"
+  exit 1
 }
 
 share() {

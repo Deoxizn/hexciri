@@ -21,12 +21,15 @@ for p in $path; do
   files+=("$p")
 done
 
-# Sender: localsend-cli when some package ships it, else the jocalsend TUI
-# (single file per launch). Anything else is a clear error, not a silent fail.
+# Sender: a CLI sender when present, else the GUI app (takes file/URI args).
+# Anything else is a clear error, not a silent fail.
 cli="$(command -v localsend-cli || command -v jocalsend || true)"
-[[ -n $cli ]] || { echo "share needs a sender: yay -S jocalsend" >&2; exit 1; }
-if [[ $(basename "$cli") == jocalsend ]] && ((${#files[@]} > 1)); then
-  for f in "${files[@]}"; do "$cli" -f "$f" || true; done
-  exit 0
+if [[ -n $cli ]]; then
+  if [[ $(basename "$cli") == jocalsend ]] && ((${#files[@]} > 1)); then
+    for f in "${files[@]}"; do "$cli" -f "$f" || true; done
+    exit 0
+  fi
+  exec "$cli" -f "${files[@]}"
 fi
-exec "$cli" -f "${files[@]}"
+command -v localsend >/dev/null 2>&1 || { echo "share needs a sender: install localsend" >&2; exit 1; }
+exec localsend "${files[@]}"
