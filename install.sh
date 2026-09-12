@@ -43,6 +43,36 @@ if [[ -x "$REPO/bin/hexciri-sync" ]]; then
   info "re-applying layer via hexciri-sync"
   HEXCIRI_REPO="$REPO" "$REPO/bin/hexciri-sync" || info "sync returned non-zero; re-run after reboot"
 fi
+# One-time light app swap: hexciri's apps in, replaced stock ones out (with
+# their config dirs, but only once something is actually absent). Runs here at
+# install and nowhere else — sync never touches packages, so later manual
+# changes are never reverted or re-applied. Best-effort, never fatal.
+# NOTE: nautilus stays (xdg-desktop-portal-gnome, required via niri's stack,
+# needs it — hidden from the menu instead); vim stays (held by the deliberately
+# kept cachyos-zsh-config). fuzzel + gtksourceview5 are layer needs (menu would
+# be dead without fuzzel; strata won't launch without the lib).
+_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel"
+_hexciri_removals="alacritty firefox meld micro cachyos-micro-settings"
+_hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro"
+if command -v pacman >/dev/null 2>&1; then
+  info "one-time app swap (wants + removals)"
+  sudo pacman -S --needed --noconfirm $_hexciri_wants 2>&1 | sed 's/^/  /' || \
+    info "wants skipped/partial — install by hand: pacman -S $_hexciri_wants"
+  for _p in $_hexciri_removals; do
+    pacman -Q "$_p" >/dev/null 2>&1 || continue
+    if sudo pacman -Rns --noconfirm "$_p" 2>&1 | sed 's/^/  /'; then
+      info "removed $_p"
+    else
+      info "kept $_p (something still needs it)"
+    fi
+  done
+  for _m in $_hexciri_purge; do
+    _pkg="${_m%%:*}"; _dir="${_m#*:}"
+    pacman -Q "$_pkg" >/dev/null 2>&1 || rm -rf "$_dir"
+  done
+  unset _p _m _pkg _dir
+fi
+unset _hexciri_wants _hexciri_removals _hexciri_purge
 # Per-user Strata file manager (GitHub release; sets itself default for
 # inode/directory + file chooser). Best-effort: offline boxes still finish.
 if [[ -x "$REPO/bin/hexciri-setup" ]]; then
