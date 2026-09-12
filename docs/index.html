@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hexciri — CachyOS dotfiles: theme hook + menu</title>
+<meta name="description" content="CachyOS plus a WM/Shell of your choice. hexciri is just dotfiles: a theme hook and a menu. One curl line away.">
+<meta name="author" content="Deoxizn">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://hexciri.dirty.pizza/">
+<meta name="theme-color" content="#0b0911">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Hexciri">
+<meta property="og:url" content="https://hexciri.dirty.pizza/">
+<meta property="og:title" content="Hexciri — CachyOS dotfiles: theme hook + menu">
+<meta property="og:description" content="CachyOS plus a WM/Shell of your choice. Just dotfiles: a theme hook and a menu.">
+</head>
+<body>
+<h1>Hexciri</h1>
+<p>CachyOS plus a WM/Shell of your choice (Niri today, MangoWM planned).
+hexciri is just dotfiles: a theme hook and a menu. Not a distro. Not an
+installer.</p>
+<h2>Dots</h2>
+<pre><code>curl -LO https://hexciri.dirty.pizza/install.sh
+sh install.sh</code></pre>
+<p>That clones <a href="https://github.com/Deoxizn/hexciri">Deoxizn/hexciri</a>
+(or uses your checkout), symlinks <code>bin/*</code> into
+<code>~/.local/bin</code>, and re-applies the layer via
+<code>hexciri-sync</code>. Updating is a pull plus a re-run. Version is the
+git SHA.</p>
+<h2>What it does</h2>
+<ul>
+<li><strong>Menu</strong> — every option dispatches to a real controller in <code>bin/</code>. Nothing dangles.</li>
+<li><strong>Theme hook</strong> — <code>hexciri-theme-set</code> recolors the desktop in one shot.</li>
+<li><strong>Keybindings, one source of truth</strong> — rendered into the WM config so they never drift.</li>
+</ul>
+<p>It never touches the installer, kernel, GPU stack, or package manager. Those stay CachyOS's.</p>
+</body>
+</html>

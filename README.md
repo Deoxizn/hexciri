@@ -2,24 +2,20 @@
 
 <img src="branding/hexciri-nb.png" alt="Hexciri" width="650">
 
-**CachyOS × Niri × Noctalia**
+**CachyOS dotfiles: theme hook + menu**
 
-A post-install layer for CachyOS: the menu, the theming, and the keybinding
-source of truth. Not a distro. Not an installer. CachyOS brings the desktop
-with no desktop, the kernels, the GPU stack, the firmware and the drivers —
-hexciri layers the shell on top.
+Install CachyOS with a WM/Shell (Niri today, MangoWM planned), clone the
+dots, run one script. Not a distro. Not an installer. Just dotfiles.
 
 </div>
 
 ## What this is
 
-hexciri turns a **CachyOS install with no desktop** into the desktop you
-already know: Niri (the WM) + the Noctalia shell, all wired to one keybinding
-menu and one theming system. Everything CachyOS already handles — GPU/HW
-autodetection, driver install (its installer reads this machine's hardware and
-pins the right mesa/nvidia stack itself), firmware, microcode, kernels and the
-rolling release — is left to CachyOS. hexciri does not install, rebuild, hold
-or swap any of it.
+hexciri is dots + scripts for a CachyOS box that already has a WM/Shell. What
+the repo actually does: every menu option dispatches to a real controller in
+`bin/`, and `hexciri-theme-set` recolors the desktop in one hook. It never
+touches the installer, kernel, GPU stack, or package manager — those stay
+CachyOS's.
 
 What hexciri does own:
 
@@ -37,26 +33,26 @@ What hexciri does own:
   they never drift. `hexciri-keybinds` prints them all; `Mod`+K searches them
   from a picker.
 
-It owns nothing that CachyOS's installer, kernel or package manager already
-does. Rolling release stays CachyOS's rolling release; stock kernels stay
-stock.
-
 ## Install
 
-1. **Install CachyOS** with the **no desktop** option (their installer does the
-   GPU/HW detection, drivers, firmware and kernels for you).
-2. Clone hexciri and run the layer:
+1. **Install CachyOS** with a WM/Shell (Niri today, MangoWM planned).
+2. Bring the dots — curl or clone, same script:
+
+```bash
+curl -LO https://hexciri.dirty.pizza/install.sh
+sh install.sh
+```
+
+or:
 
 ```bash
 git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
 ~/.local/opt/hexciri/install.sh
 ```
 
-That symlinks the controllers into `~/.local/bin` and wires the configs once.
-Updating is just a pull plus the layer re-apply.
-
-Because it's a clone, not a served artifact, there's no bootstrapping URL, no
-channel ceremony, no release cadence. Version is the git SHA.
+That symlinks the controllers into `~/.local/bin` and re-applies the layer
+via `bin/hexciri-sync`. Updating is a pull plus a re-run. Version is the git
+SHA.
 
 ## Highlights
 
@@ -69,9 +65,6 @@ channel ceremony, no release cadence. Version is the git SHA.
   behind it, so your wallpaper shows through.
 - **The keybindings, one source of truth** — rendered into Niri's config so
   they never drift. `hexciri-keybinds` lists every one; `Mod`+K searches it.
-- **It's CachyOS. Only calmer.** — same package manager, same knowledge:
-  everything that runs on CachyOS runs here. The stock channels CachyOS ships
-  stay the default; hexciri just makes it look like home.
 
 ## Sources
 
