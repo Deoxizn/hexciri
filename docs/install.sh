@@ -56,10 +56,11 @@ fi
 # install and nowhere else — sync never touches packages, so later manual
 # changes are never reverted or re-applied. Best-effort, never fatal.
 # NOTE: removal order matters — the CachyOS niri meta goes first so the portal
-# it pins, then nautilus, come out cleanly behind it. vim stays (held by the
-# deliberately kept cachyos-zsh-config; remove by hand with -Rdd if unwanted).
-# fuzzel + gtksourceview5 are layer needs (menu would be dead without fuzzel;
-# strata won't launch without the lib).
+# it pins, then nautilus, come out cleanly behind it. vim is force-removed
+# below (held by the deliberately kept cachyos-zsh-config; -Rdd breaks only
+# that declared dep, reinstalling vim undoes it). fuzzel + gtksourceview5 are
+# layer needs (menu would be dead without fuzzel; strata won't launch without
+# the lib).
 _hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel"
 _hexciri_removals="cachyos-niri-noctalia xdg-desktop-portal-gnome nautilus alacritty firefox meld cachyos-micro-settings micro"
 _hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro nautilus:$HOME/.config/nautilus"
@@ -79,6 +80,15 @@ if command -v pacman >/dev/null 2>&1; then
     _pkg="${_m%%:*}"; _dir="${_m#*:}"
     pacman -Q "$_pkg" >/dev/null 2>&1 || rm -rf "$_dir"
   done
+  if pacman -Q vim >/dev/null 2>&1; then
+    info "removing vim (forced: breaks only cachyos-zsh-config's declared dep)"
+    if sudo pacman -Rdd --noconfirm vim 2>&1 | sed 's/^/  /'; then
+      rm -rf "$HOME/.vim" "$HOME/.viminfo"
+      info "removed vim"
+    else
+      info "kept vim (forced removal failed)"
+    fi
+  fi
   unset _p _m _pkg _dir
 fi
 unset _hexciri_wants _hexciri_removals _hexciri_purge
