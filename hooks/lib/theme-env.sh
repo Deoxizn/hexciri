@@ -295,27 +295,38 @@ require_restart() {
     esac
 }
 
-primary_foreground=$(extract_color "foreground")
-primary_background=$(extract_color "background")
-cursor_color=$(extract_color "cursor")
-selection_foreground=$(extract_color "selection_foreground")
-selection_background=$(extract_color "selection_background")
-normal_black=$(extract_color "color0")
-normal_red=$(extract_color "color1")
-normal_green=$(extract_color "color2")
-normal_yellow=$(extract_color "color3")
-normal_blue=$(extract_color "color4")
-normal_magenta=$(extract_color "color5")
-normal_cyan=$(extract_color "color6")
-normal_white=$(extract_color "color7")
-bright_black=$(extract_color "color8")
-bright_red=$(extract_color "color9")
-bright_green=$(extract_color "color10")
-bright_yellow=$(extract_color "color11")
-bright_blue=$(extract_color "color12")
-bright_magenta=$(extract_color "color13")
-bright_cyan=$(extract_color "color14")
-bright_white=$(extract_color "color15")
+# Themes come in two schemas: omarchy colorN keys and accent-style names.
+# An empty var poisons every consumer (fzf dies on `hl:#`, arithmetic chokes
+# on `16#`), so every var resolves primary key → fallback key → hard default.
+# Same fallback table as the Noctalia bridge (hooks/theme-set.d/hexciri-sync.sh).
+pick() { # pick <var> <primary-key> [fallback-key] [hard-default-hex]
+    local _v
+    _v=$(extract_color "$2")
+    if [[ -z $_v && -n ${3:-} ]]; then _v=$(extract_color "$3"); fi
+    if [[ -z $_v ]]; then _v="${4:-}"; fi
+    printf -v "$1" '%s' "$_v"
+}
+pick primary_foreground foreground "" c0d0e0
+pick primary_background background "" 1a1a2e
+pick cursor_color cursor foreground c0d0e0
+pick selection_foreground selection_foreground foreground c0d0e0
+pick selection_background selection "" 292e42
+pick normal_black color0 dark_background 11111b
+pick normal_red color1 red f7768e
+pick normal_green color2 green 9ece6a
+pick normal_yellow color3 yellow e0af68
+pick normal_blue color4 blue 7aa2f7
+pick normal_magenta color5 magenta bb9af7
+pick normal_cyan color6 cyan 7dcfff
+pick normal_white color7 foreground ffffff
+pick bright_black color8 muted 586070
+pick bright_red color9 red f7768e
+pick bright_green color10 green 9ece6a
+pick bright_yellow color11 yellow e0af68
+pick bright_blue color12 blue 7aa2f7
+pick bright_magenta color13 magenta bb9af7
+pick bright_cyan color14 cyan 7dcfff
+pick bright_white color15 bright_foreground ffffff
 
 export primary_background primary_foreground cursor_color selection_foreground selection_background
 export normal_black normal_red normal_green normal_yellow normal_blue normal_magenta normal_cyan normal_white

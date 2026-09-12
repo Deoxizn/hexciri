@@ -59,10 +59,12 @@ binds {
     Mod+Shift+8 { move-column-to-workspace 8; }
     Mod+Shift+9 { move-column-to-workspace 9; }
     Mod+Shift+B { spawn "xdg-open" "https://"; }
+    Mod+Shift+C { spawn "hexciri-fuzzel" "calc"; }
     Mod+Shift+E { spawn "zeditor"; }
     Mod+Shift+F { spawn "~/.local/bin/strata"; }
     Mod+Shift+P { focus-tiling; }
     Mod+Shift+R { toggle-column-tabbed-display; }
+    Mod+Shift+S { spawn "hexciri-fuzzel" "search"; }
     Mod+Alt+Space { spawn "hexciri-menu"; }
     Mod+Ctrl+Down { move-window-down; }
     Mod+Ctrl+Left { move-column-left; }
@@ -71,6 +73,7 @@ binds {
     XF86AudioPlay { spawn "playerctl" "play-pause"; }
     XF86AudioPrev { spawn "playerctl" "previous"; }
     Mod+Ctrl+Right { move-column-right; }
+    Mod+Ctrl+Period { spawn "noctalia" "msg" "notification-clear-history"; }
     Mod+BracketLeft { consume-window-into-column; }
     Mod+Shift+Space { toggle-window-floating; }
     Mod+BracketRight { expel-window-from-column; }

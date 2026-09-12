@@ -283,6 +283,7 @@ update_self() {
       return 0
     fi
     adapt_stock_keybinds "$src" "$dst"
+    sync_new_binds "$src" "$dst"
   }
 
   adapt_stock_keybinds() {
