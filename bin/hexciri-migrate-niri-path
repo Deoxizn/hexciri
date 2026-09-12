@@ -19,6 +19,7 @@ fi
 HEXCIRI_BIN="${HEXCIRI_BIN:-$HOME/.local/bin}"
 STOCK_PATH="$HEXCIRI_BIN:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"
 
+command -v niri >/dev/null 2>&1 || { echo "hexciri-migrate-niri-path: niri not installed — skipping"; exit 0; }
 [[ -f $ENV_CFG ]] || [[ -f $CFG ]] || { echo "hexciri-migrate-niri-path: no niri config at $CFG ($ENV_CFG) — skipping"; exit 0; }
 
 # Split layout: the PATH lives in the env.kdl fragment; patch that. Legacy

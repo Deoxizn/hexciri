@@ -322,12 +322,13 @@ if [[ -f /etc/pam.d/sddm ]] && ! grep -Ev '^\s*#' /etc/pam.d/sddm | grep -q 'pam
   log "restored sddm PAM (gnome-keyring)"
 fi
 
-# ── 3c. niri-only: hexciri no longer ships hyprland/sway/mango sessions — drop
-# ── the leftover login-gate entries AND user config dirs a pre-purge box
-# ── accumulated (sddm would still offer/start them otherwise). Packages are
-# ── left installed deliberately; the user removes those by hand (pacman -Rns)
-# ── when ready. A WM actually running right now is left untouched. ──
-for _other in hyprland sway mango; do
+# ── 3c. niri-only: hexciri no longer ships hyprland/sway sessions — drop the
+# ── leftover login-gate entries AND user config dirs a pre-purge box
+# ── accumulated (sddm would still offer/start them otherwise). Mango is NOT
+# ── purged: it's a supported experiment. Packages are left installed
+# ── deliberately; the user removes those by hand (pacman -Rns) when ready.
+# ── A WM actually running right now is left untouched. ──
+for _other in hyprland sway; do
   for _sessdir in /usr/share/wayland-sessions /usr/local/share/wayland-sessions; do
     if [[ -f "$_sessdir/$_other.desktop" ]]; then
       rm -f "$_sessdir/$_other.desktop"
@@ -336,14 +337,13 @@ for _other in hyprland sway mango; do
   done
 done
 if [[ -n $noct_home ]]; then
-  for _wm in hypr sway mango; do
-    _cfg="$noct_home/.config/$_wm"
-    [[ -e $_cfg ]] || continue
-    case "$_wm" in
-      hypr)  _bin=Hyprland ;;
-      sway)  _bin=sway ;;
-      mango) _bin=mango ;;
-    esac
+    for _wm in hypr sway; do
+      _cfg="$noct_home/.config/$_wm"
+      [[ -e $_cfg ]] || continue
+      case "$_wm" in
+        hypr)  _bin=Hyprland ;;
+        sway)  _bin=sway ;;
+      esac
     if pgrep -x "$_bin" >/dev/null 2>&1; then
       log "skipping '$_wm' config purge: $_bin is running right now"
       continue

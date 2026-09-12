@@ -289,6 +289,7 @@ update_self() {
   # to ours ONCE: rebuilt as repo base + stock-only combos appended under a
   # marker. Later runs and later user edits are never touched again.
   sync_keybinds() {
+    command -v niri >/dev/null 2>&1 || return 0   # no niri here (e.g. MangoWM box) — push no niri configs
     migrate_niri_cfg_dir
     local src="$REPO/config/niri/cfg/keybinds.kdl"
     local dst="$HOME/.config/niri/cfg/keybinds.kdl"
@@ -419,15 +420,15 @@ EOF
   }
 
   # niri-only purge: leftover per-WM config dirs from older builds are garbage.
+  # Mango is NOT purged — it's a supported experiment.
   purge_other_wms() {
     local wm cfg bin purged=false
-    for wm in hypr sway mango; do
+    for wm in hypr sway; do
       cfg="${XDG_CONFIG_HOME:-$HOME/.config}/$wm"
       [[ -e $cfg ]] || continue
       case "$wm" in
         hypr)  bin=Hyprland ;;
         sway)  bin=sway ;;
-        mango) bin=mango ;;
       esac
       if pgrep -x "$bin" >/dev/null 2>&1; then
         echo "warning: '$wm' is running right now — leaving $cfg in place"
