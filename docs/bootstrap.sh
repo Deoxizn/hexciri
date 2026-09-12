@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=30   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=31   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks stock (custom kernels are post-install via hexciri-kernel)
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -265,10 +265,23 @@ fi
 # whole transaction ('failed to generate ramfs'). mkinitcpio keeps an existing
 # config file, so pre-placing the stock ISO copy guarantees a clean first build.
 install -Dm644 /etc/mkinitcpio.conf /mnt/etc/mkinitcpio.conf
-pacstrap "${PACSTRAP_K[@]}" -C "$LIVE_CONF" /mnt base "$STAGE1_KERNEL" linux-firmware "$UCODE" \
+# base + kernel go through pacstrap, but FIRMWARE deliberately does NOT.
+# Reason (20260910 upstream split): linux-firmware now has per-vendor child
+# packages (amd/ti/other/nvidia/…) and at least one pair overlaps the same
+# usr/lib/firmware/… path. pacstrap will NOT forward --overwrite to the inner
+# pacman — its getopts whitelist is only C c D G i K M N P Ucy, and everything
+# after the root is treated as package names — so folding firmware into this
+# transaction makes pacman abort the ENTIRE base install with
+#   "file … is owned by linux-firmware-ti / errors occurred, no packages were upgraded"
+# Instead: firmware gets its OWN transaction where --overwrite is legal, scoped
+# to usr/lib/firmware/* ONLY (never '*') so we can never clobber user files.
+pacstrap "${PACSTRAP_K[@]}" -C "$LIVE_CONF" /mnt base "$STAGE1_KERNEL" \
   networkmanager sudo git base-devel power-profiles-daemon nano file procps-ng \
   $([[ $FS == btrfs ]] && echo btrfs-progs) >/dev/null \
   || { err "pacstrap failed (base install aborted) — not continuing into a broken system"; exit 1; }
+info "firmware: separate transaction (20260910 firmware split overlaps usr/lib/firmware — --overwrite is legal here, not through pacstrap)"
+pacman -r /mnt --config "$LIVE_CONF" -Sy --noconfirm --overwrite 'usr/lib/firmware/*' linux-firmware "$UCODE" >/dev/null \
+  || { err "firmware install failed — not continuing into a broken system"; exit 1; }
 # persist the fresh keyring so the NEXT attempt skips keygen entirely
 if [[ -d /mnt/etc/pacman.d/gnupg ]]; then
   rm -rf "$LIVE_KEYRING"

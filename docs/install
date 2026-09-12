@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=29   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=31   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks stock (custom kernels are post-install via hexciri-kernel)
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -85,6 +85,19 @@ fi
 read -rp "timezone [$DETECTED_TZ]: " TIMEZONE </dev/tty; TIMEZONE="${TIMEZONE:-$DETECTED_TZ}"
 [[ $TIMEZONE != *".."* && -f /usr/share/zoneinfo/"$TIMEZONE" ]] || { err "unknown timezone: $TIMEZONE"; exit 1; }
 timedatectl set-ntp true 2>/dev/null || true
+
+# ── GPU: mesa is the default — it's what 90%+ of iGPUs ship with, it's the
+#    safest stack on any box with no discrete card, and installing NVIDIA on
+#    the wrong machine is how you get a box that hangs on nouveau after login.
+#    NVIDIA is strictly opt-in; auto re-runs the same detector as the GPU menu. ──
+info "gpu: mesa by default (90%+ of iGPUs) — NVIDIA is opt-in"
+read -rp "gpu [auto/mesa/nvidia-580/nvidia-current, default mesa]: " GPU_PICK </dev/tty
+GPU_PICK="${GPU_PICK,,}"; GPU_PICK="${GPU_PICK:-mesa}"
+case "$GPU_PICK" in
+  auto) GPU_PICK="" ;;  # re-detect at install time (same as always was)
+  mesa|nvidia-580|nvidia-current) ;;
+  *) err "gpu must be auto|mesa|nvidia-580|nvidia-current"; exit 1 ;;
+esac
 
 # ── filesystem: ext4 default (simplest, robust, no snapshot stack to feed);
 #    btrfs optional (checksums + zstd transparent compression) ──
@@ -252,10 +265,23 @@ fi
 # whole transaction ('failed to generate ramfs'). mkinitcpio keeps an existing
 # config file, so pre-placing the stock ISO copy guarantees a clean first build.
 install -Dm644 /etc/mkinitcpio.conf /mnt/etc/mkinitcpio.conf
-pacstrap "${PACSTRAP_K[@]}" -C "$LIVE_CONF" /mnt base "$STAGE1_KERNEL" linux-firmware "$UCODE" \
+# base + kernel go through pacstrap, but FIRMWARE deliberately does NOT.
+# Reason (20260910 upstream split): linux-firmware now has per-vendor child
+# packages (amd/ti/other/nvidia/…) and at least one pair overlaps the same
+# usr/lib/firmware/… path. pacstrap will NOT forward --overwrite to the inner
+# pacman — its getopts whitelist is only C c D G i K M N P Ucy, and everything
+# after the root is treated as package names — so folding firmware into this
+# transaction makes pacman abort the ENTIRE base install with
+#   "file … is owned by linux-firmware-ti / errors occurred, no packages were upgraded"
+# Instead: firmware gets its OWN transaction where --overwrite is legal, scoped
+# to usr/lib/firmware/* ONLY (never '*') so we can never clobber user files.
+pacstrap "${PACSTRAP_K[@]}" -C "$LIVE_CONF" /mnt base "$STAGE1_KERNEL" \
   networkmanager sudo git base-devel power-profiles-daemon nano file procps-ng \
   $([[ $FS == btrfs ]] && echo btrfs-progs) >/dev/null \
   || { err "pacstrap failed (base install aborted) — not continuing into a broken system"; exit 1; }
+info "firmware: separate transaction (20260910 firmware split overlaps usr/lib/firmware — --overwrite is legal here, not through pacstrap)"
+pacman -r /mnt --config "$LIVE_CONF" -Sy --noconfirm --overwrite 'usr/lib/firmware/*' linux-firmware "$UCODE" >/dev/null \
+  || { err "firmware install failed — not continuing into a broken system"; exit 1; }
 # persist the fresh keyring so the NEXT attempt skips keygen entirely
 if [[ -d /mnt/etc/pacman.d/gnupg ]]; then
   rm -rf "$LIVE_KEYRING"
@@ -360,7 +386,7 @@ chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.local"
 # with zero sudo calls — su(1) sessions have no controlling TTY, so nothing
 # here may ever depend on sudo prompting.
 trap 'rm -f /root/hexciri-stage2.sh' EXIT
-HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
+HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}${GPU_PICK:+ --gpu $GPU_PICK}
 # login shell stays bash: SSH remote commands, su(1), and every POSIX script
 # route through the login shell — fish as $SHELL mangles those (for/done loops,
 # quoting). fish instead launches explicitly from the terminal via kitty
