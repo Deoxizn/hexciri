@@ -1,0 +1,37 @@
+#!/bin/bash
+# xdg-terminal-exec compat: CachyOS does not ship xdg-terminal-exec, but the
+# whole menu calls it (`--app-id=... -e <cmd>` or plain `-e <cmd>`).
+# This shim provides exactly that surface via hexciri-terminal (default
+# terminal, usually kitty). If a real xdg-terminal-exec ever appears elsewhere
+# on PATH (e.g. CachyOS packages it), defer to it instead of shadowing.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+IFS=':' read -ra _dirs <<< "$PATH"
+# Skip our own dir (else the shim execs itself forever) and ~/.local/bin
+# (our normal home — both checks are path-based so sudo can't fool them).
+_mydir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _d in "${_dirs[@]}"; do
+  [[ -n $_d && $_d != "$HOME/.local/bin" && $_d != "$_mydir" ]] || continue
+  if [[ -x "$_d/xdg-terminal-exec" ]]; then
+    exec "$_d/xdg-terminal-exec" "$@"
+  fi
+done
+unset _dirs _d _mydir
+
+# Parse our two shapes: [--app-id=<id>] -e <cmd...>. Anything else passes
+# through after -e; unknown leading flags are ignored for compat.
+while (($# > 0)); do
+  case "$1" in
+    --app-id=*) shift ;;
+    --app-id) shift 2 2>/dev/null || shift ;;
+    -e) shift; break ;;
+    --) shift; break ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+
+[[ $# -gt 0 ]] || { echo "xdg-terminal-exec: no command after -e" >&2; exit 1; }
+exec "$SCRIPT_DIR/hexciri-terminal" -e "$@"
