@@ -3,20 +3,14 @@ Operation = Install
 Operation = Upgrade
 Operation = Remove
 Type = Package
-Target = linux*
-Target = mkinitcpio
-Target = sddm
-Target = gnome-keyring
 Target = avahi
 Target = hwloc
 Target = v4l-utils
 Target = qt6ct
 Target = ufw
 Target = openssh
-Target = samba
-Target = nfs-utils
 
 [Action]
-Description = Re-applying hexciri system state (boot entries, PAM, menu curation)
+Description = Re-applying hexciri layer (menu curation, firewall, sshd hardening)
 When = PostTransaction
 Exec = /usr/local/bin/hexciri-sync

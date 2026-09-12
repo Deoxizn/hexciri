@@ -123,6 +123,13 @@ if [[ -n $REPO && -d $REPO/bin && -n $noct_owner && -n $noct_home ]]; then
   [[ $changed == 1 ]] && log "~/.local/bin links refreshed"
 fi
 
+# ── hook entry point: the alpm hook execs /usr/local/bin/hexciri-sync (root
+# ── has no user PATH). Keep that one symlink pointed at this checkout; it is
+# ── hexciri's own entry point, not distro management. ──
+if [[ -n $REPO && -x $REPO/bin/hexciri-sync ]]; then
+  ln -sfn "$REPO/bin/hexciri-sync" /usr/local/bin/hexciri-sync 2>/dev/null || true
+fi
+
 # ── packages: hexciri does not manage the OS app set. No curated wants, no
 # ── removals, no AUR installs — install/remove your own apps; sync only
 # ── re-applies configs, hides and hardening. (App swaps are one-time manual
