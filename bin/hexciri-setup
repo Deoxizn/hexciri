@@ -450,8 +450,8 @@ EOF
 
   local choice
   choice=$(
-    printf '%s\n' 'Steam' 'Heroic' 'Lutris' 'RetroArch' 'Minecraft' 'Battle.net' 'GeForce NOW' 'Xbox Cloud' 'GPU setup' 'Xbox controllers' |
-      "$FUZZEL" --dmenu --prompt='Gaming: ' --width=30 --lines=10
+    printf '%s\n' 'Steam' 'Heroic' 'Lutris' 'RetroArch' 'Minecraft' 'Battle.net' 'GeForce NOW' 'Xbox Cloud' 'Xbox controllers' |
+      "$FUZZEL" --dmenu --prompt='Gaming: ' --width=30 --lines=9
   ) || return 0
   case "$choice" in
     Steam) exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$0" run steam ;;

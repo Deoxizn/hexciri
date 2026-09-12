@@ -1,6 +1,6 @@
 #!/bin/bash
 # hexciri:menu=system
-# hexciri:summary=System submenu: config, apps, fonts, network, security, kernel, maintenance.
+# hexciri:summary=System submenu: config, apps, fonts, network, security, maintenance.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,13 +9,12 @@ choice=$(
   printf '%s\n' \
     'Config >' \
     'Default Apps >' \
-    'Kernel >' \
     'Maintenance >' \
     'Windows product key' \
     'Reset defaults' \
     'Network >' \
     'Security >' |
-    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='System: ' --width=26 --lines=8
+    "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='System: ' --width=26 --lines=7
 ) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
 choice=${choice%' >'}
 
