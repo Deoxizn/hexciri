@@ -14,25 +14,126 @@
 <meta property="og:url" content="https://hexciri.dirty.pizza/">
 <meta property="og:title" content="Hexciri — CachyOS dotfiles: theme hook + menu">
 <meta property="og:description" content="CachyOS plus a WM/Shell of your choice. Just dotfiles: a theme hook and a menu.">
+<meta property="og:image" content="https://hexciri.dirty.pizza/brand.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Hexciri — CachyOS dotfiles: theme hook + menu">
+<meta name="twitter:description" content="CachyOS plus a WM/Shell of your choice. One curl line away.">
+<meta name="twitter:image" content="https://hexciri.dirty.pizza/brand.png">
+<link rel="icon" type="image/png" href="brand.png">
+<style>
+  :root {
+    --bg: #0b0911;
+    --bg-soft: #14111a;
+    --card: #171620;
+    --rose: #b6849d;
+    --muted: #6b5e72;
+    --text: #d8d0dc;
+    --line: rgba(182, 132, 157, 0.22);
+    --accent: #f7768e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(900px 420px at 50% -80px, rgba(183, 65, 80, 0.20), transparent 70%),
+      radial-gradient(760px 480px at 85% 30%, rgba(90, 50, 140, 0.16), transparent 70%),
+      radial-gradient(760px 480px at 10% 60%, rgba(120, 30, 45, 0.12), transparent 70%),
+      linear-gradient(180deg, #0b0911 0%, #120d1a 55%, #0b0911 100%);
+    color: var(--text); font: 16px/1.65 system-ui, sans-serif; min-height: 100vh;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+  header.hero { text-align: center; padding: 40px 24px 24px; }
+  header.hero img { width: min(800px, 96%); height: auto; filter: drop-shadow(0 0 42px rgba(183, 65, 80, 0.35)); }
+  header.hero h1 { font-size: 30px; margin: 22px 0 6px; line-height: 1.25;
+    background: linear-gradient(100deg, #f7768e, #b6849d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header.hero .tag { font-size: 17px; color: var(--muted); max-width: 640px; margin: 0 auto; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 22px auto 10px; }
+  .chip { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; font-size: 13px; color: var(--rose); }
+  pre.curl { background: rgba(20, 17, 26, 0.9); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin: 30px auto 8px; max-width: 640px; overflow-x: auto; font: 14px/1.6 ui-monospace, monospace; box-shadow: 0 0 28px rgba(124, 92, 191, 0.18), inset 0 0 18px rgba(183, 65, 80, 0.06); }
+  .hero-sub { color: var(--muted); font-size: 13px; margin-top: 12px; }
+  section { padding: 36px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 22px; margin-bottom: 6px;
+    background: linear-gradient(100deg, #f7768e, #b6849d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  code { font-family: ui-monospace, monospace; font-size: 13px; background: var(--bg-soft); padding: 2px 6px; border-radius: 5px; }
+  ol, ul { padding-left: 22px; }
+  li { margin: 6px 0; }
+  footer { text-align: center; padding: 40px 24px 64px; color: var(--muted); border-top: 1px solid var(--line); }
+  footer a { color: var(--rose); }
+  a { color: var(--rose); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 1.3rem 1.4rem; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  .card:hover {
+    transform: translateY(-4px); border-color: rgba(182, 132, 157, 0.40);
+    box-shadow: 0 10px 30px rgba(183, 65, 80, 0.18);
+  }
+  .card h3 { font-size: 1.02rem; color: var(--rose); margin-bottom: 0.4rem; }
+  .card p { font-size: 0.94rem; color: var(--muted); }
+</style>
 </head>
 <body>
-<h1>Hexciri</h1>
-<p>CachyOS plus a WM/Shell of your choice (Niri today, MangoWM planned).
-hexciri is just dotfiles: a theme hook and a menu.</p>
-<h2>Dots</h2>
-<pre><code>curl -LO https://hexciri.dirty.pizza/install.sh
-sh install.sh</code></pre>
-<p>That clones <a href="https://github.com/Deoxizn/hexciri">Deoxizn/hexciri</a>
-(or uses your checkout), symlinks <code>bin/*</code> into
-<code>~/.local/bin</code>, and re-applies the layer via
-<code>hexciri-sync</code>. Updating is a pull plus a re-run. Version is the
-git SHA.</p>
-<h2>What it does</h2>
-<ul>
-<li><strong>Menu</strong> — every option dispatches to a real controller in <code>bin/</code>. Nothing dangles.</li>
-<li><strong>Theme hook</strong> — <code>hexciri-theme-set</code> recolors the desktop in one shot.</li>
-<li><strong>Keybindings, one source of truth</strong> — rendered into the WM config so they never drift.</li>
-</ul>
-<p>It never touches the installer, kernel, GPU stack, or package manager. Those stay CachyOS's.</p>
+<header class="hero">
+  <img src="brand.png" alt="Hexciri emblem">
+  <h1>CachyOS × a WM/Shell of your choice</h1>
+  <p class="tag">Just dotfiles: a theme hook and a menu. Niri today, MangoWM planned.</p>
+  <div class="chips">
+    <span class="chip">CachyOS</span><span class="chip">Niri</span><span class="chip">theme hook</span><span class="chip">menu</span>
+  </div>
+  <pre class="curl">curl -LO https://hexciri.dirty.pizza/install.sh &amp;&amp; sh install.sh</pre>
+  <p class="hero-sub">CachyOS × your WM × nothing you didn't ask for.</p>
+</header>
+<div class="wrap">
+<section>
+  <h2>What it does</h2>
+  <div class="grid">
+    <div class="card"><h3>A real menu</h3><p>Every option dispatches to a controller in <code>bin/</code>. Not a menu of links — a menu of working scripts. Nothing dangles.</p></div>
+    <div class="card"><h3>One hook colors 30+ apps</h3><p>Terminals, Discord, GTK, the works. <code>hexciri-theme-set</code> recolors your entire desktop in one go.</p></div>
+    <div class="card"><h3>Keybinds, one list</h3><p>The same keys, always. Press <code>Mod+K</code> for the full list, any time. Rendered into the WM config so they never drift.</p></div>
+    <div class="card"><h3>Wallpapers you keep</h3><p>Drop your own in. They survive theme changes, everything.</p></div>
+  </div>
+</section>
+<section>
+  <h2>Dots</h2>
+  <p class="sub">Install CachyOS with a WM/Shell, then bring the dots — curl or clone, same script.</p>
+  <ol>
+    <li><code>curl -LO https://hexciri.dirty.pizza/install.sh &amp;&amp; sh install.sh</code></li>
+    <li>or <code>git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri &amp;&amp; ~/.local/opt/hexciri/install.sh</code></li>
+  </ol>
+  <p class="sub">That symlinks the controllers into <code>~/.local/bin</code> and re-applies the layer via <code>hexciri-sync</code>. Updating is a pull plus a re-run. Version is the git SHA.</p>
+</section>
+<section>
+  <h2>What it never touches</h2>
+  <p class="sub">The installer, the kernel, the GPU stack, the package manager. Those stay CachyOS's.</p>
+</section>
+<section>
+  <h2>The keys that matter</h2>
+  <p class="sub">Mod = Super. <code>Mod+K</code> lists everything.</p>
+  <table>
+    <tr><th>key</th><th>does</th></tr>
+    <tr><td><code>Mod+D</code></td><td>launch apps</td></tr>
+    <tr><td><code>Mod+Return</code></td><td>terminal</td></tr>
+    <tr><td><code>Mod+Space</code></td><td>quick run</td></tr>
+    <tr><td><code>Mod+Q</code></td><td>close window</td></tr>
+    <tr><td><code>Mod+F</code></td><td>fullscreen</td></tr>
+    <tr><td><code>Mod+1…9, 0</code></td><td>workspaces</td></tr>
+    <tr><td><code>Mod+Shift+1…9</code></td><td>move window to workspace</td></tr>
+    <tr><td><code>Mod+←/→</code></td><td>move between windows</td></tr>
+    <tr><td><code>Mod+Print</code></td><td>screenshot</td></tr>
+    <tr><td><code>Ctrl+Print</code></td><td>screenshot a chosen area</td></tr>
+    <tr><td><code>Mod+Escape</code></td><td>power menu</td></tr>
+  </table>
+</section>
+</div>
+<footer>
+  <div>
+    <a href="https://github.com/Deoxizn/hexciri" target="_blank" rel="noopener">hexciri</a>
+  </div>
+  <div style="margin-top:.4rem;">© 2026–2026 <a href="https://dirty.pizza" target="_blank" rel="noopener">dirty.pizza</a></div>
+</footer>
 </body>
 </html>
