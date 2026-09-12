@@ -5,7 +5,7 @@
 **CachyOS dotfiles: theme hook + menu**
 
 Install CachyOS with a WM/Shell (Niri today, MangoWM planned), clone the
-dots, run one script. Not a distro. Not an installer. Just dotfiles.
+dots, run one script.
 
 </div>
 
