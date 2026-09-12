@@ -15,6 +15,11 @@ Rectangle {
     if (config.Username && config.Username.length > 0) return config.Username
     return userModel.lastUser
   }
+  // install.sh stamps theme.conf with Fingerprint=true only when a reader was
+  // detected at deploy time. Auto-starting the login with an empty password is
+  // only safe with a reader to claim it; on a readerless box pam_fprintd falls
+  // through and that empty submit fails red before the user can type.
+  property bool hasFingerprint: config.Fingerprint === undefined ? true : config.Fingerprint === "true"
   property int sessionIndex: {
     for (var i = 0; i < sessionModel.rowCount(); i++) {
       var name = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString()
@@ -165,16 +170,18 @@ Rectangle {
     }
   }
 
-  // Fingerprint-first: start authentication as soon as the greeter is up so
-  // fprintd claims the reader and prompts immediately (no password needed).
-  // If fprintd is slow, the first attempt fails with a brief red flash and
-  // the reader stays armed for the next touch; Enter falls back to password.
+  // Fingerprint-first: when a reader exists, start authentication as soon as
+  // the greeter is up so fprintd claims the reader and prompts immediately (no
+  // password needed). If fprintd is slow, the first attempt fails with a brief
+  // red flash and the reader stays armed for the next touch; Enter falls back
+  // to password. Without a reader this timer sits idle — the password field
+  // already has focus and login is driven by the user's first Enter.
   Timer {
     id: autoStart
     interval: 1000
     repeat: false
     onTriggered: {
-      if (root.currentUser.length > 0) {
+      if (root.hasFingerprint && root.currentUser.length > 0) {
         root.infoText = "touch the reader or enter your password"
         sddm.login(root.currentUser, "", root.sessionIndex)
       }

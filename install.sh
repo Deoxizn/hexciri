@@ -405,6 +405,16 @@ SSHEOF
     # Prefill the greeter's username field from the install user this session;
     # the SddmComponents user model can be empty/slow on a fresh first boot.
     printf '\nUsername=%s\n' "${TARGET_USER:-}" | run tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null
+    # Stamp fingerprint presence so the greeter only auto-starts the (empty
+    # password) fingerprint login when a reader exists to claim it. pam_fprintd
+    # falls through harmlessly, but an auto-submitted empty password with no
+    # reader fails red before the user can type.
+    if "$REPO_DIR/bin/hexciri-hw" fingerprint >/dev/null 2>&1; then FP=fp; else FP=none; fi
+    if [[ $FP == fp ]]; then
+      printf 'Fingerprint=true\n' | run tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null
+    else
+      printf 'Fingerprint=false\n' | run tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null
+    fi
     run mkdir -p /etc/sddm.conf.d
     printf '[Theme]\nCurrent=hexciri\n' | run tee /etc/sddm.conf.d/10-hexciri-theme.conf >/dev/null
   fi
