@@ -413,7 +413,7 @@ EOF
   sync_hooks() {
     local src="$REPO/hooks" dst="$HOME/.config/hexciri/hooks" f rel
     [[ -d $src ]] || return 0
-    find "$src" -type f 2>/dev/null || true | while IFS= read -r f; do
+    { find "$src" -type f 2>/dev/null || true; } | while IFS= read -r f; do
       rel="${f#$src/}"
       if [[ -f "$dst/$rel" ]]; then continue; fi
       mkdir -p "$(dirname "$dst/$rel")"
