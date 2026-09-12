@@ -1,8 +1,0 @@
-# hexciri curated repo packages — re-asserted by bin/hexciri-sync (block 3a5).
-# Official repos only (pacman path). AUR wants live in lib/packages.aur
-# (owner-side yay/paru, block 3a5a). GitHub-release wants (strata) are owned
-# by `hexciri-setup strata`.
-kitty
-zed
-opencode
-localsend
