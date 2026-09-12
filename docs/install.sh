@@ -7,9 +7,10 @@
 # or: git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
 #     ~/.local/opt/hexciri/install.sh
 #
-# Clones (if curled), symlinks bin/* into ~/.local/bin, then delegates to
-# bin/hexciri-sync to re-apply the layer. Idempotent; safe to re-run.
-# Never touches the installer, kernel, GPU stack, or package manager.
+# One-shot CachyOS+Niri bring-up: clone, link controllers, root sync pass,
+# one-time app swap, per-user Strata + Brave Origin, then the update deploy
+# (keybinds adapt, kitty seed, themes). Idempotent; safe to re-run.
+# Afterwards sync never touches packages — later manual changes stick.
 set -euo pipefail
 
 REPO_URL="https://github.com/Deoxizn/hexciri.git"
@@ -43,17 +44,25 @@ if [[ -x "$REPO/bin/hexciri-sync" ]]; then
   info "re-applying layer via hexciri-sync"
   HEXCIRI_REPO="$REPO" "$REPO/bin/hexciri-sync" || info "sync returned non-zero; re-run after reboot"
 fi
+# Root pass: ufw/sshd/hides/hook need root. Prompts once here; falls back to
+# a manual `sudo hexciri-sync` if sudo isn't available.
+if [[ -x "$REPO/bin/hexciri-sync" ]]; then
+  info "root pass via hexciri-sync (ufw, sshd, menu hides)"
+  sudo HEXCIRI_REPO="$REPO" "$REPO/bin/hexciri-sync" 2>&1 | sed 's/^/  /' || \
+    info "root pass skipped — run 'sudo $REPO/bin/hexciri-sync' by hand later"
+fi
 # One-time light app swap: hexciri's apps in, replaced stock ones out (with
 # their config dirs, but only once something is actually absent). Runs here at
 # install and nowhere else — sync never touches packages, so later manual
 # changes are never reverted or re-applied. Best-effort, never fatal.
-# NOTE: nautilus stays (xdg-desktop-portal-gnome, required via niri's stack,
-# needs it — hidden from the menu instead); vim stays (held by the deliberately
-# kept cachyos-zsh-config). fuzzel + gtksourceview5 are layer needs (menu would
-# be dead without fuzzel; strata won't launch without the lib).
+# NOTE: removal order matters — the CachyOS niri meta goes first so the portal
+# it pins, then nautilus, come out cleanly behind it. vim stays (held by the
+# deliberately kept cachyos-zsh-config; remove by hand with -Rdd if unwanted).
+# fuzzel + gtksourceview5 are layer needs (menu would be dead without fuzzel;
+# strata won't launch without the lib).
 _hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel"
-_hexciri_removals="alacritty firefox meld micro cachyos-micro-settings"
-_hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro"
+_hexciri_removals="cachyos-niri-noctalia xdg-desktop-portal-gnome nautilus alacritty firefox meld cachyos-micro-settings micro"
+_hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro nautilus:$HOME/.config/nautilus"
 if command -v pacman >/dev/null 2>&1; then
   info "one-time app swap (wants + removals)"
   sudo pacman -S --needed --noconfirm $_hexciri_wants 2>&1 | sed 's/^/  /' || \
@@ -79,6 +88,20 @@ if [[ -x "$REPO/bin/hexciri-setup" ]]; then
   info "installing Strata file manager (default)"
   "$REPO/bin/hexciri-setup" strata 2>&1 | sed 's/^/  /' || info "Strata skipped (offline?) — run 'hexciri-setup strata' later"
 fi
+# AUR helper bootstrap (one-time): Brave Origin needs yay or paru, and a
+# fresh box has neither. Builds yay via makepkg (needs base-devel+git).
+# Best-effort: without it, AUR steps below print their manual fallback.
+if ! command -v yay >/dev/null 2>&1 && ! command -v paru >/dev/null 2>&1; then
+  if command -v pacman >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
+    info "bootstrapping yay (AUR helper)"
+    sudo pacman -S --needed --noconfirm base-devel git 2>&1 | sed 's/^/  /' || true
+    rm -rf /tmp/hexciri-yay && git clone https://aur.archlinux.org/yay.git /tmp/hexciri-yay 2>&1 | sed 's/^/  /' || true
+    ( cd /tmp/hexciri-yay 2>/dev/null && makepkg -si --noconfirm 2>&1 | sed 's/^/  /' ) || \
+      info "yay bootstrap skipped — install an AUR helper by hand for Brave Origin"
+  else
+    info "yay bootstrap skipped (no pacman/git) — install an AUR helper by hand for Brave Origin"
+  fi
+fi
 # Brave Origin (not Brave): the hexciri browser. One-time installer step —
 # sync never touches packages. Installs via yay/paru as you, then drops the
 # brave-bin stand-in once origin is present. Best-effort, never fatal.
@@ -100,4 +123,11 @@ if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&
   sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \
     info "kept brave-bin (removal failed) — remove by hand if unwanted"
 fi
-info "done — menu + theme hook live. Update: git -C $REPO pull && sh $REPO/install.sh"
+# Update deploy (one-time here; afterwards run it by hand or from the menu):
+# keybinds adapt, kitty seed, themes, then the full system update it offers.
+if [[ -x "$REPO/bin/hexciri-update" ]]; then
+  info "update deploy via hexciri-update (keybinds, kitty, themes)"
+  "$REPO/bin/hexciri-update" 2>&1 | sed 's/^/  /' || \
+    info "update skipped — run 'hexciri-update' by hand later"
+fi
+info "done — pick a theme ('hexciri-theme set'), then relogin. Update: git -C $REPO pull && sh $REPO/install.sh"

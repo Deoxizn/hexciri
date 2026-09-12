@@ -49,9 +49,10 @@ git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
 ~/.local/opt/hexciri/install.sh
 ```
 
-That symlinks the controllers into `~/.local/bin` and re-applies the layer
-via `bin/hexciri-sync`. Updating is a pull plus a re-run. Version is the git
-SHA.
+One run does the whole bring-up: links, root sync pass (ufw/sshd/hides),
+one-time app swap, Strata, Brave Origin, and the update deploy (keybinds,
+kitty, themes). Re-runs are safe; afterwards sync never touches packages.
+Updating is a pull plus a re-run. Version is the git SHA.
 
 ## Highlights
 
