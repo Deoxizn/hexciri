@@ -21,6 +21,12 @@ add() { # add <label> <url> <binary-or-''> — '' means always show (framework i
 add "Hexciri" "https://hexciri.dirty.pizza" ""
 add "Noctalia docs" "https://docs.noctalia.dev/noctalia/" noctalia
 
+# CachyOS rows — the base OS's own docs, gated on its tools being present.
+add "CachyOS wiki" "https://wiki.cachyos.org/" ""
+add "CachyOS Niri setup" "https://wiki.cachyos.org/configuration/desktop_environments/niri/" niri
+add "Hardware detection (chwd)" "https://wiki.cachyos.org/features/chwd/chwd/" chwd
+add "Btrfs snapshots" "https://wiki.cachyos.org/configuration/btrfs_snapshots" snapper
+
 # WM row — niri is the shipped compositor.
 add "Niri wiki" "https://github.com/YaLTeR/niri/wiki" niri
 
@@ -33,7 +39,6 @@ add "foot docs" "https://codeberg.org/dnkl/foot" foot
 add "fish docs" "https://fishshell.com/docs/current/" fish
 add "Zed docs" "https://zed.dev/docs" zeditor
 add "OpenCode docs" "https://opencode.ai/docs" opencode
-add "Arch wiki" "https://wiki.archlinux.org/title/Main_page" ""
 add "Starship docs" "https://starship.rs" starship
 
 choice=$(
