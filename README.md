@@ -82,7 +82,7 @@ theme changes.
 | editor | `zed` | `hexciri-defaults` → Editor |
 | agent | `opencode` (`Mod`+backtick) | `hexciri-defaults` → Agent |
 | kernel | auto: `linux` (stock) on fresh installs | `hexciri-kernel` (custom post-install) |
-| gpu | autodetect (mesa/vulkan per vendor; nvidia-open Turing+, 580xx legacy Maxwell/Pascal/Volta via AUR build) | `hexciri-gpu` |
+| gpu | autodetect (mesa/vulkan per vendor; nvidia-open Turing+, 580xx legacy for all pre-Turing NVIDIA via AUR build) | `hexciri-gpu` |
 | monitors | preconfigured (scale 2) | `~/.config/niri/monitors.kdl` |
 | bluetooth | on (bluez + bar widget) | — |
 | theme | `sakurazuki` | `hexciri-theme-set` |
