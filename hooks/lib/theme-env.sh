@@ -299,34 +299,37 @@ require_restart() {
 # An empty var poisons every consumer (fzf dies on `hl:#`, arithmetic chokes
 # on `16#`), so every var resolves primary key → fallback key → hard default.
 # Same fallback table as the Noctalia bridge (hooks/theme-set.d/hexciri-sync.sh).
-pick() { # pick <var> <primary-key> [fallback-key] [hard-default-hex]
-    local _v
-    _v=$(extract_color "$2")
-    if [[ -z $_v && -n ${3:-} ]]; then _v=$(extract_color "$3"); fi
-    if [[ -z $_v ]]; then _v="${4:-}"; fi
-    printf -v "$1" '%s' "$_v"
+pick() { # pick <var> <hard-default> <key>... — first present key wins
+    local _var=$1 _hard=$2 _v="" _k
+    shift 2
+    for _k in "$@"; do
+        _v=$(extract_color "$_k")
+        [[ -n $_v ]] && break
+    done
+    [[ -n $_v ]] || _v="$_hard"
+    printf -v "$_var" '%s' "$_v"
 }
-pick primary_foreground foreground "" c0d0e0
-pick primary_background background "" 1a1a2e
-pick cursor_color cursor foreground c0d0e0
-pick selection_foreground selection_foreground foreground c0d0e0
-pick selection_background selection "" 292e42
-pick normal_black color0 dark_background 11111b
-pick normal_red color1 red f7768e
-pick normal_green color2 green 9ece6a
-pick normal_yellow color3 yellow e0af68
-pick normal_blue color4 blue 7aa2f7
-pick normal_magenta color5 magenta bb9af7
-pick normal_cyan color6 cyan 7dcfff
-pick normal_white color7 foreground ffffff
-pick bright_black color8 muted 586070
-pick bright_red color9 red f7768e
-pick bright_green color10 green 9ece6a
-pick bright_yellow color11 yellow e0af68
-pick bright_blue color12 blue 7aa2f7
-pick bright_magenta color13 magenta bb9af7
-pick bright_cyan color14 cyan 7dcfff
-pick bright_white color15 bright_foreground ffffff
+pick primary_foreground c0d0e0 foreground
+pick primary_background 1a1a2e background
+pick cursor_color c0d0e0 cursor foreground
+pick selection_foreground c0d0e0 selection_foreground foreground
+pick selection_background 292e42 selection
+pick normal_black 11111b color0 dark_background
+pick normal_red f7768e color1 red
+pick normal_green 9ece6a color2 green
+pick normal_yellow e0af68 color3 yellow
+pick normal_blue 7aa2f7 color4 blue
+pick normal_magenta bb9af7 color5 magenta
+pick normal_cyan 7dcfff color6 cyan
+pick normal_white ffffff color7 foreground
+pick bright_black 586070 color8 muted
+pick bright_red f7768e color9 bright_red red
+pick bright_green 9ece6a color10 bright_green green
+pick bright_yellow e0af68 color11 bright_yellow yellow
+pick bright_blue 7aa2f7 color12 bright_blue blue
+pick bright_magenta bb9af7 color13 bright_magenta magenta
+pick bright_cyan 7dcfff color14 bright_cyan cyan
+pick bright_white ffffff color15 bright_foreground
 
 export primary_background primary_foreground cursor_color selection_foreground selection_background
 export normal_black normal_red normal_green normal_yellow normal_blue normal_magenta normal_cyan normal_white

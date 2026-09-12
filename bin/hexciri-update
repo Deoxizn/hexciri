@@ -444,18 +444,41 @@ EOF
     return 0
   }
 
-  # Repo hook scripts (theme bridge, app hooks): seed each into
-  # ~/.config/hexciri/hooks/<path> only when absent — user files there are
-  # theirs and are never clobbered. Without this, theme-set fires no hooks.
+  # Repo hook scripts (theme bridge, app hooks): seed missing files, and refresh
+  # repo-owned ones when the checkout advances — a file the user edited (differs
+  # from what we last seeded, verified via git) is never overwritten. The rev
+  # in .hexciri-manifest drives it, so no manual rm-to-refresh, ever.
   sync_hooks() {
-    local src="$REPO/hooks" dst="$HOME/.config/hexciri/hooks" f rel
+    local src="$REPO/hooks" dst="$HOME/.config/hexciri/hooks"
+    local rev manifest f rel oldrev
     [[ -d $src ]] || return 0
+    rev="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    manifest="$dst/.hexciri-manifest"
+    oldrev=""
+    [[ -f $manifest ]] && oldrev="$(head -n 1 "$manifest" 2>/dev/null || true)"
     { find "$src" -type f 2>/dev/null || true; } | while IFS= read -r f; do
       rel="${f#$src/}"
-      if [[ -f "$dst/$rel" ]]; then continue; fi
-      mkdir -p "$(dirname "$dst/$rel")"
-      cp -f "$f" "$dst/$rel" 2>/dev/null && echo "seeded hook ($rel)" || true
+      if [[ ! -f "$dst/$rel" ]]; then
+        mkdir -p "$(dirname "$dst/$rel")"
+        cp -f "$f" "$dst/$rel" 2>/dev/null && echo "seeded hook ($rel)" || true
+        continue
+      fi
+      if [[ $rev != unknown && -n $oldrev && $rev != "$oldrev" ]]; then
+        if git -C "$REPO" show "$oldrev:hooks/$rel" 2>/dev/null | cmp -s - "$dst/$rel"; then
+          if cmp -s "$f" "$dst/$rel" 2>/dev/null; then
+            : # identical already — nothing to do
+          else
+            cp -f "$f" "$dst/$rel" 2>/dev/null && echo "refreshed hook ($rel)" || true
+          fi
+        else
+          echo "kept custom hook ($rel)"
+        fi
+      fi
     done
+    if [[ $rev != unknown ]]; then
+      mkdir -p "$dst"
+      printf '%s\n' "$rev" > "$manifest"
+    fi
     return 0
   }
 
