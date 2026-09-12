@@ -398,6 +398,116 @@ if unplaced:
 EOF
   }
 
+  # Propagate NEW repo binds to the live file (additive only): combos the repo
+  # defines that were never synced and aren't live get spliced into the live
+  # binds block. Conflicts (live binds it differently) are logged, never
+  # overwritten; user deletions stick (recorded combos are never re-added).
+  sync_new_binds() {
+    local src="$1" dst="$2"
+    local db="$HOME/.local/state/hexciri/keybinds-synced"
+    REPO_BINDS="$src" LIVE_BINDS="$dst" SYNCED_DB="$db" python3 <<'EOF'
+import os, re
+
+src = os.environ["REPO_BINDS"]
+dst = os.environ["LIVE_BINDS"]
+db = os.environ["SYNCED_DB"]
+
+def combo_key(pre):
+    pre = re.sub(r'"[^"]*"', '', pre)
+    toks = [t for t in pre.split() if '=' not in t]
+    return ''.join(toks).upper() or None
+
+def entries(text):
+    out, depth, in_binds, at = [], 0, False, 0
+    cur = None
+    for line in text.splitlines():
+        s = line.strip()
+        bare = re.sub(r'"[^"]*"', '""', line)
+        bal = bare.count('{') - bare.count('}')
+        if cur is None:
+            if re.match(r'^binds\s*\{', s) and depth == 0:
+                in_binds, at = True, depth
+            elif (in_binds and depth == at + 1 and s
+                    and not s.startswith(("//", "/-"))):
+                m = re.match(r'^(.+?)\s*\{(.*)$', s)
+                if m and ';' not in re.sub(r'"[^"]*"', '', m.group(1)):
+                    key = combo_key(m.group(1))
+                    if key and key != "BINDS":
+                        cur = [key, [line], bal]
+                        if cur[2] <= 0:
+                            out.append((cur[0], "\n".join(cur[1])))
+                            cur = None
+                        depth += bal
+                        continue
+        else:
+            cur[1].append(line)
+            cur[2] += bal
+            if cur[2] <= 0:
+                out.append((cur[0], "\n".join(cur[1])))
+                cur = None
+        depth += bal
+        if in_binds and depth <= at:
+            in_binds = False
+    return out
+
+repo = open(src).read()
+live = open(dst).read()
+repo_map = {}
+for c, t in entries(repo):
+    repo_map.setdefault(c, t)
+live_map = {}
+for c, t in entries(live):
+    live_map.setdefault(c, t)
+synced = set()
+if os.path.isfile(db):
+    synced = {l.strip() for l in open(db) if l.strip()}
+
+added, conflicts, seen = [], [], set(synced)
+for c, t in repo_map.items():
+    if c not in live_map:
+        if c in synced:
+            continue
+        seen.add(c)
+        added.append((c, t))
+    elif live_map[c] != t:
+        seen.add(c)
+        conflicts.append(c)
+    else:
+        seen.add(c)
+
+if added:
+    lines = live.rstrip().split("\n")
+    depth, open_idx, close_idx = 0, None, None
+    for i, line in enumerate(lines):
+        s = line.strip()
+        bare = re.sub(r'"[^"]*"', '""', line)
+        if open_idx is None and re.match(r'^binds\s*\{', s) and depth == 0:
+            open_idx = i
+        depth += bare.count('{') - bare.count('}')
+        if open_idx is not None and depth == 0:
+            close_idx = i
+            break
+    if open_idx is not None and close_idx is not None:
+        ins = [""] + [t for _, t in added]
+        live = "\n".join(lines[:close_idx] + ins + lines[close_idx:]) + "\n"
+        import shutil, time
+        shutil.copyfile(dst, "%s.bak.%d" % (dst, int(time.time())))
+        if os.path.islink(dst):
+            os.unlink(dst)
+        with open(dst, "w") as f:
+            f.write(live)
+    else:
+        print("  WARNING: live binds block not found — %d new binds NOT placed" % len(added))
+        added = []
+os.makedirs(os.path.dirname(db) or ".", exist_ok=True)
+with open(db, "w") as f:
+    f.write("\n".join(sorted(seen)) + "\n")
+print("keybinds sync: +%d new bind(s), %d conflict(s) kept live" % (len(added), len(conflicts)))
+for c in conflicts:
+    print("  conflict %s: live differs — left alone (edit %s by hand to take ours)" % (c, dst))
+EOF
+  }
+
   # Kitty config: seed once when absent — live file is per-machine after that.
   sync_kitty() {
     local src="$REPO/config/kitty/kitty.conf"
