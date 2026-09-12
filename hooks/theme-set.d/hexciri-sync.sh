@@ -300,18 +300,38 @@ if cachy_layout.exists():
 # defaults the ring ON when no block exists (the CachyOS tree defines none).
 # Insert explicit off blocks once where absent; configured blocks are never
 # touched (a deliberate ring is the user's choice).
-def ensure_off(path, node):
-    # Insert an explicit off block only when the file has no such block at
-    # all — a configured block (even one already off) is never touched, so
-    # reruns are silent and user choices survive.
+def ensure_off_in_layout(path):
+    # Niri accepts focus-ring/border ONLY nested inside the top-level layout{}
+    # block — top-level nodes are a parse error that kills the whole config.
+    # Insert missing off blocks there; configured nodes are never touched.
     try:
         t = path.read_text()
     except OSError:
         return False
-    if re.search(r'^\s*%s\s*\{' % node, t, re.M):
+    missing = [n for n in ("focus-ring", "border")
+               if not re.search(r'^\s*%s\s*\{' % n, t, re.M)]
+    if not missing:
         return False
-    path.write_text(t.rstrip('\n') + "\n\n// theme-owned: %s off so borders/rings never cover semitransparent terminals\n%s {\n    off\n}\n" % (node, node))
-    print(f"hexciri-sync: {path.name}: {node} off for transparency")
+    lines = t.split("\n")
+    depth, open_idx, close_idx = 0, None, None
+    for i, line in enumerate(lines):
+        s = line.strip()
+        code = re.sub(r'"[^"]*"', '""', line)
+        code = re.sub(r'//.*$', '', code)
+        if open_idx is None and re.match(r'^layout\s*\{', s) and depth == 0:
+            open_idx = i
+        depth += code.count('{') - code.count('}')
+        if open_idx is not None and depth == 0:
+            close_idx = i
+            break
+    if open_idx is None or close_idx is None:
+        print(f"hexciri-sync: {path.name} has no top-level layout block — rings left alone")
+        return False
+    ins = ["", "// theme-owned: rings off so borders/rings never cover semitransparent terminals"]
+    ins += ["%s {\n    off\n}" % n for n in missing]
+    lines = lines[:close_idx] + ins + lines[close_idx:]
+    path.write_text("\n".join(lines))
+    print(f"hexciri-sync: {path.name}: {', '.join(missing)} off for transparency")
     return True
 
 ring_target = None
@@ -322,8 +342,7 @@ else:
     if _ours.exists():
         ring_target = _ours
 if ring_target is not None:
-    ensure_off(ring_target, "focus-ring")
-    ensure_off(ring_target, "border")
+    ensure_off_in_layout(ring_target)
 
 # ── 4. Wallpaper sync ──
 # If the user has custom wallpapers merged (zz-user-* links from the store or
