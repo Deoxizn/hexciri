@@ -433,9 +433,11 @@ systemctl enable smb.service >/dev/null 2>&1 || true
 systemctl enable nmb.service >/dev/null 2>&1 || true
 
 # ── 5. app-menu curation: re-hide utility entries the packages re-show ──
+# NOTE: nautilus can't be uninstalled (xdg-desktop-portal-gnome, required by
+# niri itself, depends on it) — so it stays installed but hidden here.
 for f in avahi-discover.desktop avahi-zeroconf-browser.desktop bssh.desktop \
-         bvnc.desktop btop.desktop lstopo.desktop qv4l2.desktop qvidcap.desktop \
-         qt6ct.desktop; do
+         bvnc.desktop btop.desktop lstopo.desktop org.gnome.Nautilus.desktop \
+         qv4l2.desktop qvidcap.desktop qt6ct.desktop; do
   d="/usr/share/applications/$f"
   [[ -f $d ]] && ! grep -q '^NoDisplay=true' "$d" && printf 'NoDisplay=true\n' >> "$d" && log "hid $f"
 done

@@ -2,9 +2,10 @@
 # (block 3a5r) uninstalls these if present, then purges their config dirs.
 # Already-absent packages are left alone: their files are the user's now.
 # One per line; '#' comments and blanks ignored.
-nautilus
 alacritty
 firefox
 meld
 micro
+cachyos-micro-settings
 vim
+cachyos-zsh-config
