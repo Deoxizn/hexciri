@@ -350,10 +350,10 @@ if [[ $(basename "$0") == hexciri-network ]]; then
 fi
 
 case "$sub" in
-  menu)     net_menu "$@" ;;
+  menu|"")   net_menu "$@" ;;
   dns)      dns "$@" ;;
   qr)       qr "$@" ;;
   status)   status; exit $? ;;
-  help|"")  echo "usage: hexciri-network <menu|dns <provider>|qr [--terminal]|status|help>"; exit 0 ;;
+  help)     echo "usage: hexciri-network <menu|dns <provider>|qr [--terminal]|status|help>"; exit 0 ;;
   *)        echo "unknown network subcommand: $sub" >&2; exit 1 ;;
 esac

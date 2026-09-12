@@ -203,6 +203,12 @@ mode = "{"dark" if mode == "dark" else "light"}\""""
         print(f"hexciri-sync: patched config.toml → custom palette 'hexciri'")
     else:
         print(f"hexciri-sync: preserving palette source '{cur_src}' (user choice)")
+    # Wallpaper directory → hexciri standard, but only when the section is
+    # absent entirely; a configured directory is the user's choice and stays.
+    if '[wallpaper]' not in cfg:
+        cfg = cfg.rstrip('\n') + '\n\n[wallpaper]\nenabled = true\ndirectory = "~/.local/state/hexciri/current/theme/backgrounds"\n'
+        noctalia_cfg.write_text(cfg)
+        print("hexciri-sync: set wallpaper directory → hexciri standard")
 
 # ── 3b. Qt theming (qt6ct): QPalette color scheme from theme colors ──
 qt6_dir = Path.home() / ".config" / "qt6ct"

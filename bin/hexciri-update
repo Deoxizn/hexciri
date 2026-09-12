@@ -241,6 +241,10 @@ update_self() {
       HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-omarchy" </dev/null 2>&1 || \
         echo "omarchy themes sync skipped/failed (continuing)" >&2
     fi
+    if [[ -x "$REPO/bin/hexciri-theme-extras" ]]; then
+      HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-extras" --run sync </dev/null 2>&1 || \
+        echo "extras themes sync skipped/failed (continuing)" >&2
+    fi
   }
 
   # cfg/ layout: only config.kdl lives in ~/.config/niri/, fragments live in
@@ -405,6 +409,18 @@ EOF
     echo "seeded kitty config ($dst)"
   }
 
+  # fastfetch config: seed once when absent (repo ships one, CachyOS boxes
+  # have none live) — live file is per-machine after that.
+  sync_fastfetch() {
+    local src="$REPO/config/fastfetch/config.jsonc"
+    local dst="$HOME/.config/fastfetch/config.jsonc"
+    [[ -f $src ]] || return 0
+    [[ -f $dst ]] && return 0
+    mkdir -p "$(dirname "$dst")"
+    cp -f "$src" "$dst"
+    echo "seeded fastfetch config ($dst)"
+  }
+
   # Repo hook scripts (theme bridge, app hooks): seed each into
   # ~/.config/hexciri/hooks/<path> only when absent — user files there are
   # theirs and are never clobbered. Without this, theme-set fires no hooks.
@@ -458,6 +474,7 @@ EOF
 
   sync_keybinds
   sync_kitty
+  sync_fastfetch
   sync_hooks
 
   if (( behind == 0 )); then
