@@ -6,9 +6,10 @@
 #   --user-only    run as USER   (configs, state, theme seed — zero sudo calls)
 #   no flags       Already-on-Arch: system via sudo (real terminal), then user.
 #
-# usage: ./install.sh [-y] [--dry-run] [--channel stable|bleeding] [--kernel stock|lts]
+# usage: ./install.sh [-y] [--dry-run] [--channel stable|bleeding] [--kernel stock|lts] [--gpu auto|mesa|nvidia-580|nvidia-current]
 # (kernel is always stock on fresh installs — --kernel is internal/support only;
 #  custom kernels are post-install via System ▸ Kernel)
+# (--gpu forces the graphics stack at install; default auto-detects)
 #
 # hexciri ships niri + Noctalia: niri is the single compositor and Noctalia is
 # always the desktop shell (bar, lock, OSD, notifications) spawned at login.
@@ -21,6 +22,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 CHANNEL="stable"
 KERNEL_PICK=""
+GPU_PICK=""
 YES=false
 DRY_RUN=false
 SYSTEM_ONLY=false
@@ -37,6 +39,8 @@ while (($#)); do
     --channel) CHANNEL="${2:-}"; shift 2 ;;
     --kernel=*) KERNEL_PICK="${1#*=}"; shift ;;
     --kernel) KERNEL_PICK="${2:-}"; shift 2 ;;
+    --gpu=*) GPU_PICK="${1#*=}"; shift ;;
+    --gpu) GPU_PICK="${2:-}"; shift 2 ;;
     stable|bleeding) CHANNEL="$1"; shift ;;
     --) shift ;;
     *) shift ;;
@@ -52,6 +56,11 @@ case "${KERNEL_PICK,,}" in
   lts|linux-lts) KERNEL_PICK=lts ;;
 esac
 [[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts)$ ]] || { echo "kernel must be stock|lts (omarchy kernels are post-install, via the Kernel menu)"; exit 1; }
+case "$GPU_PICK" in
+  ""|auto) GPU_PICK="" ;;
+  mesa|nvidia-580|nvidia-current) ;;
+  *) echo "gpu must be auto|mesa|nvidia-580|nvidia-current"; exit 1 ;;
+esac
 
 info() { echo -e "\e[0;36m[hexciri]\e[0m $*"; }
 ok()   { echo -e "\e[0;32m[hexciri]\e[0m $*"; }
@@ -76,7 +85,7 @@ if ! $SYSTEM_ONLY && ! $USER_ONLY; then
 re_exec_flags=""
 $DRY_RUN && re_exec_flags+=" --dry-run"
 $UPDATE_MODE && re_exec_flags+=" --update"
-sudo HEXCIRI_USER="$USER" "$0" --system-only ${YES:+ -y} $re_exec_flags --channel "$CHANNEL" ${KERNEL_PICK:+--kernel "$KERNEL_PICK"}
+sudo HEXCIRI_USER="$USER" "$0" --system-only ${YES:+ -y} $re_exec_flags --channel "$CHANNEL" ${KERNEL_PICK:+--kernel "$KERNEL_PICK"} ${GPU_PICK:+--gpu "$GPU_PICK"}
   exec "$0" --user-only ${YES:+ -y} $re_exec_flags --channel "$CHANNEL"
 fi
 
@@ -431,7 +440,7 @@ SSHEOF
   # ── GPU autodetect (runs as root here; installer reboots at the end, not mid-run) ──
   if ! $DRY_RUN; then
     # shellcheck disable=SC2086
-    if ! HEXCIRI_NO_REBOOT=1 hexciri-gpu -y ${KERNEL_PICK:+--kernel $KERNEL_PICK}; then
+    if ! HEXCIRI_NO_REBOOT=1 hexciri-gpu -y ${KERNEL_PICK:+--kernel $KERNEL_PICK} ${GPU_PICK:+--gpu $GPU_PICK}; then
       warn "GPU setup FAILED. An NVIDIA machine booting without its driver hangs"
       warn "on nouveau after login — boot to a console/live ISO and fix before using it:"
       warn "  arch-chroot /mnt  pacman -S <kernel>-headers nvidia-580xx/nvidia-open-dkms …"

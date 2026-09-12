@@ -1,6 +1,9 @@
 #!/bin/bash
 # hexciri:summary=GPU autodetect + setup: mesa/vulkan per vendor, nvidia-open 6xx (Turing+), 580xx (all pre-Turing, from AUR)
-# usage: hexciri-gpu [--kernel=stock|lts|omarchy|omarchy-bore] [--yes]
+# usage: hexciri-gpu [--gpu=mesa|nvidia-580|nvidia-current] [--kernel=stock|lts|omarchy|omarchy-bore] [--yes]
+#   --gpu forces a stack instead of auto-detecting (opt-in when detection is
+#        wrong for the machine): mesa (default fallback — 90%+ of iGPUs),
+#        nvidia-580 (AUR 580xx legacy), nvidia-current (nvidia-open 6xx).
 #   --kernel picks the default kernel (default: current-best for your card).
 #   omarchy kernels are post-install personalization (System ▸ Kernel — they
 #   ship as repo packages via the [omarchy] repo and update with pacman), and
@@ -10,11 +13,14 @@
 set -euo pipefail
 
 KERNEL_PICK=""
+GPU_PICK=""
 YES=false
 while (($#)); do
   case "$1" in
     --kernel=*) KERNEL_PICK="${1#*=}"; shift ;;
     --kernel) KERNEL_PICK="${2:-}"; shift 2 ;;
+    --gpu=*) GPU_PICK="${1#*=}"; shift ;;
+    --gpu) GPU_PICK="${2:-}"; shift 2 ;;
     -y|--yes) YES=true; shift ;;
     --) shift ;;
     *) shift ;;
@@ -29,6 +35,11 @@ case "${KERNEL_PICK,,}" in
   omarchy-bore|linux-omarchy-bore) KERNEL_PICK=omarchy-bore ;;
 esac
 [[ -z $KERNEL_PICK || $KERNEL_PICK =~ ^(stock|lts|omarchy|omarchy-bore)$ ]] || { echo "hexciri-gpu: --kernel must be stock|lts|omarchy|omarchy-bore"; exit 1; }
+case "$GPU_PICK" in
+  ""|auto) GPU_PICK="" ;;
+  mesa|nvidia-580|nvidia-current) ;;
+  *) echo "hexciri-gpu: --gpu must be mesa|nvidia-580|nvidia-current (or auto)"; exit 1 ;;
+esac
 
 info() { echo -e "\e[0;36m[hexciri:gpu]\e[0m $*"; }
 ok()   { echo -e "\e[0;32m[hexciri:gpu]\e[0m $*"; }
@@ -78,6 +89,11 @@ pkg() {
   ((${#missing[@]})) || return 0
   info "pacman: ${missing[*]}"
   sudo pacman -S --noconfirm --needed "${missing[@]}"
+}
+
+run_pacman_remove() { # $@ packages to remove (required deps too)
+  info "pacman: removing ${*}"
+  sudo pacman -Rsn --noconfirm "$@"
 }
 
 use_kernel() { # $1 = hexciri-kernel key; ensures installed + default
@@ -174,6 +190,15 @@ has_vendor 0x10de && NVIDIA=true
 nvidia_legacy && LEGACY=true
 nvidia_id_ge 0x1e00 && MODERN=true
 
+if [[ -n $GPU_PICK ]]; then      # explicit opt-in overrides detection
+  case "$GPU_PICK" in
+    mesa)         NVIDIA=false; LEGACY=false; MODERN=false ;;
+    nvidia-580)   NVIDIA=true;  LEGACY=true;  MODERN=false ;;
+    nvidia-current) NVIDIA=true; LEGACY=false; MODERN=true ;;
+  esac
+  info "GPU stack forced: $GPU_PICK"
+fi
+
 if $LEGACY; then
   info "legacy NVIDIA card detected (pre-Turing — Maxwell/Pascal/Volta and Kepler/Fermi/Tesla, i.e. any card below RTX 20xx)."
   # 580xx is the last driver line for these GPUs, but NVIDIA keeps new-kernel
@@ -250,6 +275,13 @@ fi
 
 # ── no NVIDIA: mesa/vulkan per vendor (also the base under hybrid laptops) ──
 info "no NVIDIA card — mesa/vulkan stack."
+# libglvnd pulls `opengl-driver`, which both mesa and nvidia-utils provide;
+# pacman's default provider on some syncs is nvidia-utils. Prune any leaked
+# nvidia userspace package so an AMD/Intel box never keeps the NVIDIA GL stack.
+prune=(nvidia-utils lib32-nvidia-utils nvidia nvidia-open-dkms nvidia-settings)
+for p in "${prune[@]}"; do
+  pacman -Q "$p" &>/dev/null && run_pacman_remove "$p"
+done
 pkgs=(mesa vulkan-icd-loader lib32-mesa lib32-vulkan-icd-loader)
 has_vendor 0x8086 && pkgs+=(vulkan-intel lib32-vulkan-intel)
 has_vendor 0x1002 && pkgs+=(vulkan-radeon lib32-vulkan-radeon)
