@@ -12,7 +12,7 @@ set -euo pipefail
 
 SITE="https://hexciri.dirty.pizza"
 REPO="https://github.com/Deoxizn/hexciri.git"
-BOOTSTRAP_REV=29   # bump on every bootstrap.sh change; printed first so reports are unambiguous
+BOOTSTRAP_REV=30   # bump on every bootstrap.sh change; printed first so reports are unambiguous
 CHANNEL="stable"
 KERNEL_PICK=""      # always: installer auto-picks stock (custom kernels are post-install via hexciri-kernel)
 START_EPOCH=$(date +%s)   # for the "install took Xm Ys" banner before the reboot prompt
@@ -85,6 +85,19 @@ fi
 read -rp "timezone [$DETECTED_TZ]: " TIMEZONE </dev/tty; TIMEZONE="${TIMEZONE:-$DETECTED_TZ}"
 [[ $TIMEZONE != *".."* && -f /usr/share/zoneinfo/"$TIMEZONE" ]] || { err "unknown timezone: $TIMEZONE"; exit 1; }
 timedatectl set-ntp true 2>/dev/null || true
+
+# ── GPU: mesa is the default — it's what 90%+ of iGPUs ship with, it's the
+#    safest stack on any box with no discrete card, and installing NVIDIA on
+#    the wrong machine is how you get a box that hangs on nouveau after login.
+#    NVIDIA is strictly opt-in; auto re-runs the same detector as the GPU menu. ──
+info "gpu: mesa by default (90%+ of iGPUs) — NVIDIA is opt-in"
+read -rp "gpu [auto/mesa/nvidia-580/nvidia-current, default mesa]: " GPU_PICK </dev/tty
+GPU_PICK="${GPU_PICK,,}"; GPU_PICK="${GPU_PICK:-mesa}"
+case "$GPU_PICK" in
+  auto) GPU_PICK="" ;;  # re-detect at install time (same as always was)
+  mesa|nvidia-580|nvidia-current) ;;
+  *) err "gpu must be auto|mesa|nvidia-580|nvidia-current"; exit 1 ;;
+esac
 
 # ── filesystem: ext4 default (simplest, robust, no snapshot stack to feed);
 #    btrfs optional (checksums + zstd transparent compression) ──
@@ -360,7 +373,7 @@ chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.local"
 # with zero sudo calls — su(1) sessions have no controlling TTY, so nothing
 # here may ever depend on sudo prompting.
 trap 'rm -f /root/hexciri-stage2.sh' EXIT
-HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}
+HEXCIRI_USER="$USERNAME" bash /root/hexciri-install/install.sh --system-only -y --channel $CHANNEL${KERNEL_PICK:+ --kernel $KERNEL_PICK}${GPU_PICK:+ --gpu $GPU_PICK}
 # login shell stays bash: SSH remote commands, su(1), and every POSIX script
 # route through the login shell — fish as $SHELL mangles those (for/done loops,
 # quoting). fish instead launches explicitly from the terminal via kitty
