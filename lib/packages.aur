@@ -1,0 +1,4 @@
+# hexciri curated AUR wants — installed best-effort as the OWNER via yay/paru
+# (never as root, never under the pacman lock). bin/hexciri-sync (block 3a5a).
+# brave-bin = the Brave browser (binary release, no compile).
+brave-bin

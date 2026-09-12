@@ -135,12 +135,11 @@ if [[ -n $REPO && -d $REPO/bin && -n $noct_owner && -n $noct_home ]]; then
   [[ $changed == 1 ]] && log "~/.local/bin links refreshed"
 fi
 
-# ── 3a5. curated repo packages: re-assert the set install.sh ships, so a
+# ── 3a5. curated repo packages (lib/packages): re-assert the wanted set, so a
 # ── package that was removed (or never landed on a box that installed before
-# ── it was added) comes back on the next system update. Shares lib/packages
-# ── with install.sh — the same list drives both, so they can't drift. AUR
-# ── builds (brave/yay/maplemono) are excluded deliberately: sync runs inside
-# ── the pacman lock as root and cannot build AUR packages. ──
+# ── it was added) comes back on the next manual sync. AUR wants live in
+# ── lib/packages.aur (owner-side, block 3a5a); GitHub-release wants (strata)
+# ── are owned by `hexciri-setup strata`. ──
 if [[ -n $REPO && -f $REPO/lib/packages ]]; then
   missing_pkgs=()
   while IFS= read -r p; do
@@ -154,6 +153,71 @@ if [[ -n $REPO && -f $REPO/lib/packages ]]; then
       pacman -S --noconfirm --needed "${missing_pkgs[@]}" >/dev/null 2>&1 && \
         log "installed missing curated packages: ${missing_pkgs[*]}" || \
         log "WARNING: failed to install ${missing_pkgs[*]}"
+    fi
+  fi
+fi
+
+# ── 3a5r. removals (lib/packages.remove): stock apps hexciri replaces. If
+# ── installed: uninstall (never under the pacman lock — hook runs only log),
+# ── then purge the owner's config dirs for exactly what was removed this run.
+# ── Already-absent packages are left alone: their files are the user's now. ──
+if [[ -n $REPO && -f $REPO/lib/packages.remove ]]; then
+  remove_pkgs=()
+  while IFS= read -r p; do
+    [[ -n $p && $p != \#* ]] || continue
+    pacman -Q "$p" >/dev/null 2>&1 && remove_pkgs+=("$p")
+  done < "$REPO/lib/packages.remove"
+  if ((${#remove_pkgs[@]})); then
+    if pgrep -x pacman >/dev/null 2>&1; then
+      log "removals pending ($(IFS=','; echo "${remove_pkgs[*]}")) — pacman holds the lock (hook run); run 'sudo hexciri-sync' after the transaction to remove"
+    else
+      for p in "${remove_pkgs[@]}"; do
+        if pacman -Rns --noconfirm "$p" >/dev/null 2>&1; then
+          log "removed $p"
+          if [[ -n ${noct_home:-} ]]; then
+            case "$p" in
+              nautilus)  rm -rf "$noct_home/.config/nautilus" ;;
+              alacritty) rm -rf "$noct_home/.config/alacritty" ;;
+              firefox)   rm -rf "$noct_home/.mozilla" ;;
+              meld)      rm -rf "$noct_home/.config/meld" ;;
+              micro)     rm -rf "$noct_home/.config/micro" ;;
+              vim)       rm -rf "$noct_home/.vim" "$noct_home/.viminfo" ;;
+            esac
+          fi
+        else
+          log "WARNING: could not remove $p (something still depends on it?)"
+        fi
+      done
+    fi
+  fi
+fi
+
+# ── 3a5a. AUR wants (lib/packages.aur): best-effort as the OWNER via yay/paru.
+# ── Never as root (makepkg refuses), never under the pacman lock (hook runs
+# ── only log). Attempted only when the package is actually missing. ──
+if [[ -n $REPO && -f $REPO/lib/packages.aur && -n ${noct_owner:-} && -n ${noct_home:-} ]]; then
+  aur_missing=()
+  while IFS= read -r p; do
+    [[ -n $p && $p != \#* ]] || continue
+    pacman -Q "$p" >/dev/null 2>&1 || aur_missing+=("$p")
+  done < "$REPO/lib/packages.aur"
+  if ((${#aur_missing[@]})); then
+    if pgrep -x pacman >/dev/null 2>&1; then
+      log "AUR wants pending ($(IFS=','; echo "${aur_missing[*]}")) — pacman holds the lock (hook run); run 'sudo hexciri-sync' after the transaction"
+    else
+      helper=""
+      for h in yay paru; do command -v "$h" >/dev/null 2>&1 && { helper=$h; break; }; done
+      if [[ -z $helper ]]; then
+        log "AUR wants missing ($(IFS=','; echo "${aur_missing[*]}")) — no yay/paru on PATH, skipping"
+      else
+        for p in "${aur_missing[@]}"; do
+          if runuser -u "$noct_owner" -- env HOME="$noct_home" "$helper" -S --noconfirm --needed "$p" >/dev/null 2>&1; then
+            log "installed AUR package $p (as $noct_owner via $helper)"
+          else
+            log "WARNING: AUR install failed for $p ($helper as $noct_owner)"
+          fi
+        done
+      fi
     fi
   fi
 fi
@@ -369,8 +433,9 @@ systemctl enable smb.service >/dev/null 2>&1 || true
 systemctl enable nmb.service >/dev/null 2>&1 || true
 
 # ── 5. app-menu curation: re-hide utility entries the packages re-show ──
-for f in avahi-discover.desktop bssh.desktop bvnc.desktop lstopo.desktop \
-         qv4l2.desktop qvidcap.desktop qt6ct.desktop; do
+for f in avahi-discover.desktop avahi-zeroconf-browser.desktop bssh.desktop \
+         bvnc.desktop btop.desktop lstopo.desktop qv4l2.desktop qvidcap.desktop \
+         qt6ct.desktop; do
   d="/usr/share/applications/$f"
   [[ -f $d ]] && ! grep -q '^NoDisplay=true' "$d" && printf 'NoDisplay=true\n' >> "$d" && log "hid $f"
 done
