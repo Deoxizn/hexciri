@@ -3,8 +3,8 @@
   "logo": {
     "type": "auto",
     "source": "~/.config/fastfetch/hexciri-nb.png",
-    "width": 70,
-    "height": 31,
+    "width": 65,
+    "height": 35,
     "padding": { "top": 3, "bottom": 0 },
   },
   "display": {
@@ -115,7 +115,13 @@
       "type": "command",
       "key": "OS",
       "keyWidth": 18,
-      "text": "os=$(grep '^PRETTY_NAME=' /etc/os-release | cut -d= -f2 | tr -d '\"'); echo \"$os | Hexciri\"",
+      "text": "echo \"Hexciri\"",
+    },
+    {
+      "type": "command",
+      "key": "VERSION",
+      "keyWidth": 18,
+      "text": "hexciri-version 2>/dev/null | awk '{print $1}' || echo \"?\"",
     },
     {
       "type": "command",
