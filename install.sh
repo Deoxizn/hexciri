@@ -151,6 +151,14 @@ if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&
   sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \
     info "kept brave-bin (removal failed) — remove by hand if unwanted"
 fi
+# Image defaults: the browser claims image/* on install, so pin them back to
+# imv (only browser-owned slots are touched — a deliberate viewer pick stays).
+# Best-effort, never fatal; re-runs heal whatever the browser re-stole.
+if [[ -x "$REPO/bin/hexciri-imv-defaults" ]]; then
+  info "pinning image/* defaults to imv"
+  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-imv-defaults" 2>&1 | sed 's/^/  /' || \
+    info "imv defaults skipped — pick System > Default Apps > Images by hand"
+fi
 # Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
 # localsend current delivers it — nothing extra to install. The blades resolve
 # localsend-cli || jocalsend live and fail with a clear message otherwise.

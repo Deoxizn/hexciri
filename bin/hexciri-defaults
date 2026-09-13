@@ -135,7 +135,7 @@ case "${pick_type,,}" in
     # own Icon=multimedia-photo-viewer doesn't exist on Arch, so deploy the
     # bundled viewer/folder icons into hicolor and point the entries at them.
     if [[ $choice == imv ]]; then
-      # Same healing helper install.sh/sync ship — deploys the displayable
+      # Same healing helper install.sh runs — deploys the displayable
       # override + icons and pins image/* to imv. It only overrides when a
       # browser owns the MIME, never a deliberate different viewer.
       local REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
