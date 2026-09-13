@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri dotfiles bring-up — CachyOS + a WM, then this.
+# hexciri dotfiles bring-up — CachyOS + Niri, then this.
 #
 #   curl -LO https://hexciri.dirty.pizza/install.sh
 #   sh install.sh

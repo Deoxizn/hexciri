@@ -1,17 +1,30 @@
 #!/bin/bash
-# hexciri dotfiles bring-up — CachyOS + a WM, then this.
+# hexciri dotfiles bring-up — CachyOS + Niri, then this.
 #
 #   curl -LO https://hexciri.dirty.pizza/install.sh
 #   sh install.sh
 #
 # or: git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
-#     ~/.local/opt/hexciri/install.sh
+#     ~/.local/opt/hexciri/install.sh [--yes]
+#
+# --yes/-y answers the update deploy's "Run system update?" with yes
+# (non-interactive bring-up). The reboot offer always still asks.
 #
 # One-shot CachyOS+Niri bring-up: clone, link controllers, root sync pass,
 # one-time app swap, per-user Strata + Brave Origin, then the update deploy
 # (keybinds adapt, kitty seed, themes). Idempotent; safe to re-run.
 # Afterwards sync never touches packages — later manual changes stick.
 set -euo pipefail
+
+UPDATE_YES=""
+for _a in "$@"; do
+  case "$_a" in
+    --yes|-y) UPDATE_YES="--yes" ;;
+    -h|--help) echo "usage: install.sh [--yes]"; exit 0 ;;
+    *) echo "install.sh: unknown arg: $_a (usage: install.sh [--yes])" >&2; exit 1 ;;
+  esac
+done
+unset _a
 
 REPO_URL="https://github.com/Deoxizn/hexciri.git"
 DEFAULT_REPO="$HOME/.local/opt/hexciri"
@@ -53,7 +66,8 @@ if [[ -x "$REPO/bin/hexciri-sync" ]]; then
 fi
 # One-time light app swap: hexciri's apps in, replaced stock ones out (with
 # their config dirs, but only once something is actually absent). Runs here at
-# install and nowhere else — sync never touches packages, so later manual
+# install and nowhere else — sync never touches packages (except the tiny
+# layer-critical subset `hexciri-update self` self-heals), so later manual
 # changes are never reverted or re-applied. Best-effort, never fatal.
 # NOTE: removal order matters — the CachyOS niri meta goes first so the portal
 # it pins, then nautilus, come out cleanly behind it. vim is force-removed
@@ -61,9 +75,12 @@ fi
 # that declared dep, reinstalling vim undoes it). fuzzel + gtksourceview5 are
 # layer needs (menu would be dead without fuzzel; strata won't launch without
 # the lib).
+# NOTE: polkit-gnome is a layer need too — niri autostart spawns its agent
+# binary, and without it pkexec apps (btrfs-assistant, gparted) silently
+# never open: no agent, no password dialog.
 # NOTE: xdg-terminal-exec is NOT in CachyOS repos (aborts the whole transaction
 # when named) — blades fall back to hexciri-terminal, which needs only kitty.
-_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate"
+_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse"
 _hexciri_removals="cachyos-niri-noctalia xdg-desktop-portal-gnome nautilus alacritty firefox meld cachyos-micro-settings micro"
 _hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro nautilus:$HOME/.config/nautilus"
 if command -v pacman >/dev/null 2>&1; then
@@ -135,14 +152,60 @@ if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&
   sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \
     info "kept brave-bin (removal failed) — remove by hand if unwanted"
 fi
+# Image defaults: the browser claims image/* on install, so pin them back to
+# imv (only browser-owned slots are touched — a deliberate viewer pick stays).
+# Best-effort, never fatal; re-runs heal whatever the browser re-stole.
+if [[ -x "$REPO/bin/hexciri-imv-defaults" ]]; then
+  info "pinning image/* defaults to imv"
+  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-imv-defaults" 2>&1 | sed 's/^/  /' || \
+    info "imv defaults skipped — pick System > Default Apps > Images by hand"
+fi
+# PDF default: nothing ships a reader, so PDFs fall through to the browser.
+# Same healing-helper shape as images (browser-owned slots only).
+if [[ -x "$REPO/bin/hexciri-pdf-defaults" ]]; then
+  info "pinning application/pdf default to mupdf"
+  "$REPO/bin/hexciri-pdf-defaults" 2>&1 | sed 's/^/  /' || \
+    info "pdf default skipped — set it by hand"
+fi
+# Nautilus can't be uninstalled (xdg-desktop-portal-gnome pins it), so hide it
+# instead: a user-level override with Hidden=true. User-level survives package
+# updates (which restore the system file hexciri-sync re-hides) and needs no
+# root; Hidden=true is stronger than NoDisplay (also drops MIME associations,
+# safe — Strata owns inode/directory, imv owns images).
+if [[ -f /usr/share/applications/org.gnome.Nautilus.desktop ]]; then
+  info "hiding nautilus launcher entry (portal keeps the package)"
+  mkdir -p "$HOME/.local/share/applications"
+  # Insert under [Desktop Entry]: nautilus ships a trailing [Desktop Action
+  # ...] group, so appending at EOF would hide only the action, not the app.
+  awk '/^(NoDisplay|Hidden)=/ { next } { print } /^\[Desktop Entry\]$/ && !done { print "NoDisplay=true"; print "Hidden=true"; done=1 }' \
+    /usr/share/applications/org.gnome.Nautilus.desktop > "$HOME/.local/share/applications/org.gnome.Nautilus.desktop" || \
+    info "nautilus hide skipped — hide it by hand"
+fi
 # Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
 # localsend current delivers it — nothing extra to install. The blades resolve
 # localsend-cli || jocalsend live and fail with a clear message otherwise.
+# Theme content (one-time here; afterwards Update > Themes owns it — the
+# framework sync deliberately never pulls themes, so system updates stay quiet).
+# Best-effort, never fatal.
+if [[ -x "$REPO/bin/hexciri-theme-omarchy" ]]; then
+  info "syncing omarchy theme defaults"
+  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-omarchy" 2>&1 | sed 's/^/  /' || \
+    info "omarchy themes skipped — run them from Update > Themes later"
+fi
+if [[ -x "$REPO/bin/hexciri-theme-extras" ]]; then
+  info "syncing extra themes"
+  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-extras" --run sync 2>&1 | sed 's/^/  /' || \
+    info "extra themes skipped — run them from Update > Themes later"
+fi
 # Update deploy (one-time here; afterwards run it by hand or from the menu):
 # keybinds adapt, kitty seed, themes, then the full system update it offers.
+# Runs attached to the terminal (no pipe): its "Run system update? [y/N]"
+# prompt is written without a trailing newline, so piping stdout through sed
+# swallows it and the install looks hung at an invisible question.
 if [[ -x "$REPO/bin/hexciri-update" ]]; then
   info "update deploy via hexciri-update (keybinds, kitty, themes)"
-  "$REPO/bin/hexciri-update" 2>&1 | sed 's/^/  /' || \
+  # shellcheck disable=SC2086
+  "$REPO/bin/hexciri-update" $UPDATE_YES || \
     info "update skipped — run 'hexciri-update' by hand later"
 fi
 info "done — pick a theme ('hexciri-theme set'), then relogin. Update: git -C $REPO pull && sh $REPO/install.sh"
