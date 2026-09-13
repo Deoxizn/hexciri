@@ -161,16 +161,11 @@ if [[ -x "$REPO/bin/hexciri-imv-defaults" ]]; then
     info "imv defaults skipped — pick System > Default Apps > Images by hand"
 fi
 # PDF default: nothing ships a reader, so PDFs fall through to the browser.
-# Pin application/pdf to mupdf — but only when a browser owns it or nothing
-# does; a deliberate pick (zathura, okular…) is never overridden.
-if [[ -f /usr/share/applications/mupdf.desktop ]]; then
-  _pdfcur="$(xdg-mime query default application/pdf 2>/dev/null || true)"
-  if [[ -z $_pdfcur || $_pdfcur =~ (brave|chromium|chrome|firefox|falkon|palemoon|librewolf|vivaldi|edge) ]]; then
-    info "pinning application/pdf default to mupdf"
-    xdg-mime default mupdf.desktop application/pdf 2>/dev/null || \
-      info "pdf default skipped — set it by hand"
-  fi
-  unset _pdfcur
+# Same healing-helper shape as images (browser-owned slots only).
+if [[ -x "$REPO/bin/hexciri-pdf-defaults" ]]; then
+  info "pinning application/pdf default to mupdf"
+  "$REPO/bin/hexciri-pdf-defaults" 2>&1 | sed 's/^/  /' || \
+    info "pdf default skipped — set it by hand"
 fi
 # Nautilus can't be uninstalled (xdg-desktop-portal-gnome pins it), so hide it
 # instead: a user-level override with Hidden=true. User-level survives package

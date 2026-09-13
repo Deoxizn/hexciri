@@ -1,0 +1,31 @@
+#!/bin/bash
+# hexciri:summary=Point application/pdf at mupdf (heals browser-stolen default, user-phase)
+# Browsers register application/pdf in their MimeType and take the default on
+# install/first-run. This pins it to mupdf — but ONLY when a browser currently
+# owns it or nothing handles it. A deliberate pick (zathura, okular, evince…)
+# is never overridden. Idempotent and safe to run on every sync.
+set -euo pipefail
+
+BROWSER_PATTERN='(brave|chromium|chrome|firefox|falkon|palemoon|librewolf|vivaldi|edge)'
+
+mupdf_present() { [[ -f /usr/share/applications/mupdf.desktop || -f $HOME/.local/share/applications/mupdf.desktop ]]; }
+
+# if a browser owns the MIME, that's the "broken" state to heal; anything else
+# in the slot is a user's deliberate choice and stays.
+needs_healing() {
+  local cur
+  cur="$(xdg-mime query default application/pdf 2>/dev/null || true)"
+  [[ -z $cur ]] && return 0
+  [[ $cur =~ $BROWSER_PATTERN ]]
+}
+
+healed_any=0
+if mupdf_present; then
+  if needs_healing; then
+    xdg-mime default mupdf.desktop application/pdf 2>/dev/null || true
+    healed_any=1
+  fi
+fi
+
+[[ $healed_any == 1 ]] && echo "pdf default applied (browser-stolen PDF MIME healed)"
+exit 0

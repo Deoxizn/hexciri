@@ -654,6 +654,18 @@ EOF
     return 0
   }
 
+  # MIME re-heal: browsers reclaim image/pdf defaults on install/first-run.
+  # Both healers only touch browser-owned or empty slots — a deliberate
+  # viewer/reader pick is never overridden. Best-effort, never fatal.
+  sync_mime() {
+    if [[ -x $REPO/bin/hexciri-imv-defaults ]]; then
+      HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-imv-defaults" >/dev/null 2>&1 || true
+    fi
+    if [[ -x $REPO/bin/hexciri-pdf-defaults ]]; then
+      "$REPO/bin/hexciri-pdf-defaults" >/dev/null 2>&1 || true
+    fi
+  }
+
   # Layer-critical packages: without polkit-gnome every pkexec app (btrfs-assistant,
   # gparted) is dead — no agent, no password dialog. mupdf keeps PDFs out of the
   # browser. This is the self-healing subset of install.sh's _hexciri_wants (the
@@ -712,6 +724,7 @@ EOF
   sync_fastfetch
   sync_noctalia
   sync_hooks
+  sync_mime
   ensure_layer_pkgs
 
   if (( behind == 0 )); then
