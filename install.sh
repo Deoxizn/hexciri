@@ -159,6 +159,20 @@ if [[ -x "$REPO/bin/hexciri-imv-defaults" ]]; then
   HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-imv-defaults" 2>&1 | sed 's/^/  /' || \
     info "imv defaults skipped — pick System > Default Apps > Images by hand"
 fi
+# Nautilus can't be uninstalled (xdg-desktop-portal-gnome pins it), so hide it
+# instead: a user-level override with Hidden=true. User-level survives package
+# updates (which restore the system file hexciri-sync re-hides) and needs no
+# root; Hidden=true is stronger than NoDisplay (also drops MIME associations,
+# safe — Strata owns inode/directory, imv owns images).
+if [[ -f /usr/share/applications/org.gnome.Nautilus.desktop ]]; then
+  info "hiding nautilus launcher entry (portal keeps the package)"
+  mkdir -p "$HOME/.local/share/applications"
+  # Insert under [Desktop Entry]: nautilus ships a trailing [Desktop Action
+  # ...] group, so appending at EOF would hide only the action, not the app.
+  awk '/^(NoDisplay|Hidden)=/ { next } { print } /^\[Desktop Entry\]$/ && !done { print "NoDisplay=true"; print "Hidden=true"; done=1 }' \
+    /usr/share/applications/org.gnome.Nautilus.desktop > "$HOME/.local/share/applications/org.gnome.Nautilus.desktop" || \
+    info "nautilus hide skipped — hide it by hand"
+fi
 # Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
 # localsend current delivers it — nothing extra to install. The blades resolve
 # localsend-cli || jocalsend live and fail with a clear message otherwise.

@@ -176,7 +176,16 @@ for f in avahi-discover.desktop avahi-zeroconf-browser.desktop bssh.desktop \
          bvnc.desktop btop.desktop lstopo.desktop org.gnome.Nautilus.desktop \
          qv4l2.desktop qvidcap.desktop qt6ct.desktop; do
   d="/usr/share/applications/$f"
-  [[ -f $d ]] && ! grep -q '^NoDisplay=true' "$d" && printf 'NoDisplay=true\n' >> "$d" && log "hid $f"
+  [[ -f $d ]] || continue
+  # Effective hide = NoDisplay=true inside [Desktop Entry]. Nautilus ships a
+  # trailing [Desktop Action ...] group, so a blind EOF append (what this loop
+  # used to do) hides only the action and the app stays visible everywhere.
+  if awk 'BEGIN{in_entry=0} /^\[/{in_entry=($0=="[Desktop Entry]")} in_entry && /^NoDisplay=true$/{found=1} END{exit !found}' "$d"; then
+    continue
+  fi
+  sed -i '/^NoDisplay=true$/d' "$d"
+  sed -i '0,/^\[Desktop Entry\]$/s//[Desktop Entry]\nNoDisplay=true/' "$d" \
+    && log "hid $f"
 done
 
 # ── 6. SDDM greeter theme: ship ours + select it. Never touches stock themes;
