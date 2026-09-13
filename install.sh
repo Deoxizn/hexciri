@@ -184,6 +184,19 @@ fi
 # Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
 # localsend current delivers it — nothing extra to install. The blades resolve
 # localsend-cli || jocalsend live and fail with a clear message otherwise.
+# Theme content (one-time here; afterwards Update > Themes owns it — the
+# framework sync deliberately never pulls themes, so system updates stay quiet).
+# Best-effort, never fatal.
+if [[ -x "$REPO/bin/hexciri-theme-omarchy" ]]; then
+  info "syncing omarchy theme defaults"
+  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-omarchy" 2>&1 | sed 's/^/  /' || \
+    info "omarchy themes skipped — run them from Update > Themes later"
+fi
+if [[ -x "$REPO/bin/hexciri-theme-extras" ]]; then
+  info "syncing extra themes"
+  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-extras" --run sync 2>&1 | sed 's/^/  /' || \
+    info "extra themes skipped — run them from Update > Themes later"
+fi
 # Update deploy (one-time here; afterwards run it by hand or from the menu):
 # keybinds adapt, kitty seed, themes, then the full system update it offers.
 # Runs attached to the terminal (no pipe): its "Run system update? [y/N]"

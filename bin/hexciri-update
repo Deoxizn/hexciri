@@ -235,18 +235,10 @@ update_self() {
     return 0
   }
 
-  # The shorthand Omarchy default set is part of the framework, so it rides along
-  # with the repo sync. Non-fatal so a sync proceeds even if it hits a snag.
-  sync_themes() {
-    if [[ -x "$REPO/bin/hexciri-theme-omarchy" ]]; then
-      HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-omarchy" </dev/null 2>&1 || \
-        echo "omarchy themes sync skipped/failed (continuing)" >&2
-    fi
-    if [[ -x "$REPO/bin/hexciri-theme-extras" ]]; then
-      HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-extras" --run sync </dev/null 2>&1 || \
-        echo "extras themes sync skipped/failed (continuing)" >&2
-    fi
-  }
+  # NOTE: theme-content syncing (omarchy defaults + extras pulls) deliberately
+  # lives ONLY in the Update > Themes job — not here. It's network-heavy and
+  # noisy, and every bare system update funnels through update_self first, so
+  # riding along here spams theme pulls into unrelated runs.
 
   # cfg/ layout: only config.kdl lives in ~/.config/niri/, fragments live in
   # ~/.config/niri/cfg/ (CachyOS-with-niri layout). One-time: move flat live
@@ -701,7 +693,6 @@ EOF
   fi
 
   relink
-  sync_themes
 
   # ── deploy-side migrations (run every pass; idempotent). ──
   ST="$HOME/.local/state/noctalia/settings.toml"
