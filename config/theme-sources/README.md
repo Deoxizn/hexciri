@@ -13,16 +13,20 @@ Two kinds of theme set exist in hexciri:
 Two lists, both edited from **Config**:
 
 - `config/theme-sources/extra.list` — handpicked **Extra themes**. One line per
-  theme, `<owner>/<name>` form, `#`-commented lines ignored:
+  theme, bare `<owner>/<repo>` form (the literal repo path after
+  `github.com/`), `#`-commented lines ignored:
 
   ```
+  HANCORE-linux/omarchy-aamis-theme
   HANCORE-linux/aamis
-  HANCORE-linux/sapphire
-  OldJobobo/dracula
+  signaldirective/neo-eldritch
   ```
 
-  A line can also be a full `https://github.com/<owner>/<repo>` URL when the
-  repo doesn't follow the `omarchy-<name>-theme` convention.
+  All three spellings work: `owner/omarchy-<name>-theme` clones literally,
+  `owner/<name>` tries `owner/<name>` literally then falls back to
+  `owner/omarchy-<name>-theme`, and a full
+  `https://github.com/<owner>/<repo>` URL always clones literally (any
+  naming convention).
 - `config/theme-sources/omarchy.list` — the shipped **Omarchy defaults**. Editing
   your copy lets you prune or add to the default set.
 
@@ -42,12 +46,15 @@ defaults stay pinned even if you never touch this.
 
 ## Per-theme-repo convention
 
-An extra theme is cloned from `https://github.com/<owner>/omarchy-<name>-theme.git`
+Convention themes live at `https://github.com/<owner>/omarchy-<name>-theme.git`
 (the same naming the shipped Omarchy set uses). Adding a new creator is just
-adding their `owner/name` lines — no new config files.
+adding their `owner/repo` lines — no new config files. Non-convention repos
+(e.g. `signaldirective/neo-eldritch`) clone literally from the bare
+`owner/repo` line.
 
 `hexciri-theme-install <git-url>` also adds a theme: it validates the URL,
-sanitizes the name, appends `owner/name` to your override list, and clones it —
+sanitizes the name, appends `owner/name` (convention repos) or the full URL
+(non-convention repos) to your override list, and clones it —
 so a one-off install becomes part of the same list-managed set.
 
 ## Curation on your own machine

@@ -174,9 +174,12 @@ theme_install() { # <git-url>
 
   # Track in the extras list: append owner/name shorthand for convention repos,
   # or the raw URL for nonconforming ones so a fresh sync re-clones correctly.
+  # (Bare owner/repo also syncs for nonconforming repos now, but the full URL
+  # stays unambiguous, so install keeps writing it.)
   override="$HOME/.config/hexciri/theme-sources/extra.list"
   mkdir -p "$(dirname "$override")"
-  shipped="$HEXCIRI_PATH/theme-sources/extra.list"
+  shipped="$HEXCIRI_PATH/config/theme-sources/extra.list"
+  [[ -f $shipped ]] || shipped="$HEXCIRI_PATH/theme-sources/extra.list"
   if [[ ! -f $override && -f $shipped ]]; then
     sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//' "$shipped" | rg -v '^$' > "$override"
   fi
@@ -294,10 +297,13 @@ theme_extras() { # [--run sync|remove]
     return 1
   }
 
-  # The extras list accepts either the literal repo path you'd paste after
-  # github.com/ ("HANCORE-linux/omarchy-inkypinky-theme") OR the short theme name
-  # ("HANCORE-linux/inkypinky") — the omarchy-<name>-theme naming is normalized
-  # out so both spell the same theme.
+  # The extras list accepts a bare owner/repo (the literal repo path you'd paste
+  # after github.com/, any naming) plus the omarchy-<name>-theme convention:
+  #   owner/omarchy-foo-theme  -> literal clone, dir foo
+  #   owner/foo                -> literal owner/foo, fallback to owner/omarchy-foo-theme
+  #   https://github.com/...   -> explicit full URL (any repo)
+  # short_name() normalizes omarchy-<name>-theme -> <name> so all spellings
+  # reconcile to the same install dir.
   short_name() {  # <repo-or-name> -> short theme name
     local n="$1"
     if [[ $n =~ ^omarchy-(.+)-theme$ ]]; then printf '%s\n' "${BASH_REMATCH[1]}"; else printf '%s\n' "$n"; fi
@@ -309,10 +315,11 @@ theme_extras() { # [--run sync|remove]
     while read -r line; do
       [[ -z $line ]] && continue
       if [[ $line =~ ^https?:// ]]; then
-        short="$(basename "$(sed 's/\.git$//' <<< "$line")")"
+        short="$(short_name "$(basename "$(sed 's/\.git$//' <<< "$line")" .git)")"
       else
         set -- $(split_line "$line"); owner="$1"; repo="$2"
         [[ -n $repo ]] || continue
+        repo="${repo%.git}"
         short="$(short_name "$repo")"
       fi
       printf '%s\n' "$short"
@@ -322,20 +329,32 @@ theme_extras() { # [--run sync|remove]
   split_line() { printf '%s\n' "$1" | sed 's|^\(.*\)/\([^/]*\)$|\1 \2|'; }
 
   op_sync_extra() {
-    local line owner name dest url count=0 pulled=0 skipped=0 removed=0 installed listed
+    local line owner name dest url conv_url count=0 pulled=0 skipped=0 removed=0 installed listed
     echo "Syncing Extra themes from $(basename "$(list_for extra)") ..."
     while read -r line; do
       [[ -z $line ]] && continue
+      conv_url=""
       # Lines starting with http:// or https:// are explicit full URLs; all
-      # other lines are <owner>/<repo> (full repo path or short theme name).
+      # other lines are <owner>/<repo>. A bare owner/repo is the literal repo
+      # path (everything after github.com/), with a fallback to the
+      # omarchy-<name>-theme convention so both spellings keep working:
+      #   HANCORE-linux/omarchy-aamis-theme  -> literal (convention repo)
+      #   HANCORE-linux/aamis                -> convention fallback
+      #   signaldirective/neo-eldritch       -> literal (any naming)
       if [[ $line =~ ^https?:// ]]; then
         url="$(sed 's/\.git$//' <<< "$line").git"
         name="$(short_name "$(basename "$url" .git)")"
       else
         set -- $(split_line "$line"); owner="$1"; repo="$2"
         [[ -n $owner && -n $repo ]] || continue
+        repo="${repo%.git}"
         name="$(short_name "$repo")"
-        url="https://github.com/$owner/omarchy-$name-theme.git"
+        if [[ $repo =~ ^omarchy-.+-theme$ ]]; then
+          url="https://github.com/$owner/$repo.git"
+        else
+          url="https://github.com/$owner/$repo.git"
+          conv_url="https://github.com/$owner/omarchy-$name-theme.git"
+        fi
       fi
       if is_default "$name"; then
         echo "- skip $name (ships in the Omarchy defaults)"; skipped=$((skipped+1)); continue
@@ -354,8 +373,14 @@ theme_extras() { # [--run sync|remove]
       # fail visibly instead of prompting for credentials.
       if GIT_TERMINAL_PROMPT=0 git clone "$url" "$dest" 2>/dev/null; then
         count=$((count+1)); echo "- installed $name"
+      elif [[ -n $conv_url && $conv_url != "$url" ]] && GIT_TERMINAL_PROMPT=0 git clone "$conv_url" "$dest" 2>/dev/null; then
+        count=$((count+1)); echo "- installed $name (via $conv_url)"
       else
-        echo "- FAILED $name: no usable repo at $url (typo? private repo? or a repo that doesn't follow omarchy-<name>-theme naming)"
+        if [[ -n $conv_url && $conv_url != "$url" ]]; then
+          echo "- FAILED $name: no usable repo at $url nor $conv_url (typo? private repo?)"
+        else
+          echo "- FAILED $name: no usable repo at $url (typo? private repo?)"
+        fi
       fi
     done < <(names_in "$(list_for extra)")
 
@@ -382,7 +407,10 @@ theme_extras() { # [--run sync|remove]
     echo "Removing Extra themes ..."
     while read -r line; do
       [[ -z $line ]] && continue
-      n="$(printf '%s\n' "$line" | sed -E 's|^.*/||')"
+      # Normalize like sync does: basename sans .git, then strip
+      # omarchy-<name>-theme -> <name> so both list spellings remove the same dir.
+      n="$(basename "$(sed 's/\.git$//' <<< "$line")")"
+      n="$(short_name "$n")"
       [[ -n $n ]] || continue
       is_default "$n" && continue
       if [[ -e $THEMES_DIR/$n ]]; then rm -rf "$THEMES_DIR/$n"; count=$((count+1)); fi

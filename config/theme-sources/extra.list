@@ -1,8 +1,10 @@
 # Extra themes — one line per theme. The list is user-overridable at
 # ~/.config/hexciri/theme-sources/extra.list (seeded from this shipped copy).
-# Either form works (the omarchy-<name>-theme naming is normalized away):
-#   <owner>/<name>                       → clones github.com/<owner>/omarchy-<name>-theme
-#   <owner>/omarchy-<name>-theme         the literal repo path, as it appears after github.com/
+# A bare owner/repo is the literal repo path (everything after github.com/);
+# short convention names fall back to omarchy-<name>-theme, so both work:
+#   <owner>/<repo>                       literal, e.g. signaldirective/neo-eldritch
+#   <owner>/<name>                       -> falls back to github.com/<owner>/omarchy-<name>-theme
+#   <owner>/omarchy-<name>-theme         the literal convention repo path
 #   https://github.com/<owner>/<repo>    full URL (any repo, any naming convention)
 #
 # Removing a line removes that theme on the next sync.
