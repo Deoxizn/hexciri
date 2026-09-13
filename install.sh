@@ -5,13 +5,26 @@
 #   sh install.sh
 #
 # or: git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
-#     ~/.local/opt/hexciri/install.sh
+#     ~/.local/opt/hexciri/install.sh [--yes]
+#
+# --yes/-y answers the update deploy's "Run system update?" with yes
+# (non-interactive bring-up). The reboot offer always still asks.
 #
 # One-shot CachyOS+Niri bring-up: clone, link controllers, root sync pass,
 # one-time app swap, per-user Strata + Brave Origin, then the update deploy
 # (keybinds adapt, kitty seed, themes). Idempotent; safe to re-run.
 # Afterwards sync never touches packages — later manual changes stick.
 set -euo pipefail
+
+UPDATE_YES=""
+for _a in "$@"; do
+  case "$_a" in
+    --yes|-y) UPDATE_YES="--yes" ;;
+    -h|--help) echo "usage: install.sh [--yes]"; exit 0 ;;
+    *) echo "install.sh: unknown arg: $_a (usage: install.sh [--yes])" >&2; exit 1 ;;
+  esac
+done
+unset _a
 
 REPO_URL="https://github.com/Deoxizn/hexciri.git"
 DEFAULT_REPO="$HOME/.local/opt/hexciri"
@@ -140,9 +153,13 @@ fi
 # localsend-cli || jocalsend live and fail with a clear message otherwise.
 # Update deploy (one-time here; afterwards run it by hand or from the menu):
 # keybinds adapt, kitty seed, themes, then the full system update it offers.
+# Runs attached to the terminal (no pipe): its "Run system update? [y/N]"
+# prompt is written without a trailing newline, so piping stdout through sed
+# swallows it and the install looks hung at an invisible question.
 if [[ -x "$REPO/bin/hexciri-update" ]]; then
   info "update deploy via hexciri-update (keybinds, kitty, themes)"
-  "$REPO/bin/hexciri-update" 2>&1 | sed 's/^/  /' || \
+  # shellcheck disable=SC2086
+  "$REPO/bin/hexciri-update" $UPDATE_YES || \
     info "update skipped — run 'hexciri-update' by hand later"
 fi
 info "done — pick a theme ('hexciri-theme set'), then relogin. Update: git -C $REPO pull && sh $REPO/install.sh"

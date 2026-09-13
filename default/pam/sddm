@@ -1,7 +1,15 @@
 #%PAM-1.0
 
-# Fingerprint comes via system-auth (included by system-login below) — keeping
-# it here too would prompt twice at the greeter.
+# SDDM does a single serial PAM conversation (see pam_fprintd(8)
+# LIMITATIONS: fingerprint AND password at once is impossible; GDM works
+# around it with separate stacks, SDDM cannot). So fingerprint-first here
+# blocks a typed password behind fprintd's timeout (default 30s x 3 tries)
+# and the greeter looks stuck on a dying reader. Password-first instead: a
+# typed password succeeds immediately, while the greeter's empty auto-submit
+# falls through to fprintd for touch-to-login. max-tries=1 timeout=15 keeps
+# the worst-case password fallback wait at 15s.
+auth        [success=1 default=ignore] pam_unix.so try_first_pass nullok
+auth        sufficient  pam_fprintd.so max-tries=1 timeout=15
 auth        include     system-login
 -auth       optional    pam_gnome_keyring.so
 -auth       optional    pam_kwallet5.so

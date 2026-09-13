@@ -172,10 +172,14 @@ Rectangle {
 
   // Fingerprint-first: when a reader exists, start authentication as soon as
   // the greeter is up so fprintd claims the reader and prompts immediately (no
-  // password needed). If fprintd is slow, the first attempt fails with a brief
-  // red flash and the reader stays armed for the next touch; Enter falls back
-  // to password. Without a reader this timer sits idle — the password field
-  // already has focus and login is driven by the user's first Enter.
+  // password needed). /etc/pam.d/sddm tries pam_unix first, so a typed
+  // password succeeds at once while this empty submit falls through to fprintd
+  // for touch-to-login. Without a reader this timer sits idle — the password
+  // field already has focus and login is driven by the user's first Enter.
+  // NOTE (pam_fprintd(8) LIMITATIONS): SDDM is a single serial PAM
+  // conversation, so fingerprint-first ordering would block typed passwords
+  // behind fprintd's timeout and look stuck on a dying reader. Never put
+  // pam_fprintd before pam_unix in the sddm stack.
   Timer {
     id: autoStart
     interval: 1000

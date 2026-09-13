@@ -196,7 +196,8 @@ PY
 
   if [[ -n $expected && $expected != "$running" ]]; then
     echo "kernel: $running -> $expected (a different kernel is now the boot default)"
-    confirm "Reboot now?" && systemctl reboot
+    # Always ask, even under --yes: --yes answers the update question, never reboot.
+    read -rp "Reboot now? [y/N] " r || true; [[ $r =~ ^[Yy]$ ]] && systemctl reboot || true
   else
     echo "update complete."
   fi
