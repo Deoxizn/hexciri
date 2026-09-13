@@ -19,14 +19,14 @@ fi
 HEXCIRI_BIN="${HEXCIRI_BIN:-$HOME/.local/bin}"
 STOCK_PATH="$HEXCIRI_BIN:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl"
 
-command -v niri >/dev/null 2>&1 || { echo "hexciri-migrate-niri-path: niri not installed — skipping"; exit 0; }
-[[ -f $ENV_CFG ]] || [[ -f $CFG ]] || { echo "hexciri-migrate-niri-path: no niri config at $CFG ($ENV_CFG) — skipping"; exit 0; }
+command -v niri >/dev/null 2>&1 || exit 0
+[[ -f $ENV_CFG ]] || [[ -f $CFG ]] || exit 0
 
 # Split layout: the PATH lives in the env.kdl fragment; patch that. Legacy
 # monolith (no env.kdl): patch the environment block inside config.kdl.
 if [[ -f $ENV_CFG ]]; then
   TARGET="$ENV_CFG"
-  [[ -f $CFG && "$(grep -c '^environment' "$CFG" || true)" -gt 0 ]] && echo "hexciri-migrate-niri-path: note: legacy environment block found in $CFG — split layout uses env.kdl, ignoring" >&2 || true
+  true
 else
   TARGET="$CFG"
 fi
@@ -41,7 +41,6 @@ is_patched() {
 }
 
 if is_patched; then
-  echo "hexciri-migrate-niri-path: ~/.local/bin already on PATH in $TARGET — nothing to do"
   exit 0
 fi
 
@@ -57,7 +56,6 @@ awk -v path="$STOCK_PATH" '
 
 if cmp -s "$TARGET" "$TMP"; then
   rm -f "$TMP"
-  echo "hexciri-migrate-niri-path: no change needed for $TARGET"
   exit 0
 fi
 
