@@ -1,5 +1,5 @@
 # Hexciri preset for the noctalia "yuuto/arch-updater" plugin.
-# install.sh seeds the missing keys of this table into
+# The framework sync merges the missing keys of this table into
 # ~/.local/state/noctalia/settings.toml (plugin-level settings are
 # state-dir-owned; GUI overrides win, so existing values are left alone).
 #

@@ -557,10 +557,56 @@ EOF
       [[ -f $dst.stock ]] || cp -f "$dst" "$dst.stock"
       cp -f "$src" "$dst" && echo "adopted noctalia config (stock backed up to $dst.stock)"
     fi
+    # Plugin preset: merge MISSING keys from the shipped preset into the live
+    # settings (GUI values always win). Seeding only when settings.toml is
+    # absent misses every box whose file already exists — the exact hole that
+    # left update_cmd unset and sent the plugin down its interactive default
+    # (stuck at the AUR helper's exclude prompt).
     local psrc="$REPO/config/noctalia/arch-updater.toml" pdst="$HOME/.local/state/noctalia/settings.toml"
-    if [[ -f $psrc && ! -f $pdst ]]; then
+    if [[ -f $psrc ]]; then
       mkdir -p "$(dirname "$pdst")"
-      cp -f "$psrc" "$pdst" && echo "seeded noctalia plugin settings ($pdst)"
+      [[ -f $pdst ]] || printf 'config_version = 14\n' > "$pdst"
+      REPO_PRESET="$psrc" LIVE_SETTINGS="$pdst" python3 <<'EOF' || true
+import os, re
+table = '[plugin_settings."yuuto/arch-updater"]'
+psrc, pdst = os.environ["REPO_PRESET"], os.environ["LIVE_SETTINGS"]
+wanted = {}
+for line in open(psrc):
+    s = line.strip()
+    if not s or s.startswith(("#", "[")):
+        continue
+    m = re.match(r'^([A-Za-z0-9_]+)\s*=', s)
+    if m:
+        wanted.setdefault(m.group(1), line.rstrip("\n"))
+if not wanted:
+    raise SystemExit
+lines = open(pdst).read().split("\n")
+start, end = None, len(lines)
+for i, l in enumerate(lines):
+    if l.strip() == table:
+        start = i
+        break
+if start is None:
+    lines += ["", table] + list(wanted.values())
+    missing = list(wanted)
+else:
+    for i in range(start + 1, len(lines)):
+        if lines[i].strip().startswith("["):
+            end = i
+            break
+    have = set()
+    for l in lines[start + 1:end]:
+        m = re.match(r'^\s*([A-Za-z0-9_]+)\s*=', l)
+        if m:
+            have.add(m.group(1))
+    missing = [k for k in wanted if k not in have]
+    for k in missing:
+        lines.insert(end, wanted[k])
+        end += 1
+if missing:
+    open(pdst, "w").write("\n".join(lines))
+    print("noctalia arch-updater: seeded missing key(s): %s" % ", ".join(missing))
+EOF
     fi
     return 0
   }
