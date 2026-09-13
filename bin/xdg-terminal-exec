@@ -1,9 +1,10 @@
 #!/bin/bash
 # xdg-terminal-exec compat: CachyOS does not ship xdg-terminal-exec, but the
-# whole menu calls it (`--app-id=... -e <cmd>` or plain `-e <cmd>`).
-# This shim provides exactly that surface via hexciri-terminal (default
-# terminal, usually kitty). If a real xdg-terminal-exec ever appears elsewhere
-# on PATH (e.g. CachyOS packages it), defer to it instead of shadowing.
+# whole menu calls it (`--app-id=... -e <cmd>` or plain `-e <cmd>`), and
+# Strata's "open in terminal" calls it as `--dir=<dir>` (no -e at all).
+# This shim provides that surface via hexciri-terminal (default terminal,
+# usually kitty). If a real xdg-terminal-exec ever appears elsewhere on PATH
+# (e.g. CachyOS packages it), defer to it instead of shadowing.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,10 +21,18 @@ for _d in "${_dirs[@]}"; do
 done
 unset _dirs _d _mydir
 
-# Parse our two shapes: [--app-id=<id>] -e <cmd...>. Anything else passes
-# through after -e; unknown leading flags are ignored for compat.
+# Parse leading options: [--dir=<dir>] [--app-id=<id>] -e <cmd...>.
+# --dir becomes a cd before exec — the terminal-agnostic equivalent of kitty's
+# --working-directory (every terminal inherits our cwd, whatever the default
+# terminal is set to). Unknown leading flags are ignored for compat.
+_dir=""
 while (($# > 0)); do
   case "$1" in
+    --dir=*|--working-directory=*) _dir="${1#*=}"; shift ;;
+    --dir|--working-directory)
+      _dir="${2:-}"
+      [[ -n $_dir ]] || { echo "xdg-terminal-exec: $1 needs a directory" >&2; exit 1; }
+      shift 2 ;;
     --app-id=*) shift ;;
     --app-id) shift 2 2>/dev/null || shift ;;
     -e) shift; break ;;
@@ -33,5 +42,16 @@ while (($# > 0)); do
   esac
 done
 
-[[ $# -gt 0 ]] || { echo "xdg-terminal-exec: no command after -e" >&2; exit 1; }
-exec "$SCRIPT_DIR/hexciri-terminal" -e "$@"
+# Bare `--dir=<dir>` (Strata's open-in-terminal shape) is valid with no
+# command: open an interactive terminal there.
+[[ $# -gt 0 || -n $_dir ]] || { echo "xdg-terminal-exec: no command after -e" >&2; exit 1; }
+
+if [[ -n $_dir ]]; then
+  [[ -d $_dir ]] || { echo "xdg-terminal-exec: no such directory: $_dir" >&2; exit 1; }
+  cd "$_dir" || exit 1
+fi
+if (($# > 0)); then
+  exec "$SCRIPT_DIR/hexciri-terminal" -e "$@"
+else
+  exec "$SCRIPT_DIR/hexciri-terminal"
+fi
