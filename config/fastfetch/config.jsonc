@@ -121,7 +121,7 @@
       "type": "command",
       "key": "VERSION",
       "keyWidth": 18,
-      "text": "hexciri-version 2>/dev/null | awk '{print $1}' || echo \"?\"",
+      "text": "hexciri-version 2>/dev/null | awk '{print $1}' | sed 's/^[^-]*-//' || echo \"?\"",
     },
     {
       "type": "command",
