@@ -66,7 +66,8 @@ if [[ -x "$REPO/bin/hexciri-sync" ]]; then
 fi
 # One-time light app swap: hexciri's apps in, replaced stock ones out (with
 # their config dirs, but only once something is actually absent). Runs here at
-# install and nowhere else — sync never touches packages, so later manual
+# install and nowhere else — sync never touches packages (except the tiny
+# layer-critical subset `hexciri-update self` self-heals), so later manual
 # changes are never reverted or re-applied. Best-effort, never fatal.
 # NOTE: removal order matters — the CachyOS niri meta goes first so the portal
 # it pins, then nautilus, come out cleanly behind it. vim is force-removed

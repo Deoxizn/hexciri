@@ -654,6 +654,23 @@ EOF
     return 0
   }
 
+  # Layer-critical packages: without polkit-gnome every pkexec app (btrfs-assistant,
+  # gparted) is dead — no agent, no password dialog. mupdf keeps PDFs out of the
+  # browser. This is the self-healing subset of install.sh's _hexciri_wants (the
+  # full set stays install-time-only so deliberate removals stick); --needed
+  # makes it a no-op when present, and failure (offline?) never stops the sync.
+  ensure_layer_pkgs() {
+    local pkgs="polkit-gnome mupdf" missing=""
+    command -v pacman >/dev/null 2>&1 || return 0
+    for p in $pkgs; do
+      pacman -Q "$p" >/dev/null 2>&1 || missing+="$p "
+    done
+    [[ -n $missing ]] || return 0
+    echo "layer packages missing ($missing)— installing"
+    sudo pacman -S --needed --noconfirm $missing 2>&1 | tail -n 3 || \
+      echo "layer packages skipped/partial (offline?) — run: sudo pacman -S --needed $missing"
+  }
+
   git -C "$REPO" fetch --tags origin --quiet 2>/dev/null || true
   local behind
   behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
@@ -695,6 +712,7 @@ EOF
   sync_fastfetch
   sync_noctalia
   sync_hooks
+  ensure_layer_pkgs
 
   if (( behind == 0 )); then
     echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"
