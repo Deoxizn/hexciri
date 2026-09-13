@@ -79,7 +79,7 @@ fi
 # never open: no agent, no password dialog.
 # NOTE: xdg-terminal-exec is NOT in CachyOS repos (aborts the whole transaction
 # when named) — blades fall back to hexciri-terminal, which needs only kitty.
-_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome"
+_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf"
 _hexciri_removals="cachyos-niri-noctalia xdg-desktop-portal-gnome nautilus alacritty firefox meld cachyos-micro-settings micro"
 _hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro nautilus:$HOME/.config/nautilus"
 if command -v pacman >/dev/null 2>&1; then
@@ -158,6 +158,18 @@ if [[ -x "$REPO/bin/hexciri-imv-defaults" ]]; then
   info "pinning image/* defaults to imv"
   HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-imv-defaults" 2>&1 | sed 's/^/  /' || \
     info "imv defaults skipped — pick System > Default Apps > Images by hand"
+fi
+# PDF default: nothing ships a reader, so PDFs fall through to the browser.
+# Pin application/pdf to mupdf — but only when a browser owns it or nothing
+# does; a deliberate pick (zathura, okular…) is never overridden.
+if [[ -f /usr/share/applications/mupdf.desktop ]]; then
+  _pdfcur="$(xdg-mime query default application/pdf 2>/dev/null || true)"
+  if [[ -z $_pdfcur || $_pdfcur =~ (brave|chromium|chrome|firefox|falkon|palemoon|librewolf|vivaldi|edge) ]]; then
+    info "pinning application/pdf default to mupdf"
+    xdg-mime default mupdf.desktop application/pdf 2>/dev/null || \
+      info "pdf default skipped — set it by hand"
+  fi
+  unset _pdfcur
 fi
 # Nautilus can't be uninstalled (xdg-desktop-portal-gnome pins it), so hide it
 # instead: a user-level override with Hidden=true. User-level survives package
