@@ -708,11 +708,13 @@ EOF
   # gparted) is dead — no agent, no password dialog. mupdf keeps PDFs out of the
   # browser. gnome-keyring is Noctalia's Secret Service provider (calendar tokens
   # and other secrets have nowhere to persist without it; libsecret alone is not
-  # a provider). This is the self-healing subset of install.sh's _hexciri_wants (the
+  # a provider). adw-gtk-theme ships the adw-gtk3-dark base theme the GTK hook
+  # sets — without it GTK3/plain-GTK4 apps fall back to built-in styling and
+  # look unthemed. This is the self-healing subset of install.sh's _hexciri_wants (the
   # full set stays install-time-only so deliberate removals stick); --needed
   # makes it a no-op when present, and failure (offline?) never stops the sync.
   ensure_layer_pkgs() {
-    local pkgs="polkit-gnome mupdf gnome-keyring" missing=""
+    local pkgs="polkit-gnome mupdf gnome-keyring adw-gtk-theme" missing=""
     command -v pacman >/dev/null 2>&1 || return 0
     for p in $pkgs; do
       pacman -Q "$p" >/dev/null 2>&1 || missing+="$p "

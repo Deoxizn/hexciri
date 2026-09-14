@@ -205,7 +205,7 @@ Theme swaps only replace theme-owned files — your links survive every change.
 ## Apps
 
 One-time swap at install (`install.sh` only — sync never touches packages
-except the tiny layer-critical subset `polkit-gnome mupdf gnome-keyring`,
+except the tiny layer-critical subset `polkit-gnome mupdf gnome-keyring adw-gtk-theme`,
 so deliberate removals stick). Best-effort throughout: offline boxes finish,
 missing bits print their manual fallback.
 
@@ -227,6 +227,7 @@ missing bits print their manual fallback.
 | `mupdf` | default PDF reader (pinned over browser-stolen `application/pdf`) |
 | `gnome-keyring` | Secret Service provider (calendar tokens, app secrets) + seahorse UI |
 | `seahorse` | keyring manager UI |
+| `adw-gtk-theme` | base GTK3 theme (`adw-gtk3-dark`) the theme hooks recolor — GTK apps look unthemed without it |
 
 Plus: **yay** bootstrapped via makepkg (needs `base-devel`+`git`) when no
 AUR helper exists; **Brave Origin** (`brave-origin-bin` via yay/paru — the

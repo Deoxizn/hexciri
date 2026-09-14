@@ -78,9 +78,12 @@ fi
 # NOTE: polkit-gnome is a layer need too — niri autostart spawns its agent
 # binary, and without it pkexec apps (btrfs-assistant, gparted) silently
 # never open: no agent, no password dialog.
+# NOTE: adw-gtk-theme ships the adw-gtk3-dark base theme the GTK hook sets
+# (hooks/theme-set.d/10-gtk.sh) — without it GTK3/plain-GTK4 apps fall back
+# to built-in styling and look unthemed; gtk.css is only an overlay on top.
 # NOTE: xdg-terminal-exec is NOT in CachyOS repos (aborts the whole transaction
 # when named) — blades fall back to hexciri-terminal, which needs only kitty.
-_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse"
+_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse adw-gtk-theme"
 _hexciri_removals="cachyos-niri-noctalia xdg-desktop-portal-gnome nautilus alacritty firefox meld cachyos-micro-settings micro"
 _hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro nautilus:$HOME/.config/nautilus"
 if command -v pacman >/dev/null 2>&1; then
