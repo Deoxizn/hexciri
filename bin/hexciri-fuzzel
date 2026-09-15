@@ -4,7 +4,7 @@
 # hexciri:args=[search [PROVIDER]|calc|run] — bare = app launcher, --dmenu passthrough preserved
 #
 # Modes (mirror the walker/elephant launcher features that matter):
-#   hexciri-fuzzel                 app launcher (default, unchanged)
+#   hexciri-fuzzel                 app launcher (unbound; Mod+Space is the Noctalia launcher)
 #   hexciri-fuzzel search          web search with the default provider (Mod+Shift+S)
 #   hexciri-fuzzel search NAME     web search with provider NAME (from the builtin table)
 #   hexciri-fuzzel calc            calculator via qalc; result copied to clipboard + notify

@@ -34,8 +34,7 @@ binds {
     Mod+Comma { spawn "noctalia" "msg" "notification-clear-active"; }
     Mod+Print { screenshot; }
     Mod+Right { focus-column-right; }
-    Mod+Space { spawn "hexciri-fuzzel"; }
-    Mod+D { spawn "noctalia" "msg" "panel-toggle" "launcher"; }
+    Mod+Space { spawn "noctalia" "msg" "panel-toggle" "launcher"; }
     Mod+grave { spawn "hexciri-agent"; }
     Ctrl+Print { spawn "sh" "-c" "grim -g \"$(slurp)\" - | wl-copy"; }
     Mod+Ctrl+F { fullscreen-window; }

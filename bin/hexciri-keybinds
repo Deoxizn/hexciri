@@ -27,8 +27,7 @@ file = os.environ["KEYBINDS_FILE"]
 
 # ── hexciri core: canonical combo -> description (mirrors the hand-written config) ──
 DESC = {
-    "Mod+Space": "App launcher (fuzzel)",
-    "Mod+D": "App launcher (Noctalia)",
+    "Mod+Space": "App launcher (Noctalia)",
     "Mod+Alt+Space": "Root menu",
     "Mod+K": "Keybind reference (this list)",
     "Mod+Shift+S": "Web search (default provider)",

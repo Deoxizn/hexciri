@@ -117,8 +117,9 @@ Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
     └── Repo                 framework-only sync (pull + keybinds/kitty/fastfetch/noctalia/hooks)
 ```
 
-Launchers alongside the menu: `Mod+Space` app launcher / web search /
-calculator / runner (fuzzel), `Mod+D` Noctalia launcher, `Mod+Return`
+Launchers alongside the menu: `Mod+Space` Noctalia app launcher,
+`Mod+Alt+Space` root menu (fuzzel), `Mod+Shift+S` web search / `Mod+Shift+C`
+calculator (fuzzel), `Mod+Return`
 terminal, ``Mod+` `` AI agent (`opencode` by default), `Mod+Escape` power
 menu, `Mod+Ctrl+V` clipboard history.
 
@@ -217,7 +218,7 @@ missing bits print their manual fallback.
 | `zed` | default editor |
 | `opencode` | default AI agent (``Mod+` ``) |
 | `localsend` | Share menu sender (ships `localsend-cli` ≥ 1.18) |
-| `fuzzel` | menu + launcher backbone — the menu is dead without it |
+| `fuzzel` | menu backbone (dmenu for root menu + all pickers) — the menu is dead without it |
 | `gtksourceview5` | text-viewer libs (gedit-style viewers) |
 | `gpu-screen-recorder` | Screen recording blade |
 | `tesseract` | OCR-text-from-screen blade |
@@ -257,7 +258,7 @@ Origin is present; **Nautilus** stays the default file manager (its
 - **Keybinds** — `config/niri/cfg/keybinds.kdl` is the source; sync seeds it
   fresh, adapts a stock CachyOS file once (yours + kept stock-only combos),
   then only adds new repo binds additively — conflicts and your deletions are
-  never overwritten. Core: `Mod+Space` run · `Mod+D` apps · `Mod+Return`
+  never overwritten. Core: `Mod+Space` apps (Noctalia) · `Mod+Return`
   terminal · `Mod+Alt+Space` root menu · `Mod+K` this list · `Mod+Q` close ·
   `Mod+F` maximize · `Mod+1…9,0` workspaces · `Mod+←/→` focus ·
   `Mod+Print`/`Ctrl+Print` screenshot · `Alt+Print` record · `Mod+Escape`

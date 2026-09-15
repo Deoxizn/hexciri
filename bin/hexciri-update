@@ -792,6 +792,44 @@ EOF
     done
   }
 
+  # Fuzzel app launcher retirement (runs every pass; no-op when clean).
+  # Mod+Space is now the Noctalia launcher; Mod+D (the old Noctalia bind) is
+  # retired as a duplicate. Only fuzzel-owned spawns heal — a deliberate
+  # Mod+Space/Mod+D rebind to something else stays. hexciri-fuzzel itself
+  # stays: every menu (incl. Mod+Alt+Space) uses it as --dmenu.
+  #
+  # NOTE: must run BEFORE sync_keybinds. sync_new_binds treats a live
+  # Mod+Space → fuzzel vs repo → noctalia as a user conflict and keeps the
+  # live file — healing first lets the sync see an already-matching combo.
+  migrate_fuzzel_launcher_to_noctalia() {
+    local kb
+    for kb in "$HOME/.config/niri/cfg/keybinds.kdl" "$HOME/.config/niri/keybinds.kdl"; do
+      [[ -f $kb ]] || continue
+      KB="$kb" python3 <<'EOF' || true
+import os, re, shutil, time
+kb = os.environ["KB"]
+lines = open(kb).read().split("\n")
+out, changed = [], False
+for line in lines:
+    if re.match(r'^\s*Mod\+Space\s*\{.*hexciri-fuzzel', line) and not re.search(r'calc|search|\brun\b|--dmenu', line):
+        out.append('    Mod+Space { spawn "noctalia" "msg" "panel-toggle" "launcher"; }')
+        changed = True
+        continue
+    if re.match(r'^\s*Mod\+D\s*\{.*noctalia.*launcher', line):
+        changed = True
+        continue
+    out.append(line)
+if changed:
+    shutil.copyfile(kb, "%s.bak.%d" % (kb, int(time.time())))
+    if os.path.islink(kb):
+        os.unlink(kb)
+    with open(kb, "w") as f:
+        f.write("\n".join(out))
+    print("migrated: fuzzel launcher retired → Noctalia on Mod+Space (%s)" % kb)
+EOF
+    done
+  }
+
   # Layer-critical packages: without polkit-gnome every pkexec app (btrfs-assistant,
   # gparted) is dead — no agent, no password dialog. mupdf keeps PDFs out of the
   # browser. gnome-keyring is Noctalia's Secret Service provider (calendar tokens
@@ -853,6 +891,7 @@ EOF
 
   ensure_layer_pkgs
   migrate_strata_to_nautilus
+  migrate_fuzzel_launcher_to_noctalia
   sync_keybinds
   sync_kitty
   sync_fastfetch

@@ -197,7 +197,7 @@ window-rule {
 // ──────────────────────────────────────────────
 
 layer-rule {
-    match namespace="fuzzel"                // Fuzzel app launcher
+    match namespace="fuzzel"                // Fuzzel menus (root menu, pickers)
     background-effect {
         blur true
     }
