@@ -704,6 +704,71 @@ EOF
     fi
   }
 
+  # Strata → Nautilus file-manager migration (runs every pass; no-op when
+  # clean). Removes the per-user Strata install, restores Nautilus as the
+  # folder handler, and re-runs the GTK hook so Nautilus picks up the active
+  # palette. A deliberate non-Nautilus, non-Strata pick (e.g. thunar) is never
+  # touched: only Strata-owned or broken slots heal.
+  migrate_strata_to_nautilus() {
+    local changed=0 cur gtk_hook mimeapps strata_ref
+    # 1. per-user Strata install out (binary, desktop, icon, portal, cache,
+    #    config, version state). A live --portal daemon recreates config, so
+    #    stop it first.
+    if [[ -x $HOME/.local/bin/strata || -f $HOME/.local/share/applications/io.github.lgse.Strata.desktop || -d $HOME/.config/strata ]]; then
+      pkill -x strata 2>/dev/null || true
+      rm -f "$HOME/.local/bin/strata" \
+        "$HOME/.local/share/applications/io.github.lgse.Strata.desktop" \
+        "$HOME/.local/share/icons/hicolor/scalable/apps/io.github.lgse.Strata.svg" \
+        "$HOME/.local/state/hexciri/strata.version" \
+        "$HOME/.local/share/xdg-desktop-portal/portals/strata.portal"
+      rm -rf "$HOME/.cache/hexciri/strata" "$HOME/.config/strata"
+      update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+      echo "migrated: per-user Strata install removed"
+      changed=1
+    fi
+    # 2. Strata-era launcher hide out (the stock entry applies again; the
+    #    system-level NoDisplay stamp is undone by root hexciri-sync §5b).
+    if [[ -f $HOME/.local/share/applications/org.gnome.Nautilus.desktop ]]; then
+      rm -f "$HOME/.local/share/applications/org.gnome.Nautilus.desktop" && \
+        echo "migrated: nautilus launcher unhidden"
+      changed=1
+    fi
+    # 3. folder handling back to Nautilus. xdg-mime query skips dead desktop
+    #    files, so a removed Strata can resolve to something else (or empty)
+    #    while mimeapps.list still names it — check the file content too. Only
+    #    Strata-owned or empty slots heal; a deliberate thunar etc. pick stays.
+    if command -v nautilus >/dev/null 2>&1; then
+      cur="$(xdg-mime query default inode/directory 2>/dev/null || true)"
+      mimeapps="$HOME/.config/mimeapps.list"
+      strata_ref=false
+      if [[ $cur == io.github.lgse.Strata.desktop || -z $cur ]]; then
+        strata_ref=true
+      elif [[ -f $mimeapps ]] && grep -q 'io\.github\.lgse\.Strata\.desktop' "$mimeapps"; then
+        strata_ref=true
+      fi
+      if $strata_ref; then
+        xdg-mime default org.gnome.Nautilus.desktop inode/directory 2>/dev/null && \
+          echo "migrated: inode/directory → org.gnome.Nautilus.desktop" || true
+        changed=1
+      fi
+      if [[ $(cat "$HOME/.local/state/hexciri/defaults/files" 2>/dev/null || true) == strata ]]; then
+        printf '%s' "nautilus" > "$HOME/.local/state/hexciri/defaults/files" && \
+          echo "migrated: default files strata → nautilus"
+        changed=1
+      fi
+      # 4. re-theme GTK so Nautilus picks up the active palette (the hook is
+      #    idempotent; prefer a customized live copy over the repo one).
+      if (( changed == 1 )); then
+        gtk_hook="$HOME/.config/hexciri/hooks/theme-set.d/10-gtk.sh"
+        [[ -x $gtk_hook ]] || gtk_hook="$REPO/hooks/theme-set.d/10-gtk.sh"
+        if [[ -x $gtk_hook ]]; then
+          bash "$gtk_hook" >/dev/null 2>&1 || true
+          echo "migrated: GTK theme re-applied for nautilus"
+        fi
+      fi
+    fi
+  }
+
   # Layer-critical packages: without polkit-gnome every pkexec app (btrfs-assistant,
   # gparted) is dead — no agent, no password dialog. mupdf keeps PDFs out of the
   # browser. gnome-keyring is Noctalia's Secret Service provider (calendar tokens
@@ -713,8 +778,10 @@ EOF
   # look unthemed. This is the self-healing subset of install.sh's _hexciri_wants (the
   # full set stays install-time-only so deliberate removals stick); --needed
   # makes it a no-op when present, and failure (offline?) never stops the sync.
+  # nautilus is layer here: it is the default file manager, so a box that lost
+  # it (removed meta, stray -Rns) gets it back instead of landing without one.
   ensure_layer_pkgs() {
-    local pkgs="polkit-gnome mupdf gnome-keyring adw-gtk-theme" missing=""
+    local pkgs="polkit-gnome mupdf gnome-keyring adw-gtk-theme nautilus" missing=""
     command -v pacman >/dev/null 2>&1 || return 0
     for p in $pkgs; do
       pacman -Q "$p" >/dev/null 2>&1 || missing+="$p "
@@ -753,7 +820,8 @@ EOF
 
   # State the sync must keep live (idempotent; a plain pull/re-link is all the
   # deploy a repo-runtime project does, so this is the deploy):
-  #   * Strata bridge: omarchy/current symlink → our state (Follow Omarchy mode)
+  #   * active theme tree live (hexciri-theme-ensure; also drops the retired
+  #     Strata omarchy/current bridge)
   #   * user wallpaper store merged into the active theme's backgrounds
   #   * legacy niri config PATH migration (so a kept pre-0.1.3 config can't kill keybinds)
   "$REPO/bin/hexciri-theme-ensure" >/dev/null 2>&1 || true
@@ -767,6 +835,7 @@ EOF
   sync_hooks
   sync_mime
   ensure_layer_pkgs
+  migrate_strata_to_nautilus
 
   if (( behind == 0 )); then
     echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Default apps: kitty + fish + brave-origin + strata + imv + zed + opencode (xdg-native)
+# hexciri:summary=Default apps: kitty + fish + brave-origin + nautilus + imv + zed + opencode (xdg-native)
 # Only shows apps that are actually installed; current choice is marked with ✓.
 # usage: hexciri-defaults [Browser|Editor|Images|Terminal|Shell|Files|Agent]
 set -euo pipefail
@@ -15,7 +15,7 @@ setv() { printf '%s' "$2" > "$STATE_BASE/$1"; }
 [[ -f $STATE_BASE/terminal ]] || setv terminal kitty
 [[ -f $STATE_BASE/shell ]]    || setv shell fish
 [[ -f $STATE_BASE/browser ]]  || setv browser brave-origin
-[[ -f $STATE_BASE/files ]]    || setv files strata
+[[ -f $STATE_BASE/files ]]    || setv files nautilus
 [[ -f $STATE_BASE/editor ]]   || setv editor zed
 [[ -f $STATE_BASE/agent ]]    || setv agent opencode
 [[ -f $STATE_BASE/images ]]   || setv images imv
@@ -117,12 +117,14 @@ case "${pick_type,,}" in
     ;;
   files)
     current="$(get files)"
-    choice="$(menu_via_fuzzel 'Files: ' -- "$(available files "$current" strata nautilus thunar yazi)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
+    choice="$(menu_via_fuzzel 'Files: ' -- "$(available files "$current" nautilus strata thunar yazi)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv files "$choice"
     if [[ $choice == strata ]]; then
       # Strata ships io.github.lgse.Strata.desktop; register as folder handler
       xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
+    elif [[ $choice == nautilus ]]; then
+      xdg-mime default org.gnome.Nautilus.desktop inode/directory 2>/dev/null || true
     fi
     ;;
   images)

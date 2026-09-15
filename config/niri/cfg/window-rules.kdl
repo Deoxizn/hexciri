@@ -120,7 +120,7 @@ window-rule {
     }
 }
 
-// File manager — Strata tiles with the rest (no float rule)
+// File manager — Nautilus tiles with the rest (no float rule)
 
 // ── Browser — always opens on the "browser" named workspace ──
 window-rule {

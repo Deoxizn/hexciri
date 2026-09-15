@@ -61,7 +61,7 @@ binds {
     Mod+Shift+B { spawn "xdg-open" "https://"; }
     Mod+Shift+C { spawn "hexciri-fuzzel" "calc"; }
     Mod+Shift+E { spawn "zeditor"; }
-    Mod+Shift+F { spawn "~/.local/bin/strata"; }
+    Mod+Shift+F { spawn "nautilus"; }
     Mod+Shift+P { focus-tiling; }
     Mod+Shift+R { toggle-column-tabbed-display; }
     Mod+Shift+S { spawn "hexciri-fuzzel" "search"; }

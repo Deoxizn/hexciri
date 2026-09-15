@@ -11,7 +11,7 @@
 # (non-interactive bring-up). The reboot offer always still asks.
 #
 # One-shot CachyOS+Niri bring-up: clone, link controllers, root sync pass,
-# one-time app swap, per-user Strata + Brave Origin, then the update deploy
+# one-time app swap, per-user Brave Origin, then the update deploy
 # (keybinds adapt, kitty seed, themes). Idempotent; safe to re-run.
 # Afterwards sync never touches packages — later manual changes stick.
 set -euo pipefail
@@ -70,11 +70,11 @@ fi
 # layer-critical subset `hexciri-update self` self-heals), so later manual
 # changes are never reverted or re-applied. Best-effort, never fatal.
 # NOTE: removal order matters — the CachyOS niri meta goes first so the portal
-# it pins, then nautilus, come out cleanly behind it. vim is force-removed
+# it pins comes out cleanly behind it. vim is force-removed
 # below (held by the deliberately kept cachyos-zsh-config; -Rdd breaks only
 # that declared dep, reinstalling vim undoes it). fuzzel + gtksourceview5 are
-# layer needs (menu would be dead without fuzzel; strata won't launch without
-# the lib).
+# layer needs (menu would be dead without fuzzel; gtksourceview5 covers
+# text-viewer libs).
 # NOTE: polkit-gnome is a layer need too — niri autostart spawns its agent
 # binary, and without it pkexec apps (btrfs-assistant, gparted) silently
 # never open: no agent, no password dialog.
@@ -83,9 +83,9 @@ fi
 # to built-in styling and look unthemed; gtk.css is only an overlay on top.
 # NOTE: xdg-terminal-exec is NOT in CachyOS repos (aborts the whole transaction
 # when named) — blades fall back to hexciri-terminal, which needs only kitty.
-_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse adw-gtk-theme"
-_hexciri_removals="cachyos-niri-noctalia xdg-desktop-portal-gnome nautilus alacritty firefox meld cachyos-micro-settings micro"
-_hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro nautilus:$HOME/.config/nautilus"
+_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse adw-gtk-theme"
+_hexciri_removals="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro"
+_hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro"
 if command -v pacman >/dev/null 2>&1; then
   info "one-time app swap (wants + removals)"
   sudo pacman -S --needed --noconfirm $_hexciri_wants 2>&1 | sed 's/^/  /' || \
@@ -114,12 +114,15 @@ if command -v pacman >/dev/null 2>&1; then
   unset _p _m _pkg _dir
 fi
 unset _hexciri_wants _hexciri_removals _hexciri_purge
-# Per-user Strata file manager (GitHub release; sets itself default for
-# inode/directory + file chooser). Best-effort: offline boxes still finish.
-if [[ -x "$REPO/bin/hexciri-setup" ]]; then
-  info "installing Strata file manager (default)"
-  "$REPO/bin/hexciri-setup" strata 2>&1 | sed 's/^/  /' || info "Strata skipped (offline?) — run 'hexciri-setup strata' later"
+# Nautilus is the default file manager (pacman package, in _hexciri_wants so a
+# fresh box gets it even if the removed niri meta took it). A stale
+# Hidden=true override from the Strata era would keep it out of menus, so drop
+# it; the stock desktop entry applies again.
+if [[ -f $HOME/.local/share/applications/org.gnome.Nautilus.desktop ]]; then
+  rm -f "$HOME/.local/share/applications/org.gnome.Nautilus.desktop" && \
+    info "unhid nautilus launcher entry (Strata-era override removed)"
 fi
+xdg-mime default org.gnome.Nautilus.desktop inode/directory 2>/dev/null || true
 # AUR helper bootstrap (one-time): Brave Origin needs yay or paru, and a
 # fresh box has neither. Builds yay via makepkg (needs base-devel+git).
 # Best-effort: without it, AUR steps below print their manual fallback.
@@ -169,20 +172,6 @@ if [[ -x "$REPO/bin/hexciri-pdf-defaults" ]]; then
   info "pinning application/pdf default to mupdf"
   "$REPO/bin/hexciri-pdf-defaults" 2>&1 | sed 's/^/  /' || \
     info "pdf default skipped — set it by hand"
-fi
-# Nautilus can't be uninstalled (xdg-desktop-portal-gnome pins it), so hide it
-# instead: a user-level override with Hidden=true. User-level survives package
-# updates (which restore the system file hexciri-sync re-hides) and needs no
-# root; Hidden=true is stronger than NoDisplay (also drops MIME associations,
-# safe — Strata owns inode/directory, imv owns images).
-if [[ -f /usr/share/applications/org.gnome.Nautilus.desktop ]]; then
-  info "hiding nautilus launcher entry (portal keeps the package)"
-  mkdir -p "$HOME/.local/share/applications"
-  # Insert under [Desktop Entry]: nautilus ships a trailing [Desktop Action
-  # ...] group, so appending at EOF would hide only the action, not the app.
-  awk '/^(NoDisplay|Hidden)=/ { next } { print } /^\[Desktop Entry\]$/ && !done { print "NoDisplay=true"; print "Hidden=true"; done=1 }' \
-    /usr/share/applications/org.gnome.Nautilus.desktop > "$HOME/.local/share/applications/org.gnome.Nautilus.desktop" || \
-    info "nautilus hide skipped — hide it by hand"
 fi
 # Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
 # localsend current delivers it — nothing extra to install. The blades resolve

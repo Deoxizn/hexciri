@@ -44,7 +44,7 @@ git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
 
 One run does the whole bring-up: links every controller into `~/.local/bin`,
 root sync pass (firewall/sshd/menu curation/alpm hook), one-time app swap,
-Strata, Brave Origin, image/PDF defaults, theme seeding, and the update
+Nautilus default, Brave Origin, image/PDF defaults, theme seeding, and the update
 deploy (keybinds, kitty, themes, full system update it offers). Re-runs are
 safe. Updating is a pull plus a re-run. Version is the git SHA
 (`hexciri-version`).
@@ -137,12 +137,12 @@ hexciri-theme remove <name>          # user themes only
 How it works: the theme dir's `colors.toml` is the single source of truth.
 `hexciri-theme-set` copies it live to `~/.local/state/hexciri/current/theme`,
 expands the generated templates (`default/themed/`: kitty, fuzzel,
-starship — plus a Strata theme), then fires `hexciri-hook theme-set`, which
+starship), then fires `hexciri-hook theme-set`, which
 runs every drop-in in `hooks/theme-set.d/`. That covers 30+ targets: fish,
 fzf, tmux, zellij, starship, kitty, foot, editors (zed, vscode, cursor,
 windsurf, typora, obsidian-terminal), browsers (firefox, zen, qutebrowser,
 hermes), Discord (+ ClearVision/system24 variants), GTK, Qt6ct, Spotify /
-Spicetify, file managers (superfile, Strata), launchers (vicinae), bar and
+Spicetify, file managers (superfile), launchers (vicinae), bar and
 notifications (swaync, Noctalia palette), cava, cliamp, Steam, Heroic,
 branding (fastfetch logo, SDDM), cursor, nautilus. Your own
 `~/.config/hexciri/hooks/theme-set.d/` drop-ins run too and are never
@@ -205,7 +205,7 @@ Theme swaps only replace theme-owned files — your links survive every change.
 ## Apps
 
 One-time swap at install (`install.sh` only — sync never touches packages
-except the tiny layer-critical subset `polkit-gnome mupdf gnome-keyring adw-gtk-theme`,
+except the tiny layer-critical subset `polkit-gnome mupdf gnome-keyring adw-gtk-theme nautilus`,
 so deliberate removals stick). Best-effort throughout: offline boxes finish,
 missing bits print their manual fallback.
 
@@ -218,7 +218,7 @@ missing bits print their manual fallback.
 | `opencode` | default AI agent (``Mod+` ``) |
 | `localsend` | Share menu sender (ships `localsend-cli` ≥ 1.18) |
 | `fuzzel` | menu + launcher backbone — the menu is dead without it |
-| `gtksourceview5` | Strata won't launch without the lib |
+| `gtksourceview5` | text-viewer libs (gedit-style viewers) |
 | `gpu-screen-recorder` | Screen recording blade |
 | `tesseract` | OCR-text-from-screen blade |
 | `imv` | default image viewer (pinned over browser-stolen `image/*`) |
@@ -232,8 +232,8 @@ missing bits print their manual fallback.
 Plus: **yay** bootstrapped via makepkg (needs `base-devel`+`git`) when no
 AUR helper exists; **Brave Origin** (`brave-origin-bin` via yay/paru — the
 hexciri browser, not Brave) with the `brave-bin` stand-in dropped once
-Origin is present; **Strata** file manager from GitHub releases, per-user,
-set as default for `inode/directory` + file chooser.
+Origin is present; **Nautilus** stays the default file manager (its
+`org.gnome.Nautilus.desktop` owns `inode/directory`, themed via GTK 3/4 css).
 
 **Removed** (only if installed; kept when something still needs them):
 
@@ -241,7 +241,6 @@ set as default for `inode/directory` + file chooser.
 |---|---|
 | `cachyos-niri-noctalia` | the stock meta — removed first so what it pins comes out clean |
 | `xdg-desktop-portal-gnome` | pinned by the meta; hexciri doesn't use it |
-| `nautilus` | replaced by Strata (hidden via `Hidden=true` override when the portal pins the package; MIME already moved to Strata/imv) |
 | `alacritty` | replaced by kitty (+ `~/.config/alacritty` purged) |
 | `firefox` | replaced by Brave Origin (+ `~/.mozilla` purged) |
 | `meld` | not part of the workflow (+ config purged) |
@@ -252,7 +251,7 @@ set as default for `inode/directory` + file chooser.
 
 - **Default Apps** (`System > Default Apps`, `hexciri-defaults`) — Browser
   (brave-origin…), Editor (zed…), Terminal (kitty…), Shell (fish…), Files
-  (strata…), Images (imv…), Agent (opencode…). Only installed candidates are
+  (nautilus…), Images (imv…), Agent (opencode…). Only installed candidates are
   offered; current is marked ✓. Shell switches kitty's shell without touching
   your login shell.
 - **Keybinds** — `config/niri/cfg/keybinds.kdl` is the source; sync seeds it
