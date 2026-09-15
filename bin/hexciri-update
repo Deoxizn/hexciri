@@ -706,11 +706,17 @@ EOF
 
   # Strata → Nautilus file-manager migration (runs every pass; no-op when
   # clean). Removes the per-user Strata install, restores Nautilus as the
-  # folder handler, and re-runs the GTK hook so Nautilus picks up the active
-  # palette. A deliberate non-Nautilus, non-Strata pick (e.g. thunar) is never
-  # touched: only Strata-owned or broken slots heal.
+  # folder handler, heals the Mod+Shift+F bind back to nautilus, and re-runs
+  # the GTK hook so Nautilus picks up the active palette. A deliberate
+  # non-Nautilus, non-Strata pick (e.g. thunar) is never touched: only
+  # Strata-owned or broken slots heal.
+  #
+  # NOTE: the bind heal must run BEFORE sync_keybinds. sync_new_binds treats a
+  # live Mod+Shift+F → strata vs repo → nautilus as a user conflict and keeps
+  # the live file — exactly why the Strata bind survived the original
+  # migration. Healing first lets the sync see an already-matching combo.
   migrate_strata_to_nautilus() {
-    local changed=0 cur gtk_hook mimeapps strata_ref
+    local changed=0 cur gtk_hook mimeapps strata_ref kb
     # 1. per-user Strata install out (binary, desktop, icon, portal, cache,
     #    config, version state). A live --portal daemon recreates config, so
     #    stop it first.
@@ -767,6 +773,23 @@ EOF
         fi
       fi
     fi
+    # 5. file-manager bind back to Nautilus. Only Strata-owned spawns heal —
+    #    a deliberate thunar/yazi/nautilus pick (or any other customization)
+    #    stays. Runs outside the nautilus-present gate: the bind should point
+    #    at nautilus even if the package is still being healed, and niri
+    #    picks up the edited file live (no reload needed).
+    for kb in "$HOME/.config/niri/cfg/keybinds.kdl" "$HOME/.config/niri/keybinds.kdl"; do
+      [[ -f $kb ]] || continue
+      if grep -qi 'strata' "$kb"; then
+        cp -f "$kb" "$kb.bak.$(date +%s)" 2>/dev/null || true
+        # Replace any quoted spawn target containing strata (path, bare
+        # binary, or desktop id) with the canonical nautilus spawn. The
+        # [Ss] covers the binary (strata) and the desktop id (Strata).
+        sed -Ei 's/spawn[[:space:]]+"[^"]*[Ss]trata[^"]*"/spawn "nautilus"/g' "$kb" && \
+          echo "migrated: keybind strata → nautilus ($kb)"
+        changed=1
+      fi
+    done
   }
 
   # Layer-critical packages: without polkit-gnome every pkexec app (btrfs-assistant,
@@ -828,14 +851,14 @@ EOF
   mkdir -p "$HOME/.config/hexciri/wallpapers"
   "$REPO/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
 
+  ensure_layer_pkgs
+  migrate_strata_to_nautilus
   sync_keybinds
   sync_kitty
   sync_fastfetch
   sync_noctalia
   sync_hooks
   sync_mime
-  ensure_layer_pkgs
-  migrate_strata_to_nautilus
 
   if (( behind == 0 )); then
     echo "up to date (HEAD $(git -C "$REPO" rev-parse --short HEAD))"
