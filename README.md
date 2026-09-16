@@ -97,8 +97,8 @@ Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
 │                            Extra themes list · Wallpaper dirs list
 ├── System
 │   ├── Config >             Niri > (per-fragment editors) · Noctalia config
-│   │                        Search provider · Fastfetch config
-│   │                        Hexciri lockscreen · Apps list · Keybind labels · Hooks
+│   │                        Fastfetch config · Hexciri lockscreen · Hooks
+│   │                        State files > (Apps list · Keybinds list · Search provider)
 │   ├── Default Apps >       Browser · Editor · Terminal · Shell · Files · Images · Agent
 │   ├── Maintenance >        Sync system clock · System Cleaner (cache + orphans)
 │   │                        User password · Reset boot config
@@ -209,7 +209,7 @@ Theme swaps only replace theme-owned files — your links survive every change.
 
 One-time swap at install, list-driven after that. The framework sync
 (`hexciri-sync` / `hexciri-update self`) never touches packages except the
-tiny layer-critical subset `polkit-gnome mupdf gnome-keyring adw-gtk-theme nautilus`
+tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus`
 it self-heals — anything you never listed is never reverted or re-applied.
 Best-effort throughout: offline boxes finish, missing bits print their manual
 fallback.
@@ -217,9 +217,14 @@ fallback.
 The app set is a list, not code: `config/apps/apps.list` with `[pacman]` and
 `[aur]` sections. Your copy at `~/.config/hexciri/apps/apps.list` overrides it
 (seeded from the shipped file the first time you open it from `Packages >
-Apps` or `System > Config > Apps list`). The list is the source of truth: add
+Apps` or `System > Config > State files > Apps list`). The list is the source of truth: add
 a line and it installs on the next `install.sh` run or `hexciri-apps sync`;
-delete a line and it gets removed (when installed and nothing still needs it).
+delete a line and it gets removed (when installed and nothing still needs it)
+— except the protected core (`fuzzel polkit-gnome gnome-keyring
+adw-gtk-theme nautilus`), which is never tracked in
+`~/.local/state/hexciri/apps-managed` and so can never be removed by deleting
+a line. Swappable defaults (`mupdf`, `imv`, `kitty`, …) stay managed: delete
+one's line and add your preferred replacement instead.
 What's managed is tracked in `~/.local/state/hexciri/apps-managed`.
 `hexciri-apps status` previews what a sync would change.
 
@@ -238,7 +243,7 @@ What's managed is tracked in `~/.local/state/hexciri/apps-managed`.
 | `imv` | default image viewer (pinned over browser-stolen `image/*`) |
 | `libqalculate` | fuzzel calculator provider |
 | `polkit-gnome` | auth agent — without it pkexec apps (gparted, btrfs-assistant) silently never open |
-| `mupdf` | default PDF reader (pinned over browser-stolen `application/pdf`) |
+| `mupdf` | default PDF reader (pinned over browser-stolen `application/pdf`) — swappable, delete its line and add yours |
 | `gnome-keyring` | Secret Service provider (calendar tokens, app secrets) + seahorse UI |
 | `seahorse` | keyring manager UI |
 | `adw-gtk-theme` | base GTK3 theme (`adw-gtk3-dark`) the theme hooks recolor — GTK apps look unthemed without it |
@@ -265,7 +270,7 @@ Origin is present; **Nautilus** stays the default file manager (its
 
 - **Default Apps** (`System > Default Apps`, `hexciri-defaults`) — Browser
   (brave-origin…), Editor (zed…), Terminal (kitty…), Shell (fish…), Files
-  (nautilus…), Images (imv…), Agent (opencode…). Only installed candidates are
+  (nautilus…), Images (imv…), PDF (mupdf…), Agent (opencode…). Only installed candidates are
   offered; current is marked ✓. Shell switches kitty's shell without touching
   your login shell.
 - **Keybinds** — `config/niri/cfg/keybinds.kdl` is the source; sync seeds it
@@ -275,7 +280,7 @@ Origin is present; **Nautilus** stays the default file manager (its
   Unknown binds prettify to just their command (`spawn "vesktop" "vesktop"` →
   `vesktop`), and `config/keybinds/descriptions.list` (override at
   `~/.config/hexciri/keybinds/descriptions.list`, edited from `System >
-  Config > Keybind labels`) sets your own labels, one `Combo = Label` per line.
+  Config > State files > Keybinds list`) sets your own labels, one `Combo = Label` per line.
   Core: `Mod+Space` apps (Noctalia) · `Mod+Return` terminal · `Mod+Alt+Space` root menu · `Mod+K` this list · `Mod+Q` close ·
   `Mod+F` maximize · `Mod+1…9,0` workspaces · `Mod+←/→` focus ·
   `Mod+Print`/`Ctrl+Print` screenshot · `Alt+Print` record · `Mod+Escape`

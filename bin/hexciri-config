@@ -8,21 +8,14 @@ bindir="${HEXCIRI_BIN_DIR:-}"
 if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
 bindir="${bindir:-$SCRIPT_DIR}"
 
-# Shipped catalog = the repo checkout the command symlinks into (HEXCIRI_PATH
-# overrides when run outside the repo, e.g. bootstrap seeding).
-here="$(readlink -f "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")"
-shipped_base="${HEXCIRI_PATH:-$(dirname "$here")}"
-
 cfg_xdg="${XDG_CONFIG_HOME:-$HOME/.config}"
 
 rows=(
   'Niri >'
   'Noctalia config'
-  'Search provider'
   'Fastfetch config'
   'Hexciri lockscreen'
-  'Apps list'
-  'Keybind labels'
+  'State files >'
   'Hooks'
 )
 
@@ -32,15 +25,21 @@ if [[ $# -gt 0 ]]; then
 else
   choice=$(
     printf '%s\n' "${rows[@]}" |
-      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=28 --lines=8
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=28 --lines=6
   ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
 case "$choice" in
   'Niri >')                  exec "$bindir/hexciri-config-niri" ;;
   'Niri '*)                  exec "$bindir/hexciri-config-niri" "${choice#Niri }" ;;
+  'State files >')           exec "$bindir/hexciri-config-state" ;;
+  'State files '*)           exec "$bindir/hexciri-config-state" "${choice#State files }" ;;
+  # Compat: pre-submenu direct dispatches from menu search land here.
+  'Apps list'|'Search provider')
+    exec "$bindir/hexciri-config-state" "$choice" ;;
+  'Keybind labels')
+    exec "$bindir/hexciri-config-state" "Keybinds list" ;;
   'Noctalia config')  "$bindir/hexciri-edit-file" "$cfg_xdg/noctalia/config.toml" ;;
-  'Search provider')  exec "$bindir/hexciri-search-provider" ;;
   'Fastfetch config') "$bindir/hexciri-edit-file" "$cfg_xdg/fastfetch/config.jsonc" ;;
   'Hexciri lockscreen')
     dir="$cfg_xdg/hexciri"
@@ -56,22 +55,4 @@ EOF
     fi
     "$bindir/hexciri-edit-file" "$conf" ;;
   'Hooks')              "$bindir/hexciri-edit-file" "$cfg_xdg/hexciri/hooks/" ;;
-  'Apps list')
-    dir="$cfg_xdg/hexciri/apps"
-    mkdir -p "$dir"
-    list="$dir/apps.list"
-    shipped="$shipped_base/config/apps/apps.list"
-    if [[ ! -f $list ]]; then
-      cp -f "$shipped" "$list" 2>/dev/null || { echo "hexciri-config: no apps list to seed from ($shipped)" >&2; exit 1; }
-    fi
-    "$bindir/hexciri-edit-file" "$list" ;;
-  'Keybind labels')
-    dir="$cfg_xdg/hexciri/keybinds"
-    mkdir -p "$dir"
-    list="$dir/descriptions.list"
-    shipped="$shipped_base/config/keybinds/descriptions.list"
-    if [[ ! -f $list ]]; then
-      cp -f "$shipped" "$list" 2>/dev/null || { echo "hexciri-config: no descriptions list to seed from ($shipped)" >&2; exit 1; }
-    fi
-    "$bindir/hexciri-edit-file" "$list" ;;
 esac

@@ -4,15 +4,18 @@
 #
 # The list lives at config/apps/apps.list in the repo; your copy at
 # ~/.config/hexciri/apps/apps.list overrides it (seeded from the shipped file
-# on first edit — open it from Packages > Apps or System > Config > Apps list).
+# on first edit — open it from Packages > Apps or System > Config > State
+# files > Apps list).
 # Sections: [pacman] for official-repo packages, [aur] for AUR packages.
 #
 # The list is the source of truth: adding a line installs it, deleting a line
 # removes it (when installed and nothing still needs it) on the next
-# `hexciri-apps sync`. What's managed is tracked in
-# ~/.local/state/hexciri/apps-managed — packages you never listed are never
-# touched. Sync never forces the tiny layer-critical subset either; that's
-# hexciri-update's self-heal, not this list.
+# `hexciri-apps sync` — except the protected core (see PROTECTED), which is
+# never tracked in the managed state and so can never be removed by deleting
+# a line. What's managed is tracked in ~/.local/state/hexciri/apps-managed —
+# packages you never listed are never touched. Sync never forces the tiny
+# layer-critical subset either; that's hexciri-update's self-heal, not this
+# list.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")" 2>/dev/null || dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,6 +28,47 @@ REPO="${HEXCIRI_PATH:-$(dirname "$(dirname "$here")")}"
 USER_LIST="$HOME/.config/hexciri/apps/apps.list"
 SHIPPED_LIST="$REPO/config/apps/apps.list"
 STATE="$HOME/.local/state/hexciri/apps-managed"
+
+# Protected core: load-bearing packages the list can never remove. Deleting one
+# of these lines is a no-op for removal — the package stays installed and is
+# never tracked in the managed state file, so list-truth can't touch it.
+#   fuzzel         runs every menu (without it nothing opens, including the
+#                  menu that would fix it)
+#   polkit-gnome   auth agent niri autostarts (pkexec apps silently never open)
+#   gnome-keyring  Noctalia's Secret Service provider (calendar tokens, secrets)
+#   adw-gtk-theme  GTK base theme the theme hook recolors (GTK apps look
+#                  unthemed without it)
+#   nautilus       default file manager (menus open folders through it)
+# Swappable defaults (imv, mupdf, kitty, …) are deliberately NOT here — delete
+# their line and add your preferred replacement instead.
+# To truly drop one, delete its line AND remove it by hand (pacman -Rns);
+# layer-critical ones (all but fuzzel) are additionally self-healed by
+# `hexciri-update`, so they come back on the next framework sync.
+PROTECTED="fuzzel polkit-gnome gnome-keyring adw-gtk-theme nautilus"
+protected() { # protected <pkg> — true when load-bearing
+  case " $PROTECTED " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+}
+protect_why() { # one-line reason per protected package
+  case "$1" in
+    fuzzel) printf 'runs every menu' ;;
+    polkit-gnome) printf 'auth agent for pkexec apps' ;;
+    gnome-keyring) printf "Noctalia's Secret Service provider" ;;
+    adw-gtk-theme) printf 'GTK base theme the theme hook recolors' ;;
+    nautilus) printf 'default file manager' ;;
+    *) printf 'load-bearing' ;;
+  esac
+}
+# protected_deleted — protected pkgs deleted from the list but still installed.
+# (Checked live against the list, not the state file — protected pkgs are never
+# recorded there, so a deleted line is simply kept with an explanatory note.)
+protected_deleted() {
+  local wants_all="$1" p
+  for p in $PROTECTED; do
+    grep -qx "$p" <<< "$wants_all" && continue
+    installed "$p" || continue
+    printf '%s\n' "$p"
+  done
+}
 
 list_file() {
   if [[ -f $USER_LIST ]]; then printf '%s\n' "$USER_LIST"
@@ -60,14 +104,23 @@ wants_union() { # every package the list currently names (pacman + aur, deduped)
   { section_pkgs "$(list_file)" pacman; section_pkgs "$(list_file)" aur; } |LC_ALL=C sort -u
 }
 
-managed() { # packages hexciri is tracking from the last sync
+managed() { # packages hexciri is tracking from the last sync (never protected)
   [[ -f $STATE ]] || return 0
-  sed -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$STATE" | LC_ALL=C sort -u | grep -v '^$' || true
+  sed -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$STATE" | LC_ALL=C sort -u | grep -v '^$' | while IFS= read -r _m || [[ -n $_m ]]; do
+    protected "$_m" && continue
+    printf '%s\n' "$_m"
+  done || true
 }
 
-write_state() { # write_state <pkg>... — record the managed set
+write_state() { # write_state <pkg>... — record the managed set (drops protected)
   mkdir -p "$(dirname "$STATE")"
-  printf '%s\n' "$@" | LC_ALL=C sort -u | grep -v '^$' > "$STATE" || true
+  local _w _kept=()
+  for _w in "$@"; do
+    [[ -n $_w ]] || continue
+    protected "$_w" && continue
+    _kept+=("$_w")
+  done
+  printf '%s\n' "${_kept[@]:-}" | LC_ALL=C sort -u | grep -v '^$' > "$STATE" || true
 }
 
 installed() { pacman -Q "$1" >/dev/null 2>&1; }
@@ -118,7 +171,7 @@ cmd_status() {
     [[ -n $p ]] || continue
     grep -qx "$p" <<< "$wants_all" && continue   # still listed — not orphaned
     installed "$p" || continue                   # already gone — nothing to do
-    orphans+=("$p")
+    orphans+=("$p")                              # managed() already drops protected
   done < <(managed)
   if ((${#missing[@]})); then
     echo "would install: ${missing[*]}"
@@ -130,6 +183,10 @@ cmd_status() {
   else
     echo "removals: nothing deleted from the list is still installed."
   fi
+  while IFS= read -r p; do
+    [[ -n $p ]] || continue
+    echo "protected: kept $p ($(protect_why "$p")) — deleting its line never removes it; run pacman -Rns $p by hand to truly drop it"
+  done < <(protected_deleted "$wants_all")
 }
 
 cmd_sync() {
@@ -183,9 +240,11 @@ cmd_sync() {
       echo "kept brave-bin (removal failed) — remove by hand if unwanted"
   fi
 
-  # ── orphans: managed but deleted from the list, still installed. Kept when
-  # ── something still needs them; vim goes via -Rdd (held by the deliberately
-  # ── kept cachyos-zsh-config). ──
+  # ── orphans: managed (never protected — see PROTECTED/managed()) but
+  # ── deleted from the list, still installed. Kept when something still needs
+  # ── them; vim goes via -Rdd (held by the deliberately kept
+  # ── cachyos-zsh-config). Protected deletions are reported separately below
+  # ── and never offered for removal. ──
   local wants_all
   wants_all="$(wants_union)"
   while IFS= read -r p; do
@@ -220,9 +279,15 @@ cmd_sync() {
   else
     echo "removals: nothing to do."
   fi
+  while IFS= read -r p; do
+    [[ -n $p ]] || continue
+    echo "protected: kept $p ($(protect_why "$p")) — deleting its line never removes it; run pacman -Rns $p by hand to truly drop it"
+  done < <(protected_deleted "$wants_all")
 
-  # Record the managed set: today's list plus any orphan that's still installed
-  # (a kept orphan is retried next sync instead of silently forgotten).
+  # Record the managed set: today's list (minus protected — never tracked) plus
+  # any orphan that's still installed (a kept orphan is retried next sync
+  # instead of silently forgotten). Rewriting also prunes protected entries
+  # from state files written before they were excluded.
   local still=()
   while IFS= read -r p; do
     [[ -n $p ]] || continue

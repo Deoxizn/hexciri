@@ -1,7 +1,7 @@
 #!/bin/bash
-# hexciri:summary=Default apps: kitty + fish + brave-origin + nautilus + imv + zed + opencode (xdg-native)
+# hexciri:summary=Default apps: kitty + fish + brave-origin + nautilus + imv + mupdf + zed + opencode (xdg-native)
 # Only shows apps that are actually installed; current choice is marked with ✓.
-# usage: hexciri-defaults [Browser|Editor|Images|Terminal|Shell|Files|Agent]
+# usage: hexciri-defaults [Browser|Editor|Images|PDF|Terminal|Shell|Files|Agent]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,6 +19,7 @@ setv() { printf '%s' "$2" > "$STATE_BASE/$1"; }
 [[ -f $STATE_BASE/editor ]]   || setv editor zed
 [[ -f $STATE_BASE/agent ]]    || setv agent opencode
 [[ -f $STATE_BASE/images ]]   || setv images imv
+[[ -f $STATE_BASE/pdf ]]      || setv pdf mupdf
 
 # available(): only list candidates whose binary exists (browser: via desktop file)
 has_bin() { command -v "$1" >/dev/null 2>&1; }
@@ -42,6 +43,15 @@ available() { # <browser|terminal|...> <current> <candidates...>
           has_bin "$c" || continue
         fi
         ;;
+      pdf)  # offered by desktop file — what xdg-mime needs to point at
+        case "$c" in
+          mupdf) has_desktop mupdf.desktop || continue ;;
+          zathura) has_desktop org.pwmt.zathura.desktop zathura.desktop || continue ;;
+          evince) has_desktop org.gnome.Evince.desktop evince.desktop || continue ;;
+          okular) has_desktop org.kde.okular.desktop okular.desktop || continue ;;
+          *) has_bin "$c" || continue ;;
+        esac
+        ;;
       *) has_bin "$c" || continue ;;
     esac
     printf '%s\n' "$c"
@@ -62,7 +72,7 @@ menu_via_fuzzel() { # <prompt> -- <items...>
 
 pick_type="${1:-}"
 if [[ -z $pick_type ]]; then
-  pick_type="$(menu_via_fuzzel 'Defaults: ' -- Browser Editor Terminal Shell Files Images Agent)" || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
+  pick_type="$(menu_via_fuzzel 'Defaults: ' -- Browser Editor Terminal Shell Files Images PDF Agent)" || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
 fi
 
 case "${pick_type,,}" in
@@ -151,6 +161,27 @@ case "${pick_type,,}" in
     choice="$(menu_via_fuzzel 'Editor: ' -- "$(available editor "$current" zed nvim helix code)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv editor "$choice"
+    ;;
+  pdf)
+    current="$(get pdf)"
+    choice="$(menu_via_fuzzel 'PDF: ' -- "$(available pdf "$current" mupdf zathura evince okular)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
+    [[ -n $choice ]] || exit 0
+    choice="${choice#✓ }"   # re-picking the current choice keeps the bare name
+    setv pdf "$choice"
+    # map choice -> desktop file for xdg (first existing wins)
+    set_pdf() {
+      for d in "$@"; do
+        [[ -f $HOME/.local/share/applications/$d || -f /usr/local/share/applications/$d || -f /usr/share/applications/$d ]] || continue
+        xdg-mime default "$d" application/pdf 2>/dev/null && return 0
+      done
+      return 1
+    }
+    case "$choice" in
+      mupdf) set_pdf mupdf.desktop || true ;;
+      zathura) set_pdf org.pwmt.zathura.desktop zathura.desktop || true ;;
+      evince) set_pdf org.gnome.Evince.desktop evince.desktop || true ;;
+      okular) set_pdf org.kde.okular.desktop okular.desktop || true ;;
+    esac
     ;;
   agent)
     current="$(get agent)"

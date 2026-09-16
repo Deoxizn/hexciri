@@ -831,18 +831,22 @@ EOF
   }
 
   # Layer-critical packages: without polkit-gnome every pkexec app (btrfs-assistant,
-  # gparted) is dead — no agent, no password dialog. mupdf keeps PDFs out of the
-  # browser. gnome-keyring is Noctalia's Secret Service provider (calendar tokens
-  # and other secrets have nowhere to persist without it; libsecret alone is not
-  # a provider). adw-gtk-theme ships the adw-gtk3-dark base theme the GTK hook
-  # sets — without it GTK3/plain-GTK4 apps fall back to built-in styling and
-  # look unthemed. This is the self-healing subset of install.sh's _hexciri_wants (the
-  # full set stays install-time-only so deliberate removals stick); --needed
-  # makes it a no-op when present, and failure (offline?) never stops the sync.
+  # gparted) is dead — no agent, no password dialog. gnome-keyring is Noctalia's
+  # Secret Service provider (calendar tokens and other secrets have nowhere to
+  # persist without it; libsecret alone is not a provider). adw-gtk-theme ships
+  # the adw-gtk3-dark base theme the GTK hook sets — without it GTK3/plain-GTK4
+  # apps fall back to built-in styling and look unthemed. This is the
+  # self-healing subset of install.sh's _hexciri_wants (the full set stays
+  # install-time-only so deliberate removals stick); --needed makes it a no-op
+  # when present, and failure (offline?) never stops the sync.
+  # mupdf is deliberately NOT here: it's a swappable default like imv — delete
+  # its apps-list line and add your preferred PDF reader instead. The pdf
+  # defaults helper only pins mupdf over browser-stolen slots when mupdf is
+  # present, so it never fights a deliberate pick.
   # nautilus is layer here: it is the default file manager, so a box that lost
   # it (removed meta, stray -Rns) gets it back instead of landing without one.
   ensure_layer_pkgs() {
-    local pkgs="polkit-gnome mupdf gnome-keyring adw-gtk-theme nautilus" missing=""
+    local pkgs="polkit-gnome gnome-keyring adw-gtk-theme nautilus" missing=""
     command -v pacman >/dev/null 2>&1 || return 0
     for p in $pkgs; do
       pacman -Q "$p" >/dev/null 2>&1 || missing+="$p "

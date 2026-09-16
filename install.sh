@@ -90,6 +90,12 @@ fi
 # install here and via `hexciri-apps sync` — and deleted lines are removed
 # (tracked in ~/.local/state/hexciri/apps-managed; unlisted packages are never
 # touched). brave-origin-bin ([aur]) installs below via yay/paru, not pacman.
+# Protected core: load-bearing packages the list can never remove (menu
+# backbone fuzzel + the layer-critical set hexciri-update self-heals).
+# Never tracked in apps-managed, so deleting one of these lines is a no-op
+# for removal — it stays installed. (To truly drop one, delete its line AND
+# run pacman -Rns by hand; layer-critical ones come back on framework sync.)
+_hexciri_protected="fuzzel polkit-gnome gnome-keyring adw-gtk-theme nautilus"
 _hexciri_apps_file="$HOME/.config/hexciri/apps/apps.list"
 [[ -f $_hexciri_apps_file ]] || _hexciri_apps_file="$REPO/config/apps/apps.list"
 _hexciri_wants=""; _hexciri_listed=" "
@@ -145,12 +151,21 @@ if command -v pacman >/dev/null 2>&1; then
     fi
   fi
   # List-truth reconcile: managed packages deleted from the list go too.
+  # The protected core is never tracked in managed state (see below), so it
+  # can't appear here from a fresh write — but pre-exclusion state files may
+  # still name one, and a deleted protected line is always kept with a note.
   # (No-op on fresh installs — no managed state yet.)
   _hexciri_state="$HOME/.local/state/hexciri/apps-managed"
   if [[ -f $_hexciri_state ]]; then
     while IFS= read -r _p || [[ -n $_p ]]; do
       _p="${_p%%#*}"; _p="$(printf '%s' "$_p" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
       [[ -n $_p ]] || continue
+      case " $_hexciri_protected " in *" $_p "*)
+        pacman -Q "$_p" >/dev/null 2>&1 || continue
+        case "$_hexciri_listed" in *" $_p "*) continue ;; esac
+        info "protected: kept $_p (load-bearing — deleting its line never removes it; run pacman -Rns $_p by hand to truly drop it)"
+        continue ;;
+      esac
       case "$_hexciri_listed" in *" $_p "*) continue ;; esac
       pacman -Q "$_p" >/dev/null 2>&1 || continue
       info "removing $_p (deleted from the apps list)"
@@ -231,9 +246,12 @@ if [[ -n $(printf '%s' "$_hexciri_aur_pkgs" | tr -d ' ') ]]; then
   fi
 fi
 unset _aur _h _hexciri_aur_pkgs _hexciri_aur_file
-# Record the managed set (full [pacman]+[aur] union — including any already
-# satisfied want stripped above) so `hexciri-apps sync` can tell a deleted
-# line from a package it never managed.
+# Record the managed set ([pacman]+[aur] union minus the protected core —
+# protected pkgs are never tracked, so deleting one of their lines can never
+# trigger a removal — including any already satisfied want stripped above) so
+# `hexciri-apps sync` can tell a deleted line from a package it never managed.
+# Rewriting also prunes protected entries from pre-exclusion state files.
+_hexciri_protected="${_hexciri_protected:-fuzzel polkit-gnome gnome-keyring adw-gtk-theme nautilus}"
 if [[ -f $HOME/.config/hexciri/apps/apps.list ]]; then _hexciri_state_src="$HOME/.config/hexciri/apps/apps.list"
 else _hexciri_state_src="$REPO/config/apps/apps.list"; fi
 if [[ -f $_hexciri_state_src ]]; then
@@ -247,13 +265,17 @@ if [[ -f $_hexciri_state_src ]]; then
       _hexciri_sec="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
       continue
     fi
-    case "$_hexciri_sec" in pacman|aur) printf '%s\n' "${_line%%[[:space:]]*}" >> "$HOME/.local/state/hexciri/apps-managed.tmp" ;; esac
+    case "$_hexciri_sec" in pacman|aur)
+      _hexciri_tok="${_line%%[[:space:]]*}"
+      case " $_hexciri_protected " in *" $_hexciri_tok "*) continue ;; esac
+      printf '%s\n' "$_hexciri_tok" >> "$HOME/.local/state/hexciri/apps-managed.tmp" ;;
+    esac
   done < "$_hexciri_state_src"
   LC_ALL=C sort -u "$HOME/.local/state/hexciri/apps-managed.tmp" | grep -v '^$' > "$HOME/.local/state/hexciri/apps-managed" || true
   rm -f "$HOME/.local/state/hexciri/apps-managed.tmp"
-  unset _hexciri_sec _line
+  unset _hexciri_sec _line _hexciri_tok
 fi
-unset _hexciri_state_src
+unset _hexciri_state_src _hexciri_protected
 if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&1; then
   info "removing Brave stand-in (Origin is present)"
   sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \
@@ -268,11 +290,12 @@ if [[ -x "$REPO/bin/hexciri-imv-defaults" ]]; then
     info "imv defaults skipped — pick System > Default Apps > Images by hand"
 fi
 # PDF default: nothing ships a reader, so PDFs fall through to the browser.
-# Same healing-helper shape as images (browser-owned slots only).
+# Same healing-helper shape as images (browser-owned slots only, honoring
+# System > Default Apps > PDF once changed from the mupdf out-of-box pick).
 if [[ -x "$REPO/bin/hexciri-pdf-defaults" ]]; then
-  info "pinning application/pdf default to mupdf"
+  info "pinning application/pdf default (mupdf unless changed)"
   "$REPO/bin/hexciri-pdf-defaults" 2>&1 | sed 's/^/  /' || \
-    info "pdf default skipped — set it by hand"
+    info "pdf default skipped — pick System > Default Apps > PDF by hand"
 fi
 # Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
 # localsend current delivers it — nothing extra to install. The blades resolve
