@@ -931,7 +931,7 @@ update_hardware() { # [choice]
 update_menu() { # [choice]
   local entries choice
 
-  entries=('Hexciri' 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
+  entries=('Hexciri' 'Apps' 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
 
   if [[ $# -gt 0 ]]; then
     choice="$*"
@@ -945,6 +945,7 @@ update_menu() { # [choice]
 
   case "$choice" in
     "Hexciri")   exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update" ;;
+    "Apps")      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-apps" sync ;;
     "Hardware")  exec "$SCRIPT_DIR/hexciri-update-hardware" ;;
     "Firmware")  exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" fwupdmgr update ;;
     "Repo")      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update-hexciri" ;;

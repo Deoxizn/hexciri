@@ -1,0 +1,21 @@
+# Keybind labels for Mod+K (hexciri-keybinds) — one per line:
+#
+#   Mod+Ctrl+D = Vesktop
+#   Mod+Shift+W = Browser (private)
+#
+# Combo matching is case-insensitive and whitespace-tolerant (`mod+ctrl+d`
+# matches `Mod+Ctrl+D`). `#` comments and blank lines are ignored. Either `=`
+# or `:` separates the combo from the label (first one wins).
+#
+# Your copy at ~/.config/hexciri/keybinds/descriptions.list adds to / overrides
+# this shipped file, and both override the builtin core labels. Anything not
+# listed anywhere falls back to the builtin core labels, then to a prettified
+# spawn (first command only, deduped — e.g. spawn "vesktop" "vesktop" → vesktop,
+# hexciri webapp launchers → their app name).
+#
+# So most custom binds (like the Vesktop one above) already read sensibly with
+# zero config — this file is for the ones where you want your own wording.
+#
+# Examples (uncomment to use):
+# Mod+Ctrl+D = Vesktop
+# Mod+Shift+W = Browser (private)

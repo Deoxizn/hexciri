@@ -20,7 +20,12 @@ if [[ -z $FILE ]]; then
   exit 1
 fi
 
-output=$(KEYBINDS_FILE="$FILE" python3 <<'EOF'
+# Label overrides: shipped list + your copy (yours wins). One per line:
+#   Mod+Ctrl+D = Vesktop
+SHIPPED_DESC="$REPO/config/keybinds/descriptions.list"
+USER_DESC="$CFG/hexciri/keybinds/descriptions.list"
+
+output=$(KEYBINDS_FILE="$FILE" SHIPPED_DESC="$SHIPPED_DESC" USER_DESC="$USER_DESC" python3 <<'EOF'
 import os, re, sys
 
 file = os.environ["KEYBINDS_FILE"]
@@ -128,8 +133,86 @@ def canon(combo):
     toks = [c for c in toks if c]
     return "+".join(canon_key(t) for t in toks)
 
+def load_descriptions(path):
+    """descriptions.list -> {canonical combo: label}. `=` or `:` separates."""
+    out = {}
+    try:
+        with open(path) as f:
+            text = f.read()
+    except OSError:
+        return out
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        sep = -1
+        for i, ch in enumerate(line):
+            if ch in ("=", ":"):
+                sep = i
+                break
+        if sep < 0:
+            continue
+        combo, label = line[:sep].strip(), line[sep + 1:].strip()
+        if not combo or not label:
+            continue
+        try:
+            out[canon(combo)] = label
+        except Exception:
+            continue
+    return out
+
+for _p in (os.environ.get("SHIPPED_DESC", ""), os.environ.get("USER_DESC", "")):
+    if _p:
+        DESC.update(load_descriptions(_p))
+
+def prettify(action):
+    """Fallback label when no DESC entry matches: just the command, not the
+    full spawn line. spawn "vesktop" "vesktop" -> vesktop."""
+    import os.path as _op
+    import shlex as _shlex
+    s = action.strip().rstrip(";").strip()
+    if not s:
+        return action
+    first = s.split(None, 1)[0].rstrip(";")
+    if first in ("spawn", "spawn-sh"):
+        rest = s[len(first):].strip().rstrip(";").strip()
+        try:
+            toks = _shlex.split(rest)
+        except ValueError:
+            toks = rest.split()
+        if not toks:
+            return s
+        cmd = _op.basename(toks[0])
+        # sh -c "<script>": the script IS the label (truncated, not the wrapper)
+        if cmd in ("sh", "bash", "dash", "zsh", "fish") and "-c" in toks:
+            try:
+                script = toks[toks.index("-c") + 1]
+            except IndexError:
+                script = ""
+            script = script.strip()
+            if not script:
+                return cmd
+            return script if len(script) <= 48 else script[:47] + "…"
+        # hexciri webapp launchers carry the app name as arg 1
+        if cmd in ("hexciri-launch-or-focus-webapp", "hexciri-launch-webapp") and len(toks) >= 2:
+            return toks[1]
+        # dedupe repeated binary (spawn "vesktop" "vesktop" -> vesktop)
+        deduped = []
+        for t in toks:
+            if not deduped or t != deduped[-1]:
+                deduped.append(t)
+        pretty = " ".join(_op.basename(t) if "/" in t else t for t in deduped)
+        return pretty
+    # plain niri action: close-window; -> Close window
+    s = s.replace('"', "").replace("'", "")
+    s = s.replace("-", " ").replace("_", " ")
+    s = re.sub(r"\s+", " ", s).strip()
+    return s[:1].upper() + s[1:] if s else action
+
 binds = []
-for m in re.finditer(r"^\s*([^\s{}]+)\s*\{\s*([^;{}]*)", open(file).read(), re.M):
+# NOTE: neither gap may span newlines — otherwise the `binds {` opener match
+# eats the first bind's combo into its "action" and that bind never shows.
+for m in re.finditer(r"^\s*([^\s{}]+)[ \t]*\{[ \t]*([^;{}\n]*)", open(file).read(), re.M):
     name = m.group(1).strip()
     if name in ("binds", "binds+", "binds-columns"):  # the binds { } block opener
         continue
@@ -138,7 +221,7 @@ for m in re.finditer(r"^\s*([^\s{}]+)\s*\{\s*([^;{}]*)", open(file).read(), re.M
 rows = []
 for combo, action in binds:
     c = canon(combo)
-    rows.append(f"{c:<22} {DESC.get(c, action)}")
+    rows.append(f"{c:<22} {DESC.get(c, prettify(action))}")
 
 if not rows:
     print(f"No keybinds found in {file}", file=sys.stderr)

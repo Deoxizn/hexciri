@@ -1,0 +1,41 @@
+# Hexciri apps — the app set, as a list.
+#
+# One package per line. `#` comments and blank lines are ignored. Section
+# headers are `[pacman]` and `[aur]` (case-insensitive, the brackets are
+# required — a bare word is a package, not a section).
+#
+#   [pacman]  official-repo packages. Add your own lines — they install on the
+#             next `install.sh` run or `hexciri-apps sync`.
+#   [aur]     AUR packages (needs yay or paru). Same deal: add lines and they
+#             install on the next bring-up/sync.
+#
+# The list is the source of truth: deleting a line removes that package (when
+# installed and nothing still needs it) on the next `hexciri-apps sync`.
+# What's managed is tracked in ~/.local/state/hexciri/apps-managed — packages
+# you never listed are never touched.
+#
+# Curate without touching the repo: keep your own copy at
+# ~/.config/hexciri/apps/apps.list — it overrides this shipped file.
+# (Seeded from here the first time you open it from the menu:
+# Packages > Apps, or System > Config > Apps list.)
+
+[pacman]
+kitty
+zed
+opencode
+nautilus
+localsend
+gtksourceview5
+fuzzel
+gpu-screen-recorder
+tesseract
+imv
+libqalculate
+polkit-gnome
+mupdf
+gnome-keyring
+seahorse
+adw-gtk-theme
+
+[aur]
+brave-origin-bin

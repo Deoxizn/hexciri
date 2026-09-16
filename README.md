@@ -82,6 +82,7 @@ Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
 │   │                          └── Steam · Heroic · Lutris · RetroArch · Minecraft
 │   │                              Battle.net · GeForce NOW · Xbox Cloud · Xbox controllers
 │   └── Remove >             Package · Web App (yours) · Theme (yours)
+│   └── Apps >               Sync apps (installs added lines, removes deleted ones) · Show changes · Edit list
 ├── Share & Capture          LocalSend + screenshots, recording, OCR, QR, transcode
 │   ├── Clipboard · File · Folder · Receive (localsend-cli / GUI fallback)
 │   └── Screenshot region · Screenshot screen · Screen recording (gpu-screen-recorder)
@@ -97,7 +98,7 @@ Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
 ├── System
 │   ├── Config >             Niri > (per-fragment editors) · Noctalia config
 │   │                        Search provider · Fastfetch config
-│   │                        Hexciri lockscreen · Hooks
+│   │                        Hexciri lockscreen · Apps list · Keybind labels · Hooks
 │   ├── Default Apps >       Browser · Editor · Terminal · Shell · Files · Images · Agent
 │   ├── Maintenance >        Sync system clock · System Cleaner (cache + orphans)
 │   │                        User password · Reset boot config
@@ -110,6 +111,7 @@ Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
 ├── Restart                  Reload Niri · Restart Noctalia · Refresh theme
 └── Update
     ├── Hexciri              system update: repo + AUR, keyring check, sync re-apply, reboot offer
+    ├── Apps                 apps list reconcile: installs added lines, removes deleted ones
     ├── Themes               pull Omarchy defaults + sync extras list
     ├── Wallpaper            re-merge your wallpapers into the active theme
     ├── Hardware >           restart Audio · Wi-Fi · Bluetooth · Trackpad stack
@@ -205,10 +207,21 @@ Theme swaps only replace theme-owned files — your links survive every change.
 
 ## Apps
 
-One-time swap at install (`install.sh` only — sync never touches packages
-except the tiny layer-critical subset `polkit-gnome mupdf gnome-keyring adw-gtk-theme nautilus`,
-so deliberate removals stick). Best-effort throughout: offline boxes finish,
-missing bits print their manual fallback.
+One-time swap at install, list-driven after that. The framework sync
+(`hexciri-sync` / `hexciri-update self`) never touches packages except the
+tiny layer-critical subset `polkit-gnome mupdf gnome-keyring adw-gtk-theme nautilus`
+it self-heals — anything you never listed is never reverted or re-applied.
+Best-effort throughout: offline boxes finish, missing bits print their manual
+fallback.
+
+The app set is a list, not code: `config/apps/apps.list` with `[pacman]` and
+`[aur]` sections. Your copy at `~/.config/hexciri/apps/apps.list` overrides it
+(seeded from the shipped file the first time you open it from `Packages >
+Apps` or `System > Config > Apps list`). The list is the source of truth: add
+a line and it installs on the next `install.sh` run or `hexciri-apps sync`;
+delete a line and it gets removed (when installed and nothing still needs it).
+What's managed is tracked in `~/.local/state/hexciri/apps-managed`.
+`hexciri-apps status` previews what a sync would change.
 
 **Added** (`pacman -S --needed`):
 
@@ -258,8 +271,12 @@ Origin is present; **Nautilus** stays the default file manager (its
 - **Keybinds** — `config/niri/cfg/keybinds.kdl` is the source; sync seeds it
   fresh, adapts a stock CachyOS file once (yours + kept stock-only combos),
   then only adds new repo binds additively — conflicts and your deletions are
-  never overwritten. Core: `Mod+Space` apps (Noctalia) · `Mod+Return`
-  terminal · `Mod+Alt+Space` root menu · `Mod+K` this list · `Mod+Q` close ·
+  never overwritten. `hexciri-keybinds` lists them; `Mod+K` searches them live.
+  Unknown binds prettify to just their command (`spawn "vesktop" "vesktop"` →
+  `vesktop`), and `config/keybinds/descriptions.list` (override at
+  `~/.config/hexciri/keybinds/descriptions.list`, edited from `System >
+  Config > Keybind labels`) sets your own labels, one `Combo = Label` per line.
+  Core: `Mod+Space` apps (Noctalia) · `Mod+Return` terminal · `Mod+Alt+Space` root menu · `Mod+K` this list · `Mod+Q` close ·
   `Mod+F` maximize · `Mod+1…9,0` workspaces · `Mod+←/→` focus ·
   `Mod+Print`/`Ctrl+Print` screenshot · `Alt+Print` record · `Mod+Escape`
   power.

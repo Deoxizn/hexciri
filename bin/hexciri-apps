@@ -1,0 +1,258 @@
+#!/bin/bash
+# hexciri:summary=Apps list: the hexciri app set as an editable list (pacman/AUR)
+# hexciri:args=[sync|status|list|edit|help]
+#
+# The list lives at config/apps/apps.list in the repo; your copy at
+# ~/.config/hexciri/apps/apps.list overrides it (seeded from the shipped file
+# on first edit — open it from Packages > Apps or System > Config > Apps list).
+# Sections: [pacman] for official-repo packages, [aur] for AUR packages.
+#
+# The list is the source of truth: adding a line installs it, deleting a line
+# removes it (when installed and nothing still needs it) on the next
+# `hexciri-apps sync`. What's managed is tracked in
+# ~/.local/state/hexciri/apps-managed — packages you never listed are never
+# touched. Sync never forces the tiny layer-critical subset either; that's
+# hexciri-update's self-heal, not this list.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")" 2>/dev/null || dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-$SCRIPT_DIR}"
+here="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+REPO="${HEXCIRI_PATH:-$(dirname "$(dirname "$here")")}"
+[[ -d $REPO/config/apps ]] || REPO="$(dirname "$SCRIPT_DIR")"
+[[ -d $REPO/config/apps ]] || REPO="$HOME/.local/opt/hexciri"
+
+USER_LIST="$HOME/.config/hexciri/apps/apps.list"
+SHIPPED_LIST="$REPO/config/apps/apps.list"
+STATE="$HOME/.local/state/hexciri/apps-managed"
+
+list_file() {
+  if [[ -f $USER_LIST ]]; then printf '%s\n' "$USER_LIST"
+  else printf '%s\n' "$SHIPPED_LIST"
+  fi
+}
+
+# section_pkgs <file> <section> — one package per line, comments/blanks stripped.
+# Section names are case-insensitive; unknown sections are ignored.
+section_pkgs() {
+  local file="$1" want="$2"
+  want="$(printf '%s' "$want" | tr '[:upper:]' '[:lower:]')"
+  [[ -f $file ]] || return 0
+  local cur=""
+  while IFS= read -r line || [[ -n $line ]]; do
+    line="${line%%#*}"                                        # strip # comments
+    line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ -z $line ]] && continue
+    if [[ $line =~ ^\[(.*)\]$ ]]; then
+      cur="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+      continue
+    fi
+    # bare package token (first word; ignores trailing inline junk)
+    local pkg="${line%%[[:space:]]*}"
+    [[ -n $pkg ]] || continue
+    if [[ $cur == "$want" ]]; then
+      printf '%s\n' "$pkg"
+    fi
+  done < "$file"
+}
+
+wants_union() { # every package the list currently names (pacman + aur, deduped)
+  { section_pkgs "$(list_file)" pacman; section_pkgs "$(list_file)" aur; } |LC_ALL=C sort -u
+}
+
+managed() { # packages hexciri is tracking from the last sync
+  [[ -f $STATE ]] || return 0
+  sed -e 's/#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$STATE" | LC_ALL=C sort -u | grep -v '^$' || true
+}
+
+write_state() { # write_state <pkg>... — record the managed set
+  mkdir -p "$(dirname "$STATE")"
+  printf '%s\n' "$@" | LC_ALL=C sort -u | grep -v '^$' > "$STATE" || true
+}
+
+installed() { pacman -Q "$1" >/dev/null 2>&1; }
+
+cmd_edit() {
+  mkdir -p "$(dirname "$USER_LIST")"
+  if [[ ! -f $USER_LIST && -f $SHIPPED_LIST ]]; then
+    cp -f "$SHIPPED_LIST" "$USER_LIST"
+  fi
+  touch "$USER_LIST"
+  exec "$bindir/hexciri-edit-file" "$USER_LIST"
+}
+
+cmd_list() {
+  local f
+  f="$(list_file)"
+  if [[ ! -f $f ]]; then
+    echo "hexciri-apps: no apps list found ($f)" >&2
+    exit 1
+  fi
+  echo "# $f"
+  echo
+  for sec in pacman aur; do
+    echo "[$sec]"
+    section_pkgs "$f" "$sec" | sed 's/^/  /'
+    echo
+  done
+}
+
+cmd_status() {
+  # Read-only preview of what `hexciri-apps sync` would do.
+  if ! command -v pacman >/dev/null 2>&1; then
+    echo "hexciri-apps: pacman not found — cannot check installed state" >&2
+    exit 1
+  fi
+  local p missing=() orphans=()
+  local wants_all
+  wants_all="$(wants_union)"
+  while IFS= read -r p; do
+    [[ -n $p ]] || continue
+    installed "$p" || missing+=("$p")
+  done < <(wants_union)
+  while IFS= read -r p; do
+    [[ -n $p ]] || continue
+    grep -qx "$p" <<< "$wants_all" && continue   # still listed — not orphaned
+    installed "$p" || continue                   # already gone — nothing to do
+    orphans+=("$p")
+  done < <(managed)
+  if ((${#missing[@]})); then
+    echo "would install: ${missing[*]}"
+  else
+    echo "installs: nothing missing."
+  fi
+  if ((${#orphans[@]})); then
+    echo "would remove (deleted from the list, still installed): ${orphans[*]}"
+  else
+    echo "removals: nothing deleted from the list is still installed."
+  fi
+}
+
+cmd_sync() {
+  local f
+  f="$(list_file)"
+  if [[ ! -f $f ]]; then
+    echo "hexciri-apps: no apps list found ($f)" >&2
+    exit 1
+  fi
+  if ! command -v pacman >/dev/null 2>&1; then
+    echo "hexciri-apps: pacman not found — nothing to sync" >&2
+    exit 1
+  fi
+  local p missing=() missing_aur=() orphans=()
+  while IFS= read -r p; do
+    [[ -n $p ]] || continue
+    installed "$p" || missing+=("$p")
+  done < <(section_pkgs "$f" pacman)
+  while IFS= read -r p; do
+    [[ -n $p ]] || continue
+    installed "$p" || missing_aur+=("$p")
+  done < <(section_pkgs "$f" aur)
+
+  if ((${#missing[@]})); then
+    echo "installing missing repo packages: ${missing[*]}"
+    sudo pacman -S --needed --noconfirm "${missing[@]}" || \
+      echo "wants skipped/partial — install by hand: pacman -S ${missing[*]}"
+  else
+    echo "repo wants: all present."
+  fi
+
+  if ((${#missing_aur[@]})); then
+    local aur=""
+    for h in yay paru; do command -v "$h" >/dev/null 2>&1 && { aur=$h; break; }; done
+    if [[ -z $aur ]]; then
+      echo "no AUR helper (yay/paru) — skipping AUR wants: ${missing_aur[*]}"
+    else
+      echo "installing missing AUR packages via $aur: ${missing_aur[*]}"
+      "$aur" -S --needed --noconfirm "${missing_aur[@]}" || \
+        echo "AUR wants skipped/partial — run by hand: $aur -S ${missing_aur[*]}"
+    fi
+  else
+    echo "AUR wants: all present."
+  fi
+
+  # ── Brave stand-in: dropped once Origin is present (conditional — it lives
+  # ── outside the list because it depends on what's installed, not on a line).
+  if command -v brave-origin >/dev/null 2>&1 && installed brave-bin; then
+    echo "removing Brave stand-in (Origin is present)"
+    sudo pacman -Rns --noconfirm brave-bin || \
+      echo "kept brave-bin (removal failed) — remove by hand if unwanted"
+  fi
+
+  # ── orphans: managed but deleted from the list, still installed. Kept when
+  # ── something still needs them; vim goes via -Rdd (held by the deliberately
+  # ── kept cachyos-zsh-config). ──
+  local wants_all
+  wants_all="$(wants_union)"
+  while IFS= read -r p; do
+    [[ -n $p ]] || continue
+    grep -qx "$p" <<< "$wants_all" && continue
+    installed "$p" || continue
+    orphans+=("$p")
+  done < <(managed)
+  if ((${#orphans[@]})); then
+    echo "deleted from the list, still installed: ${orphans[*]}"
+    local ans="n"
+    if [[ ${1:-} == "--yes" || ${1:-} == "-y" ]]; then ans="y"
+    else read -rp "Remove them? [y/N] " ans || true
+    fi
+    if [[ $ans =~ ^[Yy]$ ]]; then
+      for p in "${orphans[@]}"; do
+        if [[ $p == vim ]]; then
+          if sudo pacman -Rdd --noconfirm vim; then
+            rm -rf "$HOME/.vim" "$HOME/.viminfo" && echo "removed vim"
+          else
+            echo "kept vim (forced removal failed)"
+          fi
+        elif sudo pacman -Rns --noconfirm "$p"; then
+          echo "removed $p"
+        else
+          echo "kept $p (something still needs it)"
+        fi
+      done
+    else
+      echo "kept: ${orphans[*]} (re-run with --yes to remove non-interactively)"
+    fi
+  else
+    echo "removals: nothing to do."
+  fi
+
+  # Record the managed set: today's list plus any orphan that's still installed
+  # (a kept orphan is retried next sync instead of silently forgotten).
+  local still=()
+  while IFS= read -r p; do
+    [[ -n $p ]] || continue
+    grep -qx "$p" <<< "$wants_all" && continue
+    installed "$p" || continue
+    still+=("$p")
+  done < <(managed)
+  write_state $(wants_union) "${still[@]:-}"
+  echo "managed set recorded ($(managed | wc -l | tr -d ' ') packages)."
+}
+
+cmd_menu() {
+  local choice
+  choice=$(
+    printf '%s\n' 'Sync apps' 'Show changes' 'Edit list' |
+      "$bindir/hexciri-fuzzel" --dmenu --prompt='Apps: ' --width=26 --lines=3
+  ) || exec "$bindir/hexciri-packages"
+  case "$choice" in
+    "Sync apps") exec xdg-terminal-exec --app-id=TUI.float -e "$bindir/hexciri-hold" "$bindir/hexciri-apps" sync ;;
+    "Show changes") exec xdg-terminal-exec --app-id=TUI.float -e "$bindir/hexciri-hold" "$bindir/hexciri-apps" status ;;
+    "Edit list") exec "$bindir/hexciri-apps" edit ;;
+  esac
+}
+
+sub="${1:-}"
+if [[ -n $sub ]]; then
+  case "$sub" in
+    sync) shift; cmd_sync "$@" ;;
+    status|diff|changes) cmd_status ;;
+    list|show) cmd_list ;;
+    edit|config) cmd_edit ;;
+    help|--help|-h) echo "usage: hexciri-apps <sync [--yes]|status|list|edit|help>"; exit 0 ;;
+    *) echo "unknown apps subcommand: $sub" >&2; echo "usage: hexciri-apps <sync|status|list|edit|help>" >&2; exit 1 ;;
+  esac
+else
+  cmd_menu
+fi

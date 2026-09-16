@@ -21,6 +21,8 @@ rows=(
   'Search provider'
   'Fastfetch config'
   'Hexciri lockscreen'
+  'Apps list'
+  'Keybind labels'
   'Hooks'
 )
 
@@ -30,7 +32,7 @@ if [[ $# -gt 0 ]]; then
 else
   choice=$(
     printf '%s\n' "${rows[@]}" |
-      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=28 --lines=6
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=28 --lines=8
   ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
@@ -54,4 +56,18 @@ EOF
     fi
     "$bindir/hexciri-edit-file" "$conf" ;;
   'Hooks')              "$bindir/hexciri-edit-file" "$cfg_xdg/hexciri/hooks/" ;;
+  'Apps list')
+    dir="$cfg_xdg/hexciri/apps"
+    mkdir -p "$dir"
+    list="$dir/apps.list"
+    shipped="$shipped_base/config/apps/apps.list"
+    [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
+    "$bindir/hexciri-edit-file" "$list" ;;
+  'Keybind labels')
+    dir="$cfg_xdg/hexciri/keybinds"
+    mkdir -p "$dir"
+    list="$dir/descriptions.list"
+    shipped="$shipped_base/config/keybinds/descriptions.list"
+    [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
+    "$bindir/hexciri-edit-file" "$list" ;;
 esac
