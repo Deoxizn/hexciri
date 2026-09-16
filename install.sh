@@ -64,12 +64,12 @@ if [[ -x "$REPO/bin/hexciri-sync" ]]; then
   sudo HEXCIRI_REPO="$REPO" "$REPO/bin/hexciri-sync" 2>&1 | sed 's/^/  /' || \
     info "root pass skipped — run 'sudo $REPO/bin/hexciri-sync' by hand later"
 fi
-# App set from the list: hexciri's apps in, replaced stock ones out (with
-# their config dirs, but only once something is actually absent). The list
-# (config/apps/apps.list) is the source of truth — it applies here and via
-# `hexciri-apps sync`. The framework sync (hexciri-sync / hexciri-update self)
-# still never touches packages (except the tiny layer-critical subset it
-# self-heals), so anything you never listed is never reverted or re-applied.
+# One-time app swap: hexciri's apps in, replaced stock ones out (with
+# their config dirs, but only once something is actually absent). The wants
+# below are hardcoded — there is no list to curate. The framework sync
+# (hexciri-sync / hexciri-update self) still never touches packages (except
+# the tiny layer-critical subset it self-heals: polkit-gnome gnome-keyring
+# adw-gtk-theme nautilus), so your later manual changes stick.
 # Best-effort, never fatal.
 # NOTE: removal order matters — the CachyOS niri meta goes first so the portal
 # it pins comes out cleanly behind it. vim is force-removed
@@ -85,47 +85,14 @@ fi
 # to built-in styling and look unthemed; gtk.css is only an overlay on top.
 # NOTE: xdg-terminal-exec is NOT in CachyOS repos (aborts the whole transaction
 # when named) — blades fall back to hexciri-terminal, which needs only kitty.
-# The swap reads config/apps/apps.list ([pacman] + [aur]); your copy at
-# ~/.config/hexciri/apps/apps.list overrides the shipped file, so added lines
-# install here and via `hexciri-apps sync` — and deleted lines are removed
-# (tracked in ~/.local/state/hexciri/apps-managed; unlisted packages are never
-# touched). brave-origin-bin ([aur]) installs below via yay/paru, not pacman.
-# Protected core: load-bearing packages the list can never remove (menu
-# backbone fuzzel + the layer-critical set hexciri-update self-heals).
-# Never tracked in apps-managed, so deleting one of these lines is a no-op
-# for removal — it stays installed. (To truly drop one, delete its line AND
-# run pacman -Rns by hand; layer-critical ones come back on framework sync.)
-_hexciri_protected="fuzzel polkit-gnome gnome-keyring adw-gtk-theme nautilus"
-_hexciri_apps_file="$HOME/.config/hexciri/apps/apps.list"
-[[ -f $_hexciri_apps_file ]] || _hexciri_apps_file="$REPO/config/apps/apps.list"
-_hexciri_wants=""; _hexciri_listed=" "
-if [[ -f $_hexciri_apps_file ]]; then
-  _sec=""
-  while IFS= read -r _line || [[ -n $_line ]]; do
-    _line="${_line%%#*}"
-    _line="$(printf '%s' "$_line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    [[ -z $_line ]] && continue
-    if [[ $_line =~ ^\[(.*)\]$ ]]; then
-      _sec="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-      continue
-    fi
-    case "$_sec" in pacman|aur) ;; *) continue ;; esac
-    _pkg="${_line%%[[:space:]]*}"
-    [[ -n $_pkg ]] || continue
-    _hexciri_listed+="$_pkg "
-    [[ $_sec == pacman ]] && _hexciri_wants+="$_pkg "
-  done < "$_hexciri_apps_file"
-  unset _sec _line _pkg
-fi
-# Fallback when the list is missing (e.g. partial checkout) — mirrors the
-# shipped config/apps/apps.list so bring-up still works.
-[[ -n $_hexciri_wants ]] || _hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse adw-gtk-theme "
+# brave-origin-bin installs below via yay/paru, not pacman.
+_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse adw-gtk-theme "
 # One-time stock removals (not the list — replaced CachyOS defaults, always
 # safe to attempt; kept when something still needs them).
 _hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro"
 _hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro"
 if command -v pacman >/dev/null 2>&1; then
-  info "one-time app swap (wants from $(basename "$_hexciri_apps_file") + stock removals)"
+  info "one-time app swap (hexciri wants + stock removals)"
   # shellcheck disable=SC2086
   sudo pacman -S --needed --noconfirm $_hexciri_wants 2>&1 | sed 's/^/  /' || \
     info "wants skipped/partial — install by hand: pacman -S $_hexciri_wants"
@@ -150,34 +117,9 @@ if command -v pacman >/dev/null 2>&1; then
       info "kept vim (forced removal failed)"
     fi
   fi
-  # List-truth reconcile: managed packages deleted from the list go too.
-  # The protected core is never tracked in managed state (see below), so it
-  # can't appear here from a fresh write — but pre-exclusion state files may
-  # still name one, and a deleted protected line is silently kept.
-  # (No-op on fresh installs — no managed state yet.)
-  _hexciri_state="$HOME/.local/state/hexciri/apps-managed"
-  if [[ -f $_hexciri_state ]]; then
-    while IFS= read -r _p || [[ -n $_p ]]; do
-      _p="${_p%%#*}"; _p="$(printf '%s' "$_p" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-      [[ -n $_p ]] || continue
-      case " $_hexciri_protected " in *" $_p "*) continue ;; esac
-      case "$_hexciri_listed" in *" $_p "*) continue ;; esac
-      pacman -Q "$_p" >/dev/null 2>&1 || continue
-      info "removing $_p (deleted from the apps list)"
-      if [[ $_p == vim ]]; then
-        sudo pacman -Rdd --noconfirm vim 2>&1 | sed 's/^/  /' && rm -rf "$HOME/.vim" "$HOME/.viminfo" && \
-          info "removed vim" || info "kept vim (removal failed)"
-      elif sudo pacman -Rns --noconfirm "$_p" 2>&1 | sed 's/^/  /'; then
-        info "removed $_p"
-      else
-        info "kept $_p (something still needs it)"
-      fi
-    done < "$_hexciri_state"
-    unset _hexciri_listed
-  fi
-  unset _p _m _pkg _dir _hexciri_state
+  unset _p _m _pkg _dir
 fi
-unset _hexciri_wants _hexciri_listed _hexciri_stock_rm _hexciri_purge _hexciri_apps_file
+unset _hexciri_wants _hexciri_stock_rm _hexciri_purge
 # Nautilus is the default file manager (pacman package, in _hexciri_wants so a
 # fresh box gets it even if the removed niri meta took it). A stale
 # Hidden=true override from the Strata era would keep it out of menus, so drop
@@ -201,28 +143,9 @@ if ! command -v yay >/dev/null 2>&1 && ! command -v paru >/dev/null 2>&1; then
     info "yay bootstrap skipped (no pacman/git) — install an AUR helper by hand for Brave Origin"
   fi
 fi
-# AUR wants ([aur] in the apps list). Installs via yay/paru as you, then drops
+# AUR want (Brave Origin). Installs via yay/paru as you, then drops
 # the brave-bin stand-in once origin is present. Best-effort, never fatal.
-# (`hexciri-apps sync` re-runs this same list logic on demand.)
-_hexciri_aur_file="$HOME/.config/hexciri/apps/apps.list"
-[[ -f $_hexciri_aur_file ]] || _hexciri_aur_file="$REPO/config/apps/apps.list"
-_hexciri_aur_pkgs=""
-if [[ -f $_hexciri_aur_file ]]; then
-  _sec=""
-  while IFS= read -r _line || [[ -n $_line ]]; do
-    _line="${_line%%#*}"
-    _line="$(printf '%s' "$_line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    [[ -z $_line ]] && continue
-    if [[ $_line =~ ^\[(.*)\]$ ]]; then
-      _sec="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-      continue
-    fi
-    [[ $_sec == aur ]] || continue
-    _hexciri_aur_pkgs+="${_line%%[[:space:]]*} "
-  done < "$_hexciri_aur_file"
-  unset _sec _line
-fi
-[[ -n $_hexciri_aur_pkgs ]] || _hexciri_aur_pkgs="brave-origin-bin "
+_hexciri_aur_pkgs="brave-origin-bin "
 if command -v brave-origin >/dev/null 2>&1 && [[ $_hexciri_aur_pkgs == *"brave-origin-bin"* ]]; then
   info "Brave Origin already present — keeping it, no Brave stand-in wanted"
   # strip the satisfied want so the helper step below only handles the rest
@@ -240,37 +163,7 @@ if [[ -n $(printf '%s' "$_hexciri_aur_pkgs" | tr -d ' ') ]]; then
     info "AUR wants skipped (no yay/paru) — run by hand: yay -S $_hexciri_aur_pkgs"
   fi
 fi
-unset _aur _h _hexciri_aur_pkgs _hexciri_aur_file
-# Record the managed set ([pacman]+[aur] union minus the protected core —
-# protected pkgs are never tracked, so deleting one of their lines can never
-# trigger a removal — including any already satisfied want stripped above) so
-# `hexciri-apps sync` can tell a deleted line from a package it never managed.
-# Rewriting also prunes protected entries from pre-exclusion state files.
-_hexciri_protected="${_hexciri_protected:-fuzzel polkit-gnome gnome-keyring adw-gtk-theme nautilus}"
-if [[ -f $HOME/.config/hexciri/apps/apps.list ]]; then _hexciri_state_src="$HOME/.config/hexciri/apps/apps.list"
-else _hexciri_state_src="$REPO/config/apps/apps.list"; fi
-if [[ -f $_hexciri_state_src ]]; then
-  mkdir -p "$HOME/.local/state/hexciri"
-  _hexciri_sec=""; : > "$HOME/.local/state/hexciri/apps-managed.tmp"
-  while IFS= read -r _line || [[ -n $_line ]]; do
-    _line="${_line%%#*}"
-    _line="$(printf '%s' "$_line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    [[ -z $_line ]] && continue
-    if [[ $_line =~ ^\[(.*)\]$ ]]; then
-      _hexciri_sec="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-      continue
-    fi
-    case "$_hexciri_sec" in pacman|aur)
-      _hexciri_tok="${_line%%[[:space:]]*}"
-      case " $_hexciri_protected " in *" $_hexciri_tok "*) continue ;; esac
-      printf '%s\n' "$_hexciri_tok" >> "$HOME/.local/state/hexciri/apps-managed.tmp" ;;
-    esac
-  done < "$_hexciri_state_src"
-  LC_ALL=C sort -u "$HOME/.local/state/hexciri/apps-managed.tmp" | grep -v '^$' > "$HOME/.local/state/hexciri/apps-managed" || true
-  rm -f "$HOME/.local/state/hexciri/apps-managed.tmp"
-  unset _hexciri_sec _line _hexciri_tok
-fi
-unset _hexciri_state_src _hexciri_protected
+unset _aur _h _hexciri_aur_pkgs
 if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&1; then
   info "removing Brave stand-in (Origin is present)"
   sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \

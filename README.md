@@ -82,7 +82,6 @@ Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
 │   │                          └── Steam · Heroic · Lutris · RetroArch · Minecraft
 │   │                              Battle.net · GeForce NOW · Xbox Cloud · Xbox controllers
 │   └── Remove >             Package · Web App (yours) · Theme (yours)
-│   └── Apps >               Sync apps (installs added lines, removes deleted ones) · Show changes · Edit list
 ├── Share & Capture          LocalSend + screenshots, recording, OCR, QR, transcode
 │   ├── Clipboard · File · Folder · Receive (localsend-cli / GUI fallback)
 │   └── Screenshot region · Screenshot screen · Screen recording (gpu-screen-recorder)
@@ -98,7 +97,7 @@ Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
 ├── System
 │   ├── Config >             Niri > (per-fragment editors) · Noctalia config
 │   │                        Fastfetch config · Hexciri lockscreen · Hooks
-│   │                        State files > (Apps list · Keybinds list · Search provider)
+│   │                        State files > (Keybinds list · Search provider)
 │   ├── Default Apps >       Browser · Editor · Terminal · Shell · Files · Images · Agent
 │   ├── Maintenance >        Sync system clock · System Cleaner (cache + orphans)
 │   │                        User password · Reset boot config
@@ -111,7 +110,6 @@ Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
 ├── Restart                  Reload Niri · Restart Noctalia · Refresh theme
 └── Update
     ├── Hexciri              system update: repo + AUR, keyring check, sync re-apply, reboot offer
-    ├── Apps                 apps list reconcile: installs added lines, removes deleted ones
     ├── Themes               pull Omarchy defaults + sync extras list
     ├── Wallpaper            re-merge your wallpapers into the active theme
     ├── Hardware >           restart Audio · Wi-Fi · Bluetooth · Trackpad stack
@@ -207,26 +205,17 @@ Theme swaps only replace theme-owned files — your links survive every change.
 
 ## Apps
 
-One-time swap at install, list-driven after that. The framework sync
+One-time swap at install, hands off after that. The framework sync
 (`hexciri-sync` / `hexciri-update self`) never touches packages except the
 tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus`
-it self-heals — anything you never listed is never reverted or re-applied.
+it self-heals — your later manual changes stick.
 Best-effort throughout: offline boxes finish, missing bits print their manual
 fallback.
 
-The app set is a list, not code: `config/apps/apps.list` with `[pacman]` and
-`[aur]` sections. Your copy at `~/.config/hexciri/apps/apps.list` overrides it
-(seeded from the shipped file the first time you open it from `Packages >
-Apps` or `System > Config > State files > Apps list`). The list is the source of truth: add
-a line and it installs on the next `install.sh` run or `hexciri-apps sync`;
-delete a line and it gets removed (when installed and nothing still needs it)
-— except the protected core (`fuzzel polkit-gnome gnome-keyring
-adw-gtk-theme nautilus`), which is never tracked in
-`~/.local/state/hexciri/apps-managed` and so can never be removed by deleting
-a line. Swappable defaults (`mupdf`, `imv`, `kitty`, …) stay managed: delete
-one's line and add your preferred replacement instead.
-What's managed is tracked in `~/.local/state/hexciri/apps-managed`.
-`hexciri-apps status` previews what a sync would change.
+Install adds what hexciri needs and removes what it replaces, once, at
+bring-up (`install.sh`, re-runnable). After that there is no list to curate
+and no reconcile: add or remove packages yourself with pacman/yay and they
+stay as you left them.
 
 **Added** (`pacman -S --needed`):
 

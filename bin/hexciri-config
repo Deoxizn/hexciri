@@ -35,7 +35,7 @@ case "$choice" in
   'State files >')           exec "$bindir/hexciri-config-state" ;;
   'State files '*)           exec "$bindir/hexciri-config-state" "${choice#State files }" ;;
   # Compat: pre-submenu direct dispatches from menu search land here.
-  'Apps list'|'Search provider')
+  'Search provider')
     exec "$bindir/hexciri-config-state" "$choice" ;;
   'Keybind labels')
     exec "$bindir/hexciri-config-state" "Keybinds list" ;;

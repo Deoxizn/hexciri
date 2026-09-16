@@ -543,39 +543,6 @@ EOF
     return 0
   }
 
-  # Apps list: seed when absent; refresh when the live file matches a past
-  # repo revision (unmodified seed — safe to advance); keep silently when it
-  # matches the current one, and keep-as-custom when it matches none (the
-  # user made it theirs — added/removed lines are intent, never moved).
-  # Same policy as fastfetch; git history is the record. Without this, a
-  # user copy seeded from an older revision keeps its stale header forever
-  # and no framework sync ever updates it.
-  sync_apps_list() {
-    local src="$REPO/config/apps/apps.list"
-    local dst="$HOME/.config/hexciri/apps/apps.list"
-    local r found=""
-    [[ -f $src ]] || return 0
-    if [[ ! -f $dst ]]; then
-      mkdir -p "$(dirname "$dst")"
-      cp -f "$src" "$dst" && echo "seeded apps list ($dst)"
-      return 0
-    fi
-    cmp -s "$src" "$dst" 2>/dev/null && return 0
-    while IFS= read -r r; do
-      [[ -n $r ]] || continue
-      if git -C "$REPO" show "$r:config/apps/apps.list" 2>/dev/null | cmp -s - "$dst"; then
-        found="$r"
-        break
-      fi
-    done < <(git -C "$REPO" log --format=%H -- "config/apps/apps.list" 2>/dev/null || true)
-    if [[ -z $found ]]; then
-      echo "kept custom apps list ($dst)"
-      return 0
-    fi
-    cp -f "$src" "$dst" && echo "refreshed apps list ($dst)"
-    return 0
-  }
-
   # Noctalia bar config + plugin settings: adopt once. A missing live config
   # is seeded; a present non-hexciri one is backed up to .stock and replaced.
   # Anything carrying our header afterwards is the user's and is never touched.
@@ -890,33 +857,6 @@ EOF
       echo "layer packages skipped/partial (offline?) — run: sudo pacman -S --needed $missing"
   }
 
-  # Apps-managed state: pre-protected-core files still name fuzzel etc.
-  # managed() already ignores them on read, but the file on disk stays stale
-  # until the next `hexciri-apps sync` / install.sh rewrite — confusing when
-  # inspecting state. Prune them here (every pass, idempotent, silent when
-  # clean) so a plain framework sync heals old boxes. Same PROTECTED set as
-  # hexciri-apps / install.sh; keep in sync.
-  prune_apps_state() {
-    local st="$HOME/.local/state/hexciri/apps-managed"
-    [[ -f $st ]] || return 0
-    local _protected="fuzzel polkit-gnome gnome-keyring adw-gtk-theme nautilus"
-    local tmp="$st.tmp" line tok found=0
-    : > "$tmp" || return 0
-    while IFS= read -r line || [[ -n $line ]]; do
-      tok="${line%%#*}"
-      tok="$(printf '%s' "$tok" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-      [[ -z $tok ]] && { printf '%s\n' "$line" >> "$tmp"; continue; }
-      case " $_protected " in *" $tok "*) found=1; continue ;; esac
-      printf '%s\n' "$line" >> "$tmp"
-    done < "$st"
-    if (( found )); then
-      mv -f "$tmp" "$st"
-      echo "pruned protected core from apps-managed state ($st)"
-    else
-      rm -f "$tmp"
-    fi
-  }
-
   git -C "$REPO" fetch --tags origin --quiet 2>/dev/null || true
   local behind
   behind=$(git -C "$REPO" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
@@ -954,8 +894,6 @@ EOF
   "$REPO/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
 
   ensure_layer_pkgs
-  sync_apps_list
-  prune_apps_state
   migrate_strata_to_nautilus
   migrate_fuzzel_launcher_to_noctalia
   sync_keybinds
@@ -997,7 +935,7 @@ update_hardware() { # [choice]
 update_menu() { # [choice]
   local entries choice
 
-  entries=('Hexciri' 'Apps' 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
+  entries=('Hexciri' 'Themes' 'Wallpaper' 'Hardware >' 'Firmware' 'Repo')
 
   if [[ $# -gt 0 ]]; then
     choice="$*"
@@ -1011,7 +949,6 @@ update_menu() { # [choice]
 
   case "$choice" in
     "Hexciri")   exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update" ;;
-    "Apps")      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-apps" sync ;;
     "Hardware")  exec "$SCRIPT_DIR/hexciri-update-hardware" ;;
     "Firmware")  exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hold" fwupdmgr update ;;
     "Repo")      exec xdg-terminal-exec --app-id=TUI.float -e "$SCRIPT_DIR/hexciri-hold" "$SCRIPT_DIR/hexciri-update-hexciri" ;;
