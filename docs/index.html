@@ -57,14 +57,8 @@
   h2 { font-size: 22px; margin-bottom: 6px;
     background: linear-gradient(100deg, #f7768e, #b6849d); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .sub { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 600; }
+  .sub a { white-space: nowrap; }
   code { font-family: ui-monospace, monospace; font-size: 13px; background: var(--bg-soft); padding: 2px 6px; border-radius: 5px; }
-  pre.tree { background: rgba(20, 17, 26, 0.9); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; overflow-x: auto; font: 13px/1.7 ui-monospace, monospace; color: var(--text); }
-  pre.tree .dim { color: var(--muted); }
-  ol, ul { padding-left: 22px; }
-  li { margin: 6px 0; }
   footer { text-align: center; padding: 40px 24px 64px; color: var(--muted); border-top: 1px solid var(--line); }
   footer a { color: var(--rose); }
   a { color: var(--rose); }
@@ -79,8 +73,6 @@
   }
   .card h3 { font-size: 1.02rem; color: var(--rose); margin-bottom: 0.4rem; }
   .card p { font-size: 0.94rem; color: var(--muted); }
-  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-  .pill { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-size: 12.5px; color: var(--text); }
 </style>
 </head>
 <body>
@@ -110,94 +102,27 @@
 </section>
 <section id="menu">
   <h2>The menu</h2>
-  <p class="sub"><code>hexciri-menu</code> on <code>Mod+Alt+Space</code>. Rows gated on hardware or installed apps hide themselves when irrelevant.</p>
-  <pre class="tree">► Hexciri
-├── Learn <span class="dim">— docs for what's installed (Hexciri, Noctalia, CachyOS, Niri, kitty, fish, Zed, OpenCode, Starship…)</span>
-├── Packages
-│   ├── Install &gt; <span class="dim">Package · AUR · Web App · Gaming (Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net, GeForce NOW, Xbox Cloud, controllers)</span>
-│   └── Remove &gt; <span class="dim">Package · Web App · Theme</span>
-├── Share &amp; Capture <span class="dim">— LocalSend clipboard/file/folder/receive · screenshots · screen recording · OCR · QR decode · transcode</span>
-├── Reminders <span class="dim">— set · quick · clear</span>
-├── Hardware <span class="dim">— touchpad · touchscreen · hybrid GPU · network up/down · disk speed (only what exists)</span>
-├── Themes <span class="dim">— theme list · palette source · backgrounds · fonts · extra themes list · wallpaper dirs</span>
-├── System
-│   ├── Config &gt; <span class="dim">Niri fragments · Noctalia · fastfetch · lockscreen · hooks</span>
-│   │   └── State files &gt; <span class="dim">keybind labels · search</span>
-│   ├── Default Apps &gt; <span class="dim">browser · editor · terminal · shell · files · images · agent</span>
-│   ├── Maintenance &gt; <span class="dim">clock sync · cleaner · password · boot reset</span>
-│   ├── Network &gt; <span class="dim">DNS (DHCP/Cloudflare/Google/Custom) · Wi-Fi QR</span>
-│   ├── Security &gt; <span class="dim">fingerprint · FIDO2 · SSHD · passwordless sudo</span>
-│   ├── Windows product key <span class="dim">— firmware MSDM/OA3 read</span>
-│   └── Reset defaults
-├── Restart <span class="dim">— reload Niri · restart Noctalia · refresh theme</span>
-└── Update <span class="dim">— Hexciri (system) · Themes · Wallpaper · Hardware restarts · Firmware · Repo</span></pre>
+  <p class="sub"><code>Mod+Alt+Space</code> opens nine buckets — packages, sharing, hardware, themes, system, updates and more. Every row runs a real script and Esc always goes back. <a href="https://github.com/Deoxizn/hexciri#menu">Full menu map in the README</a>.</p>
 </section>
 <section id="themes">
   <h2>Themes: one pick, 30+ apps</h2>
-  <p class="sub"><code>colors.toml</code> is the single source of truth. <code>hexciri-theme-set</code> goes live, expands generated configs, then fires every drop-in in <code>hooks/theme-set.d/</code>.</p>
-  <ul>
-    <li><strong>Generated:</strong> kitty, fuzzel, starship configs, straight from the palette.</li>
-    <li><strong>Hooked:</strong> terminals, editors, browsers, Discord, GTK/Qt, Spotify, bar, lock and 20+ more — <a href="https://github.com/Deoxizn/hexciri#themes">full list in the README</a>.</li>
-    <li><strong>Palette source</strong> (<code>Themes &gt; Palette source</code>) is yours: <em>Theme</em> or <em>Wallpaper</em> (Material You). Swaps never flip it back.</li>
-  </ul>
-  <h2 style="margin-top:26px">22 defaults + handpicked extras</h2>
-  <p class="sub">Defaults ride a sparse clone of <code>omacom/omarchy</code> (quattro); extras are one line per theme in <code>config/theme-sources/extra.list</code> — the list is the source of truth (sync installs, pulls, and prunes to match). Plus two hexciri originals in <code>themes/</code>: <strong>sakurazuki</strong> and <strong>various-arch</strong>.</p>
-  <div class="pills">
-    <span class="pill">catppuccin</span><span class="pill">catppuccin-latte</span><span class="pill">ethereal</span><span class="pill">everforest</span><span class="pill">flexoki-light</span><span class="pill">gruvbox</span><span class="pill">hackerman</span><span class="pill">kanagawa</span><span class="pill">last-horizon</span><span class="pill">lumon</span><span class="pill">lupine</span><span class="pill">matte-black</span><span class="pill">miasma</span><span class="pill">nord</span><span class="pill">osaka-jade</span><span class="pill">retro-82</span><span class="pill">ristretto</span><span class="pill">rose-pine</span><span class="pill">solitude</span><span class="pill">tokyo-night</span><span class="pill">vantablack</span><span class="pill">white</span>
-  </div>
-  <p class="sub">Extras today:</p>
-  <div class="pills">
-    <span class="pill">HANCORE-linux / omarchy-aamis-theme</span><span class="pill">HANCORE-linux / omarchy-sapphire-theme</span><span class="pill">OldJobobo / omarchy-everpuccin-theme</span>
-  </div>
-  <p class="sub"><code>hexciri-theme install &lt;github-url&gt;</code> adds any theme to your list. <a href="https://github.com/Deoxizn/hexciri#themes">How theme lists work, in the README</a>.</p>
+  <p class="sub"><code>hexciri-theme set</code> recolors terminals, editors, browsers, the bar and lock from one palette — 22 defaults ship and any GitHub theme is one command away. <a href="https://github.com/Deoxizn/hexciri#themes">How themes work, in the README</a>.</p>
 </section>
 <section id="wallpapers">
   <h2>Wallpapers that survive theme changes</h2>
-  <p class="sub">Your images merge into the active theme as read-only <code>zz-user-*</code> symlinks — theme swaps only replace theme-owned files, so yours persist.</p>
-  <ul>
-    <li><strong>Store:</strong> drop images/folders in <code>~/.config/hexciri/wallpapers</code> (<code>Themes &gt; Backgrounds</code> opens it).</li>
-    <li><strong>Extra dirs:</strong> one directory per line in the wallpaper sources list (<code>Themes &gt; Wallpaper dirs list</code>) — <code>~/Pictures</code>, absolute paths, even NFS mounts. Never copied, never deleted, only linked.</li>
-    <li><strong>Refresh:</strong> <code>Update &gt; Wallpaper</code> re-merges; every framework sync re-merges the store automatically.</li>
-  </ul>
+  <p class="sub">Drop images in a folder and they join every theme's picker as read-only links — theme swaps never touch them. <a href="https://github.com/Deoxizn/hexciri#wallpapers">How wallpapers work, in the README</a>.</p>
 </section>
 <section id="apps">
   <h2>Apps: added &amp; removed</h2>
-  <p class="sub">One-time swap at install. Sync never touches packages afterwards (except the tiny layer-critical set), so manual changes stick. <a href="https://github.com/Deoxizn/hexciri#apps">Full list with reasons in the README</a>.</p>
-  <table>
-    <tr><th>Added</th><th>why</th></tr>
-    <tr><td><code>kitty · zed · opencode · Brave Origin</code> (AUR) <code>· nautilus</code></td><td>terminal, editor, AI agent, browser, files</td></tr>
-    <tr><td><code>localsend · fuzzel · imv · mupdf · gpu-screen-recorder · tesseract</code></td><td>sharing, menu, viewing, recording, OCR</td></tr>
-    <tr><td><code>polkit-gnome · gnome-keyring · adw-gtk-theme · brightnessctl · playerctl</code></td><td>auth, secrets, theme base, brightness + media keys</td></tr>
-  </table>
-  <br>
-  <table>
-    <tr><th>Removed (only if installed)</th><th>why</th></tr>
-    <tr><td><code>stock niri meta · alacritty · firefox · meld · micro · vim</code></td><td>replaced by the apps above (configs purged)</td></tr>
-  </table>
+  <p class="sub">One-time swap at install — kitty, Zed, Brave Origin, Nautilus in, replaced stock apps out — then hands off forever. <a href="https://github.com/Deoxizn/hexciri#apps">Full list with reasons in the README</a>.</p>
 </section>
 <section id="keys">
   <h2>The keys that matter</h2>
-  <p class="sub">Mod = Super. <code>Mod+K</code> searches the full list, rendered from the live Niri config so it never drifts.</p>
-  <table>
-    <tr><th>key</th><th>does</th></tr>
-    <tr><td><code>Mod+Alt+Space</code></td><td>root menu (this whole page, as a menu)</td></tr>
-    <tr><td><code>Mod+Space</code></td><td>app launcher (Noctalia)</td></tr>
-    <tr><td><code>Mod+Return</code> / <code>Mod+`</code></td><td>terminal / AI agent</td></tr>
-    <tr><td><code>Mod+Q</code> / <code>Mod+F</code></td><td>close window / maximize column</td></tr>
-    <tr><td><code>Mod+1…9, 0</code> + <code>Shift</code></td><td>workspaces / move window there</td></tr>
-    <tr><td><code>Mod+←/→</code> / <code>Mod+Ctrl+←/→</code></td><td>focus / move window</td></tr>
-    <tr><td><code>Mod+Print</code> / <code>Ctrl+Print</code> / <code>Alt+Print</code></td><td>screenshot / region to clipboard / screen record</td></tr>
-    <tr><td><code>Mod+Ctrl+V</code> / <code>Mod+Escape</code></td><td>clipboard history / power menu</td></tr>
-  </table>
+  <p class="sub">Mod = Super. <code>Mod+Alt+Space</code> menu, <code>Mod+Space</code> launcher, <code>Mod+K</code> searches every keybind. <a href="https://github.com/Deoxizn/hexciri#more-of-whats-inside">More keys in the README</a>.</p>
 </section>
 <section id="more">
   <h2>Also inside</h2>
-  <div class="grid">
-    <div class="card"><h3>Default Apps</h3><p><code>System &gt; Default Apps</code>: browser, editor, terminal, shell, files, images, agent. Only installed candidates offered, current marked ✓.</p></div>
-    <div class="card"><h3>Gaming in one press</h3><p>Steam, Heroic, Lutris, RetroArch, Minecraft, Battle.net (umu + GE-Proton, no Steam needed), GeForce NOW, Xbox Cloud, controllers.</p></div>
-    <div class="card"><h3>Web apps</h3><p>Any URL becomes a desktop app with icon; removable from <code>Remove &gt; Web App</code>. Messenger gets its own keybind.</p></div>
-    <div class="card"><h3>Self-healing updates</h3><p>Every press pulls the framework, re-execs into new code, re-applies links, menu curation, firewall, sshd hardening and MIME heals — then updates the system.</p></div>
-  </div>
+  <p class="sub">Switchable default apps, one-press gaming setup, any URL as a desktop app, self-healing updates. <a href="https://github.com/Deoxizn/hexciri#more-of-whats-inside">Details in the README</a>.</p>
 </section>
 </div>
 <footer>
