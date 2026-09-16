@@ -69,7 +69,7 @@ fi
 # below are hardcoded — there is no list to curate. The framework sync
 # (hexciri-sync / hexciri-update self) still never touches packages (except
 # the tiny layer-critical subset it self-heals: polkit-gnome gnome-keyring
-# adw-gtk-theme nautilus brightnessctl playerctl), so your later manual changes stick.
+# adw-gtk-theme nautilus brightnessctl playerctl fwupd), so your later manual changes stick.
 # Best-effort, never fatal.
 # NOTE: removal order matters — the CachyOS niri meta goes first so the portal
 # it pins comes out cleanly behind it. vim is force-removed
@@ -87,10 +87,12 @@ fi
 # NOTE: adw-gtk-theme ships the adw-gtk3-dark base theme the GTK hook sets
 # (hooks/theme-set.d/10-gtk.sh) — without it GTK3/plain-GTK4 apps fall back
 # to built-in styling and look unthemed; gtk.css is only an overlay on top.
+# NOTE: fwupd is a layer need too — Update > Firmware runs fwupdmgr update,
+# and without it the blade fails with "command not found".
 # NOTE: xdg-terminal-exec is NOT in CachyOS repos (aborts the whole transaction
 # when named) — blades fall back to hexciri-terminal, which needs only kitty.
 # brave-origin-bin installs below via yay/paru, not pacman.
-_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl "
+_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd "
 # One-time stock removals (not the list — replaced CachyOS defaults, always
 # safe to attempt; kept when something still needs them).
 _hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro"

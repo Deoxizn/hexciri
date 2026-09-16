@@ -256,12 +256,12 @@ Theme swaps only replace theme-owned files — your links survive every change.
 
 In plain words: on day one we install the apps hexciri expects and remove
 the ones they replace. From day two on, your installs and removals are
-yours — updates never undo them (except 6 layer-critical packages that
+yours — updates never undo them (except 7 layer-critical packages that
 would break keys, logins, or themes if missing).
 
 One-time swap at install, hands off after that. The framework sync
 (`hexciri-sync` / `hexciri-update self`) never touches packages except the
-tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl`
+tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl fwupd`
 it self-heals — your later manual changes stick.
 Best-effort throughout: offline boxes finish, missing bits print their manual
 fallback.
@@ -292,6 +292,7 @@ stay as you left them.
 | `adw-gtk-theme` | base GTK3 theme (`adw-gtk3-dark`) the theme hooks recolor — GTK apps look unthemed without it |
 | `brightnessctl` | backlight control — niri `XF86MonBrightness*` binds + Noctalia brightness widget/OSD are dead without it |
 | `playerctl` | MPRIS media control — niri `XF86AudioPlay/Next/Prev` binds are dead without it |
+| `fwupd` | firmware updates — Update > Firmware runs `fwupdmgr update`, fails with "command not found" without it |
 
 Plus: **yay** bootstrapped via makepkg (needs `base-devel`+`git`) when no
 AUR helper exists; **Brave Origin** (`brave-origin-bin` via yay/paru — the
