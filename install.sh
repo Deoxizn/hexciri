@@ -153,19 +153,14 @@ if command -v pacman >/dev/null 2>&1; then
   # List-truth reconcile: managed packages deleted from the list go too.
   # The protected core is never tracked in managed state (see below), so it
   # can't appear here from a fresh write — but pre-exclusion state files may
-  # still name one, and a deleted protected line is always kept with a note.
+  # still name one, and a deleted protected line is silently kept.
   # (No-op on fresh installs — no managed state yet.)
   _hexciri_state="$HOME/.local/state/hexciri/apps-managed"
   if [[ -f $_hexciri_state ]]; then
     while IFS= read -r _p || [[ -n $_p ]]; do
       _p="${_p%%#*}"; _p="$(printf '%s' "$_p" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
       [[ -n $_p ]] || continue
-      case " $_hexciri_protected " in *" $_p "*)
-        pacman -Q "$_p" >/dev/null 2>&1 || continue
-        case "$_hexciri_listed" in *" $_p "*) continue ;; esac
-        info "protected: kept $_p (load-bearing — deleting its line never removes it; run pacman -Rns $_p by hand to truly drop it)"
-        continue ;;
-      esac
+      case " $_hexciri_protected " in *" $_p "*) continue ;; esac
       case "$_hexciri_listed" in *" $_p "*) continue ;; esac
       pacman -Q "$_p" >/dev/null 2>&1 || continue
       info "removing $_p (deleted from the apps list)"
