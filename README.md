@@ -10,22 +10,32 @@ Install CachyOS with Niri, clone the dots, run one script.
 
 ## What this is
 
-hexciri is dots + scripts for a CachyOS + Niri box. It never
-touches the installer, kernel, GPU stack, or package manager — those stay
-CachyOS's. What it owns:
+Think of it like this: CachyOS builds the house (installer, kernel, drivers,
+updates). hexciri just arranges the furniture — the menu, the themes, your
+apps and defaults. It never touches the foundation.
+
+What it owns:
 
 - **The menu** — every option dispatches to a real controller in `bin/`.
   Nothing dangles. Root is `Mod+Alt+Space`; `Mod+K` searches all keybinds.
+  (Like a TV remote where every button actually does something.)
 - **The theming** — one pick (`hexciri-theme set`) recolors 30+ apps in one
   hook. 22 Omarchy defaults ship; extras are one line each in a list.
+  (Like changing your shirt and your shoes, watch, and hat all match instantly.)
 - **Your wallpapers survive theme changes** — drop images into
   `~/.config/hexciri/wallpapers` (or point at your own folders) and they show
   up in the picker on every theme, forever.
+  (Your photos stay on the fridge no matter how often you repaint the kitchen.)
 - **One-time app swap, then hands off** — install adds what hexciri needs and
   removes what it replaces. After that, sync never touches packages: your
   manual changes stick.
+  (We help you move in once, then never rearrange your stuff again.)
 
 ## Install
+
+In plain words: install CachyOS, grab this repo, run one script, answer two
+questions (system update? reboot?). Done. Re-running later is safe — it just
+re-applies.
 
 1. **Install CachyOS** with Niri.
 2. Bring the dots — curl or clone, same script:
@@ -70,6 +80,10 @@ safe. Updating is a pull plus a re-run. Version is the git SHA
 ## Menu
 
 Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
+In plain words: `Mod+Alt+Space` opens the big list of everything. Pick a
+row, it does the thing — no dead buttons.
+
+> The website shows the short version. This is the complete map.
 
 ```
 ► Hexciri
@@ -95,9 +109,13 @@ Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
 │                            Backgrounds (your store) · Fonts
 │                            Extra themes list · Wallpaper dirs list
 ├── System
-│   ├── Config >             Niri > (per-fragment editors) · Noctalia config
-│   │                        Fastfetch config · Hexciri lockscreen · Hooks
-│   │                        State files > (Keybinds list · Search provider)
+│   ├── Config >
+│   │   ├── Niri >             (per-fragment editors: config.kdl + cfg/*.kdl)
+│   │   ├── Noctalia config
+│   │   ├── Fastfetch config
+│   │   ├── Hexciri lockscreen
+│   │   ├── State files >      (Keybinds list · Search provider)
+│   │   └── Hooks
 │   ├── Default Apps >       Browser · Editor · Terminal · Shell · Files · Images · Agent
 │   ├── Maintenance >        Sync system clock · System Cleaner (cache + orphans)
 │   │                        User password · Reset boot config
@@ -125,7 +143,9 @@ menu, `Mod+Ctrl+V` clipboard history.
 
 ## Themes
 
-One command recolors the whole desktop:
+One command recolors the whole desktop. In plain words: pick a color theme
+once, and your terminal, browser, bar, lock screen and 25+ other apps all
+match — you never theme apps one by one.
 
 ```bash
 hexciri-theme set <name>     # e.g. hexciri-theme set sakurazuki
@@ -205,9 +225,14 @@ Theme swaps only replace theme-owned files — your links survive every change.
 
 ## Apps
 
+In plain words: on day one we install the apps hexciri expects and remove
+the ones they replace. From day two on, your installs and removals are
+yours — updates never undo them (except 6 layer-critical packages that
+would break keys, logins, or themes if missing).
+
 One-time swap at install, hands off after that. The framework sync
 (`hexciri-sync` / `hexciri-update self`) never touches packages except the
-tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus`
+tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl`
 it self-heals — your later manual changes stick.
 Best-effort throughout: offline boxes finish, missing bits print their manual
 fallback.
@@ -236,6 +261,8 @@ stay as you left them.
 | `gnome-keyring` | Secret Service provider (calendar tokens, app secrets) + seahorse UI |
 | `seahorse` | keyring manager UI |
 | `adw-gtk-theme` | base GTK3 theme (`adw-gtk3-dark`) the theme hooks recolor — GTK apps look unthemed without it |
+| `brightnessctl` | backlight control — niri `XF86MonBrightness*` binds + Noctalia brightness widget/OSD are dead without it |
+| `playerctl` | MPRIS media control — niri `XF86AudioPlay/Next/Prev` binds are dead without it |
 
 Plus: **yay** bootstrapped via makepkg (needs `base-devel`+`git`) when no
 AUR helper exists; **Brave Origin** (`brave-origin-bin` via yay/paru — the
@@ -284,7 +311,8 @@ Origin is present; **Nautilus** stays the default file manager (its
   sudo; clock sync, cache/orphan cleaner, boot-config reset, firmware update.
 - **Config editing** (`System > Config`) — Niri fragments (autostart,
   cursors, env, input, looknfeel, monitors, window-rules, keybinds), Noctalia,
-  search provider, fastfetch, lockscreen panel-off timing, and your hooks dir.
+  fastfetch, lockscreen panel-off timing, State files (your keybind labels +
+  search provider), and your hooks dir.
 - **Self-heal on every update** — alpm hook + `hexciri-sync` re-apply links,
   menu curation (`.desktop` hides), firewall, sshd hardening (key-only, no
   root password), MIME heals (browsers keep stealing image/PDF defaults), and

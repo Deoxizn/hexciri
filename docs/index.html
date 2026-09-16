@@ -121,7 +121,8 @@
 ├── Hardware <span class="dim">— touchpad · touchscreen · hybrid GPU · network up/down · disk speed (only what exists)</span>
 ├── Themes <span class="dim">— theme list · palette source · backgrounds · fonts · extra themes list · wallpaper dirs</span>
 ├── System
-│   ├── Config &gt; <span class="dim">Niri fragments · Noctalia · search · fastfetch · lockscreen · hooks</span>
+│   ├── Config &gt; <span class="dim">Niri fragments · Noctalia · fastfetch · lockscreen · hooks</span>
+│   │   └── State files &gt; <span class="dim">keybind labels · search</span>
 │   ├── Default Apps &gt; <span class="dim">browser · editor · terminal · shell · files · images · agent</span>
 │   ├── Maintenance &gt; <span class="dim">clock sync · cleaner · password · boot reset</span>
 │   ├── Network &gt; <span class="dim">DNS (DHCP/Cloudflare/Google/Custom) · Wi-Fi QR</span>
@@ -136,7 +137,7 @@
   <p class="sub"><code>colors.toml</code> is the single source of truth. <code>hexciri-theme-set</code> goes live, expands generated configs, then fires every drop-in in <code>hooks/theme-set.d/</code>.</p>
   <ul>
     <li><strong>Generated:</strong> kitty, fuzzel, starship configs, straight from the palette.</li>
-    <li><strong>Hooked:</strong> fish, tmux, zellij, fzf, foot, Zed, VS Code, Cursor, Windsurf, Typora, Obsidian, Firefox, Zen, qutebrowser, Discord (+system24), GTK, Qt6ct, Spotify/Spicetify, Superfile, Vicinae launcher, SwayNC, Noctalia palette, Cava, Steam, Heroic, fastfetch branding, SDDM, cursor, Nautilus — plus your own drop-ins in <code>~/.config/hexciri/hooks/theme-set.d/</code> (edited files are kept as custom, never overwritten).</li>
+    <li><strong>Hooked:</strong> terminals, editors, browsers, Discord, GTK/Qt, Spotify, bar, lock and 20+ more — <a href="https://github.com/Deoxizn/hexciri#themes">full list in the README</a>.</li>
     <li><strong>Palette source</strong> (<code>Themes &gt; Palette source</code>) is yours: <em>Theme</em> or <em>Wallpaper</em> (Material You). Swaps never flip it back.</li>
   </ul>
   <h2 style="margin-top:26px">22 defaults + handpicked extras</h2>
@@ -161,21 +162,17 @@
 </section>
 <section id="apps">
   <h2>Apps: added &amp; removed</h2>
-  <p class="sub">One-time swap at install. Sync never touches packages afterwards (except the tiny layer-critical set), so manual changes stick.</p>
+  <p class="sub">One-time swap at install. Sync never touches packages afterwards (except the tiny layer-critical set), so manual changes stick. <a href="https://github.com/Deoxizn/hexciri#apps">Full list with reasons in the README</a>.</p>
   <table>
     <tr><th>Added</th><th>why</th></tr>
-    <tr><td><code>kitty · zed · opencode</code></td><td>default terminal, editor, AI agent (<code>Mod+`</code>)</td></tr>
-    <tr><td><code>Brave Origin</code> (AUR) · <code>nautilus</code></td><td>default browser (not Brave) and default file manager</td></tr>
-    <tr><td><code>localsend · fuzzel · imv · mupdf</code></td><td>share menu, menu backbone, image + PDF defaults pinned back from the browser</td></tr>
-    <tr><td><code>gpu-screen-recorder · tesseract · libqalculate · gtksourceview5</code></td><td>recording, OCR, calculator, text-viewer libs</td></tr>
-    <tr><td><code>polkit-gnome · gnome-keyring · seahorse</code></td><td>auth agent (pkexec apps die without it), secrets provider + UI</td></tr>
-    <tr><td><code>adw-gtk-theme</code></td><td>base GTK3 theme (<code>adw-gtk3-dark</code>) the theme hooks recolor — GTK apps look unthemed without it</td></tr>
+    <tr><td><code>kitty · zed · opencode · Brave Origin</code> (AUR) <code>· nautilus</code></td><td>terminal, editor, AI agent, browser, files</td></tr>
+    <tr><td><code>localsend · fuzzel · imv · mupdf · gpu-screen-recorder · tesseract</code></td><td>sharing, menu, viewing, recording, OCR</td></tr>
+    <tr><td><code>polkit-gnome · gnome-keyring · adw-gtk-theme · brightnessctl · playerctl</code></td><td>auth, secrets, theme base, brightness + media keys</td></tr>
   </table>
   <br>
   <table>
     <tr><th>Removed (only if installed)</th><th>why</th></tr>
-    <tr><td><code>cachyos-niri-noctalia · xdg-desktop-portal-gnome</code></td><td>stock meta + portal hexciri doesn't use</td></tr>
-    <tr><td><code>alacritty · firefox · meld · micro + cachyos-micro-settings · vim</code></td><td>replaced by kitty, Brave Origin, Zed (configs purged; vim's removal breaks only a declared dep and is reversible)</td></tr>
+    <tr><td><code>stock niri meta · alacritty · firefox · meld · micro · vim</code></td><td>replaced by the apps above (configs purged)</td></tr>
   </table>
 </section>
 <section id="keys">

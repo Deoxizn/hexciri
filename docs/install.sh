@@ -64,11 +64,13 @@ if [[ -x "$REPO/bin/hexciri-sync" ]]; then
   sudo HEXCIRI_REPO="$REPO" "$REPO/bin/hexciri-sync" 2>&1 | sed 's/^/  /' || \
     info "root pass skipped — run 'sudo $REPO/bin/hexciri-sync' by hand later"
 fi
-# One-time light app swap: hexciri's apps in, replaced stock ones out (with
-# their config dirs, but only once something is actually absent). Runs here at
-# install and nowhere else — sync never touches packages (except the tiny
-# layer-critical subset `hexciri-update self` self-heals), so later manual
-# changes are never reverted or re-applied. Best-effort, never fatal.
+# One-time app swap: hexciri's apps in, replaced stock ones out (with
+# their config dirs, but only once something is actually absent). The wants
+# below are hardcoded — there is no list to curate. The framework sync
+# (hexciri-sync / hexciri-update self) still never touches packages (except
+# the tiny layer-critical subset it self-heals: polkit-gnome gnome-keyring
+# adw-gtk-theme nautilus brightnessctl playerctl), so your later manual changes stick.
+# Best-effort, never fatal.
 # NOTE: removal order matters — the CachyOS niri meta goes first so the portal
 # it pins comes out cleanly behind it. vim is force-removed
 # below (held by the deliberately kept cachyos-zsh-config; -Rdd breaks only
@@ -78,19 +80,27 @@ fi
 # NOTE: polkit-gnome is a layer need too — niri autostart spawns its agent
 # binary, and without it pkexec apps (btrfs-assistant, gparted) silently
 # never open: no agent, no password dialog.
+# NOTE: brightnessctl + playerctl are layer needs too — niri keybinds spawn
+# them for XF86MonBrightness* / XF86AudioPlay/Next/Prev (Framework F7/F8 +
+# media keys). Without them brightness + media keys are dead while volume
+# (wpctl) keeps working.
 # NOTE: adw-gtk-theme ships the adw-gtk3-dark base theme the GTK hook sets
 # (hooks/theme-set.d/10-gtk.sh) — without it GTK3/plain-GTK4 apps fall back
 # to built-in styling and look unthemed; gtk.css is only an overlay on top.
 # NOTE: xdg-terminal-exec is NOT in CachyOS repos (aborts the whole transaction
 # when named) — blades fall back to hexciri-terminal, which needs only kitty.
-_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse adw-gtk-theme"
-_hexciri_removals="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro"
+# brave-origin-bin installs below via yay/paru, not pacman.
+_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl "
+# One-time stock removals (not the list — replaced CachyOS defaults, always
+# safe to attempt; kept when something still needs them).
+_hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro"
 _hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro"
 if command -v pacman >/dev/null 2>&1; then
-  info "one-time app swap (wants + removals)"
+  info "one-time app swap (hexciri wants + stock removals)"
+  # shellcheck disable=SC2086
   sudo pacman -S --needed --noconfirm $_hexciri_wants 2>&1 | sed 's/^/  /' || \
     info "wants skipped/partial — install by hand: pacman -S $_hexciri_wants"
-  for _p in $_hexciri_removals; do
+  for _p in $_hexciri_stock_rm; do
     pacman -Q "$_p" >/dev/null 2>&1 || continue
     if sudo pacman -Rns --noconfirm "$_p" 2>&1 | sed 's/^/  /'; then
       info "removed $_p"
@@ -113,7 +123,7 @@ if command -v pacman >/dev/null 2>&1; then
   fi
   unset _p _m _pkg _dir
 fi
-unset _hexciri_wants _hexciri_removals _hexciri_purge
+unset _hexciri_wants _hexciri_stock_rm _hexciri_purge
 # Nautilus is the default file manager (pacman package, in _hexciri_wants so a
 # fresh box gets it even if the removed niri meta took it). A stale
 # Hidden=true override from the Strata era would keep it out of menus, so drop
@@ -137,22 +147,27 @@ if ! command -v yay >/dev/null 2>&1 && ! command -v paru >/dev/null 2>&1; then
     info "yay bootstrap skipped (no pacman/git) — install an AUR helper by hand for Brave Origin"
   fi
 fi
-# Brave Origin (not Brave): the hexciri browser. One-time installer step —
-# sync never touches packages. Installs via yay/paru as you, then drops the
-# brave-bin stand-in once origin is present. Best-effort, never fatal.
-if command -v brave-origin >/dev/null 2>&1; then
+# AUR want (Brave Origin). Installs via yay/paru as you, then drops
+# the brave-bin stand-in once origin is present. Best-effort, never fatal.
+_hexciri_aur_pkgs="brave-origin-bin "
+if command -v brave-origin >/dev/null 2>&1 && [[ $_hexciri_aur_pkgs == *"brave-origin-bin"* ]]; then
   info "Brave Origin already present — keeping it, no Brave stand-in wanted"
-else
+  # strip the satisfied want so the helper step below only handles the rest
+  _hexciri_aur_pkgs="$(printf '%s' "$_hexciri_aur_pkgs" | tr ' ' '\n' | grep -vx 'brave-origin-bin' | tr '\n' ' ')"
+fi
+if [[ -n $(printf '%s' "$_hexciri_aur_pkgs" | tr -d ' ') ]]; then
   _aur=""
   for _h in yay paru; do command -v "$_h" >/dev/null 2>&1 && { _aur=$_h; break; }; done
   if [[ -n $_aur ]]; then
-    info "installing Brave Origin (via $_aur)"
-    "$_aur" -S --needed --noconfirm brave-origin-bin 2>&1 | sed 's/^/  /' || \
-      info "Brave Origin skipped — run 'yay -S brave-origin-bin' by hand later"
+    info "installing AUR wants via $_aur: $_hexciri_aur_pkgs"
+    # shellcheck disable=SC2086
+    "$_aur" -S --needed --noconfirm $_hexciri_aur_pkgs 2>&1 | sed 's/^/  /' || \
+      info "AUR wants skipped — run by hand: $_aur -S $_hexciri_aur_pkgs"
   else
-    info "Brave Origin skipped (no yay/paru) — run 'yay -S brave-origin-bin' by hand later"
+    info "AUR wants skipped (no yay/paru) — run by hand: yay -S $_hexciri_aur_pkgs"
   fi
 fi
+unset _aur _h _hexciri_aur_pkgs
 if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&1; then
   info "removing Brave stand-in (Origin is present)"
   sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \
@@ -167,11 +182,12 @@ if [[ -x "$REPO/bin/hexciri-imv-defaults" ]]; then
     info "imv defaults skipped — pick System > Default Apps > Images by hand"
 fi
 # PDF default: nothing ships a reader, so PDFs fall through to the browser.
-# Same healing-helper shape as images (browser-owned slots only).
+# Same healing-helper shape as images (browser-owned slots only, honoring
+# System > Default Apps > PDF once changed from the mupdf out-of-box pick).
 if [[ -x "$REPO/bin/hexciri-pdf-defaults" ]]; then
-  info "pinning application/pdf default to mupdf"
+  info "pinning application/pdf default (mupdf unless changed)"
   "$REPO/bin/hexciri-pdf-defaults" 2>&1 | sed 's/^/  /' || \
-    info "pdf default skipped — set it by hand"
+    info "pdf default skipped — pick System > Default Apps > PDF by hand"
 fi
 # Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
 # localsend current delivers it — nothing extra to install. The blades resolve
