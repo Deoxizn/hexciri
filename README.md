@@ -10,11 +10,17 @@ Install CachyOS with Niri, clone the dots, run one script.
 
 ## What this is
 
-Think of it like this: CachyOS builds the house (installer, kernel, drivers,
-updates). hexciri just arranges the furniture — the menu, the themes, your
-apps and defaults. It never touches the foundation.
+Three names you'll see everywhere in this file:
 
-What it owns:
+- **CachyOS** — the operating system underneath (Arch Linux, tuned for speed).
+  It owns the installer, kernel, drivers, and package updates.
+- **Niri** — the window manager. It decides where your windows go: columns
+  side by side that you scroll through, instead of overlapping windows.
+- **Noctalia** — the bar, launcher, notifications, lock screen, and widgets.
+  The visible stuff across the top of your screen.
+
+hexciri is the layer on top: dots + scripts. Think of CachyOS as the house
+and hexciri as the furniture — it never touches the foundation. What it owns:
 
 - **The menu** — every option dispatches to a real controller in `bin/`.
   Nothing dangles. Root is `Mod+Alt+Space`; `Mod+K` searches all keybinds.
@@ -34,10 +40,9 @@ What it owns:
 ## Install
 
 In plain words: install CachyOS, grab this repo, run one script, answer two
-questions (system update? reboot?). Done. Re-running later is safe — it just
-re-applies.
+questions (run the system update? reboot at the end?). Done.
 
-1. **Install CachyOS** with Niri.
+1. **Install CachyOS** with Niri (normal installer — pick Niri as the desktop).
 2. Bring the dots — curl or clone, same script:
 
 ```bash
@@ -55,35 +60,48 @@ git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
 One run does the whole bring-up: links every controller into `~/.local/bin`,
 root sync pass (firewall/sshd/menu curation/alpm hook), one-time app swap,
 Nautilus default, Brave Origin, image/PDF defaults, theme seeding, and the update
-deploy (keybinds, kitty, themes, full system update it offers). Re-runs are
-safe. Updating is a pull plus a re-run. Version is the git SHA
+deploy (keybinds, kitty, themes, full system update it offers).
+
+Safe to re-run any time — it re-applies instead of duplicating, so a second
+run changes nothing that already matches. Staying current later is either
+`Update > Hexciri` from the menu or `git pull` + re-run. Version is the git SHA
 (`hexciri-version`).
 
 ## Highlights
 
-- **A menu that does things** — 9 root entries, ~60 leaves, all working
-  scripts: packages, sharing, hardware, themes, network, security,
-  maintenance, gaming, web apps. See [Menu](#menu) below.
-- **Themes that color everything** — one hook recolors terminals, shell,
-  editors, browsers, Discord, GTK/Qt, Spotify, file manager, bar, lock, and
-  more. See [Themes](#themes).
-- **Apps in, cruft out** — curated [added and removed apps](#apps), installed
-  once at bring-up and never forced on you again.
+- **A menu that does things** — 9 root entries, ~60 leaves. Press
+  `Mod+Alt+Space` and you get buckets for packages, sharing, hardware,
+  themes, network, security, maintenance, gaming, web apps. Every row runs a
+  script in `bin/` — there are no dead buttons. Details in [Menu](#menu).
+- **Themes that color everything** — run `hexciri-theme set <name>` once and
+  your terminal, editor, browser, bar, lock screen and 25+ other apps all
+  match. No per-app theming, ever. Details in [Themes](#themes).
+- **Apps in, cruft out** — the installer swaps in hexciri's apps (kitty, Zed,
+  Brave Origin…) and removes what they replace, exactly once. After that your
+  installs and removals are yours. Full list in [Apps](#apps).
 - **Defaults you can switch** — browser, editor, terminal, shell, files,
-  images, agent: all switchable from `System > Default Apps`.
-- **Keybinds, one source of truth** — rendered into Niri's config so they
-  never drift. `hexciri-keybinds` lists them; `Mod+K` searches them live.
-- **Self-healing updates** — every `hexciri-update` press pulls the framework,
-  re-execs into the new code, re-applies links/menu/firewall/sshd, and only
-  then updates the system.
+  images, agent: all switchable from `System > Default Apps`. Only apps you
+  actually have installed are offered; your current pick is marked ✓.
+- **Keybinds, one source of truth** — the keybind file in the repo is what
+  lands in your Niri config, so docs and behavior can't drift apart.
+  `Mod+K` searches every bind live.
+- **Self-healing updates** — every `hexciri-update` press first pulls the
+  newest framework code, then re-applies links, menu entries, firewall and
+  sshd settings, and only then updates your system packages. So fixes we ship
+  (like missing helper apps) land on your box by themselves.
 
 ## Menu
 
 Root menu (`hexciri-menu`, `Mod+Alt+Space`). Esc always goes back a level.
-In plain words: `Mod+Alt+Space` opens the big list of everything. Pick a
-row, it does the thing — no dead buttons.
 
-> The website shows the short version. This is the complete map.
+In plain words: `Mod+Alt+Space` opens the big list of everything. Nine
+buckets — Learn (manuals for what's installed), Packages (get/remove
+software), Share & Capture (send files, screenshots), Reminders, Hardware
+(laptop toggles), Themes (the look), System (settings), Restart (reload
+things), Update (updates). Pick a row and it does the thing.
+
+> The website shows the short version. This is the complete map — it mirrors
+> the actual scripts in `bin/`, so if a row is here it works.
 
 ```
 ► Hexciri
@@ -155,7 +173,13 @@ hexciri-theme install <github-url>   # one-off → tracked in your extras list
 hexciri-theme remove <name>          # user themes only
 ```
 
-How it works: the theme dir's `colors.toml` is the single source of truth.
+How it works, in plain words: every theme is just a list of colors
+(`colors.toml`). Picking a theme copies that list into place and then runs a
+hook — a folder of small scripts, one per app — and each script repaints its
+app from the same list. That's how 30+ apps match with one command. Your own
+scripts dropped in `~/.config/hexciri/hooks/theme-set.d/` run too, and if you
+edit a shipped script it is kept as yours forever (never overwritten).
+
 `hexciri-theme-set` copies it live to `~/.local/state/hexciri/current/theme`,
 expands the generated templates (`default/themed/`: kitty, fuzzel,
 starship), then fires `hexciri-hook theme-set`, which
@@ -170,8 +194,9 @@ branding (fastfetch logo, SDDM), cursor, nautilus. Your own
 overwritten (manifest-tracked: edited files are kept as custom).
 
 Palette source is your independent choice in `Themes > Palette source`:
-**Theme** (the theme's custom palette) or **Wallpaper** (Material You from
-the background). Theme swaps never flip it back.
+**Theme** (use the colors the theme author picked) or **Wallpaper** (make
+colors from your current background, Material-You style). Theme swaps never
+flip it back — the two choices don't interfere with each other.
 
 ### Shipped themes
 
@@ -207,6 +232,10 @@ Curate without touching the repo: keep overrides at
 `hexciri-theme-install <url>` appends to your override automatically.
 
 ### Wallpapers
+
+In plain words: your pictures and the theme's pictures are kept in separate
+piles. Switching themes only replaces the theme's pile — yours is linked in
+beside them and survives every change.
 
 Your wallpapers are merged into the active theme as read-only `zz-user-*`
 symlinks, so Noctalia's picker shows them beside the theme's shipped set.
@@ -284,19 +313,25 @@ Origin is present; **Nautilus** stays the default file manager (its
 
 ## More of what's inside
 
+Plain version first: your day-to-day settings (which browser, which keys do
+what) live in the menu under System — you should never need to hunt through
+config files by hand. The notes below are what's happening behind those rows.
+
 - **Default Apps** (`System > Default Apps`, `hexciri-defaults`) — Browser
   (brave-origin…), Editor (zed…), Terminal (kitty…), Shell (fish…), Files
   (nautilus…), Images (imv…), PDF (mupdf…), Agent (opencode…). Only installed candidates are
   offered; current is marked ✓. Shell switches kitty's shell without touching
   your login shell.
-- **Keybinds** — `config/niri/cfg/keybinds.kdl` is the source; sync seeds it
-  fresh, adapts a stock CachyOS file once (yours + kept stock-only combos),
-  then only adds new repo binds additively — conflicts and your deletions are
-  never overwritten. `hexciri-keybinds` lists them; `Mod+K` searches them live.
-  Unknown binds prettify to just their command (`spawn "vesktop" "vesktop"` →
-  `vesktop`), and `config/keybinds/descriptions.list` (override at
-  `~/.config/hexciri/keybinds/descriptions.list`, edited from `System >
-  Config > State files > Keybinds list`) sets your own labels, one `Combo = Label` per line.
+- **Keybinds** — the file `config/niri/cfg/keybinds.kdl` in this repo is the
+  master copy. First sync puts it in place (adapting a stock CachyOS file
+  once, keeping your combos plus any stock-only ones worth keeping). After
+  that, updates only *add* brand-new binds — your edits and your deletions
+  are never overwritten.
+  `hexciri-keybinds` lists them; `Mod+K` searches them live.
+  Binds without a friendly name show just their command
+  (`spawn "vesktop" "vesktop"` → `vesktop`), and you can set your own labels
+  in `System > Config > State files > Keybinds list`, one `Combo = Label`
+  per line.
   Core: `Mod+Space` apps (Noctalia) · `Mod+Return` terminal · `Mod+Alt+Space` root menu · `Mod+K` this list · `Mod+Q` close ·
   `Mod+F` maximize · `Mod+1…9,0` workspaces · `Mod+←/→` focus ·
   `Mod+Print`/`Ctrl+Print` screenshot · `Alt+Print` record · `Mod+Escape`
@@ -317,6 +352,18 @@ Origin is present; **Nautilus** stays the default file manager (its
   menu curation (`.desktop` hides), firewall, sshd hardening (key-only, no
   root password), MIME heals (browsers keep stealing image/PDF defaults), and
   the Noctalia updater plugin migration. Silent when there's nothing to do.
+
+## When something looks off
+
+Three steps, in order — most problems end at step 1:
+
+1. Press `Update > Hexciri` from the menu. Every press re-applies links,
+   keybinds, firewall and sshd settings, and installs any missing
+   layer-critical packages. It tells you what it changed.
+2. Still off? Re-run `install.sh` — it only fills in what's missing, so it's
+   safe to run on a working box too.
+3. Forgot a key? `Mod+K` searches every keybind. Need a doc? `Learn` in the
+   root menu only shows guides for apps you actually have installed.
 
 ## Sources
 
