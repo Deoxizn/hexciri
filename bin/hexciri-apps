@@ -74,10 +74,14 @@ installed() { pacman -Q "$1" >/dev/null 2>&1; }
 
 cmd_edit() {
   mkdir -p "$(dirname "$USER_LIST")"
-  if [[ ! -f $USER_LIST && -f $SHIPPED_LIST ]]; then
-    cp -f "$SHIPPED_LIST" "$USER_LIST"
+  if [[ ! -f $USER_LIST ]]; then
+    if [[ -f $SHIPPED_LIST ]]; then
+      cp -f "$SHIPPED_LIST" "$USER_LIST"
+    else
+      echo "hexciri-apps: no apps list to seed from ($SHIPPED_LIST)" >&2
+      exit 1
+    fi
   fi
-  touch "$USER_LIST"
   exec "$bindir/hexciri-edit-file" "$USER_LIST"
 }
 

@@ -61,13 +61,17 @@ EOF
     mkdir -p "$dir"
     list="$dir/apps.list"
     shipped="$shipped_base/config/apps/apps.list"
-    [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
+    if [[ ! -f $list ]]; then
+      cp -f "$shipped" "$list" 2>/dev/null || { echo "hexciri-config: no apps list to seed from ($shipped)" >&2; exit 1; }
+    fi
     "$bindir/hexciri-edit-file" "$list" ;;
   'Keybind labels')
     dir="$cfg_xdg/hexciri/keybinds"
     mkdir -p "$dir"
     list="$dir/descriptions.list"
     shipped="$shipped_base/config/keybinds/descriptions.list"
-    [[ -f $list ]] || cp -f "$shipped" "$list" 2>/dev/null || true
+    if [[ ! -f $list ]]; then
+      cp -f "$shipped" "$list" 2>/dev/null || { echo "hexciri-config: no descriptions list to seed from ($shipped)" >&2; exit 1; }
+    fi
     "$bindir/hexciri-edit-file" "$list" ;;
 esac
