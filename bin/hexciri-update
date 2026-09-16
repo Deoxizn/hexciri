@@ -706,7 +706,9 @@ EOF
 
   # Strata → Nautilus file-manager migration (runs every pass; no-op when
   # clean). Removes the per-user Strata install, restores Nautilus as the
-  # folder handler, heals the Mod+Shift+F bind back to nautilus, and re-runs
+  # folder handler, heals the Mod+Shift+F bind back to nautilus, pins the
+  # portal FileChooser back to gtk (strata's override + the gnome-first system
+  # default both leave niri with no Open/Save dialog), and re-runs
   # the GTK hook so Nautilus picks up the active palette. A deliberate
   # non-Nautilus, non-Strata pick (e.g. thunar) is never touched: only
   # Strata-owned or broken slots heal.
@@ -716,18 +718,24 @@ EOF
   # the live file — exactly why the Strata bind survived the original
   # migration. Healing first lets the sync see an already-matching combo.
   migrate_strata_to_nautilus() {
-    local changed=0 cur gtk_hook mimeapps strata_ref kb
-    # 1. per-user Strata install out (binary, desktop, icon, portal, cache,
-    #    config, version state). A live --portal daemon recreates config, so
-    #    stop it first.
-    if [[ -x $HOME/.local/bin/strata || -f $HOME/.local/share/applications/io.github.lgse.Strata.desktop || -d $HOME/.config/strata ]]; then
+    local changed=0 cur gtk_hook mimeapps strata_ref kb pc portal_changed=0
+    # 1. per-user Strata install out (binary, desktop, icon, portal, dbus
+    #    services, share/cache, config, version state). A live --portal daemon
+    #    recreates config, so stop it first. Runs unconditionally for the
+    #    portal/dbus crumbs: the binary can already be gone while its
+    #    FileChooser override still hijacks every Open/Save dialog.
+    if [[ -x $HOME/.local/bin/strata || -f $HOME/.local/share/applications/io.github.lgse.Strata.desktop || -d $HOME/.config/strata \
+      || -f $HOME/.local/share/xdg-desktop-portal/portals/strata.portal \
+      || -f $HOME/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.strata.service ]]; then
       pkill -x strata 2>/dev/null || true
       rm -f "$HOME/.local/bin/strata" \
         "$HOME/.local/share/applications/io.github.lgse.Strata.desktop" \
         "$HOME/.local/share/icons/hicolor/scalable/apps/io.github.lgse.Strata.svg" \
         "$HOME/.local/state/hexciri/strata.version" \
-        "$HOME/.local/share/xdg-desktop-portal/portals/strata.portal"
-      rm -rf "$HOME/.cache/hexciri/strata" "$HOME/.config/strata"
+        "$HOME/.local/share/xdg-desktop-portal/portals/strata.portal" \
+        "$HOME/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.strata.service" \
+        "$HOME/.local/share/dbus-1/services/io.github.lgse.Strata.FileManager1.service"
+      rm -rf "$HOME/.cache/hexciri/strata" "$HOME/.config/strata" "$HOME/.local/share/strata" "$HOME/.cache/strata"
       update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
       echo "migrated: per-user Strata install removed"
       changed=1
@@ -790,6 +798,35 @@ EOF
         changed=1
       fi
     done
+    # 6. file chooser back to GTK. Strata's --install-portal wrote
+    #    ~/.config/xdg-desktop-portal/portals.conf with
+    #    FileChooser=strata;... — with the binary gone the portal tries to
+    #    activate a dead strata backend and no Open/Save dialog ever appears
+    #    ("Could not activate remote peer strata"). And the system default
+    #    (niri-portals.conf default=gnome;gtk) never falls back on niri: the
+    #    gnome backend is settings-only here, so FileChooser must pin gtk
+    #    explicitly. A deliberate non-gtk FileChooser pick is never touched:
+    #    only missing files and strata-owned lines heal.
+    pc="$HOME/.config/xdg-desktop-portal/portals.conf"
+    if [[ ! -f $pc ]]; then
+      mkdir -p "$(dirname "$pc")"
+      printf '[preferred]\norg.freedesktop.impl.portal.FileChooser=gtk;\n' > "$pc" && \
+        echo "migrated: FileChooser → gtk ($pc)"
+      portal_changed=1
+    elif grep -qi '^org\.freedesktop\.impl\.portal\.FileChooser=.*strata' "$pc"; then
+      cp -f "$pc" "$pc.bak.$(date +%s)" 2>/dev/null || true
+      # Keep any other preferred keys the user set; only the FileChooser line
+      # heals.
+      sed -Ei 's|^org\.freedesktop\.impl\.portal\.FileChooser=.*|org.freedesktop.impl.portal.FileChooser=gtk;|' "$pc" && \
+        echo "migrated: FileChooser strata → gtk ($pc)"
+      portal_changed=1
+    fi
+    if (( portal_changed == 1 )); then
+      changed=1
+      # Pick up the new backend list without relogin; best-effort (no session
+      # bus on headless boxes).
+      systemctl --user restart xdg-desktop-portal.service 2>/dev/null || true
+    fi
   }
 
   # Fuzzel app launcher retirement (runs every pass; no-op when clean).
