@@ -916,6 +916,51 @@ EOF
     fi
   }
 
+  # vlc → mpv media-player migration (runs every pass; no-op when
+  # clean). Installs mpv, removes the vlc plugin stack (meta plus any
+  # orphaned split plugins left behind), and drops the CachyOS wallpaper
+  # pack (Noctalia shows theme backgrounds, never that pack). A deliberate
+  # full-vlc install (vlc/vlc-gui-qt present) is never touched: only the
+  # plugin stack with no player behind it goes.
+  migrate_vlc_to_mpv() {
+    local left
+    command -v pacman >/dev/null 2>&1 || return 0
+    if ! pacman -Q mpv >/dev/null 2>&1; then
+      echo "migrated: installing mpv (replaces vlc)"
+      if sudo pacman -S --needed --noconfirm mpv 2>&1 | tail -n 3; then
+        echo "migrated: mpv installed"
+      else
+        echo "migrated: mpv install skipped/partial (offline?) — run: sudo pacman -S --needed mpv"
+        return 0
+      fi
+    fi
+    if pacman -Q vlc-plugins-all >/dev/null 2>&1; then
+      if sudo pacman -Rns --noconfirm vlc-plugins-all 2>&1 | tail -n 2; then
+        echo "migrated: removed vlc-plugins-all (replaced by mpv)"
+      else
+        echo "migrated: kept vlc-plugins-all (something still needs it)"
+      fi
+    fi
+    if ! pacman -Q vlc >/dev/null 2>&1 && ! pacman -Q vlc-gui-qt >/dev/null 2>&1; then
+      left="$(pacman -Qq 2>/dev/null | grep -E '^vlc-plugin|^libvlc$' || true)"
+      if [[ -n $left ]]; then
+        # shellcheck disable=SC2086
+        if sudo pacman -Rns --noconfirm $left 2>&1 | tail -n 2; then
+          echo "migrated: removed orphaned vlc plugins (replaced by mpv)"
+        else
+          echo "migrated: kept orphaned vlc plugins (something still needs them)"
+        fi
+      fi
+    fi
+    if pacman -Q cachyos-wallpapers >/dev/null 2>&1; then
+      if sudo pacman -Rns --noconfirm cachyos-wallpapers 2>&1 | tail -n 2; then
+        echo "migrated: removed cachyos-wallpapers (noctalia uses theme backgrounds)"
+      else
+        echo "migrated: kept cachyos-wallpapers (something still needs it)"
+      fi
+    fi
+  }
+
   # Layer-critical packages: without polkit-gnome every pkexec app (btrfs-assistant,
   # gparted) is dead — no agent, no password dialog. gnome-keyring is Noctalia's
   # Secret Service provider (calendar tokens and other secrets have nowhere to
@@ -988,6 +1033,7 @@ EOF
   migrate_strata_to_nautilus
   migrate_fuzzel_launcher_to_noctalia
   migrate_mupdf_to_zathura
+  migrate_vlc_to_mpv
   sync_keybinds
   sync_kitty
   sync_fastfetch

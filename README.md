@@ -284,6 +284,7 @@ stay as you left them.
 | `gpu-screen-recorder` | Screen recording blade |
 | `tesseract` | OCR-text-from-screen blade |
 | `imv` | default image viewer (pinned over browser-stolen `image/*`) |
+| `mpv` | default video player (replaces the vlc plugin stack) |
 | `libqalculate` | fuzzel calculator provider |
 | `polkit-gnome` | auth agent — without it pkexec apps (gparted, btrfs-assistant) silently never open |
 | `zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb` | default document reader — PDF/ePub/XPS via the MuPDF backend plus PostScript, DjVu and comics (pinned over browser-stolen doc MIME) — swappable, delete its line and add yours |
