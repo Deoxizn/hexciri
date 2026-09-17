@@ -1,0 +1,108 @@
+#!/bin/bash
+# hexciri:summary=Apply the current Aether theme to hexciri (bar, apps, wallpaper)
+# hexciri:args=[--name <theme>] [--colors <colors.toml>] [--wallpaper <image>] [--no-set]
+#
+# Aether themes Owarchy-style apps but knows nothing about Noctalia, so an
+# Aether apply never recolors the bar. This snapshots Aether's live palette
+# (~/.config/aether/theme/colors.toml) plus its wallpaper into a hexciri user
+# theme and runs `hexciri-theme set`, which fires every theme-set hook
+# (Noctalia palette, wallpaper, terminals, browsers, ...).
+#
+# Usage:
+#   hexciri-aether-apply                     # import live Aether theme as `aether`, then set it
+#   hexciri-aether-apply --name solitary     # import as `solitary` instead
+#   hexciri-aether-apply --no-set            # only (re)build ~/.config/hexciri/themes/<name>
+#
+# The destination dir is owned by this importer (marked with .hexciri-aether):
+# re-running rebuilds it. A pre-existing dir without the marker is left alone
+# unless --force is given.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || dirname "${BASH_SOURCE[0]}")" )" && pwd)"
+
+NAME="aether"
+COLORS="$HOME/.config/aether/theme/colors.toml"
+WALLPAPER=""
+DO_SET=true
+FORCE=false
+
+usage() { sed -n '2,20p' "$0"; exit "${1:-0}"; }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --name)      NAME="${2:-}"; shift 2 ;;
+    --colors)    COLORS="${2:-}"; shift 2 ;;
+    --wallpaper) WALLPAPER="${2:-}"; shift 2 ;;
+    --no-set)    DO_SET=false; shift ;;
+    --force)     FORCE=true; shift ;;
+    -h|--help)   usage 0 ;;
+    *) echo "hexciri-aether-apply: unknown arg: $1" >&2; usage 1 ;;
+  esac
+done
+
+NAME="$(printf '%s' "$NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
+[[ -n $NAME ]] || { echo "hexciri-aether-apply: empty theme name" >&2; exit 1; }
+[[ -f $COLORS ]] || { echo "hexciri-aether-apply: no Aether palette at $COLORS (apply a theme in Aether first)" >&2; exit 1; }
+
+# Default wallpaper: first image in Aether's live backgrounds dir.
+if [[ -z $WALLPAPER ]]; then
+  _bgdir="$(dirname "$COLORS")/backgrounds"
+  if [[ -d $_bgdir ]]; then
+    WALLPAPER="$(find -L "$_bgdir" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) | sort | head -n 1)"
+  fi
+fi
+if [[ -n ${WALLPAPER:-} && ! -f $WALLPAPER ]]; then
+  echo "hexciri-aether-apply: wallpaper not found: $WALLPAPER" >&2; exit 1
+fi
+
+DEST="$HOME/.config/hexciri/themes/$NAME"
+if [[ -e $DEST && ! -f $DEST/.hexciri-aether && $FORCE != true ]]; then
+  echo "hexciri-aether-apply: $DEST exists and is not importer-owned (use --name or --force)" >&2; exit 1
+fi
+
+# value of `key = "#rrggbb"` in the Aether file, else $2.
+_pick() { # <key> <fallback>
+  local v
+  v="$(sed -n -E "s/^$1[[:space:]]*=[[:space:]]*\"#?([0-9a-fA-F]{6})\".*/\1/p" "$COLORS" | head -n 1)"
+  if [[ -n $v ]]; then printf '#%s' "$v"; else printf '%s' "$2"; fi
+}
+
+BG="$(_pick background '#1a1a2e')"
+DARK_BG="$(_pick dark_bg "$(_pick color0 "$BG")")"
+DARKER_BG="$(_pick darker_bg "$DARK_BG")"
+LIGHTER_BG="$(_pick lighter_bg "$BG")"
+FG="$(_pick foreground '#c0d0e0')"
+DARK_FG="$(_pick dark_fg "$FG")"
+LIGHT_FG="$(_pick light_fg "$FG")"
+BRIGHT_FG="$(_pick bright_fg "$(_pick color15 "$FG")")"
+
+rm -rf "$DEST"
+mkdir -p "$DEST/backgrounds"
+cp -f "$COLORS" "$DEST/colors.toml"
+{
+  printf '\n# Added by hexciri-aether-apply: long names the theme hooks prefer.\n'
+  printf 'dark_background = "%s"\n' "$DARK_BG"
+  printf 'darker_background = "%s"\n' "$DARKER_BG"
+  printf 'lighter_background = "%s"\n' "$LIGHTER_BG"
+  printf 'dark_foreground = "%s"\n' "$DARK_FG"
+  printf 'light_foreground = "%s"\n' "$LIGHT_FG"
+  printf 'bright_foreground = "%s"\n' "$BRIGHT_FG"
+} >> "$DEST/colors.toml"
+printf 'aether import %s\n' "$(date -u +%FT%TZ)" > "$DEST/.hexciri-aether"
+
+if [[ -n ${WALLPAPER:-} ]]; then
+  cp -f "$WALLPAPER" "$DEST/backgrounds/"
+  echo "hexciri-aether-apply: wallpaper → $DEST/backgrounds/$(basename "$WALLPAPER")"
+else
+  echo "hexciri-aether-apply: no Aether wallpaper found — theme keeps the current background"
+fi
+
+if $DO_SET; then
+  if [[ -x $SCRIPT_DIR/hexciri-theme ]]; then
+    HEXCIRI_PATH="${HEXCIRI_PATH:-$(dirname "$SCRIPT_DIR")}" "$SCRIPT_DIR/hexciri-theme" set "$NAME"
+  else
+    hexciri-theme set "$NAME"
+  fi
+else
+  echo "built: $DEST (not set — run 'hexciri-theme set $NAME')"
+fi

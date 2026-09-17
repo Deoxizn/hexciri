@@ -171,6 +171,7 @@ hexciri-theme list           # preview picker (▶ marks current)
 hexciri-theme current
 hexciri-theme install <github-url>   # one-off → tracked in your extras list
 hexciri-theme remove <name>          # user themes only
+hexciri-aether-apply [--name <name>] # import Aether's live palette+wallpaper, then set it (bar included)
 ```
 
 How it works, in plain words: every theme is just a list of colors
