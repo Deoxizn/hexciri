@@ -652,9 +652,19 @@ themes_list() {
 
   theme=$(printf '%s' "$choice" | sed -E 's/icon\x1f.*//')
   theme=${theme#▶ }
+  # Strip a stray icon-protocol tail when the NUL separator was mangled
+  # upstream (fuzzel/shell transport): keep the human-readable head.
+  theme="${theme%%$'\x1f'*}"
+  # Observability: picker launches set detached with output discarded, so a
+  # silent no-op is otherwise undebuggable. Keep a short rolling log.
+  {
+    printf '%s choice=%q parsed=%q\n' "$(date +%FT%T)" "$choice" "$theme"
+  } >> "${XDG_STATE_HOME:-$HOME/.local/state}/hexciri/theme-list.log" 2>/dev/null || true
+  tail -n 50 "${XDG_STATE_HOME:-$HOME/.local/state}/hexciri/theme-list.log" > "${XDG_STATE_HOME:-$HOME/.local/state}/hexciri/theme-list.log.tmp" 2>/dev/null && \
+    mv "${XDG_STATE_HOME:-$HOME/.local/state}/hexciri/theme-list.log.tmp" "${XDG_STATE_HOME:-$HOME/.local/state}/hexciri/theme-list.log" 2>/dev/null || true
   [[ -n $theme ]] || exit 0
 
-  nohup "$SCRIPT_DIR/hexciri-theme" set "$theme" >/dev/null 2>&1 &
+  nohup "$SCRIPT_DIR/hexciri-theme" set "$theme" >> "${XDG_STATE_HOME:-$HOME/.local/state}/hexciri/theme-list.log" 2>&1 &
 }
 
 # ══════════════════════════════════════════════ dispatch
