@@ -398,12 +398,14 @@ EOF
   sync_new_binds() {
     local src="$1" dst="$2"
     local db="$HOME/.local/state/hexciri/keybinds-synced"
-    REPO_BINDS="$src" LIVE_BINDS="$dst" SYNCED_DB="$db" python3 <<'EOF'
-import os, re
+    local cdb="$HOME/.local/state/hexciri/keybinds-conflicts-reported"
+    REPO_BINDS="$src" LIVE_BINDS="$dst" SYNCED_DB="$db" CONFLICTS_DB="$cdb" python3 <<'EOF'
+import os, re, hashlib
 
 src = os.environ["REPO_BINDS"]
 dst = os.environ["LIVE_BINDS"]
 db = os.environ["SYNCED_DB"]
+cdb = os.environ.get("CONFLICTS_DB", "")
 
 def combo_key(pre):
     pre = re.sub(r'"[^"]*"', '', pre)
@@ -464,7 +466,7 @@ for c, t in repo_map.items():
         added.append((c, t))
     elif live_map[c] != t:
         seen.add(c)
-        conflicts.append(c)
+        conflicts.append((c, t))
     else:
         seen.add(c)
 
@@ -495,9 +497,23 @@ if added:
 os.makedirs(os.path.dirname(db) or ".", exist_ok=True)
 with open(db, "w") as f:
     f.write("\n".join(sorted(seen)) + "\n")
-print("keybinds sync: +%d new bind(s), %d conflict(s) kept live" % (len(added), len(conflicts)))
-for c in conflicts:
-    print("  conflict %s: live differs — left alone (edit %s by hand to take ours)" % (c, dst))
+# Conflicts are deliberate user edits — report each one ONCE (keyed by combo
+# + repo text, so a changed repo bind re-reports once), then stay silent.
+# A kept-live customization must never nag on every press.
+def rep_key(c, t):
+    return c + ":" + hashlib.sha1(t.encode()).hexdigest()[:12]
+reported = set()
+if cdb and os.path.isfile(cdb):
+    reported = {l.strip() for l in open(cdb) if l.strip()}
+new_conflicts = [(c, t) for c, t in conflicts if rep_key(c, t) not in reported]
+if cdb:
+    os.makedirs(os.path.dirname(cdb) or ".", exist_ok=True)
+    with open(cdb, "w") as f:
+        f.write("\n".join(sorted(reported | {rep_key(c, t) for c, t in conflicts})) + "\n")
+if added or new_conflicts:
+    print("keybinds sync: +%d new bind(s), %d conflict(s) kept live" % (len(added), len(new_conflicts)))
+    for c, t in new_conflicts:
+        print("  conflict %s: live differs — left alone (edit %s by hand to take ours)" % (c, dst))
 EOF
   }
 
