@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Default apps: kitty + fish + brave-origin + nautilus + imv + mupdf + zed + opencode (xdg-native)
+# hexciri:summary=Default apps: kitty + fish + brave-origin + nautilus + imv + zathura + zed + opencode (xdg-native)
 # Only shows apps that are actually installed; current choice is marked with ✓.
 # usage: hexciri-defaults [Browser|Editor|Images|PDF|Terminal|Shell|Files|Agent]
 set -euo pipefail
@@ -19,7 +19,7 @@ setv() { printf '%s' "$2" > "$STATE_BASE/$1"; }
 [[ -f $STATE_BASE/editor ]]   || setv editor zed
 [[ -f $STATE_BASE/agent ]]    || setv agent opencode
 [[ -f $STATE_BASE/images ]]   || setv images imv
-[[ -f $STATE_BASE/pdf ]]      || setv pdf mupdf
+[[ -f $STATE_BASE/pdf ]]      || setv pdf zathura
 
 # available(): only list candidates whose binary exists (browser: via desktop file)
 has_bin() { command -v "$1" >/dev/null 2>&1; }
@@ -60,6 +60,15 @@ available() { # <browser|terminal|...> <current> <candidates...>
   done
 }
 
+# mupdf → zathura migration for the stored pick: a kept "mupdf" value whose
+# reader is gone flips to zathura once its desktop exists. A deliberate
+# reinstall of mupdf keeps working (its desktop exists → no flip).
+if [[ $(get pdf) == mupdf ]]; then
+  if ! has_desktop mupdf.desktop && has_desktop org.pwmt.zathura.desktop zathura.desktop; then
+    setv pdf zathura
+  fi
+fi
+
 menu_via_fuzzel() { # <prompt> -- <items...>
   local prompt=$1; shift
   [[ $1 == -- ]] && shift
@@ -83,22 +92,9 @@ case "${pick_type,,}" in
       exit 0
     fi
     setv browser "$choice"
-    # map choice -> desktop file for xdg (first existing wins)
-    set_browser() {
-      for d in "$@"; do
-        [[ -f $HOME/.local/share/applications/$d || -f /usr/local/share/applications/$d || -f /usr/share/applications/$d ]] || continue
-        xdg-settings set default-web-browser "$d" 2>/dev/null && return 0
-      done
-      return 1
-    }
-    case "$choice" in
-      brave-origin) set_browser brave-origin.desktop com.brave.Origin.desktop || true ;;
-      brave-origin-beta) set_browser brave-origin-beta.desktop com.brave.Origin.beta.desktop || true ;;
-      brave) set_browser brave-browser.desktop || true ;;
-      firefox) set_browser firefox.desktop || true ;;
-      chromium) set_browser chromium.desktop || true ;;
-      zen) set_browser zen.desktop || true ;;
-    esac
+    # file associations live in the single mime-defaults table — force-pin the
+    # explicit choice (an explicit pick wins over whatever owns the slot).
+    "$SCRIPT_DIR/hexciri-mime-defaults" apply browser >/dev/null 2>&1 || true
     ;;
   terminal)
     current="$(get terminal)"
@@ -130,31 +126,16 @@ case "${pick_type,,}" in
     choice="$(menu_via_fuzzel 'Files: ' -- "$(available files "$current" nautilus strata thunar yazi)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv files "$choice"
-    if [[ $choice == strata ]]; then
-      # Strata ships io.github.lgse.Strata.desktop; register as folder handler
-      xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null || true
-    elif [[ $choice == nautilus ]]; then
-      xdg-mime default org.gnome.Nautilus.desktop inode/directory 2>/dev/null || true
-    fi
+    "$SCRIPT_DIR/hexciri-mime-defaults" apply files >/dev/null 2>&1 || true
     ;;
   images)
     current="$(get images)"
     choice="$(menu_via_fuzzel 'Images: ' -- "$(available images "$current" imv qimgv)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv images "$choice"
-    # imv ships NoDisplay=true, so it never wins as a hidden default; a
-    # displayable user-level override makes it visible and defaultable. Imv's
-    # own Icon=multimedia-photo-viewer doesn't exist on Arch, so deploy the
-    # bundled viewer/folder icons into hicolor and point the entries at them.
-    if [[ $choice == imv ]]; then
-      # Same healing helper install.sh runs — deploys the displayable
-      # override + icons and pins image/* to imv. It only overrides when a
-      # browser owns the MIME, never a deliberate different viewer.
-      local REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
-      if [[ -x $REPO/bin/hexciri-imv-defaults ]]; then
-        HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-imv-defaults" >/dev/null 2>&1 || true
-      fi
-    fi
+    # imv needs its displayable override deployed too — the mime-defaults
+    # table owns that alongside the pinning.
+    HEXCIRI_PATH="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}" "$SCRIPT_DIR/hexciri-mime-defaults" apply images >/dev/null 2>&1 || true
     ;;
   editor)
     current="$(get editor)"
@@ -164,24 +145,11 @@ case "${pick_type,,}" in
     ;;
   pdf)
     current="$(get pdf)"
-    choice="$(menu_via_fuzzel 'PDF: ' -- "$(available pdf "$current" mupdf zathura evince okular)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
+    choice="$(menu_via_fuzzel 'PDF: ' -- "$(available pdf "$current" zathura mupdf evince okular)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     choice="${choice#✓ }"   # re-picking the current choice keeps the bare name
     setv pdf "$choice"
-    # map choice -> desktop file for xdg (first existing wins)
-    set_pdf() {
-      for d in "$@"; do
-        [[ -f $HOME/.local/share/applications/$d || -f /usr/local/share/applications/$d || -f /usr/share/applications/$d ]] || continue
-        xdg-mime default "$d" application/pdf 2>/dev/null && return 0
-      done
-      return 1
-    }
-    case "$choice" in
-      mupdf) set_pdf mupdf.desktop || true ;;
-      zathura) set_pdf org.pwmt.zathura.desktop zathura.desktop || true ;;
-      evince) set_pdf org.gnome.Evince.desktop evince.desktop || true ;;
-      okular) set_pdf org.kde.okular.desktop okular.desktop || true ;;
-    esac
+    "$SCRIPT_DIR/hexciri-mime-defaults" apply pdf >/dev/null 2>&1 || true
     ;;
   agent)
     current="$(get agent)"

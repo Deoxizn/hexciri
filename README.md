@@ -286,7 +286,7 @@ stay as you left them.
 | `imv` | default image viewer (pinned over browser-stolen `image/*`) |
 | `libqalculate` | fuzzel calculator provider |
 | `polkit-gnome` | auth agent — without it pkexec apps (gparted, btrfs-assistant) silently never open |
-| `mupdf` | default PDF reader (pinned over browser-stolen `application/pdf`) — swappable, delete its line and add yours |
+| `zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb` | default document reader — PDF/ePub/XPS via the MuPDF backend plus PostScript, DjVu and comics (pinned over browser-stolen doc MIME) — swappable, delete its line and add yours |
 | `gnome-keyring` | Secret Service provider (calendar tokens, app secrets) + seahorse UI |
 | `seahorse` | keyring manager UI |
 | `adw-gtk-theme` | base GTK3 theme (`adw-gtk3-dark`) the theme hooks recolor — GTK apps look unthemed without it |
@@ -320,7 +320,7 @@ config files by hand. The notes below are what's happening behind those rows.
 
 - **Default Apps** (`System > Default Apps`, `hexciri-defaults`) — Browser
   (brave-origin…), Editor (zed…), Terminal (kitty…), Shell (fish…), Files
-  (nautilus…), Images (imv…), PDF (mupdf…), Agent (opencode…). Only installed candidates are
+  (nautilus…), Images (imv…), PDF (zathura…), Agent (opencode…). Only installed candidates are
   offered; current is marked ✓. Shell switches kitty's shell without touching
   your login shell.
 - **Keybinds** — the file `config/niri/cfg/keybinds.kdl` in this repo is the

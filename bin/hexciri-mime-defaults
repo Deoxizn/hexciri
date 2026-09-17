@@ -1,0 +1,251 @@
+#!/bin/bash
+# hexciri:summary=Default-app file associations: pin stored picks to xdg MIME (user-phase)
+# hexciri:args=[heal|apply <type>|apply all]
+#
+# The single table for every file association hexciri manages (images,
+# documents, files, browser) — add future associations HERE, not new scripts.
+# Picks live in ~/.local/state/hexciri/defaults/* (owned by hexciri-defaults).
+#
+# usage: hexciri-mime-defaults [heal|apply <type>|apply all]
+#   heal (default)  pin each stored pick, but ONLY where the slot is broken:
+#                   empty, owned by a browser (they steal image/doc types on
+#                   install/first-run), or pointing at a desktop file that is
+#                   no longer installed. A deliberate pick stays. Safe on every
+#                   sync (install.sh, hexciri-update).
+#   apply <type>    force-pin the stored pick for one type right after the user
+#                   changes it in System > Default Apps. An explicit choice
+#                   wins over whatever owns the slot.
+set -euo pipefail
+
+REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+STATE_BASE="$HOME/.local/state/hexciri/defaults"
+BROWSER_PATTERN='(brave|chromium|chrome|firefox|falkon|palemoon|librewolf|vivaldi|edge)'
+
+get() { cat "$STATE_BASE/$1" 2>/dev/null || true; }
+
+have_desktop() { # <desktop...> — true if any exists
+  local d
+  for d in "$@"; do
+    [[ -f $HOME/.local/share/applications/$d || -f /usr/local/share/applications/$d || -f /usr/share/applications/$d ]] && return 0
+  done
+  return 1
+}
+
+first_desktop() { # <desktop...> — print the first existing one, or nothing
+  local d
+  for d in "$@"; do
+    if [[ -f $HOME/.local/share/applications/$d || -f /usr/local/share/applications/$d || -f /usr/share/applications/$d ]]; then
+      printf '%s\n' "$d"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# ── the tables: MIME lists are what the shipped default for each type owns ──
+IMAGE_MIMES=(image/png image/x-png image/jpeg image/jpg image/pjpeg image/gif image/bmp image/x-bmp \
+  image/webp image/avif image/heif image/tiff image/tiff-fx image/svg+xml image/x-farbfeld image/jxl image/qoi image/*)
+# zathura covers these via its plugins (pdf-mupdf: PDF/ePub/XPS; ps:
+# PostScript; djvu: DjVu; cb: comic archives).
+DOC_MIMES=(application/pdf application/epub+zip application/oxps application/vnd.ms-xpsdocument
+  application/postscript application/x-postscript application/eps application/x-eps
+  image/vnd.djvu image/x-djvu application/x-cbr application/x-cbz application/x-cb7 application/x-cbt)
+FILES_MIMES=(inode/directory)
+
+# ── pick -> desktop resolution (same maps the hexciri-defaults picker offers) ──
+images_desktop() { # <pick>
+  case "$1" in
+    imv) set -- imv.desktop ;;
+    qimgv) set -- qimgv.desktop ;;
+    *) return 1 ;;
+  esac
+  first_desktop "$@"
+}
+docs_desktop() { # <pick>
+  case "$1" in
+    mupdf) set -- mupdf.desktop ;;
+    zathura) set -- org.pwmt.zathura.desktop zathura.desktop ;;
+    evince) set -- org.gnome.Evince.desktop evince.desktop ;;
+    okular) set -- org.kde.okular.desktop okular.desktop ;;
+    *) return 1 ;;
+  esac
+  first_desktop "$@"
+}
+files_desktop() { # <pick>
+  case "$1" in
+    nautilus) set -- org.gnome.Nautilus.desktop ;;
+    strata) set -- io.github.lgse.Strata.desktop ;;
+    thunar) set -- Thunar.desktop thunar.desktop ;;
+    *) return 1 ;; # yazi and friends have no desktop entry to pin
+  esac
+  first_desktop "$@"
+}
+browser_desktop() { # <pick>
+  case "$1" in
+    brave-origin) set -- brave-origin.desktop com.brave.Origin.desktop ;;
+    brave-origin-beta) set -- brave-origin-beta.desktop com.brave.Origin.beta.desktop ;;
+    brave) set -- brave-browser.desktop ;;
+    firefox) set -- firefox.desktop ;;
+    chromium) set -- chromium.desktop ;;
+    zen) set -- zen.desktop ;;
+    *) return 1 ;;
+  esac
+  first_desktop "$@"
+}
+
+# imv ships NoDisplay=true, so it never wins as a hidden default; a
+# displayable user-level override makes it visible and defaultable. Imv's own
+# Icon=multimedia-photo-viewer doesn't exist on Arch, so deploy the bundled
+# viewer/folder icons into hicolor and point the entries at them.
+deploy_imv_override() {
+  local src=""
+  [[ -f /usr/share/applications/imv.desktop ]] && src=/usr/share/applications/imv.desktop
+  [[ -z $src && -f /usr/local/share/applications/imv.desktop ]] && src=/usr/local/share/applications/imv.desktop
+  [[ -n $src ]] || return 0
+  mkdir -p "$HOME/.local/share/applications"
+  mkdir -p "$HOME/.local/share/icons/hicolor/256x256/apps"
+  cp -f "$REPO/branding/imv.png" "$HOME/.local/share/icons/hicolor/256x256/apps/imv.png" 2>/dev/null || true
+  cp -f "$REPO/branding/imv-dir.png" "$HOME/.local/share/icons/hicolor/256x256/apps/imv-dir.png" 2>/dev/null || true
+  gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" &>/dev/null || true
+  awk '/^NoDisplay=/{next} {print}' "$src" 2>/dev/null | sed 's|^Icon=.*|Icon=imv|' \
+    > "$HOME/.local/share/applications/imv.desktop" 2>/dev/null || true
+  if [[ -f /usr/share/applications/imv-dir.desktop || -f /usr/local/share/applications/imv-dir.desktop ]]; then
+    local dirsrc=/usr/share/applications/imv-dir.desktop
+    [[ -f $dirsrc ]] || dirsrc=/usr/local/share/applications/imv-dir.desktop
+    awk '/^NoDisplay=/{next} {print}' "$dirsrc" 2>/dev/null | sed 's|^Icon=.*|Icon=imv-dir|' \
+      > "$HOME/.local/share/applications/imv-dir.desktop" 2>/dev/null || true
+  fi
+  return 0
+}
+
+# broken = empty, browser-owned, or pointing at a reader that isn't installed
+# anymore (stale pick-then-removed). Anything else is deliberate and stays.
+slot_broken() { # <mime>
+  local cur d
+  cur="$(xdg-mime query default "$1" 2>/dev/null || true)"
+  [[ -z $cur ]] && return 0
+  [[ $cur =~ $BROWSER_PATTERN ]] && return 0
+  ! have_desktop "$cur"
+}
+
+pin_mimes() { # <desktop> <mime...>
+  local target=$1; shift
+  local mt
+  for mt in "$@"; do
+    xdg-mime default "$target" "$mt" 2>/dev/null || true
+  done
+  return 0
+}
+
+# ── healers (broken slots only) ──
+heal_images() {
+  local pick target mt changed=0
+  pick="$(get images)"; [[ -n $pick ]] || pick=imv
+  target="$(images_desktop "$pick" || true)"; [[ -n ${target:-} ]] || return 0
+  [[ $pick == imv ]] && deploy_imv_override
+  for mt in "${IMAGE_MIMES[@]}"; do
+    if slot_broken "$mt"; then
+      xdg-mime default "$target" "$mt" 2>/dev/null || true
+      changed=1
+    fi
+  done
+  [[ $changed == 1 ]] && echo "images default applied ($pick)"
+  return 0
+}
+heal_docs() {
+  local pick target mt changed=0
+  pick="$(get pdf)"; [[ -n $pick ]] || pick=zathura
+  target="$(docs_desktop "$pick" || true)"; [[ -n ${target:-} ]] || return 0
+  for mt in "${DOC_MIMES[@]}"; do
+    if slot_broken "$mt"; then
+      xdg-mime default "$target" "$mt" 2>/dev/null || true
+      changed=1
+    fi
+  done
+  [[ $changed == 1 ]] && echo "documents default applied ($pick)"
+  return 0
+}
+heal_files() {
+  local pick target mt changed=0
+  pick="$(get files)"; [[ -n $pick ]] || pick=nautilus
+  target="$(files_desktop "$pick" || true)"; [[ -n ${target:-} ]] || return 0
+  for mt in "${FILES_MIMES[@]}"; do
+    if slot_broken "$mt"; then
+      xdg-mime default "$target" "$mt" 2>/dev/null || true
+      changed=1
+    fi
+  done
+  [[ $changed == 1 ]] && echo "files default applied ($pick)"
+  return 0
+}
+heal_browser() {
+  local pick target cur
+  pick="$(get browser)"; [[ -n $pick ]] || pick=brave-origin
+  target="$(browser_desktop "$pick" || true)"; [[ -n ${target:-} ]] || return 0
+  cur="$(xdg-settings get default-web-browser 2>/dev/null || true)"
+  if [[ -z $cur ]] || ! have_desktop "$cur"; then
+    xdg-settings set default-web-browser "$target" 2>/dev/null && echo "browser default applied ($pick)" || true
+  fi
+  return 0
+}
+
+# ── appliers (explicit user choice wins over whatever owns the slot) ──
+resolve_or_skip() { # <type> <pick> — print desktop or skip with a message
+  local target
+  case "$1" in
+    images) target="$(images_desktop "$2" || true)" ;;
+    pdf|documents) target="$(docs_desktop "$2" || true)" ;;
+    files) target="$(files_desktop "$2" || true)" ;;
+    browser) target="$(browser_desktop "$2" || true)" ;;
+    *) echo "mime-defaults: unknown type '$1' (images|pdf|files|browser)" >&2; return 1 ;;
+  esac
+  if [[ -z ${target:-} ]]; then
+    echo "mime-defaults: no desktop installed for $1 pick '$2' — skipping" >&2
+    return 1
+  fi
+  printf '%s\n' "$target"
+}
+apply_images() {
+  local pick target
+  pick="$(get images)"; [[ -n $pick ]] || pick=imv
+  target="$(resolve_or_skip images "$pick")" || return 0
+  [[ $pick == imv ]] && deploy_imv_override
+  pin_mimes "$target" "${IMAGE_MIMES[@]}"
+}
+apply_docs() {
+  local pick target
+  pick="$(get pdf)"; [[ -n $pick ]] || pick=zathura
+  target="$(resolve_or_skip pdf "$pick")" || return 0
+  pin_mimes "$target" "${DOC_MIMES[@]}"
+}
+apply_files() {
+  local pick target
+  pick="$(get files)"; [[ -n $pick ]] || pick=nautilus
+  target="$(resolve_or_skip files "$pick")" || return 0
+  pin_mimes "$target" "${FILES_MIMES[@]}"
+}
+apply_browser() {
+  local pick target
+  pick="$(get browser)"; [[ -n $pick ]] || pick=brave-origin
+  target="$(resolve_or_skip browser "$pick")" || return 0
+  xdg-settings set default-web-browser "$target" 2>/dev/null || true
+}
+
+usage() { echo "usage: hexciri-mime-defaults [heal|apply <images|pdf|files|browser|all>]"; exit 1; }
+
+cmd="${1:-heal}"
+case "$cmd" in
+  heal) heal_images; heal_docs; heal_files; heal_browser ;;
+  apply)
+    case "${2:-}" in
+      images) apply_images ;;
+      pdf|documents) apply_docs ;;
+      files) apply_files ;;
+      browser) apply_browser ;;
+      all) apply_images; apply_docs; apply_files; apply_browser ;;
+      *) usage ;;
+    esac
+    ;;
+  *) usage ;;
+esac
+exit 0

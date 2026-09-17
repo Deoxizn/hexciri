@@ -692,15 +692,12 @@ EOF
     return 0
   }
 
-  # MIME re-heal: browsers reclaim image/pdf defaults on install/first-run.
-  # Both healers only touch browser-owned or empty slots — a deliberate
-  # viewer/reader pick is never overridden. Best-effort, never fatal.
+  # MIME re-apply: browsers reclaim image/doc defaults on install/first-run.
+  # The single mime-defaults table heals only broken (browser-owned, empty,
+  # stale) slots — a deliberate pick is never overridden. Best-effort.
   sync_mime() {
-    if [[ -x $REPO/bin/hexciri-imv-defaults ]]; then
-      HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-imv-defaults" >/dev/null 2>&1 || true
-    fi
-    if [[ -x $REPO/bin/hexciri-pdf-defaults ]]; then
-      "$REPO/bin/hexciri-pdf-defaults" >/dev/null 2>&1 || true
+    if [[ -x $REPO/bin/hexciri-mime-defaults ]]; then
+      HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-mime-defaults" heal >/dev/null 2>&1 || true
     fi
   }
 
@@ -867,6 +864,58 @@ EOF
     done
   }
 
+  # mupdf → zathura document-reader migration (runs every pass; no-op when
+  # clean). Installs zathura + its format plugins (pdf-mupdf for PDF/ePub/XPS,
+  # ps for PostScript, djvu for DjVu, cb for comic archives), removes the mupdf
+  # package once zathura lands, and flips a kept "mupdf" default pick to
+  # zathura. A deliberate non-zathura, non-mupdf pick (e.g. evince) is never
+  # touched: only mupdf-owned slots flip. The MIME heal itself runs later in
+  # sync_mime via hexciri-mime-defaults (stale mupdf.desktop slots heal there).
+  migrate_mupdf_to_zathura() {
+    local pkgs="zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb" missing="" p
+    command -v pacman >/dev/null 2>&1 || return 0
+    # zathura-pdf-mupdf conflicts with zathura-pdf-poppler — drop the poppler
+    # backend first so the mupdf backend installs cleanly.
+    if pacman -Q zathura-pdf-poppler >/dev/null 2>&1; then
+      if sudo pacman -Rns --noconfirm zathura-pdf-poppler 2>&1 | tail -n 2; then
+        echo "migrated: removed zathura-pdf-poppler (mupdf backend is the default)"
+      else
+        echo "migrated: kept zathura-pdf-poppler (removal failed) — install zathura-pdf-mupdf by hand if wanted"
+        return 0
+      fi
+    fi
+    for p in $pkgs; do
+      pacman -Q "$p" >/dev/null 2>&1 || missing+="$p "
+    done
+    if [[ -n $missing ]]; then
+      echo "migrated: installing zathura (replaces mupdf): $missing"
+      # shellcheck disable=SC2086
+      if sudo pacman -S --needed --noconfirm $missing 2>&1 | tail -n 3; then
+        echo "migrated: zathura installed"
+      else
+        echo "migrated: zathura install skipped/partial (offline?) — run: sudo pacman -S --needed $missing"
+        return 0
+      fi
+    fi
+    if pacman -Q mupdf >/dev/null 2>&1; then
+      if sudo pacman -Rns --noconfirm mupdf 2>&1 | tail -n 2; then
+        echo "migrated: removed mupdf (replaced by zathura)"
+      else
+        echo "migrated: kept mupdf (something still needs it)"
+      fi
+    fi
+    # stale per-user mupdf desktop override: the package is gone, the override is dead.
+    if ! pacman -Q mupdf >/dev/null 2>&1 && [[ -f $HOME/.local/share/applications/mupdf.desktop ]]; then
+      rm -f "$HOME/.local/share/applications/mupdf.desktop" && \
+        echo "migrated: removed stale mupdf desktop override"
+    fi
+    if [[ $(cat "$HOME/.local/state/hexciri/defaults/pdf" 2>/dev/null || true) == mupdf ]]; then
+      mkdir -p "$HOME/.local/state/hexciri/defaults"
+      printf '%s' "zathura" > "$HOME/.local/state/hexciri/defaults/pdf" && \
+        echo "migrated: default pdf mupdf → zathura"
+    fi
+  }
+
   # Layer-critical packages: without polkit-gnome every pkexec app (btrfs-assistant,
   # gparted) is dead — no agent, no password dialog. gnome-keyring is Noctalia's
   # Secret Service provider (calendar tokens and other secrets have nowhere to
@@ -880,10 +929,11 @@ EOF
   # self-healing subset of install.sh's _hexciri_wants (the full set stays
   # install-time-only so deliberate removals stick); --needed makes it a no-op
   # when present, and failure (offline?) never stops the sync.
-  # mupdf is deliberately NOT here: it's a swappable default like imv — delete
+  # zathura is deliberately NOT here: it's a swappable default like imv — delete
   # its apps-list line and add your preferred PDF reader instead. The pdf
-  # defaults helper only pins mupdf over browser-stolen slots when mupdf is
-  # present, so it never fights a deliberate pick.
+  # defaults helper only pins the picked reader over browser-stolen, empty, or
+  # stale (reader-removed) slots, so it never fights a deliberate pick. The
+  # one-time mupdf → zathura migration below owns the switch.
   # nautilus is layer here: it is the default file manager, so a box that lost
   # it (removed meta, stray -Rns) gets it back instead of landing without one.
   ensure_layer_pkgs() {
@@ -937,6 +987,7 @@ EOF
   ensure_layer_pkgs
   migrate_strata_to_nautilus
   migrate_fuzzel_launcher_to_noctalia
+  migrate_mupdf_to_zathura
   sync_keybinds
   sync_kitty
   sync_fastfetch

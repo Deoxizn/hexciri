@@ -92,7 +92,7 @@ fi
 # NOTE: xdg-terminal-exec is NOT in CachyOS repos (aborts the whole transaction
 # when named) — blades fall back to hexciri-terminal, which needs only kitty.
 # brave-origin-bin installs below via yay/paru, not pacman.
-_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome mupdf gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd "
+_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd "
 # One-time stock removals (not the list — replaced CachyOS defaults, always
 # safe to attempt; kept when something still needs them).
 _hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro"
@@ -126,6 +126,34 @@ if command -v pacman >/dev/null 2>&1; then
   unset _p _m _pkg _dir
 fi
 unset _hexciri_wants _hexciri_stock_rm _hexciri_purge
+# mupdf → zathura migration (one-time; no-op when clean): a re-run of
+# install.sh must converge boxes that got mupdf from an older bring-up.
+# zathura-pdf-mupdf conflicts with the poppler backend, so that goes first.
+if command -v pacman >/dev/null 2>&1; then
+  if pacman -Q zathura-pdf-poppler >/dev/null 2>&1; then
+    if sudo pacman -Rns --noconfirm zathura-pdf-poppler 2>&1 | sed 's/^/  /'; then
+      info "removed zathura-pdf-poppler (mupdf backend is the default)"
+    else
+      info "kept zathura-pdf-poppler (removal failed)"
+    fi
+  fi
+  if pacman -Q mupdf >/dev/null 2>&1; then
+    if sudo pacman -Rns --noconfirm mupdf 2>&1 | sed 's/^/  /'; then
+      info "removed mupdf (replaced by zathura)"
+    else
+      info "kept mupdf (something still needs it)"
+    fi
+  fi
+  if ! pacman -Q mupdf >/dev/null 2>&1 && [[ -f $HOME/.local/share/applications/mupdf.desktop ]]; then
+    rm -f "$HOME/.local/share/applications/mupdf.desktop" && \
+      info "removed stale mupdf desktop override"
+  fi
+fi
+if [[ $(cat "$HOME/.local/state/hexciri/defaults/pdf" 2>/dev/null || true) == mupdf ]]; then
+  mkdir -p "$HOME/.local/state/hexciri/defaults"
+  printf '%s' "zathura" > "$HOME/.local/state/hexciri/defaults/pdf" && \
+    info "default pdf mupdf → zathura"
+fi
 # Nautilus is the default file manager (pacman package, in _hexciri_wants so a
 # fresh box gets it even if the removed niri meta took it). A stale
 # Hidden=true override from the Strata era would keep it out of menus, so drop
@@ -134,7 +162,8 @@ if [[ -f $HOME/.local/share/applications/org.gnome.Nautilus.desktop ]]; then
   rm -f "$HOME/.local/share/applications/org.gnome.Nautilus.desktop" && \
     info "unhid nautilus launcher entry (Strata-era override removed)"
 fi
-xdg-mime default org.gnome.Nautilus.desktop inode/directory 2>/dev/null || true
+# inode/directory is owned by the mime-defaults table (heal pins the stored
+# Files pick when the slot is empty/stale, never over a deliberate pick).
 # AUR helper bootstrap (one-time): Brave Origin needs yay or paru, and a
 # fresh box has neither. Builds yay via makepkg (needs base-devel+git).
 # Best-effort: without it, AUR steps below print their manual fallback.
@@ -175,21 +204,14 @@ if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&
   sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \
     info "kept brave-bin (removal failed) — remove by hand if unwanted"
 fi
-# Image defaults: the browser claims image/* on install, so pin them back to
-# imv (only browser-owned slots are touched — a deliberate viewer pick stays).
-# Best-effort, never fatal; re-runs heal whatever the browser re-stole.
-if [[ -x "$REPO/bin/hexciri-imv-defaults" ]]; then
-  info "pinning image/* defaults to imv"
-  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-imv-defaults" 2>&1 | sed 's/^/  /' || \
-    info "imv defaults skipped — pick System > Default Apps > Images by hand"
-fi
-# PDF default: nothing ships a reader, so PDFs fall through to the browser.
-# Same healing-helper shape as images (browser-owned slots only, honoring
-# System > Default Apps > PDF once changed from the mupdf out-of-box pick).
-if [[ -x "$REPO/bin/hexciri-pdf-defaults" ]]; then
-  info "pinning application/pdf default (mupdf unless changed)"
-  "$REPO/bin/hexciri-pdf-defaults" 2>&1 | sed 's/^/  /' || \
-    info "pdf default skipped — pick System > Default Apps > PDF by hand"
+# Default-app file associations: one table (images, documents, files,
+# browser) pins the stored picks, healing only browser-stolen, empty, or
+# stale slots — a deliberate pick stays. Best-effort, never fatal; re-runs
+# heal whatever the browser re-stole.
+if [[ -x "$REPO/bin/hexciri-mime-defaults" ]]; then
+  info "applying default-app file associations"
+  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-mime-defaults" heal 2>&1 | sed 's/^/  /' || \
+    info "mime defaults skipped — pick System > Default Apps by hand"
 fi
 # Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
 # localsend current delivers it — nothing extra to install. The blades resolve
