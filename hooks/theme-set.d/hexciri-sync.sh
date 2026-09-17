@@ -102,28 +102,54 @@ niri_patch = Path(os.environ.get("NIRI_PATCH_FILE") or os.environ["NIRI_CFG"])
 
 data = tomllib.loads((theme_dir / "colors.toml").read_text())
 
-def hex_color(key, fallback):
-    v = data.get(key)
-    if isinstance(v, str) and len(v) >= 6:
-        return "#" + v.lstrip("#")[:6]
+def hex_color(key, fallback, alt_keys=()):
+    # Primary key -> alternate keys (omarchy colorN schema) -> hard default.
+    # Same fallback order as theme-env.sh's pick table — a colorN-only theme
+    # must resolve its own slots, never generic grays.
+    for k in (key,) + tuple(alt_keys):
+        v = data.get(k)
+        if isinstance(v, str) and len(v) >= 6:
+            return "#" + v.lstrip("#")[:6]
     return "#" + fallback
+
+def shade(rgb, delta):
+    # Shift "#rrggbb" by delta per channel, clamped. Non-colors pass through.
+    try:
+        c = rgb.lstrip("#")
+        r = min(255, max(0, int(c[0:2], 16) + delta))
+        g = min(255, max(0, int(c[2:4], 16) + delta))
+        b = min(255, max(0, int(c[4:6], 16) + delta))
+        return "%02x%02x%02x" % (r, g, b)
+    except (ValueError, IndexError):
+        return rgb
 
 accent          = hex_color("accent",           "7c3aed")
 background      = hex_color("background",       "1a1a2e")
-dark_background = hex_color("dark_background",  "11111b")
-dark_bg         = hex_color("dark_bg",          "15181a")
-darker_bg       = hex_color("darker_bg",        "0e1012")
-lighter_bg      = hex_color("lighter_bg",       "333639")
+dark_background = hex_color("dark_background",  "11111b", ("dark_bg", "color0"))
+dark_bg         = hex_color("dark_bg",          "15181a", ("dark_background", "color0"))
+darker_bg       = hex_color("darker_bg",        shade(dark_background, -12))
+lighter_bg      = hex_color("lighter_bg",       shade(background, 22))
 foreground      = hex_color("foreground",       "c0d0e0")
-muted           = hex_color("muted",            "586070")
-bright_fg       = hex_color("bright_foreground", "eeeeee")
+muted           = hex_color("muted",            "586070", ("color8",))
+bright_fg       = hex_color("bright_foreground", "eeeeee", ("color15",))
+# NOTE: selection intentionally resolves the "selection" key only (never the
+# theme's selection_background, which is light in pastel themes and would put
+# light text on a light selection). The dark fallback keeps selections
+# readable everywhere.
 selection       = hex_color("selection",         "292e42")
-red             = hex_color("red",               "f7768e")
-green           = hex_color("green",             "9ece6a")
-yellow          = hex_color("yellow",            "e0af68")
-blue            = hex_color("blue",              "7aa2f7")
-magenta         = hex_color("magenta",           "bb9af7")
-cyan            = hex_color("cyan",              "7dcfff")
+red             = hex_color("red",               "f7768e", ("color1",))
+green           = hex_color("green",             "9ece6a", ("color2",))
+yellow          = hex_color("yellow",            "e0af68", ("color3",))
+blue            = hex_color("blue",              "7aa2f7", ("color4",))
+magenta         = hex_color("magenta",           "bb9af7", ("color5",))
+cyan            = hex_color("cyan",              "7dcfff", ("color6",))
+white           = hex_color("color7",            foreground.lstrip("#"))
+bright_red      = hex_color("bright_red",        red.lstrip("#"), ("color9",))
+bright_green    = hex_color("bright_green",      green.lstrip("#"), ("color10",))
+bright_yellow   = hex_color("bright_yellow",     yellow.lstrip("#"), ("color11",))
+bright_blue     = hex_color("bright_blue",       blue.lstrip("#"), ("color12",))
+bright_magenta  = hex_color("bright_magenta",    magenta.lstrip("#"), ("color13",))
+bright_cyan     = hex_color("bright_cyan",       cyan.lstrip("#"), ("color14",))
 
 # ── 1. Generate custom palette JSON ──
 palette = {
@@ -159,16 +185,16 @@ palette = {
                 "blue": blue,
                 "magenta": magenta,
                 "cyan": cyan,
-                "white": foreground
+                "white": white
             },
             "bright": {
                 "black": muted,
-                "red": red,
-                "green": green,
-                "yellow": yellow,
-                "blue": blue,
-                "magenta": magenta,
-                "cyan": cyan,
+                "red": bright_red,
+                "green": bright_green,
+                "yellow": bright_yellow,
+                "blue": bright_blue,
+                "magenta": bright_magenta,
+                "cyan": bright_cyan,
                 "white": bright_fg
             }
         }
@@ -390,3 +416,10 @@ if os.environ.get("NOCTALIA_SYNC_NO_WALLPAPER") != "1":
 
 print(f"hexciri-sync: synced theme '{theme_name}'")
 PYEOF
+
+# Tell the running shell to pick up the rewritten palette. Config hot-reload
+# watches TOML, not palettes/*.json — without this nudge a theme switch can
+# leave the bar on the previous palette until the next config edit/restart.
+if command -v noctalia >/dev/null 2>&1 && command -v pgrep >/dev/null 2>&1 && pgrep -x noctalia >/dev/null 2>&1; then
+  noctalia msg config-reload >/dev/null 2>&1 || true
+fi

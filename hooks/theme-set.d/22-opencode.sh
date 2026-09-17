@@ -20,6 +20,17 @@ bg_element="$(extract_color "lighter_background")"
 [[ -n $bg_element ]] || bg_element="$(extract_color "lighter_bg")"
 [[ -n $bg_element ]] || bg_element="$normal_black"
 
+# Selected list items render their text over the primary color
+# (selectedListItemText; opencode's own fallback is the background color).
+# A hardcoded light text is unreadable on light primaries (sapphire #f7c3c6),
+# so mirror opencode's selectedForeground contrast rule (luminance > 0.5 ->
+# dark text): light primary -> background text, dark primary -> bright text.
+sel_fg="$bright_white"
+if [[ $accent =~ ^[0-9a-fA-F]{6}$ ]]; then
+  accent_lum1000=$(( 299*16#${accent:0:2} + 587*16#${accent:2:2} + 114*16#${accent:4:2} ))
+  (( accent_lum1000 > 127500 )) && sel_fg="$primary_background"
+fi
+
 theme_dir="$HOME/.config/opencode/themes"
 tui_file="$HOME/.config/opencode/tui.json"
 mkdir -p "$theme_dir"
@@ -37,7 +48,7 @@ cat > "$theme_dir/hexciri.json" << EOF
     "info": "#${normal_cyan}",
     "text": "#${primary_foreground}",
     "textMuted": "#${bright_black}",
-    "selectedListItemText": "#${bright_white}",
+    "selectedListItemText": "#${sel_fg}",
     "background": "#${primary_background}",
     "backgroundPanel": "#${normal_black}",
     "backgroundElement": "#${bg_element}",
