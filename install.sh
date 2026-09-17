@@ -217,6 +217,13 @@ if [[ -x "$REPO/bin/hexciri-mime-defaults" ]]; then
   HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-mime-defaults" heal 2>&1 | sed 's/^/  /' || \
     info "mime defaults skipped — pick System > Default Apps by hand"
 fi
+# aether:// web-apply links: route them through the hexciri handler so one
+# click applies in Aether AND follows through to the hexciri theme (bar).
+if [[ -x "$REPO/bin/hexciri-aether-url" ]]; then
+  info "claiming aether:// links for the hexciri handler"
+  "$REPO/bin/hexciri-aether-url" heal 2>&1 | sed 's/^/  /' || \
+    info "aether handler skipped — run 'hexciri-aether-url heal' by hand"
+fi
 # Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
 # localsend current delivers it — nothing extra to install. The blades resolve
 # localsend-cli || jocalsend live and fail with a clear message otherwise.

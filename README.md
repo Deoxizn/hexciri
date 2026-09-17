@@ -174,6 +174,10 @@ hexciri-theme remove <name>          # user themes only
 hexciri-aether-apply [--name <name>] # import Aether's live palette+wallpaper, then set it (bar included)
 ```
 
+Web `aether://` Apply buttons are claimed automatically (install + every
+sync): one click applies in Aether and follows through to the hexciri theme,
+bar included — no manual import step.
+
 How it works, in plain words: every theme is just a list of colors
 (`colors.toml`). Picking a theme copies that list into place and then runs a
 hook — a folder of small scripts, one per app — and each script repaints its

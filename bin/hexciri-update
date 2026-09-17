@@ -715,6 +715,12 @@ EOF
     if [[ -x $REPO/bin/hexciri-mime-defaults ]]; then
       HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-mime-defaults" heal >/dev/null 2>&1 || true
     fi
+    # keep aether:// Apply buttons one-click: stock Aether fails
+    # as_omarchy_theme links off-Omarchy and never touches the bar —
+    # the hexciri handler strips, applies, and follows through to theme-set.
+    if [[ -x $REPO/bin/hexciri-aether-url ]]; then
+      "$REPO/bin/hexciri-aether-url" heal >/dev/null 2>&1 || true
+    fi
   }
 
   # Strata → Nautilus file-manager migration (runs every pass; no-op when

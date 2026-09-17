@@ -1,0 +1,121 @@
+#!/bin/bash
+# hexciri:summary=aether:// link handler: make web Apply buttons just work (bar included)
+# hexciri:args=[<aether://URL>|heal]
+#
+# Stock Aether handles `aether://apply?...&as_omarchy_theme=<name>` by failing
+# hard when Omarchy isn't installed — and even when it applies, it knows
+# nothing about Noctalia, so the bar never follows. Gallery Apply buttons are
+# `silent=true` links, so this shim finishes the job headlessly:
+#
+#   1. drop as_omarchy_theme when `omarchy` is missing (else stock aether errors),
+#   2. run the real `aether --handle-url` on the cleaned link,
+#   3. on success of a silent apply, run hexciri-aether-apply --name <name>
+#      so the bar, wallpaper and all 30+ hooks follow.
+#
+# Interactive (non-silent) links are only cleaned and handed to Aether: the
+# user confirms in the GUI, then runs `hexciri-aether-apply` by hand.
+#
+# `heal` (idempotent) installs the user-level desktop entry and claims
+# x-scheme-handler/aether when the slot is empty or stock-owned. Called from
+# install.sh and the framework sync; safe to run by hand.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || dirname "${BASH_SOURCE[0]}")" )" && pwd)"
+DESKTOP="hexciri-aether-url.desktop"
+STOCK_DESKTOP="li.oever.aether.url-handler.desktop"
+
+usage() { sed -n '2,22p' "$0"; exit "${1:-0}"; }
+
+real_aether() { # stock binary first: this shim already implements the fallback
+  if [[ -x /usr/bin/aether ]]; then printf '/usr/bin/aether'; return 0; fi
+  command -v aether || { echo "hexciri-aether-url: aether is not installed" >&2; return 1; }
+}
+
+strip_omarchy_param() { # <url> — remove every as_omarchy_theme=<name> param
+  local u="$1"
+  u="$(printf '%s' "$u" | sed -E 's/[?&]as_omarchy_theme=[A-Za-z0-9_.-]*//g')"
+  u="$(printf '%s' "$u" | sed -E 's/\?&/?/; s/&&/\&/g; s/[?&]$//')"
+  # removal may have eaten the only '?': restore it before the first '&'
+  u="$(printf '%s' "$u" | sed -E '/\?/!s/&/?/')"
+  printf '%s' "$u"
+}
+
+query_param() { # <name> <url> — print first value, else empty
+  local key="$1" u="$2"
+  u="${u#*\?}"; [[ $u == "$2" ]] && return 0
+  local p
+  while IFS= read -r -d '&' p || [[ -n $p ]]; do
+    p="${p%%&}"; [[ $p == "$key="* ]] && { printf '%s' "${p#"$key="}"; return 0; }
+  done < <(printf '%s&' "$u")
+  return 0
+}
+
+has_flag() { # <name> <url> — true when name=true|1|yes (case-insensitive)
+  local v
+  v="$(query_param "$1" "$2" | tr '[:upper:]' '[:lower:]')"
+  [[ $v == true || $v == 1 || $v == yes ]]
+}
+
+do_heal() {
+  local apps="$HOME/.local/share/applications" changed=0 cur
+  mkdir -p "$apps"
+  if [[ ! -f $apps/$DESKTOP ]] || ! grep -q '^Exec=hexciri-aether-url %u$' "$apps/$DESKTOP" 2>/dev/null; then
+    cat > "$apps/$DESKTOP" <<'EOF'
+[Desktop Entry]
+Name=Aether URL Handler (hexciri)
+Comment=Apply aether:// themes, then follow through to the hexciri theme (bar included)
+Exec=hexciri-aether-url %u
+Icon=aether
+Terminal=false
+Type=Application
+NoDisplay=true
+MimeType=x-scheme-handler/aether;
+Categories=Utility;
+StartupNotify=false
+EOF
+    changed=1
+  fi
+  update-desktop-database "$apps" >/dev/null 2>&1 || true
+  cur="$(xdg-mime query default x-scheme-handler/aether 2>/dev/null || true)"
+  if [[ -z $cur || $cur == "$STOCK_DESKTOP" ]]; then
+    if [[ $cur != "$DESKTOP" ]]; then
+      xdg-mime default "$DESKTOP" x-scheme-handler/aether >/dev/null 2>&1 || true
+      changed=1
+    fi
+  fi
+  [[ $changed == 1 ]] && echo "aether-url: handler → $DESKTOP"
+  return 0
+}
+
+[[ ${1:-} == "-h" || ${1:-} == "--help" ]] && usage 0
+if [[ ${1:-} == "heal" ]]; then do_heal; exit 0; fi
+
+URL="${1:-}"; [[ -n $URL ]] || usage 1
+[[ $URL == aether://apply* ]] || { echo "hexciri-aether-url: only aether://apply links (got ${URL%%\?*})" >&2; exit 1; }
+
+AETHER="$(real_aether)" || exit 1
+NAME="$(query_param as_omarchy_theme "$URL" | tr '[:upper:]' '[:lower:]')"
+SILENT=false; has_flag silent "$URL" && SILENT=true
+
+CLEAN="$URL"
+if [[ -n $NAME ]] && ! command -v omarchy >/dev/null 2>&1; then
+  CLEAN="$(strip_omarchy_param "$URL")"
+fi
+
+if ! "$AETHER" --handle-url "$CLEAN" 2>&1; then
+  echo "hexciri-aether-url: aether apply failed" >&2; exit 1
+fi
+
+# Silent links are fully applied by now — follow through to hexciri (bar).
+if $SILENT; then
+  IMPORTER="$SCRIPT_DIR/hexciri-aether-apply"
+  [[ -x $IMPORTER ]] || IMPORTER="$(command -v hexciri-aether-apply || true)"
+  if [[ -n ${IMPORTER:-} && -x $IMPORTER ]]; then
+    [[ -n $NAME ]] || NAME="aether"
+    "$IMPORTER" --name "$NAME" 2>&1 | tail -n 3
+  else
+    echo "hexciri-aether-url: applied in Aether (hexciri-aether-apply missing — bar not updated)" >&2
+  fi
+else
+  echo "hexciri-aether-url: opened in Aether — confirm there, then run: hexciri-aether-apply${NAME:+ --name $NAME}"
+fi
