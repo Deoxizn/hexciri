@@ -420,6 +420,27 @@ PYEOF
 # Tell the running shell to pick up the rewritten palette. Config hot-reload
 # watches TOML, not palettes/*.json — without this nudge a theme switch can
 # leave the bar on the previous palette until the next config edit/restart.
+# NOTE: config-reload alone does NOT flip a live wallpaper/community/builtin
+# source to custom (verified: file said custom while `color-scheme-get`
+# reported wallpaper). So when the configured source is custom, set it
+# explicitly; otherwise a plain reload suffices. A deliberate
+# Themes > Palette source > Wallpaper choice is never overridden here —
+# the file patch above already preserves it, and we reload only.
 if command -v noctalia >/dev/null 2>&1 && command -v pgrep >/dev/null 2>&1 && pgrep -x noctalia >/dev/null 2>&1; then
-  noctalia msg config-reload >/dev/null 2>&1 || true
+  _src="" _pal="hexciri"
+  _in_theme=0
+  while IFS= read -r _line; do
+    [[ $_line =~ ^\[ ]] && { [[ $_line == "[theme]" ]] && _in_theme=1 || _in_theme=0; continue; }
+    if (( _in_theme )); then
+      [[ $_line =~ ^source[[:space:]]*=[[:space:]]*\"([^\"]+)\" ]] && _src="${BASH_REMATCH[1]}"
+      [[ $_line =~ ^custom_palette[[:space:]]*=[[:space:]]*\"([^\"]+)\" ]] && _pal="${BASH_REMATCH[1]}"
+    fi
+  done < "$NOCTALIA_CFG" 2>/dev/null || true
+  if [[ $_src == custom && -n $_pal ]]; then
+    noctalia msg color-scheme-set custom "$_pal" >/dev/null 2>&1 || \
+      noctalia msg config-reload >/dev/null 2>&1 || true
+  else
+    noctalia msg config-reload >/dev/null 2>&1 || true
+  fi
+  unset _src _pal _in_theme _line
 fi
