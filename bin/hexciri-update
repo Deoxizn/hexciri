@@ -579,6 +579,7 @@ EOF
     REPO_CFG="$src" LIVE_CFG="$dst" python3 <<'EOF' || true
 import os, re
 wanted = [
+    'background_opacity = 0.0',
     'margin_edge = 10',
     'margin_ends = 10',
     'concave_edge_corners = false',
@@ -1119,6 +1120,31 @@ EOF
   if [[ -f $ST ]] && grep -q 'update_cmd = "hexciri-update-run"' "$ST"; then
     sed -i 's|update_cmd = "hexciri-update-run"|update_cmd = "hexciri-update"|' "$ST"
     echo "arch-updater plugin: update_cmd migrated to hexciri-update"
+  fi
+
+  # Islands bar: the shipped background_opacity is now 0.0 (transparent bar,
+  # solid pills). Flip live configs still on the old 0.95 default; any other
+  # value is a deliberate pick and stays. Section-scoped to [bar.default].
+  NC="$HOME/.config/noctalia/config.toml"
+  if [[ -f $NC ]]; then
+    LIVE_CFG="$NC" python3 <<'EOF' || true
+import os, re
+p = os.environ["LIVE_CFG"]
+lines = open(p).read().split("\n")
+in_bar = False
+changed = False
+for i, l in enumerate(lines):
+    s = l.strip()
+    if s.startswith("["):
+        in_bar = (s == "[bar.default]")
+        continue
+    if in_bar and re.match(r"^background_opacity\s*=\s*0\.95\s*(#.*)?$", l):
+        lines[i] = re.sub(r"0\.95", "0.0", l, count=1)
+        changed = True
+if changed:
+    open(p, "w").write("\n".join(lines))
+    print("noctalia bar: background_opacity 0.95 -> 0.0 (islands default)")
+EOF
   fi
 
   # State the sync must keep live (idempotent; a plain pull/re-link is all the
