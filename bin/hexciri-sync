@@ -218,4 +218,30 @@ if [[ -n $REPO && -d $REPO/branding/sddm ]]; then
   fi
 fi
 
+# ── 6. xwayland-satellite pin (upstream #468): 0.8.2 regressed popup
+# ── positioning (commit 3273a0f) — X11 dropdowns (Steam menus, etc.) spawn
+# ── offset and lose hover on niri. Hold at last-good 0.8.1 until a fixed
+# ── 0.8.3+ lands in the repos, then drop this block. File edit only: this
+# ── also runs inside the alpm PostTransaction hook, where the pacman db lock
+# ── is held, so it must never run pacman here. The downgrade itself lives in
+# ── install.sh and hexciri-update (both run outside transactions).
+# ── FIX POLICY: mirrored in install.sh; downgrade mirrored there + update. ──
+if [[ -f /etc/pacman.conf ]]; then
+  if grep -Eq '^IgnorePkg.*xwayland-satellite' /etc/pacman.conf 2>/dev/null; then
+    : # already held
+  elif grep -Eq '^IgnorePkg[[:space:]]*=' /etc/pacman.conf 2>/dev/null; then
+    sed -Ei 's/^(IgnorePkg[^#]*)(#.*)?$/\1 xwayland-satellite \2/' /etc/pacman.conf 2>/dev/null \
+      && log "pacman: held xwayland-satellite (IgnorePkg)" || \
+      log "WARNING: could not hold xwayland-satellite in /etc/pacman.conf"
+  elif grep -Eq '^#IgnorePkg[[:space:]]*=' /etc/pacman.conf 2>/dev/null; then
+    sed -Ei '0,/^#IgnorePkg[[:space:]]*=.*/s//IgnorePkg = xwayland-satellite/' /etc/pacman.conf 2>/dev/null \
+      && log "pacman: held xwayland-satellite (IgnorePkg)" || \
+      log "WARNING: could not hold xwayland-satellite in /etc/pacman.conf"
+  else
+    printf '\nIgnorePkg = xwayland-satellite\n' >> /etc/pacman.conf 2>/dev/null \
+      && log "pacman: held xwayland-satellite (IgnorePkg)" || \
+      log "WARNING: could not hold xwayland-satellite in /etc/pacman.conf"
+  fi
+fi
+
 exit 0

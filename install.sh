@@ -100,6 +100,33 @@ _hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-
 # One-time stock removals (not the list — replaced CachyOS defaults, always
 # safe to attempt; kept when something still needs them).
 _hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro vlc-plugins-all cachyos-wallpapers"
+# xwayland-satellite pin (upstream #468): 0.8.2 regressed popup positioning
+# (commit 3273a0f) — X11 dropdowns (Steam menus, etc.) spawn offset and lose
+# hover on niri. Hold at last-good 0.8.1 until a fixed 0.8.3+ lands, then drop
+# this block. Mirrored in bin/hexciri-sync (§6, re-asserts the hold on every
+# update) and bin/hexciri-update (hold + downgrade before its Syu).
+if command -v pacman >/dev/null 2>&1; then
+  if grep -Eq '^IgnorePkg.*xwayland-satellite' /etc/pacman.conf 2>/dev/null; then
+    : # already held
+  elif grep -Eq '^IgnorePkg[[:space:]]*=' /etc/pacman.conf 2>/dev/null; then
+    sudo sed -Ei 's/^(IgnorePkg[^#]*)(#.*)?$/\1 xwayland-satellite \2/' /etc/pacman.conf 2>&1 | sed 's/^/  /' && \
+      info "held xwayland-satellite (IgnorePkg)" || \
+      info "hold skipped — add by hand: IgnorePkg = xwayland-satellite in /etc/pacman.conf"
+  elif grep -Eq '^#IgnorePkg[[:space:]]*=' /etc/pacman.conf 2>/dev/null; then
+    sudo sed -Ei '0,/^#IgnorePkg[[:space:]]*=.*/s//IgnorePkg = xwayland-satellite/' /etc/pacman.conf 2>&1 | sed 's/^/  /' && \
+      info "held xwayland-satellite (IgnorePkg)" || \
+      info "hold skipped — add by hand: IgnorePkg = xwayland-satellite in /etc/pacman.conf"
+  else
+    printf '\nIgnorePkg = xwayland-satellite\n' | sudo tee -a /etc/pacman.conf >/dev/null 2>&1 && \
+      info "held xwayland-satellite (IgnorePkg)" || \
+      info "hold skipped — add by hand: IgnorePkg = xwayland-satellite in /etc/pacman.conf"
+  fi
+  if pacman -Q xwayland-satellite 2>/dev/null | grep -q ' 0\.8\.2'; then
+    info "downgrading xwayland-satellite 0.8.2 → 0.8.1 (upstream #468 popup regression)"
+    sudo pacman -U --noconfirm https://archive.archlinux.org/packages/x/xwayland-satellite/xwayland-satellite-0.8.1-2-x86_64.pkg.tar.zst 2>&1 | sed 's/^/  /' || \
+      info "downgrade skipped — run by hand: sudo pacman -U https://archive.archlinux.org/packages/x/xwayland-satellite/xwayland-satellite-0.8.1-2-x86_64.pkg.tar.zst"
+  fi
+fi
 _hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro"
 if command -v pacman >/dev/null 2>&1; then
   info "one-time app swap (hexciri wants + stock removals)"

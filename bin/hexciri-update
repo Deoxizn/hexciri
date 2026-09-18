@@ -128,6 +128,33 @@ PY
   # root is already granted.
   sudo -v || { echo "sudo needed for the system update"; exit 1; }
 
+  # xwayland-satellite pin (upstream #468): 0.8.2 regressed popup positioning
+  # (commit 3273a0f) — X11 dropdowns (Steam menus, etc.) spawn offset and lose
+  # hover on niri. Hold BEFORE the Syu below so a pinned 0.8.1 can't ride back
+  # up, then downgrade a buggy 0.8.2 while outside any transaction. Root
+  # hexciri-sync (§6) re-asserts the hold every pass; install.sh covers fresh
+  # boxes. Drop when a fixed 0.8.3+ lands in the repos.
+  if grep -Eq '^IgnorePkg.*xwayland-satellite' /etc/pacman.conf 2>/dev/null; then
+    :
+  elif grep -Eq '^IgnorePkg[[:space:]]*=' /etc/pacman.conf 2>/dev/null; then
+    sudo sed -Ei 's/^(IgnorePkg[^#]*)(#.*)?$/\1 xwayland-satellite \2/' /etc/pacman.conf && \
+      echo "pacman: held xwayland-satellite (IgnorePkg)" || \
+      echo "pacman hold skipped — add by hand: IgnorePkg = xwayland-satellite in /etc/pacman.conf"
+  elif grep -Eq '^#IgnorePkg[[:space:]]*=' /etc/pacman.conf 2>/dev/null; then
+    sudo sed -Ei '0,/^#IgnorePkg[[:space:]]*=.*/s//IgnorePkg = xwayland-satellite/' /etc/pacman.conf && \
+      echo "pacman: held xwayland-satellite (IgnorePkg)" || \
+      echo "pacman hold skipped — add by hand: IgnorePkg = xwayland-satellite in /etc/pacman.conf"
+  else
+    printf '\nIgnorePkg = xwayland-satellite\n' | sudo tee -a /etc/pacman.conf >/dev/null && \
+      echo "pacman: held xwayland-satellite (IgnorePkg)" || \
+      echo "pacman hold skipped — add by hand: IgnorePkg = xwayland-satellite in /etc/pacman.conf"
+  fi
+  if pacman -Q xwayland-satellite 2>/dev/null | grep -q ' 0\.8\.2'; then
+    echo "downgrading xwayland-satellite 0.8.2 → 0.8.1 (upstream #468 popup regression)"
+    sudo pacman -U --noconfirm https://archive.archlinux.org/packages/x/xwayland-satellite/xwayland-satellite-0.8.1-2-x86_64.pkg.tar.zst || \
+      echo "downgrade skipped — run by hand: sudo pacman -U https://archive.archlinux.org/packages/x/xwayland-satellite/xwayland-satellite-0.8.1-2-x86_64.pkg.tar.zst"
+  fi
+
   # Re-apply the alpm hook from the pulled tree now that root is granted. The
   # hook only self-refreshes while a package transaction actually runs, so a
   # no-op update (nothing to upgrade) never fired it — a stale hook (e.g. missing
