@@ -573,6 +573,53 @@ EOF
       [[ -f $dst.stock ]] || cp -f "$dst" "$dst.stock"
       cp -f "$src" "$dst" && echo "adopted noctalia config (stock backed up to $dst.stock)"
     fi
+    # Islands look: merge MISSING bar-style keys into the live [bar.default]
+    # (present values — user-tuned or GUI-written — always win). Seed-only
+    # would leave every existing box on the docked bar forever.
+    REPO_CFG="$src" LIVE_CFG="$dst" python3 <<'EOF' || true
+import os, re
+wanted = [
+    'margin_edge = 10',
+    'margin_ends = 10',
+    'concave_edge_corners = false',
+    'radius = 16',
+    'padding = 10',
+    'widget_spacing = 4',
+    'capsule = true',
+    'capsule_fill = "surface_variant"',
+    'capsule_thickness = 0.76',
+    'contact_shadow = true',
+    'panel_overlap = 1',
+]
+dst = os.environ["LIVE_CFG"]
+try:
+    lines = open(dst).read().split("\n")
+except OSError:
+    raise SystemExit
+start = end = None
+for i, l in enumerate(lines):
+    if l.strip() == "[bar.default]":
+        start = i
+        continue
+    if start is not None and re.match(r"^\[", l.strip()):
+        end = i
+        break
+if start is None:
+    raise SystemExit
+if end is None:
+    end = len(lines)
+have = set()
+for l in lines[start + 1:end]:
+    m = re.match(r"^\s*([A-Za-z0-9_]+)\s*=", l)
+    if m:
+        have.add(m.group(1))
+missing = [w for w in wanted if re.match(r"^([A-Za-z0-9_]+)", w).group(1) not in have]
+if missing:
+    ins = ["", "# Islands look (hexciri default — tune freely)"] + missing
+    lines[end:end] = ins
+    open(dst, "w").write("\n".join(lines))
+    print("noctalia bar: added missing key(s): %s" % ", ".join(m.split("=")[0].strip() for m in missing))
+EOF
     # Plugin preset: merge MISSING keys from the shipped preset into the live
     # settings (GUI values always win). Seeding only when settings.toml is
     # absent misses every box whose file already exists — the exact hole that
@@ -623,6 +670,38 @@ if missing:
     open(pdst, "w").write("\n".join(lines))
     print("noctalia arch-updater: seeded missing key(s): %s" % ", ".join(missing))
 EOF
+    fi
+    return 0
+  }
+
+  # Niri island-bar rule: Noctalia v5 publishes a full-bar blur region even
+  # with background_opacity = 0, hazing the gaps between capsules. Existing
+  # boxes keep their live window-rules.kdl untouched, so append the opt-out
+  # once (marker-guarded, idempotent). Fresh boxes get it from the repo file.
+  sync_niri_bar_blur() {
+    command -v niri >/dev/null 2>&1 || return 0
+    local dst done_any=0
+    for dst in "$HOME/.config/niri/cfg/window-rules.kdl" "$HOME/.config/niri/window-rules.kdl"; do
+      [[ -f $dst ]] || continue
+      grep -q 'noctalia-bar-' "$dst" 2>/dev/null && continue
+      cat >> "$dst" <<'EOF'
+
+// Noctalia island bar: no compositor blur (hexciri default — safe to delete).
+// Noctalia v5 publishes a full-bar blur region even with background_opacity = 0,
+// so blurring here hazes the gaps between capsules. Must come AFTER the general
+// noctalia rule so it wins for the bar.
+layer-rule {
+    match namespace="^noctalia-bar-.*$"
+    background-effect {
+        blur false
+    }
+}
+EOF
+      echo "niri window-rules: added Noctalia island-bar no-blur rule ($dst)"
+      done_any=1
+    done
+    if (( done_any )); then
+      niri validate >/dev/null 2>&1 || echo "WARNING: niri validate fails — check window-rules.kdl" >&2
     fi
     return 0
   }
@@ -1060,6 +1139,7 @@ EOF
   sync_kitty
   sync_fastfetch
   sync_noctalia
+  sync_niri_bar_blur
   sync_hooks
   sync_mime
 
