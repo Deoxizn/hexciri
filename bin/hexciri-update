@@ -575,8 +575,12 @@ EOF
     fi
     # Islands look: merge MISSING bar-style keys into the live [bar.default]
     # (present values — user-tuned or GUI-written — always win). Seed-only
-    # would leave every existing box on the docked bar forever.
-    REPO_CFG="$src" LIVE_CFG="$dst" python3 <<'EOF' || true
+    # would leave every existing box on the docked bar forever. Covers both
+    # the config file and the state settings file: Noctalia resolves per-key
+    # with the state file winning, so a [bar.default] there shadows the
+    # config for every key it sets.
+    STATE_CFG="$HOME/.local/state/noctalia/settings.toml"
+    REPO_CFG="$src" LIVE_CFG="$dst" STATE_CFG="$STATE_CFG" python3 <<'EOF' || true
 import os, re
 wanted = [
     'background_opacity = 0.0',
@@ -592,34 +596,36 @@ wanted = [
     'contact_shadow = true',
     'panel_overlap = 1',
 ]
-dst = os.environ["LIVE_CFG"]
-try:
-    lines = open(dst).read().split("\n")
-except OSError:
-    raise SystemExit
-start = end = None
-for i, l in enumerate(lines):
-    if l.strip() == "[bar.default]":
-        start = i
-        continue
-    if start is not None and re.match(r"^\[", l.strip()):
-        end = i
-        break
-if start is None:
-    raise SystemExit
-if end is None:
-    end = len(lines)
-have = set()
-for l in lines[start + 1:end]:
-    m = re.match(r"^\s*([A-Za-z0-9_]+)\s*=", l)
-    if m:
-        have.add(m.group(1))
-missing = [w for w in wanted if re.match(r"^([A-Za-z0-9_]+)", w).group(1) not in have]
-if missing:
-    ins = ["", "# Islands look (hexciri default — tune freely)"] + missing
-    lines[end:end] = ins
-    open(dst, "w").write("\n".join(lines))
-    print("noctalia bar: added missing key(s): %s" % ", ".join(m.split("=")[0].strip() for m in missing))
+def merge(path, tag):
+    try:
+        lines = open(path).read().split("\n")
+    except OSError:
+        return
+    start = end = None
+    for i, l in enumerate(lines):
+        if l.strip() == "[bar.default]":
+            start = i
+            continue
+        if start is not None and re.match(r"^\[", l.strip()):
+            end = i
+            break
+    if start is None:
+        return
+    if end is None:
+        end = len(lines)
+    have = set()
+    for l in lines[start + 1:end]:
+        m = re.match(r"^\s*([A-Za-z0-9_]+)\s*=", l)
+        if m:
+            have.add(m.group(1))
+    missing = [w for w in wanted if re.match(r"^([A-Za-z0-9_]+)", w).group(1) not in have]
+    if missing:
+        ins = ["", "# Islands look (hexciri default — tune freely)"] + missing
+        lines[end:end] = ins
+        open(path, "w").write("\n".join(lines))
+        print("noctalia bar (%s): added missing key(s): %s" % (tag, ", ".join(m.split("=")[0].strip() for m in missing)))
+merge(os.environ["LIVE_CFG"], "config")
+merge(os.environ["STATE_CFG"], "state")
 EOF
     # Plugin preset: merge MISSING keys from the shipped preset into the live
     # settings (GUI values always win). Seeding only when settings.toml is
