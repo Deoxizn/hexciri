@@ -684,7 +684,7 @@ EOF
     for dst in "$HOME/.config/niri/cfg/window-rules.kdl" "$HOME/.config/niri/window-rules.kdl" \
                "$HOME/.config/niri/cfg/rules.kdl" "$HOME/.config/niri/rules.kdl"; do
       [[ -f $dst ]] || continue
-      grep -q 'noctalia-bar-' "$dst" 2>/dev/null && continue
+      grep -q 'noctalia-bar' "$dst" 2>/dev/null && continue
       cat >> "$dst" <<'EOF'
 
 // Noctalia island bar: no compositor blur (hexciri default — safe to delete).
