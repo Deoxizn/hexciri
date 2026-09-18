@@ -89,11 +89,26 @@ create_spicetify_styling
 create_dynamic_theme
 change_spicetify_theme
 
+# `spicetify apply` exits 0 even when it applies nothing: after a Spotify or
+# spicetify-cli upgrade the preprocessed bundle is stale and apply just prints
+# "Preprocessed Spotify data is outdated". That silently pinned Spotify to old
+# colors across theme switches, behind a SUCCESS message. Detect spicetify's
+# own signature and run its remedy once instead.
+spicetify_apply_healed() {
+    local out
+    out="$(spicetify apply 2>&1)" || true
+    if printf '%s\n' "$out" | grep -qi 'outdated'; then
+        out="$(spicetify restore backup apply 2>&1)" || \
+            printf 'hexciri spotify hook: rebuild failed (run "spicetify doctor"): %s\n' "$out" >&2
+    fi
+}
+export -f spicetify_apply_healed 2>/dev/null || true
+
 if [ "$spotify_was_running" = true ]; then
-       spicetify apply > /dev/null 2>&1 &
+    spicetify_apply_healed > /dev/null &
 else
     setsid bash -c '
-        spicetify apply > /dev/null 2>&1 &
+        spicetify_apply_healed > /dev/null 2>&1 &
 
         for i in {1..250}; do
             if pgrep -x "spotify" > /dev/null 2>&1; then
