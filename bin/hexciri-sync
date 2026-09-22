@@ -259,8 +259,7 @@ fi
 
 # ── login-greeter appearance sync authorization (one-time per user): on
 # ── greetd boxes the login page is noctalia-greeter and every theme-set
-# ── pushes the new look via `noctalia msg greeter-sync`
-# ── (hooks/theme-set.d/90-greeter-sync.sh). That sync needs admin auth per
+# ── pushes the new look via the theme bridge §8. That sync needs admin auth per
 # ── call unless this narrow polkit rule exists — enabling once (additive,
 # ── never removes other accounts) makes all future syncs promptless.
 # ── Root-only (writes the polkit rule); the user-context pass skips.

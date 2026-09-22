@@ -575,3 +575,19 @@ fi
 if command -v kbuildsycoca6 >/dev/null 2>&1; then
   kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
 fi
+
+# ── 8. Login-greeter follow (greetd boxes) ──
+# Noctalia copies the live palette + wallpaper + font + scale to
+# noctalia-greeter. Runs HERE, at the end of the bridge, deliberately: hook
+# files sort before this script, so a standalone trigger would stage the
+# PREVIOUS theme (observed live: greeter one theme behind). Needs a live
+# shell + the packaged apply helper; without passwordless auth this pops one
+# admin prompt (one-time enable owned by install.sh + root sync) — a refused
+# or failed sync only skips, never fails the theme change.
+if command -v noctalia >/dev/null 2>&1 && command -v pgrep >/dev/null 2>&1 && pgrep -x noctalia >/dev/null 2>&1 && [[ -x /usr/bin/noctalia-greeter-apply-appearance ]]; then
+  if noctalia msg greeter-sync >/dev/null 2>&1; then
+    echo "hexciri-sync: login greeter appearance synced"
+  else
+    echo "hexciri-sync: greeter sync skipped (needs auth? run: sudo noctalia-greeter passwordless-sync enable $USER)"
+  fi
+fi

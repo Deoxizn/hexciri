@@ -1508,6 +1508,16 @@ EOF
   mkdir -p "$HOME/.config/hexciri/wallpapers"
   "$REPO/bin/hexciri-wallpaper-refresh" >/dev/null 2>&1 || true
 
+  # 90-greeter-sync.sh → folded into the theme bridge §8 (runs last by
+  # definition): remove the live orphan so theme-sets sync once, with fresh
+  # state. Runs every pass; no-op when clean. The file was generated (never
+  # hand-edited), so no backup is kept — a re-pull restores it if wanted.
+  migrate_greeter_hook_fold() {
+    local old="$HOME/.config/hexciri/hooks/theme-set.d/90-greeter-sync.sh"
+    [[ -f $old ]] || return 0
+    rm -f "$old" && echo "migrated: removed superseded 90-greeter-sync.sh hook (greeter sync runs at the end of the theme bridge)"
+  }
+
   ensure_layer_pkgs
   migrate_strata_to_nautilus
   migrate_fuzzel_launcher_to_noctalia
@@ -1515,6 +1525,7 @@ EOF
   migrate_vlc_to_mpv
   migrate_hyprland_native_apps
   migrate_faillock_desktop_tuning
+  migrate_greeter_hook_fold
   sync_keybinds
   sync_hyprland
   sync_kitty
