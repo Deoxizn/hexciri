@@ -90,14 +90,14 @@ if [[ $TO == hyprland ]]; then
   STACK_PKGS="hyprland xdg-desktop-portal-hyprland uwsm"
   NEED_META=true  # stock hyprland.lua skeleton comes from the CachyOS meta
   META_PKG="cachyos-hypr-noctalia"
-  NATIVE_FM="dolphin"; FALLBACK_FM="nautilus"
-  NATIVE_IMG="qview";  FALLBACK_IMG="imv"
+  NATIVE_FM="dolphin"
+  NATIVE_IMG="qview"
 else
   STACK_PKGS="niri xwayland-satellite xdg-desktop-portal-gtk"
   NEED_META=false # repo ships the full niri tree (config/niri)
   META_PKG=""
-  NATIVE_FM="nautilus"; FALLBACK_FM="dolphin"
-  NATIVE_IMG="imv";     FALLBACK_IMG="qview"
+  NATIVE_FM="nautilus"
+  NATIVE_IMG="imv"
 fi
 
 # Native swap pairs (flip + uninstall): old native → target native per role.
@@ -130,12 +130,15 @@ if [[ $TO == hyprland && ! -f $HOME/.config/hypr/hyprland.lua ]]; then
   NEED_SKELETON=true
   if have_pkg "$META_PKG"; then NEED_SKELETON=false; fi
 fi
-# Native-app gate (install.sh idiom): a box with no file manager / viewer at
-# all gets the target native. Whatever is already there is handled by the
-# swap below (flip a carried old-native pick, uninstall replaced natives).
+# Native-app install (deliberate-switch semantics, NOT install.sh minimalism):
+# adopting the target WM means adopting its native apps — install them unless
+# already present, even when the other WM's app serves today. The flip +
+# uninstall below then converge picks and remove the replaced half. (Fresh
+# installs stay minimal via install.sh's presence gate; a switch is an
+# explicit "make this box the other kind".)
 MISSING_APPS=""
-if ! have "$NATIVE_FM" && ! have "$FALLBACK_FM"; then MISSING_APPS+="$NATIVE_FM "; fi
-if ! have "$NATIVE_IMG" && ! have "$FALLBACK_IMG"; then MISSING_APPS+="$NATIVE_IMG "; fi
+if ! have "$NATIVE_FM"; then MISSING_APPS+="$NATIVE_FM "; fi
+if ! have "$NATIVE_IMG"; then MISSING_APPS+="$NATIVE_IMG "; fi
 MISSING_APPS="$(printf '%s' "$MISSING_APPS" | tr -s ' ' | sed 's/^ *//;s/ *$//')"
 STACK_LINE="${MISSING_STACK:-"(all installed)"}${MISSING_APPS:+ + natives ($MISSING_APPS)}"
 # Stored picks for the swap plan (empty = never seeded; deploy seeds later).
