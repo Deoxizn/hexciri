@@ -297,8 +297,11 @@ print(f"hexciri-sync: wrote Qt color scheme → {(qt6_dir / 'colors' / 'hexciri.
 # color-schemes/*.colors + kdeglobals — qt6ct never touches those, which is why
 # dolphin (the stock hyprland file manager, Mod+Shift+F) renders untinted
 # frames. Generate the standard KDE scheme from the same theme tokens and point
-# kdeglobals at it. A user KDE scheme choice in System Settings survives: we
-# only write the ColorScheme= key, never the rest of the file.
+# kdeglobals at it. Structure mirrors Noctalia's own KDE template
+# (/usr/share/noctalia/assets/templates/kde/kcolorscheme.colors) section for
+# section — same groups, same keys — so anything that reads a Noctalia-rendered
+# scheme reads this one. A user KDE scheme choice in System Settings survives:
+# we only write the ColorScheme= key, never the rest of the file.
 def rgb(v):
     c = v.lstrip("#")
     return "%d,%d,%d" % (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16))
@@ -324,17 +327,32 @@ def kde_group(grp, bg, fg, alt, deco):
         f"ForegroundVisited={rgb(magenta)}\n"
     )
 
-kde_body = "[ColorEffects:Disabled]\nColor=56,56,56\nColorAmount=0.7\nColorEffect=0\nContrastAmount=0.65\nContrastEffect=1\nIntensityAmount=0.1\nIntensityEffect=2\n\n"
+kde_body = "[KDE]\ncontrast=4\n\n"
+kde_body += "[General]\nColorScheme=hexciri\nName=hexciri\n\n"
+kde_body += ("[ColorEffects:Disabled]\nColor=56,56,56\nColorAmount=0.7\nColorEffect=0\n"
+             "ContrastAmount=0.65\nContrastEffect=1\nIntensityAmount=0.1\nIntensityEffect=2\n\n")
+kde_body += ("[ColorEffects:Inactive]\nChangeSelectionColor=true\n"
+             f"Color={rgb(darker_bg)}\nColorAmount=0.025\nColorEffect=2\n"
+             "ContrastAmount=0.1\nContrastEffect=2\nEnable=false\n"
+             "IntensityAmount=0\nIntensityEffect=0\n\n")
 for grp, bg, fg in (
     ("Button", background, foreground),
     ("Complementary", dark_background, foreground),
+    ("Header", background, foreground),
+    ("Header][Inactive", dark_background, foreground),
     ("Selection", accent, background),          # accent bg + theme bg text = readable
     ("Tooltip", dark_background, foreground),
     ("View", dark_background, foreground),
     ("Window", background, foreground),
 ):
     kde_body += kde_group(grp, bg, fg, darker_bg, accent) + "\n"
-kde_body += "[General]\nName=hexciri\nColorScheme=hexciri\n"
+kde_body += ("[WM]\n"
+             f"activeBackground={rgb(accent)}\n"
+             f"activeBlend={rgb(background)}\n"
+             f"activeForeground={rgb(background)}\n"
+             f"inactiveBackground={rgb(dark_background)}\n"
+             f"inactiveBlend={rgb(muted)}\n"
+             f"inactiveForeground={rgb(muted)}\n")
 kde_scheme.write_text(kde_body)
 print(f"hexciri-sync: wrote KDE color scheme → {kde_scheme}")
 
@@ -548,4 +566,12 @@ fi
 # hook does for nautilus.
 if command -v dolphin >/dev/null 2>&1 && pgrep -x dolphin >/dev/null 2>&1; then
   pkill -x dolphin 2>/dev/null || true
+fi
+
+# ── 7. KDE service cache rebuild ──
+# A freshly-written scheme file is invisible to KDE until the service cache
+# knows it (the cache is otherwise rebuilt at login, so a theme-set without
+# this step leaves dolphin on the previous scheme until relogin).
+if command -v kbuildsycoca6 >/dev/null 2>&1; then
+  kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
 fi
