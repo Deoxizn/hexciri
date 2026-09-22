@@ -93,14 +93,14 @@ fi
 # XXX package names are the Arch/CachyOS ones; if they drift pacman fails
 # and the script prints the manual fallback instead of dying.
 if [[ $TO == hyprland ]]; then
-  STACK_PKGS="hyprland xdg-desktop-portal-hyprland uwsm"
+  STACK_PKGS="hyprland xdg-desktop-portal-hyprland uwsm noctalia"
   OLD_STACK="cachyos-niri-noctalia niri xwayland-satellite"
   NEED_META=true  # stock hyprland.lua skeleton comes from the CachyOS meta
   META_PKG="cachyos-hypr-noctalia"
   NATIVE_FM="dolphin"
   NATIVE_IMG="qview"
 else
-  STACK_PKGS="niri xwayland-satellite xdg-desktop-portal-gtk"
+  STACK_PKGS="niri xwayland-satellite xdg-desktop-portal-gtk noctalia"
   OLD_STACK="cachyos-hypr-noctalia hyprland uwsm xdg-desktop-portal-hyprland"
   NEED_META=false # repo ships the full niri tree (config/niri)
   META_PKG=""

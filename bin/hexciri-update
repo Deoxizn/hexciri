@@ -1414,7 +1414,9 @@ EOF
   # playerctl are niri keybind needs (XF86MonBrightness* / XF86AudioPlay/Next/
   # Prev) — without them brightness + media keys are dead while volume (wpctl)
   # keeps working. fwupd ships fwupdmgr for Update > Firmware — without it the
-  # blade fails with "command not found". This is the
+  # blade fails with "command not found". noctalia is the shell itself (bar,
+  # lock, launcher, notifications) — a meta removal orphaned it once and left
+  # a gray compositor with no shell, so it heals here like the rest. This is the
   # self-healing subset of install.sh's _hexciri_wants (the full set stays
   # install-time-only so deliberate removals stick); --needed makes it a no-op
   # when present, and failure (offline?) never stops the sync.
@@ -1431,7 +1433,7 @@ EOF
   # without this gate every update would drag nautilus back onto hyprland.
   # (imv needs no gate here: it was never layer, install-time only.)
   ensure_layer_pkgs() {
-    local pkgs="polkit-gnome gnome-keyring adw-gtk-theme brightnessctl playerctl fwupd" missing=""
+    local pkgs="polkit-gnome gnome-keyring adw-gtk-theme brightnessctl playerctl fwupd noctalia" missing=""
     if ! command -v dolphin >/dev/null 2>&1 && ! command -v nautilus >/dev/null 2>&1; then
       pkgs+=" nautilus"
     fi
