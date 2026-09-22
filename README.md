@@ -155,9 +155,9 @@ things), Update (updates). Pick a row and it does the thing.
 │                            Backgrounds (your store) · Fonts
 │                            Extra themes list · Wallpaper dirs list
 ├── System
-│   ├── Config >
-│   │   ├── Niri >             (per-fragment editors: config.kdl + cfg/*.kdl)
-│   │   ├── Hyprland >         (live editor for hyprland.lua + config/*.lua)
+│   ├── Config >               (only the ACTIVE WM's entry shows)
+│   │   ├── Niri >             (per-fragment editors: config.kdl + cfg/*.kdl)   — on niri
+│   │   ├── Hyprland >         (live editor for hyprland.lua + config/*.lua)    — on hyprland
 │   │   ├── Noctalia config
 │   │   ├── Fastfetch config
 │   │   ├── Hexciri lockscreen
