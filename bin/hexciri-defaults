@@ -157,6 +157,15 @@ case "${pick_type,,}" in
     choice="$(menu_via_fuzzel 'Terminal: ' -- "$(available terminal "$current" kitty foot ghostty alacritty)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv terminal "$choice"
+    # Nemo's "Open in Terminal" reads the Cinnamon default-terminal keys
+    # (stock: gnome-terminal, absent here). Point them at the picked terminal
+    # so the menu entry works; kitty opens in the folder via --directory.
+    if gsettings writable org.cinnamon.desktop.default-applications.terminal exec 2>/dev/null; then
+      gsettings set org.cinnamon.desktop.default-applications.terminal exec "$choice" 2>/dev/null || true
+      if [[ $choice == kitty ]]; then
+        gsettings set org.cinnamon.desktop.default-applications.terminal exec-arg '--directory' 2>/dev/null || true
+      fi
+    fi
     ;;
   shell)
     current="$(get shell)"
