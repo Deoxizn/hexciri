@@ -17,8 +17,11 @@ set -euo pipefail
 LAYOUTS=(dwindle scrolling monocle)
 
 HYPR_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
-LAYOUT_FILE="$HYPR_DIR/config/hexciri-layout.lua"
-MAIN_FILE="$HYPR_DIR/hyprland.lua"
+MISC_FILE="$HYPR_DIR/config/misc.lua"
+
+# Live layout state is a marked block in misc.lua (looknfeel-adjacent, never
+# theme-owned). The cycler patches the layout value in place; deploy seeds
+# the block when absent. One fewer file, same instant file+reload apply.
 
 # uwsm-managed Hyprland omits HYPRLAND_INSTANCE_SIGNATURE from its own
 # environ, so the Mod+L bind inherits a sig-less env and every hyprctl call
@@ -50,27 +53,19 @@ except Exception: print("")' 2>/dev/null || true)"
   printf '%s' "${cur:-dwindle}"
 }
 
-write_layout() { # <name> — the whole file is generated, never hand-edited
-  mkdir -p "$(dirname "$LAYOUT_FILE")"
-  cat > "$LAYOUT_FILE" <<EOF
--- Hexciri live layout (written by hexciri-hyprland-layout, never by hand).
-hl.config({
-    general = {
-        layout = "$1",
-    },
-})
-EOF
-}
-
-ensure_required() {
-  [[ -f $MAIN_FILE ]] || return 0
-  grep -q 'require("config.hexciri-layout")' "$MAIN_FILE" 2>/dev/null && return 0
-  cp -f "$MAIN_FILE" "$MAIN_FILE.hexciri.bak" 2>/dev/null || true
-  if grep -q 'require("config.hexciri-binds")' "$MAIN_FILE" 2>/dev/null; then
-    sed -i '/require("config.hexciri-binds")/a require("config.hexciri-layout")' "$MAIN_FILE"
-  else
-    printf '\nrequire("config.hexciri-layout")\n' >> "$MAIN_FILE"
-  fi
+write_layout() { # <name> — patches the marked block in misc.lua
+  LAY_NEW="$1" LAY_FILE="$MISC_FILE" python3 <<'PYEOF' || return 1
+import os, re
+p = os.environ["LAY_FILE"]
+new = os.environ["LAY_NEW"]
+start = "-- ── HEXCIRI layout ──"
+t = open(p).read()
+pat = re.compile(r'(?<=general = \{\n        layout = ")[a-z]+(?=",\n    \},\n\}\))')
+assert start in t, "layout block missing (run hexciri-update self to seed it)"
+t2, n = pat.subn(new, t, count=1)
+assert n == 1, "layout value line not found"
+open(p, "w").write(t2)
+PYEOF
 }
 
 mode="${1:-next}"
@@ -94,6 +89,12 @@ case "$mode" in
     fi
     ;;
 esac
+
+ensure_required() {
+  [[ -f $MISC_FILE ]] || return 0
+  grep -qxF -- "-- ── HEXCIRI layout ──" "$MISC_FILE" 2>/dev/null && return 0
+  { printf '\n-- ── HEXCIRI layout ──\n'; printf 'hl.config({\n    general = {\n        layout = "dwindle",\n    },\n})\n'; printf -- '-- ── END HEXCIRI layout ──\n'; } >> "$MISC_FILE"
+}
 
 ensure_required
 write_layout "$next"
