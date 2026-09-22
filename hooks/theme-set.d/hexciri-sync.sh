@@ -576,6 +576,17 @@ if command -v kbuildsycoca6 >/dev/null 2>&1; then
   kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
 fi
 
+# ── 7b. KDE platform plugin check ──
+# Dolphin reads the scheme above ONLY through KDE's Qt platform theme plugin
+# (frameworkintegration). It ships as an optional dolphin dep, so minimal
+# installs can have dolphin with no platform plugin — and then no scheme
+# ever applies, no matter how often the theme changes. Name the fix instead
+# of failing silently (install: sudo pacman -S --needed frameworkintegration).
+if command -v dolphin >/dev/null 2>&1 && \
+   ! ls /usr/lib/qt6/plugins/platformthemes/ 2>/dev/null | grep -qi kde; then
+  echo "hexciri-sync: WARNING dolphin has no KDE platform plugin — schemes can't apply (run: sudo pacman -S --needed frameworkintegration)" >&2
+fi
+
 # ── 8. Login-greeter follow (greetd boxes) ──
 # Noctalia copies the live palette + wallpaper + font + scale to
 # noctalia-greeter. Runs HERE, at the end of the bridge, deliberately: hook

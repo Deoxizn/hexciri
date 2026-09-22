@@ -106,7 +106,7 @@ fi
 # XXX package names are the Arch/CachyOS ones; if they drift pacman fails
 # and the script prints the manual fallback instead of dying.
 if [[ $TO == hyprland ]]; then
-  STACK_PKGS="hyprland xdg-desktop-portal-hyprland uwsm noctalia"
+  STACK_PKGS="hyprland xdg-desktop-portal-hyprland uwsm noctalia frameworkintegration"
   OLD_STACK="cachyos-niri-noctalia niri xwayland-satellite"
   NEED_META=true  # stock hyprland.lua skeleton comes from the CachyOS meta
   META_PKG="cachyos-hypr-noctalia"

@@ -111,6 +111,11 @@ _hexciri_wants="kitty zed opencode localsend fuzzel gpu-screen-recorder tesserac
 # without nautilus still gets one.
 command -v dolphin >/dev/null 2>&1 || _hexciri_wants+="nautilus "
 command -v qview >/dev/null 2>&1 || _hexciri_wants+="imv "
+# KDE platform theme plugin (dolphin reads KDE color schemes ONLY through
+# it; ships as an optional dolphin dep). Needed wherever dolphin is.
+if command -v dolphin >/dev/null 2>&1 && ! pacman -Q frameworkintegration >/dev/null 2>&1; then
+  _hexciri_wants+="frameworkintegration "
+fi
 # One-time stock removals (not the list — replaced CachyOS defaults, always
 # safe to attempt; kept when something still needs them). The hyprland tail
 # (gnome-text-editor → zed, gnome-calculator → the fuzzel calc menu script)
