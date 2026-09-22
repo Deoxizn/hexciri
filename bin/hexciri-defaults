@@ -108,13 +108,15 @@ if [[ $(get pdf) == mupdf ]]; then
 fi
 
 menu_via_fuzzel() { # <prompt> -- <items...>
-  local prompt=$1; shift
+  local prompt=$1 out; shift
   [[ $1 == -- ]] && shift
   if command -v hexciri-fuzzel &>/dev/null; then
-    printf '%s\n' "$@" | hexciri-fuzzel --dmenu --prompt="$prompt" --width=30 --lines=8
+    out="$(printf '%s\n' "$@" | hexciri-fuzzel --dmenu --prompt="$prompt" --width=30 --lines=8)" || return 1
   else
-    printf '%s\n' "$@" | head -n 1
+    out="$(printf '%s\n' "$@" | head -n 1)"
   fi
+  # Re-picking the current choice returns it ✓-marked — store the bare name.
+  printf '%s\n' "${out#✓ }"
 }
 
 pick_type="${1:-}"
