@@ -120,6 +120,7 @@ Rectangle {
 
       Image {
         id: logo
+        visible: root.bgFile.length === 0
         source: "logo.png"
         width: Math.min(sourceSize.width, 716)
         height: sourceSize.width > 0 ? Math.round(width * sourceSize.height / sourceSize.width) : 0

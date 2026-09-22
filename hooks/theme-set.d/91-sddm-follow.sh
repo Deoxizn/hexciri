@@ -26,20 +26,29 @@ mkdir -p "$STAGING" || { warning "SDDM follow skipped (no runtime dir)"; exit 0;
   printf 'Error=#%s\n' "$normal_red"
 } > "$STAGING/sddm-theme.conf"
 
-# Wallpaper: the live Noctalia wallpaper symlink the theme bridge maintains.
-# Optional — colors alone still follow when it is absent.
-CUR="$HOME/.local/state/noctalia/wallpaper/current"
-if [[ -L $CUR || -f $CUR ]]; then
-  SRC="$(readlink -f "$CUR" 2>/dev/null || true)"
-  if [[ -n $SRC && -f $SRC && -s $SRC ]]; then
-    EXT="${SRC##*.}"; EXT="${EXT,,}"
-    case "$EXT" in
-      jpg|jpeg|png|webp)
-        if cp -f "$SRC" "$STAGING/background.$EXT" 2>/dev/null; then
-          printf 'BackgroundFile=%s\n' "background.$EXT" >> "$STAGING/sddm-theme.conf"
-        fi ;;
-    esac
+# Wallpaper: the LIVE wallpaper, not the theme default. `noctalia msg
+# wallpaper-get` is ground truth (order-proof: this hook sorts before the
+# theme bridge that rewrites the `current` symlink, and the user may have
+# picked via the Noctalia picker without any theme-set). Falls back to the
+# `current` symlink (headless), else colors-only.
+SRC=""
+if command -v noctalia >/dev/null 2>&1 && command -v pgrep >/dev/null 2>&1 && pgrep -x noctalia >/dev/null 2>&1; then
+  SRC="$(noctalia msg wallpaper-get 2>/dev/null | head -n1 || true)"
+fi
+if [[ -z $SRC ]]; then
+  CUR="$HOME/.local/state/noctalia/wallpaper/current"
+  if [[ -L $CUR || -f $CUR ]]; then
+    SRC="$(readlink -f "$CUR" 2>/dev/null || true)"
   fi
+fi
+if [[ -n $SRC && -f $SRC && -s $SRC ]]; then
+  EXT="${SRC##*.}"; EXT="${EXT,,}"
+  case "$EXT" in
+    jpg|jpeg|png|webp)
+      if cp -f "$SRC" "$STAGING/background.$EXT" 2>/dev/null; then
+        printf 'BackgroundFile=%s\n' "background.$EXT" >> "$STAGING/sddm-theme.conf"
+      fi ;;
+  esac
 fi
 
 OUT="$(pkexec "$HELPER" --sync "$STAGING" 2>&1)"; RC=$?
