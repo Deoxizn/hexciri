@@ -369,6 +369,26 @@ if not re.search(r'^ColorScheme=hexciri$', kg, flags=re.M):
     kde_globals.write_text(kg)
     print(f"hexciri-sync: kdeglobals ColorScheme → hexciri")
 
+# Point dolphin's own override at it too (surgical: only the ColorScheme= key
+# under [UiSettings]). Dolphin renders its file view from this per-app key,
+# NOT the kdeglobals default above — an empty/missing key leaves the view on
+# whatever was selected before (observed: black view text that only Dolphin's
+# own Window Color Scheme picker fixed). A deliberate per-app scheme loses to
+# theme-set by design (one pick recolors everything). Only when installed.
+import shutil
+if shutil.which("dolphin"):
+    d_rc = Path.home() / ".config" / "dolphinrc"
+    dr = d_rc.read_text() if d_rc.exists() else ""
+    if not re.search(r'^ColorScheme=hexciri$', dr, flags=re.M):
+        if re.search(r'^ColorScheme=.*$', dr, flags=re.M):
+            dr = re.sub(r'^ColorScheme=.*$', 'ColorScheme=hexciri', dr, count=1, flags=re.M)
+        elif '[UiSettings]' in dr:
+            dr = re.sub(r'^\[UiSettings\]$', '[UiSettings]\nColorScheme=hexciri', dr, count=1, flags=re.M)
+        else:
+            dr = dr.rstrip("\n") + "\n\n[UiSettings]\nColorScheme=hexciri\n"
+        d_rc.write_text(dr)
+        print(f"hexciri-sync: dolphinrc ColorScheme → hexciri")
+
 # ── 3. Window border/focus-ring colors (niri only) ──
 # The tiny theme surface niri carries. Skip niri configs not yet present
 # (no-op until a check-out lays them down).
