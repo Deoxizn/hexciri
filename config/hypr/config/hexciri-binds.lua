@@ -54,6 +54,11 @@ hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("hexciri-hyprland-layout"))
 hl.bind(mainMod .. " + bracketright", hl.dsp.layout("cyclenext"))
 hl.bind(mainMod .. " + bracketleft", hl.dsp.layout("cycleprev"))
 
+-- Floating toggle (the niri Mod+Shift+Space verb): stock bound this slot to
+-- float-toggle but it was neutralized at deploy for the root menu, leaving
+-- Hyprland with no tiling/floating flip at all.
+hl.bind(mainMod .. " + SHIFT + Space", hl.dsp.window.float({ action = "toggle" }))
+
 -- Workspaces: niri verbs (Mod+digit switch / Mod+SHIFT+digit move). Stock
 -- CachyOS binds Mod+ALT+digit to switch and Mod+SHIFT+CONTROL|ALT+digit to
 -- move, and its Mod+SHIFT+digit(1-3) nudges windows between MONITORS — the
