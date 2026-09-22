@@ -201,7 +201,7 @@ plan() {
   fi
   echo "  deploy: hexciri-update self (overlays, keybinds, kitty, themes)"
   echo "  root: sudo hexciri-sync (SDDM theme + PreferredSession=$TO stamp)"
-  echo "  finish: log out, pick '$TO' at SDDM (greeter defaults to it), log in"
+  echo "  finish: log out, pick '$TO' in the login picker (it remembers your choice), log in"
 }
 
 if [[ $DRY == true ]]; then
@@ -388,6 +388,15 @@ else
     info "no pacman here — remove by hand: $OLD_STACK"
   fi
 fi
+# Second pass over replaced apps: the first pass ran while the old meta still
+# pinned them (blocked, kept); with the meta retired they uninstall. All
+# helpers are idempotent (skip when absent/unneeded), so this is free.
+# shellcheck disable=SC2086
+for p in $RM_LIST; do uninstall_plain "$p" "replaced on $TO"; done
+for p in $RDD_LIST; do uninstall_forced "$p"; done
+unset p
+uninstall_native "$FM_OLD" "$FM_NEW" files
+uninstall_native "$IMG_OLD" "$IMG_NEW" images
 if [[ $REMOVED_ANY == true ]]; then
   update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 fi
@@ -403,7 +412,7 @@ fi
 cat <<EOF
 hexciri-wm-switch: $CURRENT → $TO complete.
   old configs: $BAK (restore by hand to switch back without re-seeding)
-  next: log out, pick '$TO' at SDDM (greeter now defaults to it), log in.
+  next: log out, pick '$TO' in the login picker (it remembers your choice), log in.
   apps: carried $FM_OLD/$IMG_OLD picks flipped to $FM_NEW/$IMG_NEW, replaced
   natives uninstalled when nothing still needed them (explicit cross-WM
   picks were kept — change any time in System > Default Apps).
