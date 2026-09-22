@@ -112,7 +112,7 @@ command -v qview >/dev/null 2>&1 || _hexciri_wants+="imv "
 # (gnome-text-editor → zed, gnome-calculator → the fuzzel calc menu script)
 # covers the CachyOS hyprland preinstalls niri boxes never had; absent on niri
 # they are plain no-ops there.
-_hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro vlc-plugins-all cachyos-wallpapers gnome-text-editor gnome-calculator"
+_hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro vlc-plugins-all cachyos-wallpapers"
 # xwayland-satellite pin (upstream #468): 0.8.2 regressed popup positioning
 # (commit 3273a0f) — X11 dropdowns (Steam menus, etc.) spawn offset and lose
 # hover on niri. Hold at last-good 0.8.1 until a fixed 0.8.3+ lands, then drop
@@ -167,6 +167,23 @@ if command -v pacman >/dev/null 2>&1; then
       info "kept vim (forced removal failed)"
     fi
   fi
+  # Stock hyprland editor + calculator (vim precedent): the CachyOS hyprland
+  # meta pins them so plain -Rns refuses — -Rdd breaks only the meta's
+  # declared dep. The editor goes only when zed (its replacement) is present;
+  # the calculator is hexciri's fuzzel menu script, not an app.
+  for _p in gnome-text-editor gnome-calculator; do
+    pacman -Q "$_p" >/dev/null 2>&1 || continue
+    if [[ $_p == gnome-text-editor ]] && ! command -v zeditor >/dev/null 2>&1; then
+      info "kept $_p (zed not present yet)"
+      continue
+    fi
+    info "removing $_p (forced: breaks only cachyos-hypr-noctalia's declared dep)"
+    if sudo pacman -Rdd --noconfirm "$_p" 2>&1 | sed 's/^/  /'; then
+      info "removed $_p"
+    else
+      info "kept $_p (forced removal failed)"
+    fi
+  done
   unset _p _m _pkg _dir
 fi
 unset _hexciri_wants _hexciri_stock_rm _hexciri_purge

@@ -1307,6 +1307,20 @@ EOF
     # script (libqalculate), and the viewer libs lost their last consumer
     # with the editor + calculator.
     rm_list+="gnome-calculator gtksourceview5 "
+    local rdd_list=""
+    # Forced removals (vim precedent): the CachyOS hyprland meta pins the
+    # stock editor + calculator, so plain -Rns refuses while it's installed.
+    # -Rdd breaks only the meta's declared dep. Without the meta they take
+    # the clean -Rns path above instead.
+    if pacman -Q cachyos-hypr-noctalia >/dev/null 2>&1; then
+      for p in gnome-text-editor gnome-calculator; do
+        # shellcheck disable=SC2076
+        if [[ " $rm_list " =~ " $p " ]]; then
+          rm_list=${rm_list//"$p "/}
+          rdd_list+="$p "
+        fi
+      done
+    fi
     for p in $rm_list; do
       pacman -Q "$p" >/dev/null 2>&1 || continue
       # shellcheck disable=SC2086
@@ -1314,6 +1328,14 @@ EOF
         echo "migrated: removed $p (hyprland-native replacement is live)"
       else
         echo "migrated: kept $p (something still needs it)"
+      fi
+    done
+    for p in $rdd_list; do
+      pacman -Q "$p" >/dev/null 2>&1 || continue
+      if sudo pacman -Rdd --noconfirm "$p" 2>&1 | tail -n 2; then
+        echo "migrated: removed $p (forced: breaks only cachyos-hypr-noctalia's declared dep)"
+      else
+        echo "migrated: kept $p (forced removal failed)"
       fi
     done
     if ! pacman -Q imv >/dev/null 2>&1; then
