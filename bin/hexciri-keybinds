@@ -44,6 +44,12 @@ wm = os.environ.get("WM", "niri")
 file = os.environ["KEYBINDS_FILE"]
 
 # ── hexciri core: canonical combo -> description (mirrors the hand-written config) ──
+# Combos reused across WMs with different meanings: niri owns the DESC entry,
+# hyprland rows take theirs here (checked first on the hyprland path).
+HYPR_DESC = {
+    "Mod+BracketLeft": "Cycle to previous window",
+    "Mod+BracketRight": "Cycle to next window",
+}
 DESC = {
     "Mod+Space": "App launcher (Noctalia)",
     "Mod+Alt+Space": "Root menu",
@@ -415,6 +421,13 @@ for combo, action in binds:
     label = ""
     if wm == "hyprland":
         label = hypr_label(action)
+    # Combos whose meaning differs per WM resolve here first: niri owns the
+    # DESC entry (Mod+Bracket* = consume/expel columns, a niri-only concept),
+    # while the hyprland overlay reuses the keys for monocle stack flipping.
+    # (A DESC.get default can't do this — the key EXISTS in DESC.)
+    if wm == "hyprland" and c in HYPR_DESC:
+        rows.append(f"{c:<22} {HYPR_DESC[c]}")
+        continue
     rows.append(f"{c:<22} {DESC.get(c, label or prettify(action))}")
 
 if not rows:
