@@ -328,6 +328,8 @@ stay as you left them.
 | `brightnessctl` | backlight control — niri `XF86MonBrightness*` binds + Noctalia brightness widget/OSD are dead without it |
 | `playerctl` | MPRIS media control — niri `XF86AudioPlay/Next/Prev` binds are dead without it |
 | `fwupd` | firmware updates — Update > Firmware runs `fwupdmgr update`, fails with "command not found" without it |
+| `jq` | JSON parsing for the WM bridges — focused-output/window lookups, reminder timers, and screen-record geometry all go through it |
+| `cliphist` | clipboard history — `Mod+Ctrl+V` picker (`hexciri-clipboard`) and the autostart history watchers on both WMs |
 
 Plus: **yay** bootstrapped via makepkg (needs `base-devel`+`git`) when no
 AUR helper exists; **Brave Origin** (`brave-origin-bin` via yay/paru — the

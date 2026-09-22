@@ -78,7 +78,8 @@ fi
 # that declared dep, reinstalling vim undoes it). fuzzel + gtksourceview5 are
 # layer needs (menu would be dead without fuzzel; gtksourceview5 covers
 # text-viewer libs).
-# NOTE: polkit-gnome is a layer need too — niri autostart spawns its agent
+# hexciri could not open. NOTE: polkit-gnome is a layer need too — the
+# niri/hyprland autostarts both spawn its agent.
 # binary, and without it pkexec apps (btrfs-assistant, gparted) silently
 # never open: no agent, no password dialog.
 # NOTE: brightnessctl + playerctl are layer needs too — niri keybinds spawn
@@ -97,7 +98,7 @@ fi
 # (vlc-plugins-all) is removed below; nothing in the layer references it.
 # NOTE: cachyos-wallpapers is removed below too — Noctalia shows theme
 # backgrounds (plus ~/.config/hexciri/wallpapers), never that pack.
-_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd "
+_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd jq cliphist "
 # One-time stock removals (not the list — replaced CachyOS defaults, always
 # safe to attempt; kept when something still needs them).
 _hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro vlc-plugins-all cachyos-wallpapers"
