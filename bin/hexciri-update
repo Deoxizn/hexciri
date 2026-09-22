@@ -434,6 +434,20 @@ update_self() {
       fi
     fi
 
+    # hexciri-windowrules.lua (TUI.float float + size, fastfetch float):
+    # seeded by the generic overlay loop above like binds/autostart — assert
+    # the require AFTER stock config.windowrules so the overlay wins
+    # (anonymous rules resolve last-match-wins). Mirrors niri window-rules.kdl.
+    if ! grep -q 'require("config.hexciri-windowrules")' "$main" 2>/dev/null; then
+      cp -f "$main" "$main.hexciri.bak" 2>/dev/null || true
+      if grep -q 'require("config.windowrules")' "$main" 2>/dev/null; then
+        sed -i '/require("config.windowrules")/a require("config.hexciri-windowrules")' "$main" && \
+          echo "hyprland: required config.hexciri-windowrules after stock windowrules"
+      else
+        echo "hyprland: NOTE could not place config.hexciri-windowrules (no stock windowrules require found)" >&2
+      fi
+    fi
+
     # Neutralize stock binds that the hexciri overlay owns outright. In this
     # shell a duplicate combo STACKS (both actions fire) — the overlay being
     # required later does NOT dislodge the stock line. Comment the stock ones

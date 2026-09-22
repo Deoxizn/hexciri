@@ -24,8 +24,13 @@ unset _dirs _d _mydir
 # Parse leading options: [--dir=<dir>] [--app-id=<id>] -e <cmd...>.
 # --dir becomes a cd before exec — the terminal-agnostic equivalent of kitty's
 # --working-directory (every terminal inherits our cwd, whatever the default
-# terminal is set to). Unknown leading flags are ignored for compat.
+# terminal is set to). --app-id is forwarded to hexciri-terminal, which maps
+# it onto the active terminal's own flag (kitty/foot take --app-id natively,
+# ghostty/alacritty take --class) so the Wayland app-id survives — Niri's
+# TUI.float rule and Hyprland's hexciri-windowrules.lua match on it.
+# Unknown leading flags are ignored for compat.
 _dir=""
+_appid=""
 while (($# > 0)); do
   case "$1" in
     --dir=*|--working-directory=*) _dir="${1#*=}"; shift ;;
@@ -33,8 +38,11 @@ while (($# > 0)); do
       _dir="${2:-}"
       [[ -n $_dir ]] || { echo "xdg-terminal-exec: $1 needs a directory" >&2; exit 1; }
       shift 2 ;;
-    --app-id=*) shift ;;
-    --app-id) shift 2 2>/dev/null || shift ;;
+    --app-id=*) _appid="${1#*=}"; shift ;;
+    --app-id)
+      _appid="${2:-}"
+      [[ -n $_appid ]] || { echo "xdg-terminal-exec: $1 needs an id" >&2; exit 1; }
+      shift 2 ;;
     -e) shift; break ;;
     --) shift; break ;;
     -*) shift ;;
@@ -51,7 +59,13 @@ if [[ -n $_dir ]]; then
   cd "$_dir" || exit 1
 fi
 if (($# > 0)); then
-  exec "$SCRIPT_DIR/hexciri-terminal" -e "$@"
+  if [[ -n $_appid ]]; then
+    exec "$SCRIPT_DIR/hexciri-terminal" --app-id="$_appid" -e "$@"
+  else
+    exec "$SCRIPT_DIR/hexciri-terminal" -e "$@"
+  fi
+elif [[ -n $_appid ]]; then
+  exec "$SCRIPT_DIR/hexciri-terminal" --app-id="$_appid"
 else
   exec "$SCRIPT_DIR/hexciri-terminal"
 fi

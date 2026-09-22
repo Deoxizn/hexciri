@@ -1,8 +1,25 @@
 #!/bin/bash
 # hexciri:summary=Open the default terminal (reads hexciri defaults state, passes args through)
-# usage: hexciri-terminal [args...] (e.g. hexciri-terminal -e nvim)
+# usage: hexciri-terminal [--app-id=<id>] [args...] (e.g. hexciri-terminal -e nvim)
+# --app-id sets the Wayland app-id so compositors can match it (Niri
+# TUI.float rule, Hyprland hexciri-windowrules.lua). It is translated onto
+# the active terminal's own flag: kitty and foot take --app-id natively,
+# ghostty and alacritty take --class.
 set -euo pipefail
+_appid=""
+if [[ ${1:-} == --app-id=* ]]; then
+  _appid="${1#*=}"
+  shift
+fi
 term="$(cat "$HOME/.local/state/hexciri/defaults/terminal" 2>/dev/null || echo kitty)"
 command -v "$term" &>/dev/null || term="kitty"
 command -v "$term" &>/dev/null || { echo "no terminal found (tried $term, kitty)" >&2; exit 1; }
+if [[ -n $_appid ]]; then
+  case "$(basename "$term")" in
+    ghostty|alacritty)
+      exec "$term" --class="$_appid" "$@" ;;
+    *)
+      exec "$term" --app-id="$_appid" "$@" ;;
+  esac
+fi
 exec "$term" "$@"
