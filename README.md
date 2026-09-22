@@ -191,6 +191,7 @@ manager (dolphin on Hyprland, nautilus on niri — one pick in
 (`opencode` by default), `Mod+Escape` power menu, `Mod+Ctrl+V` clipboard
 history. Stock `Mod+W` (which launched the replaced firefox) is neutralized
 at deploy with no replacement — browser already lives on `Mod+Shift+B`.
+`Mod+T` cycles tiling layouts (dwindle/master/scrolling…).
 Workspaces are niri verbs on both WMs: `Mod+1…9` switches, `Mod+Shift+1…9`
 moves the focused window. Binds use keycodes so they survive any layout
 (US/AZERTY alike), mirroring the stock CachyOS digit idiom.

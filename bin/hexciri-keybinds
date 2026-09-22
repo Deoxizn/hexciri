@@ -55,6 +55,7 @@ DESC = {
     "Mod+Shift+B": "Browser",
     "Mod+Shift+E": "Text editor",
     "Mod+Shift+F": "File manager",
+    "Mod+T": "Cycle tiling layout",
     "Mod+Ctrl+M": "Messenger webapp",
     "Mod+Q": "Close window",
     "Mod+Left": "Focus left", "Mod+H": "Focus left",

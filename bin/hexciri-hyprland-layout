@@ -1,0 +1,60 @@
+#!/bin/bash
+# hexciri:summary=Cycle Hyprland tiling layouts (dwindle/master/scrolling…)
+# usage: hexciri-hyprland-layout [next|prev|<name>]  (default: next)
+# Rotates through every layout the compositor actually supports: built-ins
+# dwindle + master always, plus scrolling when the hyprscrolling plugin is
+# loaded. Bound to Mod+T on hyprland (the Omarchy toggle idiom, generalized
+# from a two-way toggle to a full cycle so future layouts join free).
+set -euo pipefail
+
+BUILTINS=(dwindle master)
+
+# scrolling registers a layout literally named "scrolling" — present only
+# when its plugin is loaded. Probe both plugin-list spellings; unknown
+# subcommands fail silently and scrolling is simply skipped.
+have_scrolling() {
+  hyprctl plugin list 2>/dev/null | grep -qiE "scrolling" || \
+    hyprctl plugins list 2>/dev/null | grep -qiE "scrolling"
+}
+
+current_layout() {
+  local cur=""
+  if command -v jq >/dev/null 2>&1; then
+    cur="$(hyprctl getoption general:layout -j 2>/dev/null | jq -r '.str // empty' 2>/dev/null || true)"
+  fi
+  if [[ -z $cur ]]; then
+    cur="$(hyprctl getoption general:layout 2>/dev/null | grep -oE '"(dwindle|master|scrolling|[a-z]+)"' | head -1 | tr -d '"' || true)"
+  fi
+  printf '%s' "${cur:-dwindle}"
+}
+
+layouts=("${BUILTINS[@]}")
+if have_scrolling; then
+  layouts+=(scrolling)
+fi
+
+mode="${1:-next}"
+cur="$(current_layout)"
+idx=-1
+for i in "${!layouts[@]}"; do
+  [[ ${layouts[$i]} == "$cur" ]] && idx=$i
+done
+
+case "$mode" in
+  next) next=${layouts[$(( (idx + 1) % ${#layouts[@]} ))]} ;;
+  prev) next=${layouts[$(( (idx - 1 + ${#layouts[@]}) % ${#layouts[@]} ))]} ;;
+  *)
+    next=""
+    for l in "${layouts[@]}"; do
+      [[ $l == "$mode" ]] && next=$l
+    done
+    if [[ -z $next ]]; then
+      echo "hexciri-hyprland-layout: unknown layout '$mode' (have: ${layouts[*]})" >&2
+      exit 1
+    fi
+    ;;
+esac
+
+hyprctl keyword general:layout "$next" >/dev/null 2>&1 || exit 1
+notify-send "Layout" "$next" 2>/dev/null || true
+echo "$next"
