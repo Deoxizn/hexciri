@@ -324,6 +324,12 @@ def hypr_label(action):
     m = re.search(r'workspace\.toggle_special\(', s2)
     if m:
         return "Toggle scratchpad"
+    m = re.search(r'layout\("cyclenext"\)', s2)
+    if m:
+        return "Cycle to next window"
+    m = re.search(r'layout\("cycleprev"\)', s2)
+    if m:
+        return "Cycle to previous window"
     m = re.search(r'layout\("togglesplit"\)', s2)
     if m:
         return "Toggle split layout"
