@@ -1333,9 +1333,12 @@ EOF
       rm_list+="gnome-text-editor "
     fi
     # No app dependency: hexciri's calculator is the Mod+Shift+C fuzzel menu
-    # script (libqalculate), and the viewer libs lost their last consumer
-    # with the editor + calculator.
-    rm_list+="gnome-calculator gtksourceview5 "
+    # script (libqalculate).
+    rm_list+="gnome-calculator "
+    # NOTE: gtksourceview5 is deliberately NOT removed — libspelling depends
+    # on it, so the removal always fails (pacman dependency error, kept
+    # anyway) and would print that error on every single pass. It stays:
+    # invisible, still required.
     local rdd_list=""
     # Forced removals (vim precedent): the CachyOS hyprland meta pins the
     # stock editor + calculator, so plain -Rns refuses while it's installed.

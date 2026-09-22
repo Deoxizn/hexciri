@@ -107,7 +107,7 @@ fi
 if [[ $TO == hyprland ]]; then
   FM_OLD=nautilus;  FM_NEW=dolphin
   IMG_OLD=imv;      IMG_NEW=qview
-  EXTRA_RM="gnome-text-editor gnome-calculator gtksourceview5"
+  EXTRA_RM="gnome-text-editor gnome-calculator"
 else
   FM_OLD=dolphin;   FM_NEW=nautilus
   IMG_OLD=qview;    IMG_NEW=imv
@@ -150,7 +150,8 @@ if [[ $TO == hyprland ]]; then
   if have zeditor; then
     if have_pkg cachyos-hypr-noctalia; then RDD_LIST+="gnome-text-editor gnome-calculator "; else RM_LIST+="gnome-text-editor gnome-calculator "; fi
   fi
-  RM_LIST+="gtksourceview5 "
+  # gtksourceview5 stays on purpose (libspelling needs it — attempting the
+  # removal errors every run, see migrate_hyprland_native_apps).
 fi
 
 if [[ $CURRENT == niri ]]; then OLD_CFG="$HOME/.config/niri"; else OLD_CFG="$HOME/.config/hypr"; fi
