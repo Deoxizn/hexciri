@@ -292,110 +292,6 @@ disabled = ", ".join("#80" + c.lstrip("#") for c in roles)
 )
 print(f"hexciri-sync: wrote Qt color scheme → {(qt6_dir / 'colors' / 'hexciri.conf')}")
 
-# ── 3k. KDE color scheme (dolphin + KDE apps) ──
-# qt6ct covers the Qt *palette roles*, but KDE apps read their own
-# color-schemes/*.colors + kdeglobals — qt6ct never touches those, which is why
-# dolphin (the stock hyprland file manager, Mod+Shift+F) renders untinted
-# frames. Generate the standard KDE scheme from the same theme tokens and point
-# kdeglobals at it. Structure mirrors Noctalia's own KDE template
-# (/usr/share/noctalia/assets/templates/kde/kcolorscheme.colors) section for
-# section — same groups, same keys — so anything that reads a Noctalia-rendered
-# scheme reads this one. A user KDE scheme choice in System Settings survives:
-# we only write the ColorScheme= key, never the rest of the file.
-def rgb(v):
-    c = v.lstrip("#")
-    return "%d,%d,%d" % (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16))
-
-kde_dir = Path.home() / ".local/share/color-schemes"
-kde_dir.mkdir(parents=True, exist_ok=True)
-kde_scheme = kde_dir / "hexciri.colors"
-
-def kde_group(grp, bg, fg, alt, deco):
-    return (
-        f"[Colors:{grp}]\n"
-        f"BackgroundAlternate={rgb(alt)}\n"
-        f"BackgroundNormal={rgb(bg)}\n"
-        f"DecorationFocus={rgb(deco)}\n"
-        f"DecorationHover={rgb(deco)}\n"
-        f"ForegroundActive={rgb(fg)}\n"
-        f"ForegroundInactive={rgb(muted)}\n"
-        f"ForegroundLink={rgb(accent)}\n"
-        f"ForegroundNegative={rgb(red)}\n"
-        f"ForegroundNeutral={rgb(yellow)}\n"
-        f"ForegroundNormal={rgb(fg)}\n"
-        f"ForegroundPositive={rgb(green)}\n"
-        f"ForegroundVisited={rgb(magenta)}\n"
-    )
-
-kde_body = "[KDE]\ncontrast=4\n\n"
-kde_body += "[General]\nColorScheme=hexciri\nName=hexciri\n\n"
-kde_body += ("[ColorEffects:Disabled]\nColor=56,56,56\nColorAmount=0.7\nColorEffect=0\n"
-             "ContrastAmount=0.65\nContrastEffect=1\nIntensityAmount=0.1\nIntensityEffect=2\n\n")
-kde_body += ("[ColorEffects:Inactive]\nChangeSelectionColor=true\n"
-             f"Color={rgb(darker_bg)}\nColorAmount=0.025\nColorEffect=2\n"
-             "ContrastAmount=0.1\nContrastEffect=2\nEnable=false\n"
-             "IntensityAmount=0\nIntensityEffect=0\n\n")
-for grp, bg, fg in (
-    ("Button", background, foreground),
-    ("Complementary", dark_background, foreground),
-    ("Header", background, foreground),
-    ("Header][Inactive", dark_background, foreground),
-    ("Selection", accent, background),          # accent bg + theme bg text = readable
-    ("Tooltip", dark_background, foreground),
-    ("View", dark_background, foreground),
-    ("Window", background, foreground),
-):
-    kde_body += kde_group(grp, bg, fg, darker_bg, accent) + "\n"
-kde_body += ("[WM]\n"
-             f"activeBackground={rgb(accent)}\n"
-             f"activeBlend={rgb(background)}\n"
-             f"activeForeground={rgb(background)}\n"
-             f"inactiveBackground={rgb(dark_background)}\n"
-             f"inactiveBlend={rgb(muted)}\n"
-             f"inactiveForeground={rgb(muted)}\n")
-kde_scheme.write_text(kde_body)
-print(f"hexciri-sync: wrote KDE color scheme → {kde_scheme}")
-
-# Point kdeglobals at it (surgical: only the ColorScheme= key under [General]).
-kde_globals = Path.home() / ".config" / "kdeglobals"
-kg = kde_globals.read_text() if kde_globals.exists() else ""
-if not re.search(r'^ColorScheme=hexciri$', kg, flags=re.M):
-    if re.search(r'^ColorScheme=.*$', kg, flags=re.M):
-        kg = re.sub(r'^ColorScheme=.*$', 'ColorScheme=hexciri', kg, count=1, flags=re.M)
-    elif '[General]' in kg:
-        kg = re.sub(r'^\[General\]$', '[General]\nColorScheme=hexciri', kg, count=1, flags=re.M)
-    else:
-        kg = kg.rstrip("\n") + "\n\n[General]\nColorScheme=hexciri\n"
-    kde_globals.write_text(kg)
-    print(f"hexciri-sync: kdeglobals ColorScheme → hexciri")
-
-# Point dolphin's own override at it too (surgical: only the ColorScheme= key
-# under [UiSettings]). Dolphin renders its file view from this per-app key,
-# NOT the kdeglobals default above — an empty/missing key leaves the view on
-# whatever was selected before (observed: black view text that only Dolphin's
-# own Window Color Scheme picker fixed). A deliberate per-app scheme loses to
-# theme-set by design (one pick recolors everything). Only when installed.
-# LIMITATION (minimal installs): with plain Qt "generic" platform theme (no
-# kde platform plugin mapped — check /proc/<dolphin>/maps), a fresh dolphin
-# can still show stale view text until its own menu re-selects hexciri, even
-# with all three files correct. Suspect: plasma-integration (the kde platform
-# theme provider) absent — and it is NOT part of cachyos-hypr-noctalia, so
-# installing it is conflict-free. If revisiting: sudo pacman -S --needed
-# plasma-integration + relaunch.
-import shutil
-if shutil.which("dolphin"):
-    d_rc = Path.home() / ".config" / "dolphinrc"
-    dr = d_rc.read_text() if d_rc.exists() else ""
-    if not re.search(r'^ColorScheme=hexciri$', dr, flags=re.M):
-        if re.search(r'^ColorScheme=.*$', dr, flags=re.M):
-            dr = re.sub(r'^ColorScheme=.*$', 'ColorScheme=hexciri', dr, count=1, flags=re.M)
-        elif '[UiSettings]' in dr:
-            dr = re.sub(r'^\[UiSettings\]$', '[UiSettings]\nColorScheme=hexciri', dr, count=1, flags=re.M)
-        else:
-            dr = dr.rstrip("\n") + "\n\n[UiSettings]\nColorScheme=hexciri\n"
-        d_rc.write_text(dr)
-        print(f"hexciri-sync: dolphinrc ColorScheme → hexciri")
-
 # ── 3. Window border/focus-ring colors (niri only) ──
 # The tiny theme surface niri carries. Skip niri configs not yet present
 # (no-op until a check-out lays them down).
@@ -586,32 +482,7 @@ if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || pgrep -x Hyprland >/dev/null 2>&
   hyprctl reload >/dev/null 2>&1 || true
 fi
 
-# ── 6. KDE service cache rebuild (BEFORE the repaint kill below) ──
-# A freshly-written scheme file is invisible to KDE until the service cache
-# knows it. Rebuild FIRST: a dolphin opened during the rebuild reads the old
-# scheme, and single-instance reopens then attach to it — black-on-black
-# text that survives restarts. Rebuild-then-kill means any mid-rebuild launch
-# gets killed right after and the next open is correct.
-if command -v kbuildsycoca6 >/dev/null 2>&1; then
-  kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
-fi
-
-# ── 7. Dolphin repaint ──
-# KDE apps read color-schemes/*.colors once at startup (no live palette
-# switch), so a theme change while dolphin is open leaves it on the old
-# scheme. Restarting a file browser loses nothing — nudge it like the gtk
-# hook does for nautilus. WAIT for death afterwards: pkill is async, and a
-# fast reopen can attach to the dying instance (single-instance handoff) and
-# keep the old palette.
-if command -v dolphin >/dev/null 2>&1 && pgrep -x dolphin >/dev/null 2>&1; then
-  pkill -x dolphin 2>/dev/null || true
-  for _ in $(seq 1 30); do
-    pgrep -x dolphin >/dev/null 2>&1 || break
-    sleep 0.1
-  done
-fi
-
-# ── 8. Login-greeter follow (greetd boxes) ──
+# ── 6. Login-greeter follow (greetd boxes) ──
 # Noctalia copies the live palette + wallpaper + font + scale to
 # noctalia-greeter. Runs HERE, at the end of the bridge, deliberately: hook
 # files sort before this script, so a standalone trigger would stage the

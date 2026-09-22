@@ -110,7 +110,7 @@ if [[ $TO == hyprland ]]; then
   OLD_STACK="cachyos-niri-noctalia niri xwayland-satellite"
   NEED_META=true  # stock hyprland.lua skeleton comes from the CachyOS meta
   META_PKG="cachyos-hypr-noctalia"
-  NATIVE_FM="dolphin"
+  NATIVE_FM="nemo"
   NATIVE_IMG="qview"
 else
   STACK_PKGS="niri xwayland-satellite xdg-desktop-portal-gtk noctalia"
@@ -122,16 +122,17 @@ else
 fi
 
 # Native swap pairs (flip + uninstall): old native → target native per role.
-# A stored pick equal to the OLD native is a carried seed and flips to the
+# A stored pick equal to an OLD native is a carried seed and flips to the
 # target native (same idiom as the imv→qview / mupdf→zathura migrations); any
 # other pick — thunar, an explicit cross-WM choice — is never touched.
+# FM_OLDS covers both the other WM's native and the retired dolphin legacy.
 if [[ $TO == hyprland ]]; then
-  FM_OLD=nautilus;  FM_NEW=dolphin
-  IMG_OLD=imv;      IMG_NEW=qview
+  FM_OLDS="nautilus dolphin"; FM_NEW=nemo
+  IMG_OLD=imv;                IMG_NEW=qview
   EXTRA_RM="gnome-text-editor gnome-calculator"
 else
-  FM_OLD=dolphin;   FM_NEW=nautilus
-  IMG_OLD=qview;    IMG_NEW=imv
+  FM_OLDS="nemo dolphin";     FM_NEW=nautilus
+  IMG_OLD=qview;              IMG_NEW=imv
   EXTRA_RM=""
 fi
 # missing <pkgs...> → prints the subset not installed (empty when complete)
@@ -204,9 +205,14 @@ plan() {
   fi
   echo "  pin: ~/.config/hexciri/wm → $TO"
   APPS_LINE=""
-  [[ $STORED_FM == "$FM_OLD" ]] && APPS_LINE+="flip files $FM_OLD→$FM_NEW; "
+  # shellcheck disable=SC2086
+  for _old in $FM_OLDS; do
+    # shellcheck disable=SC2076
+    [[ $STORED_FM == "$_old" ]] && APPS_LINE+="flip files $_old→$FM_NEW; "
+  done
+  unset _old
   [[ $STORED_IMG == "$IMG_OLD" ]] && APPS_LINE+="flip images $IMG_OLD→$IMG_NEW; "
-  APPS_LINE+="uninstall replaced natives ($FM_OLD/$IMG_OLD${EXTRA_RM:+ + $EXTRA_RM} — kept when something still needs them)"
+  APPS_LINE+="uninstall replaced natives ($FM_OLDS $IMG_OLD${EXTRA_RM:+ + $EXTRA_RM} — kept when something still needs them)"
   echo "  apps: ${APPS_LINE}"
   if [[ $KEEP_OLD == true ]]; then
     echo "  old stack: kept (--keep-old: old compositor stays installed)"
@@ -318,7 +324,9 @@ flip_pick() { # <role> <old> <new>
     HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-mime-defaults" apply "$role" >/dev/null 2>&1 || true
   fi
 }
-flip_pick files "$FM_OLD" "$FM_NEW"
+# shellcheck disable=SC2086
+for _old in $FM_OLDS; do flip_pick files "$_old" "$FM_NEW"; done
+unset _old
 flip_pick images "$IMG_OLD" "$IMG_NEW"
 
 if [[ -x $REPO/bin/hexciri-update ]]; then
@@ -383,7 +391,9 @@ uninstall_native() { # <old> <new> <role>
 for p in $RM_LIST; do uninstall_plain "$p" "replaced on $TO"; done
 for p in $RDD_LIST; do uninstall_forced "$p"; done
 unset p
-uninstall_native "$FM_OLD" "$FM_NEW" files
+# shellcheck disable=SC2086
+for _old in $FM_OLDS; do uninstall_native "$_old" "$FM_NEW" files; done
+unset _old
 uninstall_native "$IMG_OLD" "$IMG_NEW" images
 
 # 7. retire the old compositor stack (fresh-install equivalence). Runs LAST
@@ -414,7 +424,9 @@ fi
 for p in $RM_LIST; do uninstall_plain "$p" "replaced on $TO"; done
 for p in $RDD_LIST; do uninstall_forced "$p"; done
 unset p
-uninstall_native "$FM_OLD" "$FM_NEW" files
+# shellcheck disable=SC2086
+for _old in $FM_OLDS; do uninstall_native "$_old" "$FM_NEW" files; done
+unset _old
 uninstall_native "$IMG_OLD" "$IMG_NEW" images
 if [[ $REMOVED_ANY == true ]]; then
   update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
@@ -431,7 +443,7 @@ fi
 cat <<EOF
 hexciri-wm-switch: $CURRENT → $TO complete.
   old configs: $BAK (restore by hand to switch back without re-seeding)
-  apps: carried $FM_OLD/$IMG_OLD picks flipped to $FM_NEW/$IMG_NEW, replaced
+  apps: carried old-native picks flipped to $FM_NEW/$IMG_NEW, replaced
   natives uninstalled when nothing still needed them (explicit cross-WM
   picks were kept — change any time in System > Default Apps).
 EOF

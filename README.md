@@ -197,7 +197,7 @@ Launchers alongside the menu: `Mod+Space` Noctalia app launcher,
 `Mod+Alt+Space` root menu (fuzzel), `Mod+Shift+S` web search / `Mod+Shift+C`
 calculator (fuzzel), `Mod+Return`
 terminal, `Mod+Shift+E` editor, `Mod+Shift+B` browser, `Mod+Shift+F` file
-manager (dolphin on Hyprland, nautilus on niri — one pick in
+manager (nemo on Hyprland, nautilus on niri — one pick in
 `System > Defaults > Files` serves both WMs), ``Mod+` `` AI agent
 (`opencode` by default), `Mod+Escape` power menu, `Mod+Ctrl+V` clipboard
 history. Stock `Mod+W` (which launched the replaced firefox) is neutralized
@@ -319,7 +319,7 @@ would break keys, logins, or themes if missing).
 
 One-time swap at install, hands off after that. The framework sync
 (`hexciri-sync` / `hexciri-update self`) never touches packages except the
-tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl fwupd` (nautilus heals only when no file manager exists — dolphin boxes skip it)
+tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl fwupd` (nautilus heals only when no file manager exists — nemo/nautilus/dolphin/thunar boxes skip it)
 it self-heals — your later manual changes stick.
 Best-effort throughout: offline boxes finish, missing bits print their manual
 fallback.
@@ -359,19 +359,18 @@ Plus: **yay** bootstrapped via makepkg (needs `base-devel`+`git`) when no
 AUR helper exists; **Brave Origin** (`brave-origin-bin` via yay/paru — the
 hexciri browser, not Brave) with the `brave-bin` stand-in dropped once
 Origin is present; **Nautilus** stays the default file manager on niri (its
-`org.gnome.Nautilus.desktop` owns `inode/directory`) while **Dolphin** takes
-the role on Hyprland — the box ships both, hexciri picks per-WM (one `Files`
-default in `System > Default Apps`, seeded dolphin on hyprland / nautilus on
-niri, never clobbering an explicit pick). Neither is force-installed where
-the other already serves: install and the layer self-heal skip nautilus when
-dolphin is present (and skip imv when qview is present), so Hyprland boxes
-stop collecting the niri stack — a box with no file manager at all still gets
+`org.gnome.Nautilus.desktop` owns `inode/directory`) while **Nemo** takes
+the role on Hyprland — GTK like nautilus with dolphin's feature set (tabs,
+split view, plugins), minus the KDE theming tail. One `Files` default in
+`System > Default Apps`, seeded nemo on hyprland / nautilus on
+niri, never clobbering an explicit pick. Neither is force-installed where
+another manager already serves: install and the layer self-heal skip the seed
+when any of nemo/nautilus/dolphin/thunar is present (and skip imv when qview
+is present), so Hyprland boxes stop collecting the niri stack — a box with no
+file manager at all still gets
 one. `Mod+Shift+F` opens whichever is
-current on either WM. Dolphin plus the other KDE apps are themed via the KDE
-color scheme the theme hook writes (`~/.local/share/color-schemes/hexciri.colors`
-+ `~/.config/kdeglobals` → `ColorScheme=hexciri`), so on Hyprland the file
-manager shows the same palette as everything else — nautilus's GTK 3/4 css
-already mirrors it on niri.
+current on either WM. Both managers are GTK, so the same theme hook that
+paints nautilus paints nemo — no per-toolkit special cases.
 
 **Removed** (only if installed; kept when something still needs them):
 
@@ -395,7 +394,7 @@ config files by hand. The notes below are what's happening behind those rows.
 
 - **Default Apps** (`System > Default Apps`, `hexciri-defaults`) — Browser
   (brave-origin…), Editor (zed…), Terminal (kitty…), Shell (fish…), Files
-  (dolphin on Hyprland / nautilus on niri…), Images (qview on Hyprland / imv on
+  (nemo on Hyprland / nautilus on niri…), Images (qview on Hyprland / imv on
   niri…), PDF (zathura…), Agent (opencode…). Only installed candidates are
   offered; current is marked ✓. Shell switches kitty's shell without touching
   your login shell. Seeding is per-WM and first-run only — an explicit pick is

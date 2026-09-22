@@ -75,6 +75,7 @@ docs_desktop() { # <pick>
 files_desktop() { # <pick>
   case "$1" in
     nautilus) set -- org.gnome.Nautilus.desktop ;;
+    nemo) set -- nemo.desktop ;;
     strata) set -- io.github.lgse.Strata.desktop ;;
     thunar) set -- Thunar.desktop thunar.desktop ;;
     *) return 1 ;; # yazi and friends have no desktop entry to pin
