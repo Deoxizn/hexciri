@@ -563,9 +563,15 @@ fi
 # KDE apps read color-schemes/*.colors once at startup (no live palette
 # switch), so a theme change while dolphin is open leaves it on the old
 # scheme. Restarting a file browser loses nothing — nudge it like the gtk
-# hook does for nautilus.
+# hook does for nautilus. WAIT for death afterwards: pkill is async, and a
+# fast reopen can attach to the dying instance (single-instance handoff) and
+# keep the old palette — observed as black-on-black text after switches.
 if command -v dolphin >/dev/null 2>&1 && pgrep -x dolphin >/dev/null 2>&1; then
   pkill -x dolphin 2>/dev/null || true
+  for _ in $(seq 1 30); do
+    pgrep -x dolphin >/dev/null 2>&1 || break
+    sleep 0.1
+  done
 fi
 
 # ── 7. KDE service cache rebuild ──
@@ -574,17 +580,6 @@ fi
 # this step leaves dolphin on the previous scheme until relogin).
 if command -v kbuildsycoca6 >/dev/null 2>&1; then
   kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
-fi
-
-# ── 7b. KDE platform plugin check ──
-# Dolphin reads the scheme above ONLY through KDE's Qt platform theme plugin
-# (frameworkintegration). It ships as an optional dolphin dep, so minimal
-# installs can have dolphin with no platform plugin — and then no scheme
-# ever applies, no matter how often the theme changes. Name the fix instead
-# of failing silently (install: sudo pacman -S --needed frameworkintegration).
-if command -v dolphin >/dev/null 2>&1 && \
-   ! ls /usr/lib/qt6/plugins/platformthemes/ 2>/dev/null | grep -qi kde; then
-  echo "hexciri-sync: WARNING dolphin has no KDE platform plugin — schemes can't apply (run: sudo pacman -S --needed frameworkintegration)" >&2
 fi
 
 # ── 8. Login-greeter follow (greetd boxes) ──
