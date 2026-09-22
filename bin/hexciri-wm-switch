@@ -83,17 +83,25 @@ if [[ $TO == "$CURRENT" ]]; then
 fi
 
 # ── target stack (compositor + portals + session launcher) ──
-# Installs only; the old compositor is never removed (switch-back safety).
+# Fresh-install equivalence: the end state should equal installing CachyOS
+# with the target WM + hexciri, minus data loss (home, docs, themes,
+# wallpapers, non-WM picks and custom configs all stay). So the old
+# compositor stack is retired at the end (OLD_STACK below, kept-when-needed)
+# — install.sh already removed the other spin's cruft patterns, and user data
+# is never in a removed package's file list (configs live in $HOME, backed up
+# before anything is retired).
 # XXX package names are the Arch/CachyOS ones; if they drift pacman fails
 # and the script prints the manual fallback instead of dying.
 if [[ $TO == hyprland ]]; then
   STACK_PKGS="hyprland xdg-desktop-portal-hyprland uwsm"
+  OLD_STACK="cachyos-niri-noctalia niri xwayland-satellite"
   NEED_META=true  # stock hyprland.lua skeleton comes from the CachyOS meta
   META_PKG="cachyos-hypr-noctalia"
   NATIVE_FM="dolphin"
   NATIVE_IMG="qview"
 else
   STACK_PKGS="niri xwayland-satellite xdg-desktop-portal-gtk"
+  OLD_STACK="cachyos-hypr-noctalia hyprland uwsm xdg-desktop-portal-hyprland"
   NEED_META=false # repo ships the full niri tree (config/niri)
   META_PKG=""
   NATIVE_FM="nautilus"
@@ -186,6 +194,11 @@ plan() {
   [[ $STORED_IMG == "$IMG_OLD" ]] && APPS_LINE+="flip images $IMG_OLD→$IMG_NEW; "
   APPS_LINE+="uninstall replaced natives ($FM_OLD/$IMG_OLD${EXTRA_RM:+ + $EXTRA_RM} — kept when something still needs them)"
   echo "  apps: ${APPS_LINE}"
+  if [[ $KEEP_OLD == true ]]; then
+    echo "  old stack: kept (--keep-old: old compositor stays installed)"
+  else
+    echo "  old stack: retire $OLD_STACK (kept when something still needs them)"
+  fi
   echo "  deploy: hexciri-update self (overlays, keybinds, kitty, themes)"
   echo "  root: sudo hexciri-sync (SDDM theme + PreferredSession=$TO stamp)"
   echo "  finish: log out, pick '$TO' at SDDM (greeter defaults to it), log in"
@@ -199,7 +212,7 @@ fi
 info "switching $CURRENT → $TO"
 if [[ $YES != true ]]; then
   if [[ -t 0 ]]; then
-    read -rp "Switch $CURRENT → $TO? old configs are backed up to $BAK then removed. [y/N] " r
+    read -rp "Switch $CURRENT → $TO? Fresh-install equivalent: target stack in, old WM configs (backed up to $BAK) + old compositor stack out, your data stays. [y/N] " r
     [[ $r =~ ^[Yy]$ ]] || { info "cancelled"; exit 0; }
   else
     info "no tty — re-run with --yes to confirm"
@@ -358,6 +371,23 @@ for p in $RDD_LIST; do uninstall_forced "$p"; done
 unset p
 uninstall_native "$FM_OLD" "$FM_NEW" files
 uninstall_native "$IMG_OLD" "$IMG_NEW" images
+
+# 7. retire the old compositor stack (fresh-install equivalence). Runs LAST
+# so any earlier failure leaves a working box. -Rns only takes the package +
+# new orphans — shared deps stay, and pacman refuses while something still
+# needs a package (kept, reported). Runs while the old compositor is live:
+# mapped files keep it running until relogin, which lands on the greeter.
+if [[ $KEEP_OLD == true ]]; then
+  info "keeping old compositor stack (--keep-old)"
+else
+  if have pacman; then
+    # shellcheck disable=SC2086
+    for p in $OLD_STACK; do uninstall_plain "$p" "replaced by the $TO stack"; done
+    unset p
+  else
+    info "no pacman here — remove by hand: $OLD_STACK"
+  fi
+fi
 if [[ $REMOVED_ANY == true ]]; then
   update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 fi

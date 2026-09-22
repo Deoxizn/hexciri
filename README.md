@@ -69,7 +69,8 @@ deploy + root sync — so the SDDM greeter defaults to the new WM too.
 `--dry-run` prints the plan without changing anything; `--keep-old` keeps the
 old configs. Relogin, pick the new session once, done — carried
 file-manager/viewer picks flip to the new WM's natives (explicit cross-WM
-picks stay), replaced natives uninstall when nothing still needs them, and
+picks stay), replaced natives uninstall when nothing still needs them, the old
+compositor stack is retired (or kept with `--keep-old`), and
 custom binds are kept.
 
 ## Install
