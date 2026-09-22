@@ -9,10 +9,15 @@
 # free-space check, `sudo pacman -Syu`, AUR via any installed helper, and a
 # kernel-reboot prompt. (Pre-rename "hexciri-update-run" stays working via a
 # shim and is migrated to this name on the next real update.)
+#
+# terminal carries --app-id=TUI.float so the window matches the floating
+# TUI rule on both compositors (Hyprland hexciri-windowrules.lua, Niri
+# window-rules.kdl). The plugin builds `<terminal> -e sh -lc ...`, so extra
+# flags ride along and its binary detection (first token) still sees kitty.
 [plugin_settings."yuuto/arch-updater"]
 aur_helper = "auto"
 auto_check_hours = 1
 flatpak_enabled = false
-terminal = "kitty"
+terminal = "kitty --app-id=TUI.float"
 update_cmd = "hexciri-update"
 update_mode = "terminal"
