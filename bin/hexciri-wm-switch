@@ -125,7 +125,7 @@ fi
 # A stored pick equal to an OLD native is a carried seed and flips to the
 # target native (same idiom as the imv→qview / mupdf→zathura migrations); any
 # other pick — thunar, an explicit cross-WM choice — is never touched.
-# FM_OLDS covers both the other WM's native and the retired dolphin legacy.
+# FM_OLDS covers the other WM's native plus retired dolphin/nemo legacy picks.
 if [[ $TO == hyprland ]]; then
   FM_OLDS="nautilus dolphin nemo"; FM_NEW=strata
   IMG_OLD=imv;                   IMG_NEW=qview

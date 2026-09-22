@@ -104,9 +104,8 @@ fi
 # Explicit here (and in the layer heal + WM switch) so it is never an orphan.
 _hexciri_wants="kitty zed opencode localsend fuzzel gpu-screen-recorder tesseract mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd jq cliphist noctalia "
 # Per-WM-native file manager / image viewer: install hexciri's pick only when
-# no file manager / viewer serves the box. Hyprland takes nemo (GTK, dolphin
-# features without the KDE theming tail); niri keeps nautilus. qview/imv
-# unchanged. Presence-gated, not WM-gated, so minimal spins stay working.
+# no file manager / viewer serves the box. Hyprland takes strata (per-user
+# release, installed below); niri keeps nautilus. qview/imv unchanged. Presence-gated, not WM-gated, so minimal spins stay working.
 # WM resolves via hexciri-session (live session → installed compositor →
 # niri default; HXC_WM env overrides for testing/bring-up).
 _hexciri_install_wm="$("$REPO/bin/hexciri-session" wm 2>/dev/null || echo niri)"
@@ -120,7 +119,7 @@ fi
 command -v qview >/dev/null 2>&1 || _hexciri_wants+="imv "
 # KDE platform theme plugin (dolphin reads KDE color schemes ONLY through
 # it; ships as an optional dolphin dep). Needed wherever dolphin is kept
-# (legacy pick — nemo is the hyprland default now).
+# (legacy picks — strata is the hyprland default now).
 if command -v dolphin >/dev/null 2>&1 && ! pacman -Q frameworkintegration >/dev/null 2>&1; then
   _hexciri_wants+="frameworkintegration "
 fi

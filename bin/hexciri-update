@@ -1301,7 +1301,7 @@ EOF
   }
 
   # Hyprland-native app migration (runs every pass; no-op when clean or on
-  # niri). Nemo replaced dolphin as the hyprland file manager (GTK, no KDE
+  # niri). Strata is the hyprland file manager; dolphin/nemo are retired,
   # theming tail); CachyOS hyprland preinstalls its own editor + calculator,
   # and hexciri's are zed + the fuzzel calc menu script. Remove the redundant
   # half once its replacement is live. Safety rules (same as the one-time
@@ -1350,15 +1350,14 @@ EOF
         HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-mime-defaults" apply files >/dev/null 2>&1 || true
       fi
     fi
-    # Dolphin retired for nemo: goes once nemo is live and the stored pick
-    # isn't dolphin itself. Nautilus strays (pre-nemo seeds) go under the same
-    # gate — a box whose pick is nautilus keeps it. Nemo itself retires the
-    # same way once strata (the current hyprland default) is picked.
-    if command -v nemo >/dev/null 2>&1 && [[ $files_pick != dolphin && $files_pick != nautilus ]]; then
-      rm_list+="dolphin nautilus "
-    fi
-    if command -v nemo >/dev/null 2>&1 && [[ $files_pick == strata ]]; then
-      rm_list+="nemo "
+    # Retired managers (dolphin, nemo, stray nautilus) go once strata is live
+    # and the stored pick isn't itself.
+    if command -v strata >/dev/null 2>&1; then
+      for p in dolphin nautilus nemo; do
+        if command -v "$p" >/dev/null 2>&1 && [[ $files_pick != "$p" ]]; then
+          rm_list+="$p "
+        fi
+      done
     fi
     if command -v qview >/dev/null 2>&1 && [[ $images_pick != imv ]]; then
       rm_list+="imv "

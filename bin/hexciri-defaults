@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Default apps: kitty + fish + brave-origin + nemo(hyprland)/nautilus(niri) + qview(hyprland)/imv(niri) + zathura + zed + opencode (xdg-native)
+# hexciri:summary=Default apps: kitty + fish + brave-origin + strata(hyprland)/nautilus(niri) + qview(hyprland)/imv(niri) + zathura + zed + opencode (xdg-native)
 # Only shows apps that are actually installed; current choice is marked with ✓.
 # usage: hexciri-defaults [Browser|Editor|Images|PDF|Terminal|Shell|Files|Agent]
 set -euo pipefail
@@ -91,8 +91,7 @@ if [[ $(get images) == imv && $_active_wm == hyprland ]] && command -v qview >/d
   setv images qview
 fi
 
-# dolphin/nemo → strata migration for the stored pick (hyprland only): both
-# predecessors retire for strata once it's installed. A deliberate reinstall
+# dolphin/nemo → strata migration for the stored pick (hyprland only). A deliberate reinstall
 # + re-pick of either keeps working (offered below, never flipped back).
 if [[ $_active_wm == hyprland ]] && command -v strata >/dev/null 2>&1; then
   _fpick="$(get files)"
