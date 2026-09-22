@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hexciri — CachyOS + Niri dotfiles: a real menu and a theme engine</title>
-<meta name="description" content="CachyOS plus Niri. hexciri is dotfiles: a menu where everything works, a theme hook that recolors 30+ apps, and a one-time app swap. One curl line away.">
+<title>Hexciri — CachyOS dotfiles: a real menu and a theme engine</title>
+<meta name="description" content="CachyOS plus Niri or Hyprland. hexciri is dotfiles: a menu where everything works, a theme hook that recolors 30+ apps, and a one-time app swap. One curl line away.">
 <meta name="author" content="Deoxizn">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://hexciri.dirty.pizza/">
@@ -78,51 +78,33 @@
 <body>
 <header class="hero">
   <img src="brand.png" alt="Hexciri emblem">
-  <h1>CachyOS + Niri, minus the chores</h1>
-  <p class="tag">Dotfiles with a real menu and a theme engine. Every menu option works. One theme pick recolors 30+ apps. Your wallpapers survive everything.</p>
+  <h1>CachyOS, minus the chores</h1>
+  <p class="tag">Dotfiles with a real menu and a theme engine. Every menu option works. One theme pick recolors 30+ apps. Niri or Hyprland — switch any time, no reinstall.</p>
   <div class="chips">
-    <span class="chip">CachyOS</span><span class="chip">Niri</span><span class="chip">Noctalia</span><span class="chip">theme hook</span><span class="chip">working menu</span>
+    <span class="chip">CachyOS</span><span class="chip">Niri or Hyprland</span><span class="chip">Noctalia</span><span class="chip">theme hook</span><span class="chip">working menu</span>
   </div>
   <pre class="curl">curl -LO https://hexciri.dirty.pizza/install.sh &amp;&amp; sh install.sh</pre>
-  <p class="hero-sub">CachyOS × Niri × nothing you didn't ask for. Re-runs are safe; updates are pull + re-run.</p>
+  <p class="hero-sub">Nothing you didn't ask for. Re-runs are safe; updates are pull + re-run.</p>
   <nav class="toc">
-    <a href="#menu">Menu</a><a href="#themes">Themes</a><a href="#wallpapers">Wallpapers</a><a href="#apps">Apps</a><a href="#keys">Keys</a><a href="#more">More</a>
+    <a href="#highlights">Highlights</a><a href="#keys">Keys</a>
   </nav>
 </header>
 <div class="wrap">
-<section>
-  <h2>What you get</h2>
-  <p class="sub">Four things, done properly.</p>
+<section id="highlights">
+  <h2>Highlights</h2>
+  <p class="sub">The whole pitch, six cards.</p>
   <div class="grid">
-    <div class="card"><h3>A menu that does things</h3><p>9 root entries, ~60 leaves — packages, sharing, hardware, themes, network, security, maintenance, gaming. Every row dispatches to a controller in <code>bin/</code>. Root is <code>Mod+Alt+Space</code>; Esc always goes back.</p></div>
-    <div class="card"><h3>Themes that color everything</h3><p><code>hexciri-theme set</code> recolors terminals, editors, browsers, Discord, GTK/Qt, Spotify, the bar and lock in one hook. 22 Omarchy defaults ship; extras are one line each in a list.</p></div>
-    <div class="card"><h3>Apps in, cruft out — once</h3><p>Install adds kitty, Zed, OpenCode, Brave Origin, Nautilus and friends, and removes what they replace. Afterwards sync never touches packages: your choices stick.</p></div>
-    <div class="card"><h3>Wallpapers you keep</h3><p>Drop images in a folder; they merge into every theme's picker as read-only links and survive every theme swap. Extra folders (even NFS) are one line each.</p></div>
+    <div class="card"><h3>A menu that does things</h3><p>9 root entries, ~60 leaves — packages, sharing, hardware, themes, network, security, maintenance, gaming. Every row works. Root is <code>Mod+Alt+Space</code>; Esc always goes back.</p></div>
+    <div class="card"><h3>Themes that color everything</h3><p><code>hexciri-theme set</code> recolors terminals, editors, browsers, Discord, GTK/Qt, Spotify, the bar, lock screen and login in one hook. 22 defaults ship; extras are one line each.</p></div>
+    <div class="card"><h3>Niri or Hyprland</h3><p>Same menu, themes and keys on both. <code>hexciri-wm-switch</code> moves you over with configs converted and defaults flipped — no reinstall.</p></div>
+    <div class="card"><h3>Apps in, cruft out — once</h3><p>Install adds kitty, Zed, OpenCode, Brave Origin and friends, and removes what they replace. Afterwards your choices stick.</p></div>
+    <div class="card"><h3>Wallpapers you keep</h3><p>Drop images in a folder; they join every theme's picker and survive every swap.</p></div>
+    <div class="card"><h3>Search, calc, clipboard</h3><p><code>Mod+Shift+S</code> searches the web, <code>Mod+Shift+C</code> calculates, <code>Mod+Ctrl+V</code> recalls everything you copied. Menu modes, not apps.</p></div>
   </div>
-</section>
-<section id="menu">
-  <h2>The menu</h2>
-  <p class="sub"><code>Mod+Alt+Space</code> opens nine buckets — packages, sharing, hardware, themes, system, updates and more. Every row runs a real script and Esc always goes back. <a href="https://github.com/Deoxizn/hexciri#menu">Full menu map in the README</a>.</p>
-</section>
-<section id="themes">
-  <h2>Themes: one pick, 30+ apps</h2>
-  <p class="sub"><code>hexciri-theme set</code> recolors terminals, editors, browsers, the bar and lock from one palette — 22 defaults ship and any GitHub theme is one command away. <a href="https://github.com/Deoxizn/hexciri#themes">How themes work, in the README</a>.</p>
-</section>
-<section id="wallpapers">
-  <h2>Wallpapers that survive theme changes</h2>
-  <p class="sub">Drop images in a folder and they join every theme's picker as read-only links — theme swaps never touch them. <a href="https://github.com/Deoxizn/hexciri#wallpapers">How wallpapers work, in the README</a>.</p>
-</section>
-<section id="apps">
-  <h2>Apps: added &amp; removed</h2>
-  <p class="sub">One-time swap at install — kitty, Zed, Brave Origin, Nautilus in, replaced stock apps out — then hands off forever. <a href="https://github.com/Deoxizn/hexciri#apps">Full list with reasons in the README</a>.</p>
 </section>
 <section id="keys">
   <h2>The keys that matter</h2>
-  <p class="sub">Mod = Super. <code>Mod+Alt+Space</code> menu, <code>Mod+Space</code> launcher, <code>Mod+K</code> searches every keybind. <a href="https://github.com/Deoxizn/hexciri#more-of-whats-inside">More keys in the README</a>.</p>
-</section>
-<section id="more">
-  <h2>Also inside</h2>
-  <p class="sub">Switchable default apps, one-press gaming setup, any URL as a desktop app, self-healing updates. <a href="https://github.com/Deoxizn/hexciri#more-of-whats-inside">Details in the README</a>.</p>
+  <p class="sub">Mod = Super. <code>Mod+Alt+Space</code> menu · <code>Mod+Space</code> launcher · <code>Mod+Return</code> terminal · <code>Mod+T</code> float · <code>Mod+L</code> layouts · <code>Mod+1…9</code> workspaces · <code>Mod+Escape</code> power · <code>Mod+K</code> searches them all.</p>
 </section>
 </div>
 <footer>
