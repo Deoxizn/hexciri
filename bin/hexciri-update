@@ -1314,6 +1314,14 @@ EOF
     command -v pacman >/dev/null 2>&1 || return 0
     wm="$("$REPO/bin/hexciri-session" wm 2>/dev/null || echo niri)"
     [[ $wm == hyprland ]] || return 0
+    # Strata is the hyprland file manager (per-user release, not pacman):
+    # provision it here so updates converge without a manual install step.
+    # Best-effort (needs network + sudo for runtime deps); a failure just
+    # skips, and the flip/removal below gate on the binary anyway.
+    if ! command -v strata >/dev/null 2>&1 && [[ -x $REPO/bin/hexciri-strata-install ]]; then
+      "$REPO/bin/hexciri-strata-install" 2>&1 | tail -n 3 || \
+        echo "migrated: strata install skipped (offline?) — run by hand: hexciri-strata-install"
+    fi
     # xdg-desktop-portal-gnome pins nautilus as its FileChooser dep: drop the
     # portal first or the nautilus removal below fails every pass with a
     # dependency error (kept, noisy). hexciri never uses the gnome portal
@@ -1331,6 +1339,17 @@ EOF
     fi
     files_pick="$(cat "$HOME/.local/state/hexciri/defaults/files" 2>/dev/null || true)"
     images_pick="$(cat "$HOME/.local/state/hexciri/defaults/images" 2>/dev/null || true)"
+    # Flip retired picks to strata now that it's provisioned above (same rule
+    # as Defaults-open; an explicit re-pick of dolphin/nemo keeps working
+    # because the binary stays until the removal below succeeds).
+    if command -v strata >/dev/null 2>&1 && [[ $files_pick == dolphin || $files_pick == nemo ]]; then
+      printf '%s' "strata" > "$HOME/.local/state/hexciri/defaults/files"
+      echo "migrated: default files $files_pick → strata"
+      files_pick="strata"
+      if [[ -x $REPO/bin/hexciri-mime-defaults ]]; then
+        HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-mime-defaults" apply files >/dev/null 2>&1 || true
+      fi
+    fi
     # Dolphin retired for nemo: goes once nemo is live and the stored pick
     # isn't dolphin itself. Nautilus strays (pre-nemo seeds) go under the same
     # gate — a box whose pick is nautilus keeps it. Nemo itself retires the

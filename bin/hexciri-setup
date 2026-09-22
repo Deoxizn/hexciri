@@ -66,7 +66,8 @@ strata_main() {
   esac
   local glibc; glibc="$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}' || true)"
   if [[ -n $glibc ]]; then
-    local maj=${glibc%%.*} rest=${glibc#*.} min=${rest%%.*}
+    local maj rest min
+    maj="${glibc%%.*}"; rest="${glibc#*.}"; min="${rest%%.*}"
     if (( maj < 2 || (maj == 2 && min < 39) )); then
       echo "hexciri-strata-install: glibc $glibc < 2.39 — build from source instead" >&2
       return 1
