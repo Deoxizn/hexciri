@@ -39,12 +39,11 @@ hl.bind(mainMod .. " + SHIFT + F", hl.dsp.exec_cmd("hexciri-defaults run files")
 -- float slot agree here — tiling/floating flip, no menus involved.
 hl.bind(mainMod .. " + T", hl.dsp.window.float({ action = "toggle" }))
 
--- Layout cycle (dwindle/scrolling/monocle) on Mod+Shift+L: Omarchy puts it
--- on L, but stock binds L to session lock here, so Shift+L keeps the letter
--- without breaking lock. The stock Mod+T editor bind stays neutralized at
--- deploy since zed lives on Mod+Shift+E (and gnome-text-editor is removed
--- on hyprland anyway).
-hl.bind(mainMod .. " + SHIFT + L", hl.dsp.exec_cmd("hexciri-hyprland-layout"))
+-- Layout cycle (dwindle/scrolling/monocle) on Mod+L (Omarchy parity): takes
+-- over the stock session-lock slot — neutralized at deploy like the other
+-- owned combos, since lock already lives on Mod+Ctrl+L (hexciri-lock, with
+-- the panel-off loop) and needs no plain-L duplicate.
+hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hexciri-hyprland-layout"))
 
 -- Monocle stack flipping: every window is fullscreen, so directional focus
 -- is useless — cycle the stack instead (forward/back, wrapping). Alt+Tab

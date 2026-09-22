@@ -5,8 +5,8 @@
 # monocle are all built into current Hyprland (verified live — each eval
 # applies with set:true, no plugin needed). Master is deliberately OUT:
 # nothing about it survives losing to the other three on this box. Bound to
-# Mod+Shift+L on hyprland (Omarchy keeps layout on L; stock binds L to
-# session lock here, so Shift+L keeps the letter).
+# Bound to Mod+L on hyprland (Omarchy parity; the stock L session-lock is
+# neutralized at deploy since hexciri-lock owns Ctrl+L).
 set -euo pipefail
 
 # uwsm-managed Hyprland omits HYPRLAND_INSTANCE_SIGNATURE from its own
