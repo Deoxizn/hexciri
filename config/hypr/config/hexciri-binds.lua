@@ -1,16 +1,17 @@
 -- Hexciri core binds for Hyprland (additive overlay).
--- Required AFTER the stock binds (see hyprland.lua) so the hexciri standard
--- wins on shared combos. Mirrors config/niri/cfg/keybinds.kdl core.
+-- Required AFTER the stock binds (see hyprland.lua). Combos that hexciri must
+-- own outright (Mod+Alt+Space root menu, Mod+Escape power menu, Mod+Return
+-- terminal, Mod+Shift+S web search, Mod+Shift+1-3 workspace-move) have their
+-- stock lines patched OUT at deploy time (sync_hyprland → binds.lua.hexciri.bak):
+-- in this shell duplicate combo binds STACK (both actions fire), so "required
+-- later = wins" is a myth for shared combos. Mirrors config/niri/cfg/keybinds.kdl core.
 --
 -- Deliberately NOT duplicated from stock binds.lua:
---   * file manager (stock Mod+E dolphin stays — each WM keeps its own)
 --   * media/brightness keys (stock routes them via noctalia; niri uses
 --     wpctl/playerctl/brightnessctl directly — each WM keeps its own)
---   * workspaces/monitors/focus/move (stock covers them)
 --
--- One opinionated override: Mod+Escape is the hexciri power menu (Mod+Q
--- closes), while stock binds Mod+Escape to kill. Loaded after stock binds,
--- this file wins — matching niri muscle memory.
+-- Window close (Mod+Q) is duplicated on purpose: same action in both files, so
+-- stacking is invisible and Q keeps the niri muscle memory.
 
 local mainMod = "SUPER"
 
@@ -23,15 +24,43 @@ hl.bind(mainMod .. " + grave",       hl.dsp.exec_cmd("hexciri-agent"))
 hl.bind(mainMod .. " + SHIFT + S", hl.dsp.exec_cmd("hexciri-fuzzel search"))
 hl.bind(mainMod .. " + SHIFT + C", hl.dsp.exec_cmd("hexciri-fuzzel calc"))
 
--- Default apps (terminal/editor/browser via hexciri defaults layer)
-hl.bind(mainMod .. " + Return",  hl.dsp.exec_cmd("hexciri-terminal"))
+-- Default apps (terminal/editor/browser/file manager via hexciri defaults layer)
+hl.bind(mainMod .. " + Return",   hl.dsp.exec_cmd("hexciri-terminal"))
 hl.bind(mainMod .. " + SHIFT + E", hl.dsp.exec_cmd("zeditor"))
 hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("xdg-open https://"))
+-- Mod+Shift+F = File manager, niri verb. Dispatches the user's Defaults pick
+-- (dolphin on hyprland boxes, nautilus on niri) via hexciri-defaults run files.
+hl.bind(mainMod .. " + SHIFT + F", hl.dsp.exec_cmd("hexciri-defaults run files"))
+
+-- Workspaces: niri verbs (Mod+digit switch / Mod+SHIFT+digit move). Stock
+-- CachyOS binds Mod+ALT+digit to switch and Mod+SHIFT+CONTROL|ALT+digit to
+-- move, and its Mod+SHIFT+digit(1-3) nudges windows between MONITORS — the
+-- deploy patch removes those three so the move verb is unambiguous. Digit
+-- binds use keycodes (code:10..18 = the number row) exactly like stock
+-- digitCode()/Omarchy, so they work on every layout (AZERTY included).
+hl.bind(mainMod .. " + code:10", hl.dsp.focus({ workspace = "1" }))
+hl.bind(mainMod .. " + code:11", hl.dsp.focus({ workspace = "2" }))
+hl.bind(mainMod .. " + code:12", hl.dsp.focus({ workspace = "3" }))
+hl.bind(mainMod .. " + code:13", hl.dsp.focus({ workspace = "4" }))
+hl.bind(mainMod .. " + code:14", hl.dsp.focus({ workspace = "5" }))
+hl.bind(mainMod .. " + code:15", hl.dsp.focus({ workspace = "6" }))
+hl.bind(mainMod .. " + code:16", hl.dsp.focus({ workspace = "7" }))
+hl.bind(mainMod .. " + code:17", hl.dsp.focus({ workspace = "8" }))
+hl.bind(mainMod .. " + code:18", hl.dsp.focus({ workspace = "9" }))
+hl.bind(mainMod .. " + SHIFT + code:10", hl.dsp.window.move({ workspace = "1" }))
+hl.bind(mainMod .. " + SHIFT + code:11", hl.dsp.window.move({ workspace = "2" }))
+hl.bind(mainMod .. " + SHIFT + code:12", hl.dsp.window.move({ workspace = "3" }))
+hl.bind(mainMod .. " + SHIFT + code:13", hl.dsp.window.move({ workspace = "4" }))
+hl.bind(mainMod .. " + SHIFT + code:14", hl.dsp.window.move({ workspace = "5" }))
+hl.bind(mainMod .. " + SHIFT + code:15", hl.dsp.window.move({ workspace = "6" }))
+hl.bind(mainMod .. " + SHIFT + code:16", hl.dsp.window.move({ workspace = "7" }))
+hl.bind(mainMod .. " + SHIFT + code:17", hl.dsp.window.move({ workspace = "8" }))
+hl.bind(mainMod .. " + SHIFT + code:18", hl.dsp.window.move({ workspace = "9" }))
 
 -- Window close (same as stock — harmless duplicate, keeps muscle memory)
 hl.bind(mainMod .. " + Q", hl.dsp.window.close())
 
--- Power menu (overrides stock kill on this combo — see header)
+-- Power menu (stock kill on this combo is patched out at deploy — see header)
 hl.bind(mainMod .. " + Escape", hl.dsp.exec_cmd("hexciri-power"))
 
 -- Lock (hexciri-lock adds the panel-off loop on top of the shell lock)
@@ -47,6 +76,6 @@ hl.bind(mainMod .. " + CONTROL + M", hl.dsp.exec_cmd("hexciri-launch-or-focus-we
 hl.bind("ALT + Print", hl.dsp.exec_cmd("hexciri-screenrecord"))
 
 -- Notifications (same verbs as the niri binds)
-hl.bind(mainMod .. " + comma",         hl.dsp.exec_cmd("noctalia msg notification-clear-active"))
+hl.bind(mainMod .. " + comma",            hl.dsp.exec_cmd("noctalia msg notification-clear-active"))
 hl.bind(mainMod .. " + CONTROL + period", hl.dsp.exec_cmd("noctalia msg notification-clear-history"))
-hl.bind(mainMod .. " + CONTROL + S",   hl.dsp.exec_cmd("noctalia msg settings-toggle"))
+hl.bind(mainMod .. " + CONTROL + S",      hl.dsp.exec_cmd("noctalia msg settings-toggle"))

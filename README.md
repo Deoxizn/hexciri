@@ -185,8 +185,14 @@ things), Update (updates). Pick a row and it does the thing.
 Launchers alongside the menu: `Mod+Space` Noctalia app launcher,
 `Mod+Alt+Space` root menu (fuzzel), `Mod+Shift+S` web search / `Mod+Shift+C`
 calculator (fuzzel), `Mod+Return`
-terminal, ``Mod+` `` AI agent (`opencode` by default), `Mod+Escape` power
-menu, `Mod+Ctrl+V` clipboard history.
+terminal, `Mod+Shift+E` editor, `Mod+Shift+B` browser, `Mod+Shift+F` file
+manager (dolphin on Hyprland, nautilus on niri — one pick in
+`System > Defaults > Files` serves both WMs), ``Mod+` `` AI agent
+(`opencode` by default), `Mod+Escape` power menu, `Mod+Ctrl+V` clipboard
+history.
+Workspaces are niri verbs on both WMs: `Mod+1…9` switches, `Mod+Shift+1…9`
+moves the focused window. Binds use keycodes so they survive any layout
+(US/AZERTY alike), mirroring the stock CachyOS digit idiom.
 
 ## Themes
 
@@ -334,8 +340,16 @@ stay as you left them.
 Plus: **yay** bootstrapped via makepkg (needs `base-devel`+`git`) when no
 AUR helper exists; **Brave Origin** (`brave-origin-bin` via yay/paru — the
 hexciri browser, not Brave) with the `brave-bin` stand-in dropped once
-Origin is present; **Nautilus** stays the default file manager (its
-`org.gnome.Nautilus.desktop` owns `inode/directory`, themed via GTK 3/4 css).
+Origin is present; **Nautilus** stays the default file manager on niri (its
+`org.gnome.Nautilus.desktop` owns `inode/directory`) while **Dolphin** takes
+the role on Hyprland — the box ships both, hexciri picks per-WM (one `Files`
+default in `System > Default Apps`, seeded dolphin on hyprland / nautilus on
+niri, never clobbering an explicit pick). `Mod+Shift+F` opens whichever is
+current on either WM. Dolphin plus the other KDE apps are themed via the KDE
+color scheme the theme hook writes (`~/.local/share/color-schemes/hexciri.colors`
++ `~/.config/kdeglobals` → `ColorScheme=hexciri`), so on Hyprland the file
+manager shows the same palette as everything else — nautilus's GTK 3/4 css
+already mirrors it on niri.
 
 **Removed** (only if installed; kept when something still needs them):
 

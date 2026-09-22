@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Default apps: kitty + fish + brave-origin + nautilus + imv + zathura + zed + opencode (xdg-native)
+# hexciri:summary=Default apps: kitty + fish + brave-origin + dolphin(hyprland)/nautilus(niri) + imv + zathura + zed + opencode (xdg-native)
 # Only shows apps that are actually installed; current choice is marked with ✓.
 # usage: hexciri-defaults [Browser|Editor|Images|PDF|Terminal|Shell|Files|Agent]
 set -euo pipefail
@@ -11,11 +11,23 @@ mkdir -p "$STATE_BASE"
 get() { cat "$STATE_BASE/$1" 2>/dev/null || true; }
 setv() { printf '%s' "$2" > "$STATE_BASE/$1"; }
 
+# Per-WM file manager: hyprland boxes ship dolphin as their natural FM (stock
+# Mod+E opens it, Omarchy hyprland conventions use it too); niri keeps the
+# hexciri nautilus default. First seed only — an explicit Defaults > Files
+# pick is never overridden.
+_active_wm="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri)"
+
 # seed user core on first run
 [[ -f $STATE_BASE/terminal ]] || setv terminal kitty
 [[ -f $STATE_BASE/shell ]]    || setv shell fish
 [[ -f $STATE_BASE/browser ]]  || setv browser brave-origin
-[[ -f $STATE_BASE/files ]]    || setv files nautilus
+if ! [[ -f $STATE_BASE/files ]]; then
+  if [[ $_active_wm == hyprland ]] && command -v dolphin >/dev/null 2>&1; then
+    setv files dolphin
+  else
+    setv files nautilus
+  fi
+fi
 [[ -f $STATE_BASE/editor ]]   || setv editor zed
 [[ -f $STATE_BASE/agent ]]    || setv agent opencode
 [[ -f $STATE_BASE/images ]]   || setv images imv
@@ -84,6 +96,22 @@ if [[ -z $pick_type ]]; then
   pick_type="$(menu_via_fuzzel 'Defaults: ' -- Browser Editor Terminal Shell Files Images PDF Agent)" || exec "$SCRIPT_DIR/hexciri-system"   # Esc = back to System menu
 fi
 
+# hexciri-defaults run <type>: launch the current default, no menu. Used by
+# the hyprland File manager bind (Mod+Shift+F → hexciri-defaults run files).
+# files only today — seeding above already guarantees a valid pick.
+if [[ ${pick_type,,} == run ]] && [[ $# -ge 2 ]]; then
+  case "${2,,}" in
+    files)
+      _run="$(get files)"
+      case "$_run" in
+        yazi) exec kitty --class yazi -e yazi 2>/dev/null || exec yazi ;;
+        *)    [[ -n $_run ]] && command -v "$_run" >/dev/null 2>&1 && exec "$_run" ;;
+      esac
+      ;;
+  esac
+  exit 1   # nothing to run
+fi
+
 case "${pick_type,,}" in
   browser)
     current="$(get browser)"
@@ -123,7 +151,7 @@ case "${pick_type,,}" in
     ;;
   files)
     current="$(get files)"
-    choice="$(menu_via_fuzzel 'Files: ' -- "$(available files "$current" nautilus strata thunar yazi)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
+    choice="$(menu_via_fuzzel 'Files: ' -- "$(available files "$current" dolphin nautilus strata thunar yazi)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv files "$choice"
     "$SCRIPT_DIR/hexciri-mime-defaults" apply files >/dev/null 2>&1 || true

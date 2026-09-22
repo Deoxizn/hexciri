@@ -139,6 +139,17 @@ def canon_key(token):
         return "Shift"
     if t.startswith("XF86"):
         return t
+    # Number-row keycodes (same mapping as the stock digitCode()/Omarchy loop):
+    # code:10..18 = digit 1..9, code:19 = digit 0. Keypad codes (82/86…) stay
+    # raw and are skipped as loop noise later.
+    m = re.fullmatch(r"code:(\d+)", t)
+    if m:
+        n = int(m.group(1))
+        if 10 <= n <= 18:
+            return str(n - 9)
+        if n == 19:
+            return "0"
+        return t
     if len(t) == 1 and t.isalpha():
         return t.upper()
     return SUB_TO_XDG.get(t.lower(), t)
@@ -229,6 +240,112 @@ def prettify(action):
     s = re.sub(r"\s+", " ", s).strip()
     return s[:1].upper() + s[1:] if s else action
 
+# Human labels for the stock Hyprland bind forms (noctCall/launchPrefix
+# concatenations and raw hl.dsp.* actions), so Mod+K shows what a bind DOES
+# instead of the lua it runs. Returns "" when nothing specific matches — the
+# caller falls back to prettify().
+NOCT_LABELS = {
+    "settings-toggle": "Toggle settings",
+    "panel-toggle launcher": "Toggle launcher",
+    "panel-toggle launcher /emo": "Emoji launcher",
+    "panel-toggle control-center": "Toggle control center",
+    "panel-toggle control-center notifications": "Toggle notifications",
+    "panel-toggle session": "Toggle session panel",
+    "panel-toggle wallpaper": "Toggle wallpaper panel",
+    "panel-toggle clipboard": "Toggle clipboard panel",
+    "session lock": "Lock session",
+    "window-switcher": "Window switcher",
+    "screenshot-region": "Screenshot region",
+    "screenshot-fullscreen": "Screenshot fullscreen",
+    "volume-up": "Volume up",
+    "volume-down": "Volume down",
+    "volume-mute": "Mute",
+    "mic-mute": "Mic mute",
+    "media toggle": "Play / pause",
+    "media next": "Next track",
+    "media previous": "Previous track",
+    "brightness-up": "Brightness up",
+    "brightness-down": "Brightness down",
+    "notification-clear-active": "Clear active notification",
+    "notification-clear-history": "Clear notification history",
+}
+APP_VARS = {
+    "TERMINAL": "Terminal",
+    "FILE_MANAGER": "File manager",
+    "EDITOR": "Editor",
+    "CALCULATOR": "Calculator",
+    "BROWSER": "Browser",
+}
+MOVE_DIRS = {"l": "left", "r": "right", "u": "up", "d": "down"}
+
+def hypr_label(action):
+    s = action.strip().rstrip(";").strip()
+    s2 = re.sub(r"\s+", " ", s)
+    if "btop" in s2:
+        return "System monitor (btop)"
+    if s.startswith("noctalia msg ") and not ".." in s:
+        lbl = NOCT_LABELS.get(s[len("noctalia msg "):].strip())
+        if lbl:
+            return lbl
+    m = re.search(r'noctCall\s*\.\.\s*"([^"]*)"', s2)
+    if m:
+        lbl = NOCT_LABELS.get(m.group(1).strip())
+        return lbl or ""
+    m = re.search(r'launchPrefix\s*\.\.\s*([A-Z_]+)', s2)
+    if m:
+        return APP_VARS.get(m.group(1), "") or ""
+    m = re.search(r'exec_cmd\(\s*"([^"]+)"', s2)
+    if m:
+        cmd = m.group(1).strip()
+        if cmd == "hyprctl kill":
+            return "Kill active window"
+        if cmd.startswith("hyprpicker"):
+            return "Pick color"
+        if cmd.startswith("noctalia msg"):
+            lbl = NOCT_LABELS.get(cmd[len("noctalia msg "):].strip())
+            if lbl:
+                return lbl
+        return ""   # other exec_cmd forms fall to prettify
+    m = re.search(r'window\.fullscreen\b', s2)
+    if m:
+        return "Fullscreen"
+    m = re.search(r'window\.cycle_next\(', s2)
+    if m:
+        return "Cycle to next window"
+    m = re.search(r'workspace\.toggle_special\(', s2)
+    if m:
+        return "Toggle scratchpad"
+    m = re.search(r'layout\("togglesplit"\)', s2)
+    if m:
+        return "Toggle split layout"
+    m = re.search(r'window\.float\(', s2)
+    if m:
+        return "Toggle floating window"
+    m = re.search(r'window\.move\(\{\s*direction\s*=\s*"([lrud])"\s*\}', s2)
+    if m:
+        return "Move window " + MOVE_DIRS[m.group(1)]
+    m = re.search(r'(?:window\.move|focus)\(\{\s*workspace\s*=\s*"(m[+-]1)"', s2)
+    if m and "window.move" in s2:
+        return "Move window to next workspace" if m.group(1) == "m+1" else "Move window to previous workspace"
+    if m:
+        return "Next workspace" if m.group(1) == "m+1" else "Previous workspace"
+    m = re.search(r'focus\(\{\s*workspace\s*=\s*"emptym"', s2)
+    if m:
+        return "Next empty workspace"
+    m = re.search(r'window\.move\(\{\s*monitor', s2)
+    if m:
+        return "Move window to monitor"
+    m = re.search(r'zoomfunction\((-?\d+(?:\.\d+)?)\)', s2)
+    if m:
+        return "Zoom in" if float(m.group(1)) > 0 else "Zoom out"
+    m = re.search(r'window\.drag\(', s2)
+    if m:
+        return "Move window (mouse)"
+    m = re.search(r'window\.resize\(', s2)
+    if m:
+        return "Resize window (mouse)"
+    return ""
+
 binds = []
 if wm == "hyprland":
     # hl.bind(<combo-expr>, <action>) — resolve the common static forms:
@@ -285,7 +402,10 @@ for combo, action in binds:
     if "code:" in c:
         continue
     seen.add(c)
-    rows.append(f"{c:<22} {DESC.get(c, prettify(action))}")
+    label = ""
+    if wm == "hyprland":
+        label = hypr_label(action)
+    rows.append(f"{c:<22} {DESC.get(c, label or prettify(action))}")
 
 if not rows:
     print(f"No keybinds found in {file}", file=sys.stderr)

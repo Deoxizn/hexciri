@@ -414,6 +414,49 @@ update_self() {
       fi
     fi
 
+    # Neutralize stock binds that the hexciri overlay owns outright. In this
+    # shell a duplicate combo STACKS (both actions fire) — the overlay being
+    # required later does NOT dislodge the stock line. Comment the stock ones
+    # out once (first change backs up binds.lua → binds.lua.hexciri.bak):
+    #   Mod+Alt+Space      float toggle   → root menu owns it
+    #   Mod+Escape         hyprctl kill   → power menu owns it
+    #   Mod+Return         launch prefix  → hexciri-terminal owns it
+    #   Mod+Shift+S        move scratchpad→ web search owns it
+    #   Mod+Shift+1..3     monitor moves  → workspace-move verb owns it
+    if [[ -f $dst/hexciri-binds.lua && -f $dst/binds.lua ]]; then
+      python3 - "$dst/binds.lua" <<'PYEOF'
+import re, sys, shutil, os
+kb = sys.argv[1]
+src = open(kb).read()
+pats = [
+    'mainMod .. " + ALT + Space"',
+    'mainMod .. " + Escape"',
+    'mainMod .. " + Return"',
+    'mainMod .. " + SHIFT + S"',
+    'window.move({ monitor = MONITOR1 })',
+    'window.move({ monitor = MONITOR2 })',
+    'window.move({ monitor = MONITOR3 })',
+]
+out, changed = [], False
+for line in src.split("\n"):
+    if line.lstrip().startswith("--"):
+        out.append(line)
+        continue
+    if any(p in line for p in pats):
+        indent = line[:len(line) - len(line.lstrip())]
+        out.append(indent + "-- [hexciri] " + line.strip())
+        changed = True
+    else:
+        out.append(line)
+if changed:
+    bak = kb + ".hexciri.bak"
+    if not os.path.exists(bak):
+        shutil.copy2(kb, bak)
+    open(kb, "w").write("\n".join(out) + ("\n" if src.endswith("\n") else "\n"))
+    print("hyprland: neutralized stock binds owned by the hexciri overlay (backup: binds.lua.hexciri.bak)")
+PYEOF
+    fi
+
     # Pin the WM so hexciri-session is deterministic everywhere (ssh included).
     local wmfile="$HOME/.config/hexciri/wm"
     if [[ -f $wmfile ]] && [[ "$(tr -d '[:space:]' <"$wmfile")" == hyprland ]]; then
