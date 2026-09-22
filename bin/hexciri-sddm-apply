@@ -63,13 +63,20 @@ if [[ -n ${VALS[BackgroundFile]:-} ]]; then
 fi
 
 # Palette merge: surgical per-key replace-or-append, everything else in
-# theme.conf (Fingerprint, PreferredSession, Username) untouched.
+# theme.conf (Fingerprint, PreferredSession, Username) untouched. Colors are
+# written QUOTED: QSettings INI strips an unquoted #comment tail, so a bare
+# Background=#0a0a0d would parse as empty (upstream QMLThemeConfigTest proves
+# quoted values arrive with quotes stripped).
 for k in Background Muted Error BackgroundFile; do
   [[ -n ${VALS[$k]:-} ]] || continue
+  case "$k" in
+    Background|Muted|Error) V="\"${VALS[$k]}\"" ;;
+    *) V="${VALS[$k]}" ;;
+  esac
   if grep -Eq "^$k=" "$TARGET/theme.conf" 2>/dev/null; then
-    sed -i -E "s/^$k=.*/$k=${VALS[$k]}/" "$TARGET/theme.conf"
+    sed -i -E "s/^$k=.*/$k=$V/" "$TARGET/theme.conf"
   else
-    printf '%s=%s\n' "$k" "${VALS[$k]}" >> "$TARGET/theme.conf"
+    printf '%s=%s\n' "$k" "$V" >> "$TARGET/theme.conf"
   fi
 done
 echo "hexciri-sddm-apply: palette synced (Background=${VALS[Background]} Muted=${VALS[Muted]} Error=${VALS[Error]})"

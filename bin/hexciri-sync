@@ -199,7 +199,18 @@ if [[ -n $REPO && -d $REPO/branding/sddm ]]; then
   tdir=/usr/share/sddm/themes/hexciri
   if [[ ! -f $tdir/Main.qml ]] || ! cmp -s "$REPO/branding/sddm/Main.qml" "$tdir/Main.qml" 2>/dev/null; then
     mkdir -p "$tdir"
-    cp -rf "$REPO/branding/sddm/." "$tdir/" && log "sddm theme deployed"
+    # Copy everything EXCEPT theme.conf: the deployed copy accumulates live
+    # keys (Fingerprint, PreferredSession, theme-follow Background/*), and a
+    # blind cp would wipe them back to the repo's bare [General] on every
+    # Main.qml refresh — exactly how a themed login reverted to static.
+    # theme.conf is seeded once when absent; keys are stamped below.
+    for _bf in "$REPO"/branding/sddm/*; do
+      [[ $(basename "$_bf") == theme.conf ]] && continue
+      cp -rf "$_bf" "$tdir/" || true
+    done
+    unset _bf
+    [[ -f $tdir/theme.conf ]] || cp -f "$REPO/branding/sddm/theme.conf" "$tdir/theme.conf" 2>/dev/null || true
+    log "sddm theme deployed"
   fi
   fp=false
   if grep -ril finger /sys/bus/usb/devices/*/product 2>/dev/null | grep -q .; then fp=true; fi
