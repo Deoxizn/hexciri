@@ -35,12 +35,18 @@ hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("xdg-open https://"))
 -- (dolphin on hyprland boxes, nautilus on niri) via hexciri-defaults run files.
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.exec_cmd("hexciri-defaults run files"))
 
--- Layout cycle (dwindle/master/scrolling…): Omarchy's Mod+T toggle idiom,
+-- Layout cycle (dwindle/scrolling/monocle): Omarchy's Mod+T toggle idiom,
 -- generalized to rotate every layout the compositor supports. Takes over the
 -- stock slot — stock binds Mod+T to the editor, which hexciri replaces with
 -- zed on Mod+Shift+E (and whose stock binary, gnome-text-editor, is removed
 -- on hyprland anyway).
 hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("hexciri-hyprland-layout"))
+
+-- Monocle stack flipping: every window is fullscreen, so directional focus
+-- is useless — cycle the stack instead (forward/back, wrapping). Alt+Tab
+-- does this globally too; these are the Mod-driven equivalents.
+hl.bind(mainMod .. " + Page_Down", hl.dsp.window.cycle_next())
+hl.bind(mainMod .. " + Page_Up", hl.dsp.window.cycle_next({ next = false }))
 
 -- Workspaces: niri verbs (Mod+digit switch / Mod+SHIFT+digit move). Stock
 -- CachyOS binds Mod+ALT+digit to switch and Mod+SHIFT+CONTROL|ALT+digit to

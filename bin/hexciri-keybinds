@@ -312,6 +312,8 @@ def hypr_label(action):
         return "Fullscreen"
     m = re.search(r'window\.cycle_next\(', s2)
     if m:
+        if re.search(r'next\s*=\s*false', s2):
+            return "Cycle to previous window"
         return "Cycle to next window"
     m = re.search(r'workspace\.toggle_special\(', s2)
     if m:

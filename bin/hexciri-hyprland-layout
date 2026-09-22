@@ -1,14 +1,15 @@
 #!/bin/bash
-# hexciri:summary=Cycle Hyprland tiling layouts (dwindle/master/scrolling/monocle)
+# hexciri:summary=Cycle Hyprland tiling layouts (dwindle/scrolling/monocle)
 # usage: hexciri-hyprland-layout [next|prev|<name>]  (default: next)
-# Rotates through every layout the compositor ships: dwindle, master,
-# scrolling and monocle are all built into current Hyprland (verified live —
-# each eval applies with set:true, no plugin needed). Bound to Mod+T on
-# hyprland (the Omarchy toggle idiom, generalized from their per-workspace
-# dwindle/scrolling toggle to a full cycle over all four).
+# Rotates through the compositor's tiling layouts: dwindle, scrolling and
+# monocle are all built into current Hyprland (verified live — each eval
+# applies with set:true, no plugin needed). Master is deliberately OUT:
+# nothing about it survives losing to the other three on this box. Bound to
+# Mod+T on hyprland (the Omarchy toggle idiom, generalized from their
+# per-workspace dwindle/scrolling toggle to a full cycle).
 set -euo pipefail
 
-LAYOUTS=(dwindle master scrolling monocle)
+LAYOUTS=(dwindle scrolling monocle)
 
 current_layout() {
   local cur=""
