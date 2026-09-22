@@ -1,0 +1,376 @@
+#!/bin/bash
+# hexciri:summary=Switch the active WM between niri and hyprland (full switch, no reinstall)
+# hexciri-wm-switch [--to niri|hyprland] [--dry-run] [--yes] [--keep-old]
+#
+# Full WM switch without reinstalling CachyOS:
+#   1. installs the target compositor stack (best-effort pacman, never fatal;
+#      the old compositor stays installed so switching back always works)
+#   2. backs up the old WM's live configs, then removes them
+#      (--keep-old skips the removal; backup is always kept)
+#   3. seeds the target WM's configs — niri ships a full repo tree
+#      (config/niri); hyprland needs the stock skeleton, pulled via the
+#      CachyOS meta when absent, then adapted by the update deploy
+#   4. flips ~/.config/hexciri/wm and re-runs the update deploy + root sync
+#      (keybinds, kitty, themes, SDDM PreferredSession stamp so the greeter
+#      defaults to the new WM)
+# Explicit user picks (Default Apps, custom binds/overlays) are never
+# overwritten — the deploy only adds what's missing. --dry-run prints the
+# whole plan without touching anything (no sudo, no writes).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd || dirname "${BASH_SOURCE[0]}")"
+
+REPO="${HEXCIRI_PATH:-}"
+if [[ -z $REPO ]]; then
+  cand="$(dirname "$SCRIPT_DIR")"
+  [[ -x $cand/bin/hexciri-update ]] && REPO="$cand"
+fi
+[[ -n $REPO ]] || REPO="$HOME/.local/opt/hexciri"
+
+info() { echo "hexciri-wm-switch: $*"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+have_pkg() { command -v pacman >/dev/null 2>&1 && pacman -Q "$1" >/dev/null 2>&1; }
+
+TO="" DRY=false YES=false KEEP_OLD=false
+for a in "$@"; do
+  case "$a" in
+    --to=*) TO="${a#--to=}" ;;
+    --dry-run|--dry|--plan) DRY=true ;;
+    --yes|-y) YES=true ;;
+    --keep-old) KEEP_OLD=true ;;
+    -h|--help)
+      echo "usage: hexciri-wm-switch [--to niri|hyprland] [--dry-run] [--yes] [--keep-old]"
+      echo "  --dry-run  print the plan, change nothing"
+      echo "  --keep-old keep the old WM's live configs (default: back up, then remove)"
+      exit 0 ;;
+  esac
+done
+# --to <value> (space form)
+for (( i=1; i<=$#; i++ )); do
+  if [[ "${!i}" == "--to" ]]; then
+    j=$((i+1)); TO="${!j:-}"; break
+  fi
+done
+case "${TO,,}" in
+  "") ;;
+  niri) TO=niri ;;
+  hypr|hyprland) TO=hyprland ;;
+  *) echo "hexciri-wm-switch: unknown --to '$TO' (niri|hyprland)" >&2; exit 1 ;;
+esac
+
+CURRENT="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri)"
+
+if [[ -z $TO ]]; then
+  OTHER=niri; [[ $CURRENT == niri ]] && OTHER=hyprland
+  if have "$SCRIPT_DIR/hexciri-fuzzel" || have hexciri-fuzzel; then
+    FZ="$SCRIPT_DIR/hexciri-fuzzel"; have "$FZ" || FZ="hexciri-fuzzel"
+    rows=()
+    for w in niri hyprland; do
+      [[ $w == "$CURRENT" ]] && rows+=("✓ $w (current)") || rows+=("$w")
+    done
+    sel="$(printf '%s\n' "${rows[@]}" | "$FZ" --dmenu --prompt='Switch WM to: ' --width=30 --lines=2 || true)"
+    sel="${sel#✓ }"; sel="${sel% (current)}"
+    [[ -n $sel ]] || { info "cancelled"; exit 0; }
+    TO="$sel"
+  else
+    TO="$OTHER"
+  fi
+fi
+
+if [[ $TO == "$CURRENT" ]]; then
+  info "already on $CURRENT — nothing to do"
+  exit 0
+fi
+
+# ── target stack (compositor + portals + session launcher) ──
+# Installs only; the old compositor is never removed (switch-back safety).
+# XXX package names are the Arch/CachyOS ones; if they drift pacman fails
+# and the script prints the manual fallback instead of dying.
+if [[ $TO == hyprland ]]; then
+  STACK_PKGS="hyprland xdg-desktop-portal-hyprland uwsm"
+  NEED_META=true  # stock hyprland.lua skeleton comes from the CachyOS meta
+  META_PKG="cachyos-hypr-noctalia"
+  NATIVE_FM="dolphin"; FALLBACK_FM="nautilus"
+  NATIVE_IMG="qview";  FALLBACK_IMG="imv"
+else
+  STACK_PKGS="niri xwayland-satellite xdg-desktop-portal-gtk"
+  NEED_META=false # repo ships the full niri tree (config/niri)
+  META_PKG=""
+  NATIVE_FM="nautilus"; FALLBACK_FM="dolphin"
+  NATIVE_IMG="imv";     FALLBACK_IMG="qview"
+fi
+
+# Native swap pairs (flip + uninstall): old native → target native per role.
+# A stored pick equal to the OLD native is a carried seed and flips to the
+# target native (same idiom as the imv→qview / mupdf→zathura migrations); any
+# other pick — thunar, an explicit cross-WM choice — is never touched.
+if [[ $TO == hyprland ]]; then
+  FM_OLD=nautilus;  FM_NEW=dolphin
+  IMG_OLD=imv;      IMG_NEW=qview
+  EXTRA_RM="gnome-text-editor gnome-calculator gtksourceview5"
+else
+  FM_OLD=dolphin;   FM_NEW=nautilus
+  IMG_OLD=qview;    IMG_NEW=imv
+  EXTRA_RM=""
+fi
+# missing <pkgs...> → prints the subset not installed (empty when complete)
+missing_pkgs() {
+  local p out=""
+  for p in "$@"; do
+    have_pkg "$p" || out+="$p "
+  done
+  printf '%s' "$out"
+}
+
+# shellcheck disable=SC2086 # intentional word-split of the package list
+MISSING_STACK="$(missing_pkgs $STACK_PKGS)"
+MISSING_STACK="$(printf '%s' "$MISSING_STACK" | tr -s ' ' | sed 's/^ *//;s/ *$//')"
+NEED_SKELETON=false
+if [[ $TO == hyprland && ! -f $HOME/.config/hypr/hyprland.lua ]]; then
+  NEED_SKELETON=true
+  if have_pkg "$META_PKG"; then NEED_SKELETON=false; fi
+fi
+# Native-app gate (install.sh idiom): a box with no file manager / viewer at
+# all gets the target native. Whatever is already there is handled by the
+# swap below (flip a carried old-native pick, uninstall replaced natives).
+MISSING_APPS=""
+if ! have "$NATIVE_FM" && ! have "$FALLBACK_FM"; then MISSING_APPS+="$NATIVE_FM "; fi
+if ! have "$NATIVE_IMG" && ! have "$FALLBACK_IMG"; then MISSING_APPS+="$NATIVE_IMG "; fi
+MISSING_APPS="$(printf '%s' "$MISSING_APPS" | tr -s ' ' | sed 's/^ *//;s/ *$//')"
+STACK_LINE="${MISSING_STACK:-"(all installed)"}${MISSING_APPS:+ + natives ($MISSING_APPS)}"
+# Stored picks for the swap plan (empty = never seeded; deploy seeds later).
+STATE_BASE="$HOME/.local/state/hexciri/defaults"
+STORED_FM="$(cat "$STATE_BASE/files" 2>/dev/null || true)"
+STORED_IMG="$(cat "$STATE_BASE/images" 2>/dev/null || true)"
+# Replacement removals beyond the old natives (hyprland direction mirrors
+# migrate_hyprland_native_apps: editor only with zed live, forced -Rdd while
+# the CachyOS hyprland meta pins editor/calculator — vim precedent).
+RM_LIST=""; RDD_LIST=""
+if [[ $TO == hyprland ]]; then
+  if have zeditor; then
+    if have_pkg cachyos-hypr-noctalia; then RDD_LIST+="gnome-text-editor gnome-calculator "; else RM_LIST+="gnome-text-editor gnome-calculator "; fi
+  fi
+  RM_LIST+="gtksourceview5 "
+fi
+
+if [[ $CURRENT == niri ]]; then OLD_CFG="$HOME/.config/niri"; else OLD_CFG="$HOME/.config/hypr"; fi
+STAMP="$(date +%Y%m%d%H%M%S)"
+BAK="$HOME/.config/hexciri-backup/wm-switch-$STAMP"
+
+plan() {
+  echo "hexciri-wm-switch plan: $CURRENT → $TO"
+  echo "  packages: $STACK_LINE"
+  if [[ $NEED_SKELETON == true ]]; then
+    echo "  skeleton: stock hyprland config absent → copy /etc/skel/.config/hypr (else install $META_PKG, then copy)"
+  fi
+  if [[ $TO == niri && ! -f $HOME/.config/niri/config.kdl ]]; then
+    echo "  seed: repo config/niri → ~/.config/niri (full tree, absent only)"
+  fi
+  if [[ -d $OLD_CFG ]]; then
+    echo "  backup: $OLD_CFG → $BAK/$(basename "$OLD_CFG")"
+    if [[ $KEEP_OLD == true ]]; then
+      echo "  retire: skipped (--keep-old)"
+    else
+      echo "  retire: remove $OLD_CFG after verified backup"
+    fi
+  else
+    echo "  backup: nothing ($OLD_CFG absent)"
+  fi
+  echo "  pin: ~/.config/hexciri/wm → $TO"
+  APPS_LINE=""
+  [[ $STORED_FM == "$FM_OLD" ]] && APPS_LINE+="flip files $FM_OLD→$FM_NEW; "
+  [[ $STORED_IMG == "$IMG_OLD" ]] && APPS_LINE+="flip images $IMG_OLD→$IMG_NEW; "
+  APPS_LINE+="uninstall replaced natives ($FM_OLD/$IMG_OLD${EXTRA_RM:+ + $EXTRA_RM} — kept when something still needs them)"
+  echo "  apps: ${APPS_LINE}"
+  echo "  deploy: hexciri-update self (overlays, keybinds, kitty, themes)"
+  echo "  root: sudo hexciri-sync (SDDM theme + PreferredSession=$TO stamp)"
+  echo "  finish: log out, pick '$TO' at SDDM (greeter defaults to it), log in"
+}
+
+if [[ $DRY == true ]]; then
+  plan
+  exit 0
+fi
+
+info "switching $CURRENT → $TO"
+if [[ $YES != true ]]; then
+  if [[ -t 0 ]]; then
+    read -rp "Switch $CURRENT → $TO? old configs are backed up to $BAK then removed. [y/N] " r
+    [[ $r =~ ^[Yy]$ ]] || { info "cancelled"; exit 0; }
+  else
+    info "no tty — re-run with --yes to confirm"
+    exit 1
+  fi
+fi
+
+# 1. target stack
+if [[ -n $MISSING_STACK || -n $MISSING_APPS ]]; then
+  if have pacman; then
+    # shellcheck disable=SC2086
+    sudo pacman -S --needed --noconfirm $MISSING_STACK $MISSING_APPS 2>&1 | tail -n 3 || \
+      info "package step partial — install by hand: sudo pacman -S --needed $MISSING_STACK $MISSING_APPS"
+  else
+    info "no pacman here — install by hand: $MISSING_STACK $MISSING_APPS"
+  fi
+else
+  info "target stack already installed"
+fi
+
+# 2. hyprland skeleton (stock hyprland.lua the overlays require into).
+# The meta ships it under /etc/skel (new users only) — copy it for this
+# user when present; otherwise install the meta, then copy. Abort before
+# the pin flips if still absent: an overlay-only ~/.config/hypr is dead.
+if [[ $NEED_SKELETON == true ]]; then
+  seed_skel() {
+    [[ -f /etc/skel/.config/hypr/hyprland.lua ]] || return 1
+    mkdir -p "$HOME/.config/hypr"
+    cp -r /etc/skel/.config/hypr/. "$HOME/.config/hypr/" 2>/dev/null && \
+      info "seeded stock hyprland skeleton from /etc/skel"
+  }
+  [[ -f $HOME/.config/hypr/hyprland.lua ]] || seed_skel || true
+  if [[ ! -f $HOME/.config/hypr/hyprland.lua ]]; then
+    if have pacman; then
+      info "installing $META_PKG for the stock hyprland skeleton"
+      sudo pacman -S --needed --noconfirm "$META_PKG" 2>&1 | tail -n 3 || \
+        info "meta install failed — install by hand: sudo pacman -S --needed $META_PKG"
+      seed_skel || true
+    else
+      info "no pacman here — install by hand: sudo pacman -S --needed $META_PKG"
+    fi
+  fi
+  if [[ ! -f $HOME/.config/hypr/hyprland.lua ]]; then
+    echo "hexciri-wm-switch: no stock hyprland.lua after install — aborting before the pin flips" >&2
+    echo "  expected: ~/.config/hypr/hyprland.lua (ships with $META_PKG)" >&2
+    echo "  fix: sudo pacman -S --needed $META_PKG, then re-run this script" >&2
+    exit 1
+  fi
+fi
+
+# 3. backup + retire the old WM's live configs
+if [[ -d $OLD_CFG ]]; then
+  mkdir -p "$BAK"
+  cp -a "$OLD_CFG" "$BAK/" && info "backed up $OLD_CFG → $BAK/$(basename "$OLD_CFG")"
+  if [[ ! -d "$BAK/$(basename "$OLD_CFG")" ]]; then
+    echo "hexciri-wm-switch: backup verify failed — NOT removing $OLD_CFG" >&2
+    exit 1
+  fi
+  if [[ $KEEP_OLD == true ]]; then
+    info "keeping $OLD_CFG (--keep-old)"
+  else
+    rm -rf "$OLD_CFG" && info "removed $OLD_CFG (backup: $BAK/$(basename "$OLD_CFG"))"
+  fi
+else
+  info "no $OLD_CFG to retire"
+fi
+
+# 4. seed the target tree when wholly absent (never overwrite)
+if [[ $TO == niri && ! -f $HOME/.config/niri/config.kdl && -d $REPO/config/niri ]]; then
+  mkdir -p "$HOME/.config/niri"
+  cp -r "$REPO/config/niri/." "$HOME/.config/niri/" && info "seeded ~/.config/niri from repo"
+fi
+
+# 5. pin + flip carried picks + deploy + uninstall replaced + root re-apply
+mkdir -p "$HOME/.config/hexciri"
+printf '%s\n' "$TO" > "$HOME/.config/hexciri/wm"
+info "pinned WM = $TO (~/.config/hexciri/wm)"
+
+# 5a. flip a carried old-native pick to the target native (re-pins MIME via
+# the defaults table). Never strands: only when the target binary is live
+# after step 1; any other pick (thunar, explicit cross-WM) is untouched.
+flip_pick() { # <role> <old> <new>
+  local role=$1 old=$2 new=$3 cur
+  cur="$(cat "$STATE_BASE/$role" 2>/dev/null || true)"
+  [[ $cur == "$old" ]] || return 0
+  if ! have "$new"; then info "pick $role stays $old ($new not installed)"; return 0; fi
+  printf '%s' "$new" > "$STATE_BASE/$role" && info "pick $role $old → $new"
+  if [[ -x $REPO/bin/hexciri-mime-defaults ]]; then
+    HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-mime-defaults" apply "$role" >/dev/null 2>&1 || true
+  fi
+}
+flip_pick files "$FM_OLD" "$FM_NEW"
+flip_pick images "$IMG_OLD" "$IMG_NEW"
+
+if [[ -x $REPO/bin/hexciri-update ]]; then
+  info "deploying via hexciri-update self"
+  "$REPO/bin/hexciri-update" self || info "deploy returned non-zero — re-run 'hexciri-update self'"
+else
+  info "no hexciri-update at $REPO/bin — run 'hexciri-update self' by hand"
+fi
+
+# 6. uninstall replaced natives. Kept-when-needed twice over: pacman itself
+# refuses while something still needs the package, and removal is gated on
+# the replacement being live + the stored pick no longer naming the old one
+# (an explicit old-native pick is never uninstalled from under the user).
+REMOVED_ANY=false
+stale_desktops() { # <pkg> → per-user desktop basenames left behind by removal
+  case "$1" in
+    nautilus) echo "org.gnome.Nautilus" ;;
+    imv) echo "imv imv-dir" ;;
+    dolphin) echo "org.kde.dolphin" ;;
+    qview) echo "qview" ;;
+    gnome-text-editor) echo "org.gnome.TextEditor" ;;
+    gnome-calculator) echo "org.gnome.Calculator" ;;
+  esac
+}
+drop_stale_desktops() { # <pkg>
+  local d
+  for d in $(stale_desktops "$1"); do
+    [[ -f $HOME/.local/share/applications/$d.desktop ]] || continue
+    rm -f "$HOME/.local/share/applications/$d.desktop" && info "removed stale $d desktop override"
+  done
+}
+uninstall_plain() { # <pkg> <why>
+  local p=$1
+  have_pkg "$p" || return 0
+  # shellcheck disable=SC2086
+  if sudo pacman -Rns --noconfirm "$p" 2>&1 | tail -n 2; then
+    info "removed $p ($2)"
+    drop_stale_desktops "$p"; REMOVED_ANY=true
+  else
+    info "kept $p (something still needs it)"
+  fi
+}
+uninstall_forced() { # <pkg> — CachyOS hyprland meta pins it (vim precedent: -Rdd breaks only the meta's declared dep)
+  local p=$1
+  have_pkg "$p" || return 0
+  if sudo pacman -Rdd --noconfirm "$p" 2>&1 | tail -n 2; then
+    info "removed $p (forced: breaks only cachyos-hypr-noctalia's declared dep)"
+    drop_stale_desktops "$p"; REMOVED_ANY=true
+  else
+    info "kept $p (forced removal failed)"
+  fi
+}
+uninstall_native() { # <old> <new> <role>
+  local old=$1 new=$2 role=$3 cur
+  have_pkg "$old" || return 0
+  if ! have "$new"; then info "kept $old ($new not installed)"; return 0; fi
+  cur="$(cat "$STATE_BASE/$role" 2>/dev/null || true)"
+  if [[ $cur == "$old" ]]; then info "kept $old (still the $role pick)"; return 0; fi
+  uninstall_plain "$old" "$new is live"
+}
+# shellcheck disable=SC2086
+for p in $RM_LIST; do uninstall_plain "$p" "replaced on $TO"; done
+for p in $RDD_LIST; do uninstall_forced "$p"; done
+unset p
+uninstall_native "$FM_OLD" "$FM_NEW" files
+uninstall_native "$IMG_OLD" "$IMG_NEW" images
+if [[ $REMOVED_ANY == true ]]; then
+  update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+fi
+
+if have hexciri-sync || [[ -x $REPO/bin/hexciri-sync ]]; then
+  SYNC_BIN="$(command -v hexciri-sync 2>/dev/null || echo "$REPO/bin/hexciri-sync")"
+  sudo "$SYNC_BIN" 2>&1 | sed 's/^/  /' || \
+    info "root pass skipped — run 'sudo hexciri-sync' by hand (SDDM stamp)"
+else
+  info "no hexciri-sync found — run 'sudo hexciri-sync' by hand (SDDM stamp)"
+fi
+
+cat <<EOF
+hexciri-wm-switch: $CURRENT → $TO complete.
+  old configs: $BAK (restore by hand to switch back without re-seeding)
+  next: log out, pick '$TO' at SDDM (greeter now defaults to it), log in.
+  apps: carried $FM_OLD/$IMG_OLD picks flipped to $FM_NEW/$IMG_NEW, replaced
+  natives uninstalled when nothing still needed them (explicit cross-WM
+  picks were kept — change any time in System > Default Apps).
+EOF

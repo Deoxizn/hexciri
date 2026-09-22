@@ -62,6 +62,16 @@ clipboard, sync, updates — is one shared code path for both WMs. `System >
 Config` edits whichever WM is active; `Restart > Reload WM` runs Hyprland's
 `reload` or Niri's `msg action reload-config` as appropriate.
 
+Switching WMs without reinstalling: `hexciri-wm-switch [--to niri|hyprland]`
+installs the other compositor, backs up the old WM's live configs (then
+removes them), seeds the new side, flips the `wm` pin, and re-runs the update
+deploy + root sync — so the SDDM greeter defaults to the new WM too.
+`--dry-run` prints the plan without changing anything; `--keep-old` keeps the
+old configs. Relogin, pick the new session once, done — carried
+file-manager/viewer picks flip to the new WM's natives (explicit cross-WM
+picks stay), replaced natives uninstall when nothing still needs them, and
+custom binds are kept.
+
 ## Install
 
 In plain words: install CachyOS, grab this repo, run one script, answer two
