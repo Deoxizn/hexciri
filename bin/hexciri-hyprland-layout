@@ -2,15 +2,26 @@
 # hexciri:summary=Cycle Hyprland tiling layouts (dwindle/scrolling/monocle)
 # usage: hexciri-hyprland-layout [next|prev|<name>]  (default: next)
 # Rotates through the compositor's tiling layouts: dwindle, scrolling and
-# monocle are all built into current Hyprland (verified live — each eval
-# applies with set:true, no plugin needed). Master is deliberately OUT:
-# nothing about it survives losing to the other three on this box. Bound to
-# Bound to Mod+L on hyprland (Omarchy parity; the stock L session-lock is
-# neutralized at deploy since hexciri-lock owns Ctrl+L).
+# monocle are all built into current Hyprland (verified live). Master is
+# deliberately OUT: nothing about it survives losing to the other three on
+# this box. Bound to Mod+L on hyprland (Omarchy parity; the stock L
+# session-lock is neutralized at deploy since hexciri-lock owns Ctrl+L).
+#
+# Mechanism: writes the layout into config/hexciri-layout.lua (owned file,
+# required from hyprland.lua) and reloads. eval sets the global only and
+# live workspaces follow slowly if at all; injected workspace rules never
+# land on the lua parser (verified both). File + reload applies instantly
+# to every workspace and survives relogin (unlike eval).
 set -euo pipefail
 
+LAYOUTS=(dwindle scrolling monocle)
+
+HYPR_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
+LAYOUT_FILE="$HYPR_DIR/config/hexciri-layout.lua"
+MAIN_FILE="$HYPR_DIR/hyprland.lua"
+
 # uwsm-managed Hyprland omits HYPRLAND_INSTANCE_SIGNATURE from its own
-# environ, so the Mod+T bind inherits a sig-less env and every hyprctl call
+# environ, so the Mod+L bind inherits a sig-less env and every hyprctl call
 # dies with "not set!". Resolve from the runtime dir (newest first) when
 # unset — same block as hexciri-compositor.
 if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
@@ -22,20 +33,44 @@ if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
   unset _hdir _sig
 fi
 
-LAYOUTS=(dwindle scrolling monocle)
-
+# python3 (stdlib only), never jq: fresh/partial boxes may lack jq while
+# python3 ships with the system (same rule as terminal-smart.sh).
 current_layout() {
   local cur=""
-  if command -v jq >/dev/null 2>&1; then
-    # Per-workspace-aware first: a workspace rule pinning a layout beats the
-    # global option, so the effective layout is the honest rotation base.
-    cur="$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.tiledLayout // empty' 2>/dev/null || true)"
-    [[ -z $cur ]] && cur="$(hyprctl getoption general:layout -j 2>/dev/null | jq -r '.str // empty' 2>/dev/null || true)"
-  fi
+  # Per-workspace-aware: the live tiled layout is the honest rotation base.
+  cur="$(hyprctl activeworkspace -j 2>/dev/null | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("tiledLayout") or "")
+except Exception: print("")' 2>/dev/null || true)"
+  [[ -z $cur ]] && cur="$(hyprctl getoption general:layout -j 2>/dev/null | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("str") or "")
+except Exception: print("")' 2>/dev/null || true)"
   if [[ -z $cur ]]; then
     cur="$(hyprctl getoption general:layout 2>/dev/null | grep -oE '"(dwindle|master|scrolling|monocle|[a-z]+)"' | head -1 | tr -d '"' || true)"
   fi
   printf '%s' "${cur:-dwindle}"
+}
+
+write_layout() { # <name> — the whole file is generated, never hand-edited
+  mkdir -p "$(dirname "$LAYOUT_FILE")"
+  cat > "$LAYOUT_FILE" <<EOF
+-- Hexciri live layout (written by hexciri-hyprland-layout, never by hand).
+hl.config({
+    general = {
+        layout = "$1",
+    },
+})
+EOF
+}
+
+ensure_required() {
+  [[ -f $MAIN_FILE ]] || return 0
+  grep -q 'require("config.hexciri-layout")' "$MAIN_FILE" 2>/dev/null && return 0
+  cp -f "$MAIN_FILE" "$MAIN_FILE.hexciri.bak" 2>/dev/null || true
+  if grep -q 'require("config.hexciri-binds")' "$MAIN_FILE" 2>/dev/null; then
+    sed -i '/require("config.hexciri-binds")/a require("config.hexciri-layout")' "$MAIN_FILE"
+  else
+    printf '\nrequire("config.hexciri-layout")\n' >> "$MAIN_FILE"
+  fi
 }
 
 mode="${1:-next}"
@@ -60,20 +95,16 @@ case "$mode" in
     ;;
 esac
 
-# Live-apply: this box runs the Lua config (non-legacy parser), where
-# `hyprctl keyword` is a no-op ("use eval"). The same hl.config() call the
-# config files make applies live through eval. Verify after set: on a
-# compositor missing the target, getoption won't move — fail loudly instead
-# of notifying a lie.
-hyprctl eval "hl.config({ general = { layout = \"$next\" } })" >/dev/null 2>&1 || exit 1
-# The live workspace can report the previous layout for a beat after a
-# successful set (observed: global moves instantly, tiledLayout lags) — so
-# re-read a few times before calling it a failure instead of notifying a lie.
+ensure_required
+write_layout "$next"
+hyprctl reload >/dev/null 2>&1 || exit 1
+# Reload applies to every workspace, but give the compositor a beat before
+# calling it a failure instead of notifying a lie.
 got=""
-for _ in 1 2 3 4; do
+for _ in 1 2 3 4 5 6; do
   got="$(current_layout)"
   [[ $got == "$next" ]] && break
-  sleep 0.3
+  sleep 0.5
 done
 if [[ $got != "$next" ]]; then
   echo "hexciri-hyprland-layout: set $next but compositor reports $got" >&2

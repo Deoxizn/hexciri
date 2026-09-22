@@ -341,6 +341,10 @@ update_self() {
     while IFS= read -r f; do
       rel="${f#$src/}"
       [[ $rel == *.lua ]] || continue
+      # hexciri-layout.lua is owned by the layout cycler (rewritten per
+      # press) — seeded + required below, never manifest-tracked here, or
+      # every update would fight the live value.
+      [[ $rel == hexciri-layout.lua ]] && continue
       if [[ ! -f $dst/$rel ]]; then
         if cp -f "$f" "$dst/$rel" 2>/dev/null; then
           echo "seeded hyprland overlay ($rel)"
@@ -411,6 +415,22 @@ update_self() {
         echo "hyprland: required config.hexciri-autostart after stock autostart"
       else
         echo "hyprland: NOTE could not place config.hexciri-autostart (no stock autostart require found)" >&2
+      fi
+    fi
+
+    # hexciri-layout.lua (live layout file owned by hexciri-hyprland-layout):
+    # seed from the repo template when absent — never overwrite, the cycler
+    # rewrites it on every press. Assert the require so the file loads.
+    if [[ ! -f $dst/hexciri-layout.lua && -f $src/hexciri-layout.lua ]]; then
+      if cp -f "$src/hexciri-layout.lua" "$dst/hexciri-layout.lua" 2>/dev/null; then
+        echo "seeded hyprland live layout (hexciri-layout.lua)"
+      fi
+    fi
+    if ! grep -q 'require("config.hexciri-layout")' "$main" 2>/dev/null; then
+      cp -f "$main" "$main.hexciri.bak" 2>/dev/null || true
+      if grep -q 'require("config.hexciri-binds")' "$main" 2>/dev/null; then
+        sed -i '/require("config.hexciri-binds")/a require("config.hexciri-layout")' "$main" && \
+          echo "hyprland: required config.hexciri-layout after hexciri binds"
       fi
     fi
 
@@ -1431,7 +1451,9 @@ EOF
   # playerctl are niri keybind needs (XF86MonBrightness* / XF86AudioPlay/Next/
   # Prev) — without them brightness + media keys are dead while volume (wpctl)
   # keeps working. fwupd ships fwupdmgr for Update > Firmware — without it the
-  # blade fails with "command not found". noctalia is the shell itself (bar,
+  # blade fails with "command not found". jq parses compositor JSON for the WM
+  # bridges (window lookups, outputs, reminders) — rowan boxes predate its
+  # install.sh want and silently lose those paths. noctalia is the shell itself (bar,
   # lock, launcher, notifications) — a meta removal orphaned it once and left
   # a gray compositor with no shell, so it heals here like the rest. This is the
   # self-healing subset of install.sh's _hexciri_wants (the full set stays
@@ -1450,7 +1472,7 @@ EOF
   # without this gate every update would drag nautilus back onto hyprland.
   # (imv needs no gate here: it was never layer, install-time only.)
   ensure_layer_pkgs() {
-    local pkgs="polkit-gnome gnome-keyring adw-gtk-theme brightnessctl playerctl fwupd noctalia" missing=""
+    local pkgs="polkit-gnome gnome-keyring adw-gtk-theme brightnessctl playerctl fwupd noctalia jq" missing=""
     if ! command -v dolphin >/dev/null 2>&1 && ! command -v nautilus >/dev/null 2>&1; then
       pkgs+=" nautilus"
     fi
