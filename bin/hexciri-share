@@ -128,16 +128,16 @@ capture() {
   local img text code
   case "$choice" in
     "Screenshot region")
-      "$SCRIPT_DIR/hexciri-compositor" screenshots -region >/dev/null 2>&1 && note "Region shot saved to $SHOT_DIR" || note "Screenshot failed"
+      "$SCRIPT_DIR/hexciri-compositor" screenshot >/dev/null 2>&1 && note "Region shot saved to $SHOT_DIR" || note "Screenshot failed"
       ;;
     "Screenshot screen")
-      "$SCRIPT_DIR/hexciri-compositor" screenshots -screen >/dev/null 2>&1 && note "Screen shot saved to $SHOT_DIR" || note "Screenshot failed"
+      "$SCRIPT_DIR/hexciri-compositor" screenshot-screen >/dev/null 2>&1 && note "Screen shot saved to $SHOT_DIR" || note "Screenshot failed"
       ;;
     "Screen recording")
       exec "$SCRIPT_DIR/hexciri-screenrecord"
       ;;
     "OCR text from screen")
-      "$SCRIPT_DIR/hexciri-compositor" screenshots -screen >/dev/null 2>&1 || { note "Screenshot failed"; exit 1; }
+      "$SCRIPT_DIR/hexciri-compositor" screenshot-screen >/dev/null 2>&1 || { note "Screenshot failed"; exit 1; }
       sleep 1
       img="$SHOT_DIR/$(latest_shot)"
       [[ -f $img ]] || { note "No screenshot found"; exit 1; }
@@ -145,7 +145,7 @@ capture() {
       [[ -n $text ]] && { printf '%s' "$text" | wl-copy; note "OCR copied to clipboard"; } || note "No text found"
       ;;
     "Decode QR from screen")
-      "$SCRIPT_DIR/hexciri-compositor" screenshots -screen >/dev/null 2>&1 || { note "Screenshot failed"; exit 1; }
+      "$SCRIPT_DIR/hexciri-compositor" screenshot-screen >/dev/null 2>&1 || { note "Screenshot failed"; exit 1; }
       sleep 1
       img="$SHOT_DIR/$(latest_shot)"
       [[ -f $img ]] || { note "No screenshot found"; exit 1; }

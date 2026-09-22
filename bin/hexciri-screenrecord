@@ -1,14 +1,14 @@
 #!/bin/bash
 # hexciri:menu=screenrecord
-# hexciri:summary=Toggle screen recording (gpu-screen-recorder, Niri)
+# hexciri:summary=Toggle screen recording (gpu-screen-recorder)
 set -euo pipefail
 
 # Notes vs stock capture:
 # - No hyprctl/slurp (both dead on Niri). Capture target is the focused
 #   monitor via gpu-screen-recorder KMS, or the system portal picker
 #   (--portal) for monitor/window choice with HDR support.
-# - Webcam overlay floats via Niri window rule; no corner snap (Niri can't
-#   pixel-place floating windows like hyprctl movewindow).
+# - Webcam overlay: niri floats it via a window rule; hyprland floats it
+#   on the fly through the compositor shim (float-window).
 # - Start/stop notifications instead of a shell recording indicator.
 # Same toggle semantics (run again to stop) and same audio/webcam flags.
 #
@@ -88,12 +88,17 @@ start_webcam_overlay() {
     --title="WebcamOverlay" --wayland-app-id="WebcamOverlay" \
     --no-border --no-audio --no-osc --osd-level=0 \
     --really-quiet &>/dev/null &
-  local waited=0
+  local waited=0 owid
   while ((waited < 40)) && ! "$SCRIPT_DIR/hexciri-compositor" windows-json 2>/dev/null | grep -q "WebcamOverlay"; do
     sleep 0.05
     ((waited++)) || true
   done
   sleep 0.6
+  # Float it once it's alive: niri's window rule already floats (no-op), but
+  # hyprland has no such rule — without this the overlay would tile and break
+  # the layout for the whole recording.
+  owid="$("$SCRIPT_DIR/hexciri-compositor" window-id-for WebcamOverlay 2>/dev/null || true)"
+  [[ -n $owid ]] && "$SCRIPT_DIR/hexciri-compositor" float-window "$owid" >/dev/null 2>&1 || true
 }
 
 cleanup_webcam() { pkill -f "WebcamOverlay" 2>/dev/null || true; }

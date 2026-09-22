@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri dotfiles bring-up — CachyOS + Niri, then this.
+# hexciri dotfiles bring-up — CachyOS (Niri or Hyprland), then this.
 #
 #   curl -LO https://hexciri.dirty.pizza/install.sh
 #   sh install.sh
@@ -10,9 +10,10 @@
 # --yes/-y answers the update deploy's "Run system update?" with yes
 # (non-interactive bring-up). The reboot offer always still asks.
 #
-# One-shot CachyOS+Niri bring-up: clone, link controllers, root sync pass,
+# One-shot CachyOS bring-up: clone, link controllers, root sync pass,
 # one-time app swap, per-user Brave Origin, then the update deploy
-# (keybinds adapt, kitty seed, themes). Idempotent; safe to re-run.
+# (keybinds adapt — the WM is auto-detected via hexciri-session — kitty seed,
+# themes). Idempotent; safe to re-run.
 # Afterwards sync never touches packages — later manual changes stick.
 set -euo pipefail
 

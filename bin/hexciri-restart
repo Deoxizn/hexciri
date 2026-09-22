@@ -1,21 +1,31 @@
 #!/bin/bash
-# hexciri:summary=Restart menu: reload Niri, restart Noctalia, refresh theme
+# hexciri:summary=Restart menu: reload compositor, restart Noctalia, refresh theme
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 note() { notify-send "Hexciri" "$1" 2>/dev/null || true; }
 
+WM="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri)"
+case "$WM" in
+  hyprland) RELOAD_LABEL="Reload Hyprland" ;;
+  *)        RELOAD_LABEL="Reload Niri" ;;
+esac
+
 if [[ $# -gt 0 ]]; then
   choice="$*"
+  # Compat: direct dispatches using the other WM's label still reload.
+  case "$choice" in
+    "Reload Niri"|"Reload Hyprland"|"Reload compositor") choice="$RELOAD_LABEL" ;;
+  esac
 else
-choice=$(printf '%s\n' "Reload Niri" "Restart Noctalia" "Refresh theme" |
+choice=$(printf '%s\n' "$RELOAD_LABEL" "Restart Noctalia" "Refresh theme" |
     "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Restart: ' --width=24 --lines=3) || exec "$SCRIPT_DIR/hexciri-menu"   # Esc = back to root menu
   [[ -z ${choice:-} ]] && exec "$SCRIPT_DIR/hexciri-menu"   # empty (no Esc shell-out above) — still back to root
   fi
 
 case "$choice" in
-  "Reload Niri")
-    "$SCRIPT_DIR/hexciri-compositor" load-config >/dev/null 2>&1 && note "Niri config reloaded" || note "Niri reload failed"
+  "Reload Niri"|"Reload Hyprland"|"Reload compositor")
+    "$SCRIPT_DIR/hexciri-compositor" load-config >/dev/null 2>&1 && note "$RELOAD_LABEL: config reloaded" || note "$RELOAD_LABEL failed"
     ;;
   "Restart Noctalia")
     pkill -x noctalia 2>/dev/null || true

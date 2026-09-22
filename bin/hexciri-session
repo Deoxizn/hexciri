@@ -1,17 +1,57 @@
 #!/bin/bash
-# hexciri:summary=Resolve the active WM and shell (niri × noctalia|caelestia|none)
+# hexciri:summary=Resolve the active WM and shell (niri|hyprland × noctalia|caelestia|none)
 # hexciri-session [wm|shell|combo]
 #
-# hexciri ships a single compositor (niri). The wm getter stays for interface
-# stability (tools call it via hexciri-compositor) but always resolves to niri;
+# hexciri supports niri and hyprland. The wm getter resolves in order:
+#   1. explicit override ~/.config/hexciri/wm (niri|hyprland)
+#   2. live session (HYPRLAND_INSTANCE_SIGNATURE / Hyprland process / niri process)
+#   3. XDG desktop markers (XDG_CURRENT_DESKTOP / XDG_SESSION_DESKTOP)
+#   4. fallback: niri (back-compat single-compositor default);
 # the shell getter resolves the desktop shell from ~/.config/hexciri/shell or
 # live detection.
 set -euo pipefail
 
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 SHELL_FILE="$XDG_CONFIG_HOME/hexciri/shell"
+WM_FILE="$XDG_CONFIG_HOME/hexciri/wm"
 
-wm()   { echo niri; }
+wm() {
+  local val=""
+  # 0. explicit test/env override (scripts, CI, forced boxes)
+  if [[ -n ${HXC_WM:-} ]]; then
+    case "${HXC_WM,,}" in
+      niri|hyprland) echo "${HXC_WM,,}"; return 0 ;;
+    esac
+  fi
+  # 1. explicit per-machine pin
+  if [[ -f $WM_FILE ]]; then
+    val="$(tr -d '[:space:]' <"$WM_FILE" 2>/dev/null || true)"
+    case "${val,,}" in
+      niri) echo niri; return 0 ;;
+      hyprland|hypr) echo hyprland; return 0 ;;
+    esac
+  fi
+  # 2. live session
+  if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then echo hyprland; return 0; fi
+  if pgrep -x Hyprland >/dev/null 2>&1; then echo hyprland; return 0; fi
+  if pgrep -x niri >/dev/null 2>&1; then echo niri; return 0; fi
+  # 3. desktop markers (login managers set these; ssh sessions lack them)
+  case "${XDG_CURRENT_DESKTOP:-}${XDG_SESSION_DESKTOP:-}" in
+    *[Hh]ypr*) echo hyprland; return 0 ;;
+    *[Nn]iri*) echo niri; return 0 ;;
+  esac
+  # 4. installed compositor — covers ssh bring-up / headless deploy where no
+  #    session markers exist yet (fresh CachyOS hyprland box has Hyprland,
+  #    no niri; and vice versa). A box with both falls through to the default.
+  if command -v Hyprland >/dev/null 2>&1 && ! command -v niri >/dev/null 2>&1; then
+    echo hyprland; return 0
+  fi
+  if command -v niri >/dev/null 2>&1 && ! command -v Hyprland >/dev/null 2>&1; then
+    echo niri; return 0
+  fi
+  # 5. back-compat default (single-compositor installs predate the wm file)
+  echo niri
+}
 
 shell() {
   local val=""

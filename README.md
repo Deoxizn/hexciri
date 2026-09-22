@@ -2,9 +2,10 @@
 
 <img src="branding/hexciri-nb.png" alt="Hexciri" width="650">
 
-**CachyOS + Niri dotfiles: a real menu and a theme engine.**
+**CachyOS dotfiles for Niri and Hyprland: a real menu and a theme engine.**
 
-Install CachyOS with Niri, clone the dots, run one script.
+Install CachyOS with Niri or Hyprland, clone the dots, run one script —
+hexciri detects the WM and tailors what it installs.
 
 </div>
 
@@ -14,8 +15,10 @@ Three names you'll see everywhere in this file:
 
 - **CachyOS** — the operating system underneath (Arch Linux, tuned for speed).
   It owns the installer, kernel, drivers, and package updates.
-- **Niri** — the window manager. It decides where your windows go: columns
-  side by side that you scroll through, instead of overlapping windows.
+- **Niri / Hyprland** — the window manager. Niri tiles windows into
+  scrollable columns; Hyprland uses classic tiled/floating layouts. Every
+  hexciri menu entry that talks to a WM works on both — hexciri detects which
+  one is running and only installs WM-specific pieces for it.
 - **Noctalia** — the bar, launcher, notifications, lock screen, and widgets.
   The visible stuff across the top of your screen.
 
@@ -37,12 +40,35 @@ and hexciri as the furniture — it never touches the foundation. What it owns:
   manual changes stick.
   (We help you move in once, then never rearrange your stuff again.)
 
+## Niri vs Hyprland
+
+hexciri runs on both. Nearly everything is shared — menu, theme engine, apps,
+sync — and the few WM-specific pieces are installed only for the WM hexciri
+detects. Detection order: explicit pin (`~/.config/hexciri/wm`) → live session
+→ desktop markers → installed compositor → default niri. `bin/hexciri-session
+wm` reports it; ssh/headless bring-up resolves from the installed binary.
+
+| Piece | Niri | Hyprland |
+|---|---|---|
+| Config location | `~/.config/niri/config.kdl` + `cfg/*.kdl` | `~/.config/hypr/hyprland.lua` + `config/*.lua` |
+| Hexciri keybinds | `config/niri/cfg/keybinds.kdl` (adapted once, then additive) | `config/hypr/config/hexciri-binds.lua` (required after `config.binds`, so hexciri wins conflicts) |
+| Hexciri autostart | `config/niri/cfg/autostart.kdl` | `config/hypr/config/hexciri-autostart.lua` (required after `config.autostart`) |
+| Theme window borders | baked in the Niri theme fragment | `decorations.lua` border/group colors patched by the theme hook, then `hyprctl reload` |
+| Screen-recording webcam | always-on-top rule | window floated on the fly by the recorder |
+| Touchpad / touchscreen toggles | yes | hidden (rows not shown on Hyprland) |
+
+Everything else — menu, themes, apps, file-manager defaults, screenshots,
+clipboard, sync, updates — is one shared code path for both WMs. `System >
+Config` edits whichever WM is active; `Restart > Reload WM` runs Hyprland's
+`reload` or Niri's `msg action reload-config` as appropriate.
+
 ## Install
 
 In plain words: install CachyOS, grab this repo, run one script, answer two
 questions (run the system update? reboot at the end?). Done.
 
-1. **Install CachyOS** with Niri (normal installer — pick Niri as the desktop).
+1. **Install CachyOS** with Niri or Hyprland (normal installer — pick either
+   as the desktop). hexciri detects which one at first sync.
 2. Bring the dots — curl or clone, same script:
 
 ```bash
@@ -60,7 +86,8 @@ git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
 One run does the whole bring-up: links every controller into `~/.local/bin`,
 root sync pass (firewall/sshd/menu curation/alpm hook), one-time app swap,
 Nautilus default, Brave Origin, image/PDF defaults, theme seeding, and the update
-deploy (keybinds, kitty, themes, full system update it offers).
+deploy (keybinds for whichever WM is active, kitty, themes, full system
+update it offers).
 
 Safe to re-run any time — it re-applies instead of duplicating, so a second
 run changes nothing that already matches. Staying current later is either
@@ -82,9 +109,10 @@ run changes nothing that already matches. Staying current later is either
 - **Defaults you can switch** — browser, editor, terminal, shell, files,
   images, agent: all switchable from `System > Default Apps`. Only apps you
   actually have installed are offered; your current pick is marked ✓.
-- **Keybinds, one source of truth** — the keybind file in the repo is what
-  lands in your Niri config, so docs and behavior can't drift apart.
-  `Mod+K` searches every bind live.
+- **Keybinds, one source of truth** — repo keybinds land in your Niri config
+  or as a Hyprland Lua overlay loaded right after the stock binds (hexciri
+  wins any conflict). Same combo set on both WMs, so docs and behavior can't
+  drift apart. `Mod+K` searches every bind live.
 - **Self-healing updates** — every `hexciri-update` press first pulls the
   newest framework code, then re-applies links, menu entries, firewall and
   sshd settings, and only then updates your system packages. So fixes we ship
@@ -129,6 +157,7 @@ things), Update (updates). Pick a row and it does the thing.
 ├── System
 │   ├── Config >
 │   │   ├── Niri >             (per-fragment editors: config.kdl + cfg/*.kdl)
+│   │   ├── Hyprland >         (live editor for hyprland.lua + config/*.lua)
 │   │   ├── Noctalia config
 │   │   ├── Fastfetch config
 │   │   ├── Hexciri lockscreen
@@ -143,7 +172,7 @@ things), Update (updates). Pick a row and it does the thing.
 │   │                        Wi-Fi QR Code (scan-to-join, terminal render)
 │   └── Security >           Fingerprint (gated on reader) · Fido2 · SSHD toggle
 │                            Passwordless Sudo
-├── Restart                  Reload Niri · Restart Noctalia · Refresh theme
+├── Restart                  Reload WM (Niri / Hyprland) · Restart Noctalia · Refresh theme
 └── Update
     ├── Hexciri              system update: repo + AUR, keyring check, sync re-apply, reboot offer
     ├── Themes               pull Omarchy defaults + sync extras list
@@ -329,16 +358,23 @@ config files by hand. The notes below are what's happening behind those rows.
   (nautilus…), Images (imv…), PDF (zathura…), Agent (opencode…). Only installed candidates are
   offered; current is marked ✓. Shell switches kitty's shell without touching
   your login shell.
-- **Keybinds** — the file `config/niri/cfg/keybinds.kdl` in this repo is the
-  master copy. First sync puts it in place (adapting a stock CachyOS file
-  once, keeping your combos plus any stock-only ones worth keeping). After
-  that, updates only *add* brand-new binds — your edits and your deletions
-  are never overwritten.
-  `hexciri-keybinds` lists them; `Mod+K` searches them live.
+- **Keybinds** — one combo set, two homes. On Niri the repo file
+  `config/niri/cfg/keybinds.kdl` is the master: first sync adapts a stock
+  CachyOS file once (keeping your combos plus stock-only keepers), then
+  updates only *add* brand-new binds. On Hyprland the same binds ship as
+  `config/hypr/config/hexciri-binds.lua` (+ `hexciri-autostart.lua`),
+  deployed by sync and required into `hyprland.lua` right after the stock
+  `config.binds` / `config.autostart` — so when a combo collides, hexciri's
+  action wins. Either way your edits are yours: modified overlays/configs
+  are kept as custom and never overwritten.
+  `hexciri-keybinds` lists them; on Hyprland it merges the live stock file
+  with the overlay and de-duplicates by combo (first file wins), skipping
+  loop-generated binds. `Mod+K` searches them live.
   Binds without a friendly name show just their command
-  (`spawn "vesktop" "vesktop"` → `vesktop`), and you can set your own labels
-  in `System > Config > State files > Keybinds list`, one `Combo = Label`
-  per line.
+  (Niri `spawn "vesktop" "vesktop"` → `vesktop`; Hyprland
+  `exec_cmd("noctalia msg panel-toggle launcher")` → the command), and you
+  can set your own labels in `System > Config > State files > Keybinds list`,
+  one `Combo = Label` per line.
   Core: `Mod+Space` apps (Noctalia) · `Mod+Return` terminal · `Mod+Alt+Space` root menu · `Mod+K` this list · `Mod+Q` close ·
   `Mod+F` maximize · `Mod+1…9,0` workspaces · `Mod+←/→` focus ·
   `Mod+Print`/`Ctrl+Print` screenshot · `Alt+Print` record · `Mod+Escape`
@@ -351,10 +387,11 @@ config files by hand. The notes below are what's happening behind those rows.
   Cloudflare / Google / Custom, NM + resolved), Wi-Fi QR share, link status;
   fingerprint (gated on a detected reader), FIDO2, SSHD toggle, passwordless
   sudo; clock sync, cache/orphan cleaner, boot-config reset, firmware update.
-- **Config editing** (`System > Config`) — Niri fragments (autostart,
-  cursors, env, input, looknfeel, monitors, window-rules, keybinds), Noctalia,
-  fastfetch, lockscreen panel-off timing, State files (your keybind labels +
-  search provider), and your hooks dir.
+- **Config editing** (`System > Config`) — your live WM config: Niri
+  fragments (autostart, cursors, env, input, looknfeel, monitors,
+  window-rules, keybinds) or Hyprland (`hyprland.lua` + every `config/*.lua`
+  fragment), plus Noctalia, fastfetch, lockscreen panel-off timing, State
+  files (your keybind labels + search provider), and your hooks dir.
 - **Self-heal on every update** — alpm hook + `hexciri-sync` re-apply links,
   menu curation (`.desktop` hides), firewall, sshd hardening (key-only, no
   root password), MIME heals (browsers keep stealing image/PDF defaults), and
@@ -374,4 +411,4 @@ Three steps, in order — most problems end at step 1:
 
 ## Sources
 
-[Omarchy](https://github.com/omacom/omarchy) × [Niri](https://github.com/YaLTeR/niri) × [Noctalia](https://github.com/) × [Quickshell](https://github.com/outfoxxed/quickshell) × [theme-hook-plugin-manager](https://github.com/OldJobobo/theme-hook-plugin-manager) × [base16-Discord](https://github.com/imbypass/base16-discord) × [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7) × [system24](https://github.com/refact0r/system24) × [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme) × [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) × [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam)
+[Omarchy](https://github.com/omacom/omarchy) × [Niri](https://github.com/YaLTeR/niri) × [Hyprland](https://hyprland.org) × [Noctalia](https://github.com/) × [Quickshell](https://github.com/outfoxxed/quickshell) × [theme-hook-plugin-manager](https://github.com/OldJobobo/theme-hook-plugin-manager) × [base16-Discord](https://github.com/imbypass/base16-discord) × [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7) × [system24](https://github.com/refact0r/system24) × [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme) × [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) × [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam)

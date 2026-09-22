@@ -1,9 +1,10 @@
 #!/bin/bash
 # hexciri:keybinds=searchable-list
-# hexciri:summary=Niri keybinding cheatsheet — parsed from the live keybinds config
-# Reads the hand-written niri keybinds file (~/.config/niri/cfg/keybinds.kdl,
-# falling back to the pre-cfg/ flat path, then the repo snapshot) and renders
-# a searchable cheat list. Hexciri ships a single compositor (niri); "Mod" = Super.
+# hexciri:summary=Compositor keybinding cheatsheet — parsed from the live keybinds config
+# Niri: reads the hand-written keybinds file (~/.config/niri/cfg/keybinds.kdl,
+# falling back to the pre-cfg/ flat path, then the repo snapshot).
+# Hyprland: reads the lua binds (hexciri overlay + stock binds.lua, then the
+# repo snapshot). "Mod" = Super on both.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -12,12 +13,23 @@ CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
 WM="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri)"
 
 FILE=""
-[[ -f $CFG/niri/cfg/keybinds.kdl ]] && FILE="$CFG/niri/cfg/keybinds.kdl"
-[[ -z $FILE && -f $CFG/niri/keybinds.kdl ]] && FILE="$CFG/niri/keybinds.kdl"
-[[ -z $FILE && -f $REPO/config/niri/cfg/keybinds.kdl ]] && FILE="$REPO/config/niri/cfg/keybinds.kdl"
-if [[ -z $FILE ]]; then
-  echo "hexciri-keybinds: no niri keybinds config found ($CFG/niri/cfg/keybinds.kdl)" >&2
-  exit 1
+HYPR_FILES=()
+if [[ $WM == hyprland ]]; then
+  for _h in "$CFG/hypr/config/hexciri-binds.lua" "$CFG/hypr/config/binds.lua" "$REPO/config/hypr/config/hexciri-binds.lua"; do
+    [[ -f $_h ]] && HYPR_FILES+=("$_h")
+  done
+  if ((${#HYPR_FILES[@]} == 0)); then
+    echo "hexciri-keybinds: no hyprland binds config found ($CFG/hypr/config/binds.lua)" >&2
+    exit 1
+  fi
+else
+  [[ -f $CFG/niri/cfg/keybinds.kdl ]] && FILE="$CFG/niri/cfg/keybinds.kdl"
+  [[ -z $FILE && -f $CFG/niri/keybinds.kdl ]] && FILE="$CFG/niri/keybinds.kdl"
+  [[ -z $FILE && -f $REPO/config/niri/cfg/keybinds.kdl ]] && FILE="$REPO/config/niri/cfg/keybinds.kdl"
+  if [[ -z $FILE ]]; then
+    echo "hexciri-keybinds: no niri keybinds config found ($CFG/niri/cfg/keybinds.kdl)" >&2
+    exit 1
+  fi
 fi
 
 # Label overrides: shipped list + your copy (yours wins). One per line:
@@ -25,9 +37,10 @@ fi
 SHIPPED_DESC="$REPO/config/keybinds/descriptions.list"
 USER_DESC="$CFG/hexciri/keybinds/descriptions.list"
 
-output=$(KEYBINDS_FILE="$FILE" SHIPPED_DESC="$SHIPPED_DESC" USER_DESC="$USER_DESC" python3 <<'EOF'
+output=$(WM="$WM" KEYBINDS_FILE="$FILE" HYPR_FILES="$(IFS=:; echo "${HYPR_FILES[*]}")" SHIPPED_DESC="$SHIPPED_DESC" USER_DESC="$USER_DESC" python3 <<'EOF'
 import os, re, sys
 
+wm = os.environ.get("WM", "niri")
 file = os.environ["KEYBINDS_FILE"]
 
 # ── hexciri core: canonical combo -> description (mirrors the hand-written config) ──
@@ -108,7 +121,9 @@ SUB_TO_XDG = {
     "space": "Space", "comma": "Comma", "grave": "grave", "return": "Return",
     "escape": "Escape", "print": "Print", "up": "Up", "down": "Down",
     "left": "Left", "right": "Right", "bracketleft": "BracketLeft",
-    "bracketright": "BracketRight", "0": "0", "1": "1", "2": "2", "3": "3",
+    "bracketright": "BracketRight", "period": "Period", "tab": "Tab",
+    "minus": "Minus", "plus": "Plus", "slash": "Slash", "semicolon": "Semicolon",
+    "0": "0", "1": "1", "2": "2", "3": "3",
     "4": "4", "5": "5", "6": "6", "7": "7", "8": "8", "9": "9",
 }
 
@@ -116,7 +131,7 @@ def canon_key(token):
     t = token.strip()
     if t in ("Mod", "SUPER", "Mod4", "$mod"):
         return "Mod"
-    if t in ("Ctrl", "CTRL"):
+    if t in ("Ctrl", "CTRL", "CONTROL"):
         return "Ctrl"
     if t in ("Alt", "ALT", "Mod1"):
         return "Alt"
@@ -174,6 +189,11 @@ def prettify(action):
     if not s:
         return action
     first = s.split(None, 1)[0].rstrip(";")
+    if first.startswith("hexciri-"):
+        # hyprland exec_cmd form: bare hexciri command (+ args) — prettify
+        # the same way as the niri spawn form.
+        s = "spawn " + s
+        first = "spawn"
     if first in ("spawn", "spawn-sh"):
         rest = s[len(first):].strip().rstrip(";").strip()
         try:
@@ -210,17 +230,61 @@ def prettify(action):
     return s[:1].upper() + s[1:] if s else action
 
 binds = []
-# NOTE: neither gap may span newlines — otherwise the `binds {` opener match
-# eats the first bind's combo into its "action" and that bind never shows.
-for m in re.finditer(r"^\s*([^\s{}]+)[ \t]*\{[ \t]*([^;{}\n]*)", open(file).read(), re.M):
-    name = m.group(1).strip()
-    if name in ("binds", "binds+", "binds-columns"):  # the binds { } block opener
-        continue
-    binds.append((name, m.group(2).strip()))
+if wm == "hyprland":
+    # hl.bind(<combo-expr>, <action>) — resolve the common static forms:
+    #   "LITERAL"                  -> LITERAL
+    #   mainMod .. " + LITERAL"    -> SUPER + LITERAL
+    # loop-generated (digitCode(..)) and gesture forms are skipped.
+    def hypr_combo(expr):
+        e = expr.strip()
+        m = re.fullmatch(r'"([^"]*)"', e)
+        if m:
+            return m.group(1).strip()
+        m = re.fullmatch(r'mainMod\s*\.\.\s*"([^"]*)"', e)
+        if m:
+            return ("SUPER " + m.group(1)).replace("  ", " ").strip()
+        return None
+    for _hf in (os.environ.get("HYPR_FILES", "") or "").split(":"):
+        if not _hf:
+            continue
+        try:
+            _text = open(_hf).read()
+        except OSError:
+            continue
+        for m in re.finditer(r'hl\.bind\(\s*(.*?)\s*,', _text):
+            combo = hypr_combo(m.group(1))
+            if not combo:
+                continue
+            # Action = the rest of THIS statement's line (bind statements are
+            # single-line in both the overlay and stock binds.lua). Never scan
+            # past the line — that lands on the NEXT bind (Mod+Q → power bug).
+            _ln = _text[m.end():].split("\n", 1)[0].strip()
+            em = re.search(r'exec_cmd\(\s*"([^"]+)"', _ln)
+            action = em.group(1) if em else _ln.rstrip(",)").strip()
+            binds.append((combo, action))
+else:
+    # NOTE: neither gap may span newlines — otherwise the `binds {` opener match
+    # eats the first bind's combo into its "action" and that bind never shows.
+    for m in re.finditer(r"^\s*([^\s{}]+)[ \t]*\{[ \t]*([^;{}\n]*)", open(file).read(), re.M):
+        name = m.group(1).strip()
+        if name in ("binds", "binds+", "binds-columns"):  # the binds { } block opener
+            continue
+        binds.append((name, m.group(2).strip()))
 
 rows = []
+seen = set()
 for combo, action in binds:
     c = canon(combo)
+    # Multi-file sources (hyprland reads the live overlay + live stock + repo
+    # fallback): a combo defined in more than one file renders once — the
+    # first file wins (overlay before stock, matching hyprland load order).
+    if c in seen:
+        continue
+    # Loop-generated binds (e.g. stock digit/zoom loops unrolled as
+    # "Mod+code:82") have no meaningful label — skip the noise.
+    if "code:" in c:
+        continue
+    seen.add(c)
     rows.append(f"{c:<22} {DESC.get(c, prettify(action))}")
 
 if not rows:

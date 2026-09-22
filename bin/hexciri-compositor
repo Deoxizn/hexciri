@@ -1,13 +1,14 @@
 #!/bin/bash
-# hexciri:summary=Compositor shim — niri IPC with a generic fallback for ops niri can't do
+# hexciri:summary=Compositor shim — niri/hyprland IPC with a generic fallback
 # hexciri-compositor <op> [args]
 #
-# Every hexciri tool calls this instead of `niri msg …`. Ops that niri has no
-# action for (area/spawn smoke) fall back to the generic backend (grim/slurp,
-# setsid). $WM resolves once via hexciri-session (always niri on this build).
+# Every hexciri tool calls this instead of `niri msg …` / `hyprctl …`. Ops that
+# a compositor has no action for fall back to the generic backend (grim/slurp,
+# setsid). $WM resolves once via hexciri-session (niri|hyprland).
 #
 # Ops: wm screenshot screenshot-screen windows-json window-id-for focus-window
-#      power-off-monitors quit load-config spawn focused-output outputs-json lock
+#      float-window power-off-monitors quit load-config spawn focused-output
+#      outputs-json lock
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,6 +24,7 @@ case "$op" in
   windows-json)
     case "$WM" in
       niri)     niri msg --json windows 2>/dev/null || echo '[]';;
+      hyprland) hyprctl clients -j 2>/dev/null || echo '[]';;
       *)        echo '[]';;
     esac
     exit 0
@@ -32,6 +34,7 @@ case "$op" in
     if (($# < 2)); then echo ""; exit 0; fi
     case "$WM" in
       niri)     niri msg --json windows 2>/dev/null | jq -r --arg p "$2" '.[] | select((.app_id|test($p;"i")) or (.title|test($p;"i"))) | .id' 2>/dev/null | head -n1 ;;
+      hyprland) hyprctl clients -j 2>/dev/null | jq -r --arg p "$2" '.[] | select((.class|test($p;"i")) or (.title|test($p;"i"))) | .address' 2>/dev/null | head -n1 ;;
       *)        echo "" ;;
     esac
     exit 0
@@ -41,7 +44,19 @@ case "$op" in
     if (($# < 2)); then exit 0; fi
     case "$WM" in
       niri)     niri msg action focus-window --id "$2" 2>/dev/null || true ;;
+      hyprland) hyprctl dispatch focuswindow "address:$2" 2>/dev/null || true ;;
       *)        true ;;
+    esac
+    exit 0
+    ;;
+
+  float-window)
+    # Float a window by id. Niri floats the webcam overlay via a config rule
+    # (no per-window toggle), so niri is a no-op; hyprland needs the explicit
+    # dispatch. window-id-for already returns hyprland addresses.
+    if (($# < 2)); then exit 0; fi
+    case "$WM" in
+      hyprland) hyprctl dispatch togglefloating "address:$2" >/dev/null 2>&1 || true ;;
     esac
     exit 0
     ;;
@@ -49,6 +64,8 @@ case "$op" in
   screenshot)
     case "$WM" in
       niri)     niri msg action screenshot 2>/dev/null || true ;;
+      hyprland) mkdir -p "${SHOT_DIR:-$HOME/Pictures/Screenshots}" 2>/dev/null || true
+                grim -g "$(slurp)" "${SHOT_DIR:-$HOME/Pictures/Screenshots}/$(date +'%Y-%m-%d_%H-%M-%S').png" 2>/dev/null || true ;;
       *)        grim -g "$(slurp)" "${SHOT_DIR:-$HOME/Pictures/Screenshots}/$(date +'%Y-%m-%d_%H-%M-%S').png" 2>/dev/null || true ;;
     esac
     exit 0
@@ -57,6 +74,8 @@ case "$op" in
   screenshot-screen)
     case "$WM" in
       niri)     niri msg action screenshot-screen 2>/dev/null || true ;;
+      hyprland) mkdir -p "${SHOT_DIR:-$HOME/Pictures/Screenshots}" 2>/dev/null || true
+                grim "${SHOT_DIR:-$HOME/Pictures/Screenshots}/$(date +'%Y-%m-%d_%H-%M-%S').png" 2>/dev/null || true ;;
       *)        grim "${SHOT_DIR:-$HOME/Pictures/Screenshots}/$(date +'%Y-%m-%d_%H-%M-%S').png" 2>/dev/null || true ;;
     esac
     exit 0
@@ -65,6 +84,7 @@ case "$op" in
   focused-output)
     case "$WM" in
       niri)     niri msg focused-output 2>/dev/null | sed -n 's/^Output .* (\(.*\))$/\1/p' | head -1 ;;
+      hyprland) hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused == true) | .name' 2>/dev/null | head -1 ;;
       *)        echo "" ;;
     esac
     exit 0
@@ -73,6 +93,7 @@ case "$op" in
   outputs-json)
     case "$WM" in
       niri)     niri msg --json outputs 2>/dev/null || echo '{}' ;;
+      hyprland) hyprctl monitors -j 2>/dev/null || echo '[]' ;;
       *)        echo '{}' ;;
     esac
     exit 0
@@ -81,6 +102,7 @@ case "$op" in
   power-off-monitors)
     case "$WM" in
       niri)     niri msg action power-off-monitors 2>/dev/null || true ;;
+      hyprland) hyprctl dispatch dpms off 2>/dev/null || true ;;
       *)        true ;;
     esac
     exit 0
@@ -89,6 +111,7 @@ case "$op" in
   quit)
     case "$WM" in
       niri)     niri msg action quit 2>/dev/null || true ;;
+      hyprland) hyprctl dispatch exit 2>/dev/null || true ;;
       *)        loginctl terminate-session "${XDG_SESSION_ID:-}" 2>/dev/null || true ;;
     esac
     exit 0
@@ -97,6 +120,7 @@ case "$op" in
   load-config)
     case "$WM" in
       niri)     niri msg action load-config-file 2>/dev/null || true ;;
+      hyprland) hyprctl reload 2>/dev/null || true ;;
       *)        true ;;
     esac
     exit 0
@@ -115,6 +139,7 @@ case "$op" in
     cmd="${2} ${3-}"
     case "$WM" in
       niri)     niri msg action spawn -- "$cmd" 2>/dev/null || true ;;
+      hyprland) hyprctl dispatch exec -- "$cmd" 2>/dev/null || setsid bash -c "$cmd" &>/dev/null & disown 2>/dev/null || true ;;
       *)        setsid "$cmd" &>/dev/null & disown 2>/dev/null || true ;;
     esac
     exit 0

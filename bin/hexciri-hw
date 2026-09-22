@@ -86,6 +86,13 @@ toggle_input() {
   local kind="${1:-}" action="${2:-toggle}"
   local label config state_file
 
+  # Niri-only: hyprland has no equivalent device on/off keyword (its touchpad
+  # controls are settings like tap-to-click, not a device kill switch).
+  if [[ $("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri) != niri ]]; then
+    echo "hexciri-hw: input-device toggling is niri-only (edits config.kdl); nothing to do on the active WM" >&2
+    return 1
+  fi
+
   usage() {
     echo "Usage: hexciri-hw toggle-input <touchpad|touchscreen> [on|off|toggle]" >&2
   }
@@ -341,6 +348,10 @@ windows_key() {
 }
 
 # ══════════════════════════════════════════ menus
+wm_is_niri() {
+  [[ $("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri) == niri ]]
+}
+
 hw_menu() {
   local menu="" choice cmd=""
   declare -A cmd_for=()
@@ -355,8 +366,8 @@ hw_menu() {
          exec "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com' ;;
       "Hybrid GPU")
          exec "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hw" toggle-hybrid-gpu ;;
-      "Touchpad")      exec "$SCRIPT_DIR/hexciri-hw" toggle-input touchpad toggle ;;
-      "Touchscreen")   exec "$SCRIPT_DIR/hexciri-hw" toggle-input touchscreen toggle ;;
+      "Touchpad")      wm_is_niri && exec "$SCRIPT_DIR/hexciri-hw" toggle-input touchpad toggle ;;
+      "Touchscreen")   wm_is_niri && exec "$SCRIPT_DIR/hexciri-hw" toggle-input touchscreen toggle ;;
       *) return 0 ;;
     esac
   fi
@@ -369,8 +380,12 @@ hw_menu() {
     menu+="$label"$'\n'
   }
 
-  add 'Touchpad'        touchpad_device     "$SCRIPT_DIR/hexciri-hw" toggle-input touchpad toggle
-  add 'Touchscreen'     touchscreen_device  "$SCRIPT_DIR/hexciri-hw" toggle-input touchscreen toggle
+  # Touchpad/Touchscreen toggles are niri-only (they edit config.kdl) — the
+  # rows follow the active WM.
+  if wm_is_niri; then
+    add 'Touchpad'        touchpad_device     "$SCRIPT_DIR/hexciri-hw" toggle-input touchpad toggle
+    add 'Touchscreen'     touchscreen_device  "$SCRIPT_DIR/hexciri-hw" toggle-input touchscreen toggle
+  fi
   add 'Hybrid GPU'      hybrid_gpu          "$SCRIPT_DIR/hexciri-terminal" -e "$SCRIPT_DIR/hexciri-hw" toggle-hybrid-gpu
   add 'Network download' ""                 "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com'
   add 'Network upload'  ""                  "$SCRIPT_DIR/hexciri-launch-webapp" 'https://fast.com'

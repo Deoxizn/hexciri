@@ -12,6 +12,7 @@ cfg_xdg="${XDG_CONFIG_HOME:-$HOME/.config}"
 
 rows=(
   'Niri >'
+  'Hyprland >'
   'Noctalia config'
   'Fastfetch config'
   'Hexciri lockscreen'
@@ -25,13 +26,15 @@ if [[ $# -gt 0 ]]; then
 else
   choice=$(
     printf '%s\n' "${rows[@]}" |
-      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=28 --lines=6
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Config: ' --width=28 --lines=7
   ) || exec "$SCRIPT_DIR/hexciri-menu"
 fi
 
 case "$choice" in
   'Niri >')                  exec "$bindir/hexciri-config-niri" ;;
   'Niri '*)                  exec "$bindir/hexciri-config-niri" "${choice#Niri }" ;;
+  'Hyprland >')              exec "$bindir/hexciri-config-hypr" ;;
+  'Hyprland '*)              exec "$bindir/hexciri-config-hypr" "${choice#Hyprland }" ;;
   'State files >')           exec "$bindir/hexciri-config-state" ;;
   'State files '*)           exec "$bindir/hexciri-config-state" "${choice#State files }" ;;
   # Compat: pre-submenu direct dispatches from menu search land here.

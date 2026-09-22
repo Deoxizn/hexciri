@@ -24,11 +24,14 @@ add "Noctalia docs" "https://docs.noctalia.dev/noctalia/" noctalia
 # CachyOS rows — the base OS's own docs, gated on its tools being present.
 add "CachyOS wiki" "https://wiki.cachyos.org/" ""
 add "CachyOS Niri setup" "https://wiki.cachyos.org/configuration/desktop_environments/niri/" niri
+add "CachyOS Hyprland setup" "https://wiki.cachyos.org/configuration/desktop_environments/hyprland/" Hyprland
 add "Hardware detection (chwd)" "https://wiki.cachyos.org/features/chwd/chwd/" chwd
 add "Btrfs snapshots" "https://wiki.cachyos.org/configuration/btrfs_snapshots" snapper
 
-# WM row — niri is the shipped compositor.
+# WM row — follows the installed WM (niri or hyprland); a swap just swaps the
+# row shown.
 add "Niri wiki" "https://github.com/YaLTeR/niri/wiki" niri
+add "Hyprland wiki" "https://wiki.hypr.land/" Hyprland
 
 # Terminal row — kitty is the shipped default; a swap to alacritty/foot just
 # changes which docs show.

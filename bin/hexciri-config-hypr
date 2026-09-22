@@ -1,0 +1,36 @@
+#!/bin/bash
+# hexciri:menu=config-hyprland
+# hexciri:summary=Edit hyprland config fragments (live scan — stock + hexciri overlays)
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bindir="${HEXCIRI_BIN_DIR:-}"
+if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
+bindir="${bindir:-$SCRIPT_DIR}"
+
+hypr_dir="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
+
+# Live scan, not a fixed table: offer whatever is actually on disk;
+# hyprland.lua (entry point) first, then config/*.lua.
+rows=()
+[[ -f $hypr_dir/hyprland.lua ]] && rows+=("hyprland.lua")
+while IFS= read -r f; do
+  [[ $f == hyprland.lua ]] && continue
+  rows+=("$f")
+done < <(cd "$hypr_dir" 2>/dev/null && ls config/*.lua *.lua 2>/dev/null | sort -u || true)
+[[ ${#rows[@]} -gt 0 ]] || { echo "no hyprland config found in $hypr_dir" >&2; exit 1; }
+
+if [[ $# -gt 0 ]]; then
+  # Direct dispatch from menu search
+  frag="$*"
+else
+  frag=$(
+    printf '%s\n' "${rows[@]}" |
+      "$SCRIPT_DIR/hexciri-fuzzel" --dmenu --prompt='Hyprland: ' --width=28 --lines=${#rows[@]}
+  ) || exec "$SCRIPT_DIR/hexciri-config"   # Esc = back to config menu
+fi
+file=""
+for r in "${rows[@]}"; do [[ $r == "$frag" ]] && file="$r"; done
+if [[ -n $file ]]; then
+  "$bindir/hexciri-edit-file" "$hypr_dir/$file"
+fi

@@ -9,7 +9,8 @@
 #       wallpaper — identical under every WM.
 #   B = per-WM render (loop over installed WMs): the tiny theme surface each WM
 #       carries (border/focus-ring colors). Border color writes land on the right
-#       per-WM file no matter which compositor you boot.
+#       per-WM file no matter which compositor you boot — niri looknfeel.kdl /
+#       cachy layout fragments, or hyprland decorations.lua (hyprlang literals).
 #
 # Niri specifics:
 #   0. Migrates a legacy pre-split Niri config (v1/v1.2/v1.3): backs the
@@ -18,6 +19,11 @@
 #      byte-for-byte — a user (or an AI) can port personal tweaks from it.
 #   3. Updates Niri border/focus ring colors (looknfeel.kdl, the theme-owned
 #      fragment — falls back to the legacy monolith when it's still in place)
+#
+# Hyprland specifics:
+#   3h. Patches decorations.lua border colors in place (accent/muted as
+#      0xrrggbbaa literals), then reloads a live session (hyprctl reload —
+#      unlike niri, hyprland does not hot-reload on file writes).
 
 set -euo pipefail
 
@@ -370,6 +376,30 @@ else:
 if ring_target is not None:
     ensure_off_in_layout(ring_target)
 
+# ── 3h. Hyprland border colors (hyprland only) ──
+# The per-WM theme surface on hyprland is decorations.lua (col.active_border /
+# col.inactive_border + group/groupbar border colors). The stock file points
+# at colors.lua vars we must not rewrite, so patch the literals in place with
+# hyprlang color tokens (0xrrggbbaa). Idempotent — same theme → same bytes.
+hypr_decor = Path.home() / ".config" / "hypr" / "config" / "decorations.lua"
+if hypr_decor.exists():
+    a = "0x" + accent.lstrip("#").lower() + "ff"
+    d = "0x" + shade(accent, -40).lower() + "ff"
+    m = "0x" + muted.lstrip("#").lower() + "ff"
+    t0 = hypr_decor.read_text()
+    t = t0
+    t = re.sub(r'colors\s*=\s*\{[^}]*\}', f'colors = {{ {a}, {d} }}', t)
+    t = re.sub(r'(inactive_border\s*=\s*)[^\s,]+', f'\\g<1>{m}', t)
+    t = re.sub(r'(border_active\s*=\s*)[^\s,]+', f'\\g<1>{a}', t)
+    t = re.sub(r'(border_inactive\s*=\s*)[^\s,]+', f'\\g<1>{m}', t)
+    t = re.sub(r'((?:border_)?locked_active\s*=\s*)[^\s,]+', f'\\g<1>{a}', t)
+    t = re.sub(r'((?:border_)?locked_inactive\s*=\s*)[^\s,]+', f'\\g<1>{m}', t)
+    t = re.sub(r'\bactive\s*=\s*[^\s,]+', f'active = {a}', t)
+    t = re.sub(r'\binactive\s*=\s*[^\s,]+', f'inactive = {m}', t)
+    if t != t0:
+        hypr_decor.write_text(t)
+        print(f"hexciri-sync: patched decorations.lua borders accent={a} inactive={m}")
+
 # ── 4. Wallpaper sync ──
 # If the user has custom wallpapers merged (zz-user-* links from the store or
 # extra dirs list), leave the wallpaper alone — a theme switch must not stomp
@@ -443,4 +473,11 @@ if command -v noctalia >/dev/null 2>&1 && command -v pgrep >/dev/null 2>&1 && pg
     noctalia msg config-reload >/dev/null 2>&1 || true
   fi
   unset _src _pal _in_theme _line
+fi
+
+# ── 5. Hyprland reload ──
+# Niri hot-reloads config files on change; hyprland does NOT — a live session
+# needs a nudge so the patched decorations.lua borders apply immediately.
+if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || pgrep -x Hyprland >/dev/null 2>&1; then
+  hyprctl reload >/dev/null 2>&1 || true
 fi
