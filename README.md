@@ -62,7 +62,7 @@ yours; updates never undo them. File manager and image viewer follow the WM:
 nemo + qview on Hyprland, nautilus + imv on Niri — switchable any time in
 `System > Default Apps`.
 
-## Niri vs Hyprland
+## Niri or Hyprland
 
 Same menu, themes and keys on both — only the tiling style differs:
 
