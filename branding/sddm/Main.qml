@@ -128,14 +128,30 @@ Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
       }
 
-      Row {
+      // Login cluster on a dim pill: once a wallpaper is staged the bare
+      // lock + entry wash out, so they sit on a mostly-transparent black
+      // box and render larger than the original static look.
+      Item {
         anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 15
+        width: loginRow.width + 56
+        height: loginRow.height + 44
+
+        Rectangle {
+          anchors.fill: parent
+          color: "#000000"
+          opacity: 0.5
+          radius: 20
+        }
+
+      Row {
+        id: loginRow
+        anchors.centerIn: parent
+        spacing: 18
 
         Image {
           source: root.errText.length > 0 ? "lock-failed.png" : "lock.png"
-          width: 34
-          height: 38
+          width: 46
+          height: 52
           fillMode: Image.PreserveAspectFit
           anchors.verticalCenter: parent.verticalCenter
         }
@@ -147,24 +163,24 @@ Rectangle {
           Image {
             id: entry
             source: root.errText.length > 0 ? "entry-failed.png" : "entry.png"
-            width: 150
-            height: 26
+            width: 200
+            height: 34
             anchors.centerIn: parent
           }
 
           Row {
             anchors.left: parent.left
-            anchors.leftMargin: 12
+            anchors.leftMargin: 16
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 5
+            spacing: 6
 
             Repeater {
               model: Math.min(password.text.length, 21)
 
               Image {
                 source: "bullet.png"
-                width: 6
-                height: 6
+                width: 8
+                height: 8
               }
             }
           }
@@ -172,13 +188,13 @@ Rectangle {
           TextInput {
             id: password
             anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
             verticalAlignment: TextInput.AlignVCenter
             echoMode: TextInput.Password
             font.family: "JetBrainsMono Nerd Font"
-            font.pixelSize: 17
-            font.letterSpacing: 2
+            font.pixelSize: 20
+            font.letterSpacing: 3
             passwordCharacter: "\u2022"
             color: "transparent"
             selectionColor: "transparent"
@@ -200,6 +216,7 @@ Rectangle {
             }
           }
         }
+      }
       }
 
       Text {
