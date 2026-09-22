@@ -157,6 +157,7 @@ STORED_IMG="$(cat "$STATE_BASE/images" 2>/dev/null || true)"
 # migrate_hyprland_native_apps: editor only with zed live, forced -Rdd while
 # the CachyOS hyprland meta pins editor/calculator — vim precedent).
 RM_LIST=""; RDD_LIST=""
+OLD_GONE=false
 if [[ $TO == hyprland ]]; then
   if have zeditor; then
     if have_pkg cachyos-hypr-noctalia; then RDD_LIST+="gnome-text-editor gnome-calculator "; else RM_LIST+="gnome-text-editor gnome-calculator "; fi
@@ -382,7 +383,12 @@ if [[ $KEEP_OLD == true ]]; then
 else
   if have pacman; then
     # shellcheck disable=SC2086
-    for p in $OLD_STACK; do uninstall_plain "$p" "replaced by the $TO stack"; done
+    for p in $OLD_STACK; do
+      if have_pkg "$p"; then
+        uninstall_plain "$p" "replaced by the $TO stack"
+        have_pkg "$p" || OLD_GONE=true
+      fi
+    done
     unset p
   else
     info "no pacman here — remove by hand: $OLD_STACK"
@@ -412,8 +418,18 @@ fi
 cat <<EOF
 hexciri-wm-switch: $CURRENT → $TO complete.
   old configs: $BAK (restore by hand to switch back without re-seeding)
-  next: log out, pick '$TO' in the login picker (it remembers your choice), log in.
   apps: carried $FM_OLD/$IMG_OLD picks flipped to $FM_NEW/$IMG_NEW, replaced
   natives uninstalled when nothing still needed them (explicit cross-WM
   picks were kept — change any time in System > Default Apps).
 EOF
+if [[ $OLD_GONE == true ]]; then
+  cat <<EOF
+  NOTE: the old compositor was retired mid-session, so menu logout is broken
+  now (its tools were just uninstalled) and the running $CURRENT is
+  configless — keybinds dying here is expected, not a bug. Finish from a
+  TTY: Ctrl+Alt+F3, log in, then reboot (or loginctl terminate-user $USER).
+  Then pick '$TO' in the login picker.
+EOF
+else
+  echo "  next: log out, pick '$TO' in the login picker (it remembers your choice), log in."
+fi
