@@ -47,8 +47,12 @@ One pick repaints your terminal, editor, browser, bar, lock screen, file
 manager and login screen from the same palette — 22 themes ship, any GitHub
 theme is one command away, and your own scripts in
 `~/.config/hexciri/hooks/theme-set.d/` run along (edits are kept as yours
-forever). Drop images in `~/.config/hexciri/wallpapers` and they show up in
-every theme's picker, surviving every swap.
+forever).
+
+Your stuff, by path: wallpapers live in `~/.config/hexciri/wallpapers`
+(extra folders in `~/.config/hexciri/wallpaper-sources/extra.list`);
+extra themes in `~/.config/hexciri/theme-sources/extra.list` — one
+`owner/repo` per line. Both survive every swap and update.
 
 ## Apps
 
@@ -60,9 +64,13 @@ nemo + qview on Hyprland, nautilus + imv on Niri — switchable any time in
 
 ## Niri vs Hyprland
 
-Nearly everything is shared. The few WM-specific pieces (keybinds, autostart,
-border colors) install only for whichever WM is active, detected automatically
-(`~/.config/hexciri/wm` pins it).
+Same menu, themes and keys on both — only the tiling style differs:
+
+| | Niri | Hyprland |
+|---|---|---|
+| Tiling | scrollable columns | classic tiles + floating |
+| `Mod+L` | — (nothing to cycle) | cycles dwindle → scrolling → monocle |
+| Files / images | nautilus + imv | nemo + qview |
 
 Switch without reinstalling:
 
@@ -76,10 +84,26 @@ new session, done.
 
 ## Keys that matter
 
-`Mod` is Super. `Mod+Return` terminal · `Mod+Q` close · `Mod+T` float toggle ·
-`Mod+L` cycle layouts · `Mod+1…9` workspaces (`Shift` moves windows) ·
-`Mod+Shift+F` files · `Mod+Shift+B` browser · `Mod+Escape` power ·
-`Mod+Ctrl+V` clipboard. All of them: `Mod+K`.
+`Mod` is Super. All of them, searchable: `Mod+K`.
+
+| Keys | Do |
+|---|---|
+| `Mod+Alt+Space` | hexciri menu |
+| `Mod+Space` | app launcher |
+| `Mod+Return` | terminal |
+| `Mod+Q` | close window |
+| `Mod+T` | float / tile toggle |
+| `Mod+L` | cycle layouts (Hyprland) |
+| `Mod+1…9` | workspaces (`Shift` moves windows) |
+| `Mod+Shift+F` | files |
+| `Mod+Shift+B` | browser |
+| `Mod+Shift+S` / `Mod+Shift+C` | web search / calculator |
+| `Mod+Ctrl+V` | clipboard history |
+| `Mod+Escape` | power menu |
+
+Search and calculator aren't apps — they're menu modes: `Mod+Shift+S`
+searches the web (and your files), `Mod+Shift+C` is a full calculator, both
+with history. `Mod+Ctrl+V` is the same idea for everything you copied.
 
 ## When something looks off
 
