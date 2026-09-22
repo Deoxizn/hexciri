@@ -125,7 +125,16 @@ case "$op" in
   quit)
     case "$WM" in
       niri)     niri msg action quit 2>/dev/null || true ;;
-      hyprland) hyprctl dispatch exit 2>/dev/null || true ;;
+      # uwsm-managed sessions (UWSM vars in the bind env) must end via
+      # `uwsm stop`: plain `hyprctl dispatch exit` kills only the compositor
+      # while the session unit lingers, so logout goes nowhere. Elsewhere
+      # dispatch exit is the right call.
+      hyprland)
+        if command -v uwsm >/dev/null 2>&1 && [[ -n ${UWSM_FINALIZE_VARNAMES:-} ]]; then
+          uwsm stop >/dev/null 2>&1 || true
+        else
+          hyprctl dispatch exit 2>/dev/null || true
+        fi ;;
       *)        loginctl terminate-session "${XDG_SESSION_ID:-}" 2>/dev/null || true ;;
     esac
     exit 0
