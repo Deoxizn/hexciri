@@ -730,10 +730,29 @@ EOF
     local dst="$HOME/.config/kitty/kitty.conf"
     [[ -f $src ]] || return 0
     command -v kitty >/dev/null 2>&1 || return 0   # no kitty here — push nothing
-    [[ -f $dst ]] && return 0
-    mkdir -p "$(dirname "$dst")"
-    cp -f "$src" "$dst"
-    echo "seeded kitty config ($dst)"
+    if [[ ! -f $dst ]]; then
+      mkdir -p "$(dirname "$dst")"
+      cp -f "$src" "$dst"
+      echo "seeded kitty config ($dst)"
+      return 0
+    fi
+    # A present config is the user's until proven otherwise: never rewrite it.
+    # But stock CachyOS kitty.conf lacks the three hexciri-owned lines (fish
+    # shell, nerd font, no close-confirm), leaving bash + a "running bash?"
+    # prompt on every Mod+Q. Add the missing ones; present values always win.
+    local added=0 key line
+    while IFS= read -r line; do
+      key=${line%% *}
+      if ! grep -qE "^[[:space:]]*$key([[:space:]]|$)" "$dst"; then
+        if (( added == 0 )); then
+          printf '\n# hexciri-owned lines below (added: missing from stock; edit freely — present values are never changed)\n' >>"$dst"
+        fi
+        printf '%s\n' "$line" >>"$dst"
+        added=1
+      fi
+    done < <(printf '%s\n' "shell fish" "font_family MesloLGS Nerd Font Mono" "confirm_os_window_close 0")
+    (( added )) && echo "kitty config: added missing hexciri-owned lines ($dst)"
+    return 0
   }
 
   # fastfetch config: seed when absent; refresh when the live file matches a
@@ -745,6 +764,16 @@ EOF
     local dst="$HOME/.config/fastfetch/config.jsonc"
     local r found=""
     [[ -f $src ]] || return 0
+    # The hexciri logo the config points at (source hexciri-nb.png) ships in
+    # repo branding but was never deployed — without it fastfetch falls back
+    # to the distro logo. Copy when missing or stale.
+    if [[ -f $REPO/branding/hexciri-nb.png ]]; then
+      mkdir -p "$(dirname "$dst")"
+      if [[ ! -f $HOME/.config/fastfetch/hexciri-nb.png ]] || ! cmp -s "$REPO/branding/hexciri-nb.png" "$HOME/.config/fastfetch/hexciri-nb.png"; then
+        cp -f "$REPO/branding/hexciri-nb.png" "$HOME/.config/fastfetch/hexciri-nb.png" && \
+          echo "deployed hexciri fastfetch logo ($dst dir)"
+      fi
+    fi
     if [[ ! -f $dst ]]; then
       mkdir -p "$(dirname "$dst")"
       cp -f "$src" "$dst" && echo "seeded fastfetch config ($dst)"
