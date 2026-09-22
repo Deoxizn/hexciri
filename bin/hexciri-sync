@@ -211,6 +211,34 @@ if [[ -n $REPO && -d $REPO/branding/sddm ]]; then
     fi
     log "sddm theme Fingerprint=$fp"
   fi
+  # PreferredSession=<niri|hyprland> stamps the box's pinned WM into the
+  # theme so the greeter defaults to it (Main.qml prefers it over the last
+  # session). Source is the repo owner's ~/.config/hexciri/wm pin, falling
+  # back to the single installed compositor; dual-WM boxes without a pin
+  # leave the key out and the greeter uses SDDM's remembered session.
+  ps=""
+  if [[ -n ${noct_home:-} && -f $noct_home/.config/hexciri/wm ]]; then
+    ps="$(tr -d '[:space:]' <"$noct_home/.config/hexciri/wm" 2>/dev/null || true)"
+  fi
+  case "${ps,,}" in
+    hypr|hyprland) ps=hyprland ;;
+    niri) ps=niri ;;
+    *)
+      ps=""
+      if command -v Hyprland >/dev/null 2>&1 && ! command -v niri >/dev/null 2>&1; then ps=hyprland; fi
+      if command -v niri >/dev/null 2>&1 && ! command -v Hyprland >/dev/null 2>&1; then ps=niri; fi
+      ;;
+  esac
+  if [[ -n $ps ]]; then
+    if ! grep -Eq "^PreferredSession=$ps\$" "$tdir/theme.conf" 2>/dev/null; then
+      if grep -Eq '^PreferredSession=' "$tdir/theme.conf" 2>/dev/null; then
+        sed -i -E "s/^PreferredSession=.*/PreferredSession=$ps/" "$tdir/theme.conf"
+      else
+        printf 'PreferredSession=%s\n' "$ps" >> "$tdir/theme.conf"
+      fi
+      log "sddm theme PreferredSession=$ps"
+    fi
+  fi
   drop=/etc/sddm.conf.d/10-hexciri-theme.conf
   if [[ ! -f $drop ]] || ! grep -Eq '^Current=hexciri$' "$drop" 2>/dev/null; then
     mkdir -p /etc/sddm.conf.d

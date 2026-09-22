@@ -20,11 +20,29 @@ Rectangle {
   // only safe with a reader to claim it; on a readerless box pam_fprintd falls
   // through and that empty submit fails red before the user can type.
   property bool hasFingerprint: config.Fingerprint === undefined ? true : config.Fingerprint === "true"
+  // WM-aware default session (stamped per-box by hexciri-sync as
+  // PreferredSession=<niri|hyprland> from ~/.config/hexciri/wm):
+  // pinned WM first, then SDDM's remembered last session, then any known
+  // compositor. A hardcoded niri default would drag a Hyprland box back
+  // into niri whenever both sessions are installed.
+  property string preferredSession: {
+    if (config.PreferredSession && config.PreferredSession.length > 0) return config.PreferredSession
+    return ""
+  }
   property int sessionIndex: {
-    for (var i = 0; i < sessionModel.rowCount(); i++) {
-      var name = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString()
-      if (name.indexOf("niri") !== -1 || name.indexOf("uwsm") !== -1)
-        return i
+    if (root.preferredSession.length > 0) {
+      for (var i = 0; i < sessionModel.rowCount(); i++) {
+        var pname = (sessionModel.data(sessionModel.index(i, 0), Qt.DisplayRole) || "").toString().toLowerCase()
+        if (pname.indexOf(root.preferredSession.toLowerCase()) !== -1)
+          return i
+      }
+    }
+    if (sessionModel.lastIndex >= 0 && sessionModel.lastIndex < sessionModel.rowCount())
+      return sessionModel.lastIndex
+    for (var j = 0; j < sessionModel.rowCount(); j++) {
+      var name = (sessionModel.data(sessionModel.index(j, 0), Qt.DisplayRole) || "").toString().toLowerCase()
+      if (name.indexOf("niri") !== -1 || name.indexOf("hyprland") !== -1 || name.indexOf("uwsm") !== -1)
+        return j
     }
     return sessionModel.lastIndex
   }
