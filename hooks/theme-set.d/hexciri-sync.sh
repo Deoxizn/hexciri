@@ -559,27 +559,29 @@ if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || pgrep -x Hyprland >/dev/null 2>&
   hyprctl reload >/dev/null 2>&1 || true
 fi
 
-# ── 6. Dolphin repaint ──
+# ── 6. KDE service cache rebuild (BEFORE the repaint kill below) ──
+# A freshly-written scheme file is invisible to KDE until the service cache
+# knows it. Rebuild FIRST: a dolphin opened during the rebuild reads the old
+# scheme, and single-instance reopens then attach to it — black-on-black
+# text that survives restarts. Rebuild-then-kill means any mid-rebuild launch
+# gets killed right after and the next open is correct.
+if command -v kbuildsycoca6 >/dev/null 2>&1; then
+  kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
+fi
+
+# ── 7. Dolphin repaint ──
 # KDE apps read color-schemes/*.colors once at startup (no live palette
 # switch), so a theme change while dolphin is open leaves it on the old
 # scheme. Restarting a file browser loses nothing — nudge it like the gtk
 # hook does for nautilus. WAIT for death afterwards: pkill is async, and a
 # fast reopen can attach to the dying instance (single-instance handoff) and
-# keep the old palette — observed as black-on-black text after switches.
+# keep the old palette.
 if command -v dolphin >/dev/null 2>&1 && pgrep -x dolphin >/dev/null 2>&1; then
   pkill -x dolphin 2>/dev/null || true
   for _ in $(seq 1 30); do
     pgrep -x dolphin >/dev/null 2>&1 || break
     sleep 0.1
   done
-fi
-
-# ── 7. KDE service cache rebuild ──
-# A freshly-written scheme file is invisible to KDE until the service cache
-# knows it (the cache is otherwise rebuilt at login, so a theme-set without
-# this step leaves dolphin on the previous scheme until relogin).
-if command -v kbuildsycoca6 >/dev/null 2>&1; then
-  kbuildsycoca6 --noincremental >/dev/null 2>&1 || true
 fi
 
 # ── 8. Login-greeter follow (greetd boxes) ──
