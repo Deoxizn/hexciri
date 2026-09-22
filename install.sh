@@ -98,7 +98,7 @@ fi
 # (vlc-plugins-all) is removed below; nothing in the layer references it.
 # NOTE: cachyos-wallpapers is removed below too — Noctalia shows theme
 # backgrounds (plus ~/.config/hexciri/wallpapers), never that pack.
-_hexciri_wants="kitty zed opencode localsend fuzzel gpu-screen-recorder tesseract mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd jq cliphist ttf-jetbrains-mono-nerd "
+_hexciri_wants="kitty zed opencode localsend fuzzel gpu-screen-recorder tesseract mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd jq cliphist "
 # Per-WM-native file manager / image viewer: install hexciri's pick only when
 # the WM's own default is absent. Hyprland boxes ship dolphin+qview (Qt,
 # themed via the KDE scheme the theme hook writes); niri boxes get

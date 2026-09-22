@@ -28,7 +28,7 @@ set -euo pipefail
 # menu gigantic next to a normal launcher. Revisit only for true scale-2
 # panels, and then gate on the live output scale, not a blanket revert.
 FZ=( fuzzel \
-    --font="JetBrainsMono Nerd Font:size=11" \
+    --font="MesloLGS Nerd Font Mono:size=11" \
     --dpi-aware=no \
     --border-width=2 )
 

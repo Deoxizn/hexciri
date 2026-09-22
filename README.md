@@ -303,7 +303,7 @@ would break keys, logins, or themes if missing).
 
 One-time swap at install, hands off after that. The framework sync
 (`hexciri-sync` / `hexciri-update self`) never touches packages except the
-tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl fwupd ttf-jetbrains-mono-nerd` (nautilus heals only when no file manager exists — dolphin boxes skip it; the nerd font is the stack default for kitty/fuzzel/bar, installed not forced — your configured families stay yours)
+tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl fwupd` (nautilus heals only when no file manager exists — dolphin boxes skip it)
 it self-heals — your later manual changes stick.
 Best-effort throughout: offline boxes finish, missing bits print their manual
 fallback.
