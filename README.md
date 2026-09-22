@@ -414,7 +414,10 @@ config files by hand. The notes below are what's happening behind those rows.
 - **Network / Security / Maintenance** — DNS provider switch (DHCP /
   Cloudflare / Google / Custom, NM + resolved), Wi-Fi QR share, link status;
   fingerprint (gated on a detected reader), FIDO2, SSHD toggle, passwordless
-  sudo; clock sync, cache/orphan cleaner, boot-config reset, firmware update.
+  sudo; desktop faillock bounds (`deny = 5`, `unlock_time = 60` on stock
+  configs — one typo burst no longer snowballs into a reboot-only lockout,
+  since retries inside the window fail and extend it); clock sync,
+  cache/orphan cleaner, boot-config reset, firmware update.
 - **Config editing** (`System > Config`) — your live WM config: Niri
   fragments (autostart, cursors, env, input, looknfeel, monitors,
   window-rules, keybinds) or Hyprland (`hyprland.lua` + every `config/*.lua`

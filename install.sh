@@ -158,6 +158,22 @@ if command -v pacman >/dev/null 2>&1; then
     _pkg="${_m%%:*}"; _dir="${_m#*:}"
     pacman -Q "$_pkg" >/dev/null 2>&1 || rm -rf "$_dir"
   done
+  # Desktop faillock bounds (same as the update migration): stock deny=3 /
+  # unlock_time=600 turns one typo burst into a reboot-only saga (retries
+  # inside the window fail and extend it). deny=5 + unlock_time=60 keeps
+  # brute-force protection while capping the cost at a minute. Stock files
+  # only — an admin-tuned deny/unlock_time/fail_interval is never touched.
+  if [[ -f /etc/security/faillock.conf ]] && ! grep -qE '^[[:space:]]*(deny|unlock_time|fail_interval)[[:space:]]*=' /etc/security/faillock.conf; then
+    for _kv in "deny = 5" "unlock_time = 60"; do
+      _key="${_kv%% *}"
+      if ! grep -qE "^[[:space:]]*$_key[[:space:]]*=" /etc/security/faillock.conf; then
+        printf '%s\n' "$_kv" | sudo tee -a /etc/security/faillock.conf >/dev/null 2>&1 && \
+          info "faillock $_kv (desktop bounds; stock file only)" || \
+          info "faillock tune skipped (no sudo here)"
+      fi
+    done
+    unset _kv _key
+  fi
   if pacman -Q vim >/dev/null 2>&1; then
     info "removing vim (forced: breaks only cachyos-zsh-config's declared dep)"
     if sudo pacman -Rdd --noconfirm vim 2>&1 | sed 's/^/  /'; then

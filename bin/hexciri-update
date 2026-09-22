@@ -1348,6 +1348,31 @@ EOF
     fi
   }
 
+  # Desktop faillock tuning (runs every pass; no-op when clean). Stock
+  # faillock (deny=3, unlock_time=600) turns one typo burst into a
+  # reboot-only saga: 3 rapid fails lock the account 10 minutes, and every
+  # "let me try again" inside the window fails AND extends it — so a correct
+  # password reads as wrong until reboot wipes /run. Desktop-appropriate
+  # bounds (deny=5 absorbs typo bursts, unlock_time=60 caps the cost at a
+  # minute) keep brute-force protection while ending the saga. Stock files
+  # only (any uncommented deny/unlock_time/fail_interval = admin choice,
+  # never touched). Needs root; failure (no sudo here) skips silently like
+  # the other privileged migrations.
+  migrate_faillock_desktop_tuning() {
+    local conf=/etc/security/faillock.conf key val
+    [[ -f $conf ]] || return 0
+    if grep -qE '^[[:space:]]*(deny|unlock_time|fail_interval)[[:space:]]*=' "$conf"; then
+      return 0
+    fi
+    for kv in "deny = 5" "unlock_time = 60"; do
+      key=${kv%% *}
+      if ! grep -qE "^[[:space:]]*$key[[:space:]]*=" "$conf"; then
+        printf '%s\n' "$kv" | sudo tee -a "$conf" >/dev/null 2>&1 || return 0
+        echo "migrated: faillock $kv (desktop bounds; stock file only)"
+      fi
+    done
+  }
+
   # Layer-critical packages: without polkit-gnome every pkexec app (btrfs-assistant,
   # gparted) is dead — no agent, no password dialog. gnome-keyring is Noctalia's
   # Secret Service provider (calendar tokens and other secrets have nowhere to
@@ -1455,6 +1480,7 @@ EOF
   migrate_mupdf_to_zathura
   migrate_vlc_to_mpv
   migrate_hyprland_native_apps
+  migrate_faillock_desktop_tuning
   sync_keybinds
   sync_hyprland
   sync_kitty
