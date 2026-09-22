@@ -1,19 +1,5 @@
--- Hexciri core binds for Hyprland (additive overlay).
--- Required AFTER the stock binds (see hyprland.lua). Combos that hexciri must
--- own outright (Mod+Alt+Space root menu, Mod+Escape power menu, Mod+Return
--- terminal, Mod+Shift+S web search, Mod+Shift+1-3 workspace-move) have their
--- stock lines patched OUT at deploy time (sync_hyprland → binds.lua.hexciri.bak):
--- in this shell duplicate combo binds STACK (both actions fire), so "required
--- later = wins" is a myth for shared combos. Mirrors config/niri/cfg/keybinds.kdl core.
---
--- Deliberately NOT duplicated from stock binds.lua:
---   * media/brightness keys (stock routes them via noctalia; niri uses
---     wpctl/playerctl/brightnessctl directly — each WM keeps its own)
---
--- Window close (Mod+Q) is duplicated on purpose: same action in both files, so
--- stacking is invisible and Q keeps the niri muscle memory.
-
-local mainMod = "SUPER"
+-- Hexciri core binds (machine-managed section — see sync_hyprland).
+-- Mirrors config/niri/cfg/keybinds.kdl core. Uses stock mainMod.
 
 -- Root menu / keybind reference / agent
 hl.bind(mainMod .. " + ALT + Space", hl.dsp.exec_cmd("hexciri-menu"))

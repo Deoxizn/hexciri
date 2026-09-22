@@ -3,8 +3,8 @@
 # hexciri:summary=Compositor keybinding cheatsheet — parsed from the live keybinds config
 # Niri: reads the hand-written keybinds file (~/.config/niri/cfg/keybinds.kdl,
 # falling back to the pre-cfg/ flat path, then the repo snapshot).
-# Hyprland: reads the lua binds (hexciri overlay + stock binds.lua, then the
-# repo snapshot). "Mod" = Super on both.
+# Hyprland: reads the live binds.lua (hexciri section lives inside it),
+# then the repo section source. "Mod" = Super on both.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -15,7 +15,7 @@ WM="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri)"
 FILE=""
 HYPR_FILES=()
 if [[ $WM == hyprland ]]; then
-  for _h in "$CFG/hypr/config/hexciri-binds.lua" "$CFG/hypr/config/binds.lua" "$REPO/config/hypr/config/hexciri-binds.lua"; do
+  for _h in "$CFG/hypr/config/binds.lua" "$REPO/config/hypr/sections/binds.lua"; do
     [[ -f $_h ]] && HYPR_FILES+=("$_h")
   done
   if ((${#HYPR_FILES[@]} == 0)); then
@@ -49,6 +49,7 @@ file = os.environ["KEYBINDS_FILE"]
 HYPR_DESC = {
     "Mod+BracketLeft": "Cycle to previous window",
     "Mod+BracketRight": "Cycle to next window",
+    "Mod+L": "Cycle tiling layout",
 }
 DESC = {
     "Mod+Space": "App launcher (Noctalia)",
@@ -61,7 +62,7 @@ DESC = {
     "Mod+Shift+B": "Browser",
     "Mod+Shift+E": "Text editor",
     "Mod+Shift+F": "File manager",
-    "Mod+T": "Cycle tiling layout",
+    "Mod+T": "Toggle floating",
     "Mod+Ctrl+M": "Messenger webapp",
     "Mod+Q": "Close window",
     "Mod+Left": "Focus left", "Mod+H": "Focus left",
@@ -395,7 +396,7 @@ if wm == "hyprland":
             if not combo:
                 continue
             # Action = the rest of THIS statement's line (bind statements are
-            # single-line in both the overlay and stock binds.lua). Never scan
+            # single-line in the stock binds.lua, section included). Never scan
             # past the line — that lands on the NEXT bind (Mod+Q → power bug).
             _ln = _text[m.end():].split("\n", 1)[0].strip()
             em = re.search(r'exec_cmd\(\s*"([^"]+)"', _ln)
@@ -414,9 +415,9 @@ rows = []
 seen = set()
 for combo, action in binds:
     c = canon(combo)
-    # Multi-file sources (hyprland reads the live overlay + live stock + repo
-    # fallback): a combo defined in more than one file renders once — the
-    # first file wins (overlay before stock, matching hyprland load order).
+    # Multi-file sources (hyprland reads live binds.lua, then the repo section
+    # source as fallback): a combo defined in more than one file renders once
+    # — the first file wins (live before repo).
     if c in seen:
         continue
     # Loop-generated binds (e.g. stock digit/zoom loops unrolled as
@@ -429,7 +430,8 @@ for combo, action in binds:
         label = hypr_label(action)
     # Combos whose meaning differs per WM resolve here first: niri owns the
     # DESC entry (Mod+Bracket* = consume/expel columns, a niri-only concept),
-    # while the hyprland overlay reuses the keys for monocle stack flipping.
+    # while hyprland reuses the keys for monocle stack flipping (and Mod+L
+    # for the layout cycle vs niri's focus-right).
     # (A DESC.get default can't do this — the key EXISTS in DESC.)
     if wm == "hyprland" and c in HYPR_DESC:
         rows.append(f"{c:<22} {HYPR_DESC[c]}")

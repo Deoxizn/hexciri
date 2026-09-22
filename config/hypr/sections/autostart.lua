@@ -1,6 +1,4 @@
--- Hexciri autostart overlay for Hyprland.
--- Runs alongside the stock autostart (see config/autostart.lua): the stock
--- file owns noctalia + dbus env; this file owns the hexciri layer needs.
+-- Hexciri autostart (machine-managed section — see sync_hyprland).
 -- Mirrors config/niri/cfg/autostart.kdl.
 
 hl.on("hyprland.start", function()

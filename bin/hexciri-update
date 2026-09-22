@@ -306,18 +306,17 @@ update_self() {
     sync_new_binds "$src" "$dst"
   }
 
-  # Hyprland overlay deploy: the hexciri fragments (hexciri-binds.lua,
-  # hexciri-autostart.lua) ship in the repo and seed/refresh the live config
-  # like hooks do — manifest-tracked, so a live file the user made theirs is
-  # never overwritten. Then the requires in hyprland.lua are asserted (backed
-  # up on first edit) so the overlays load AFTER the stock config.* fragments
-  # and win on shared combos. Finally pins ~/.config/hexciri/wm so
+  # Hyprland section deploy: the hexciri binds/autostart bodies (repo
+  # config/hypr/sections/) paste once into the stock binds.lua/autostart.lua
+  # under a HEXCIRI marker — seed-once, never refreshed, so hand-edits live
+  # with the file forever. Stale overlay requires are removed (a require of
+  # a missing file is a config error). Then pins ~/.config/hexciri/wm so
   # hexciri-session resolves hyprland deterministically (incl. ssh bring-up).
   sync_hyprland() {
     command -v Hyprland >/dev/null 2>&1 || command -v hyprland >/dev/null 2>&1 || return 0
     local src="$REPO/config/hypr/config" dst="$HOME/.config/hypr/config"
     local main="$HOME/.config/hypr/hyprland.lua"
-    local rev manifest f rel entry oldrev found r custom
+    local rev manifest entry oldrev found r
     [[ -d $src && -d $dst ]] || return 0
     [[ -f $main ]] || return 0
     rev="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
@@ -338,85 +337,37 @@ update_self() {
         printf '! %s\n' "$1" >> "$manifest"
       fi
     }
-    while IFS= read -r f; do
-      rel="${f#$src/}"
-      [[ $rel == *.lua ]] || continue
-      # hexciri-layout.lua is owned by the layout cycler (rewritten per
-      # press) — seeded + required below, never manifest-tracked here, or
-      # every update would fight the live value.
-      [[ $rel == hexciri-layout.lua ]] && continue
-      if [[ ! -f $dst/$rel ]]; then
-        if cp -f "$f" "$dst/$rel" 2>/dev/null; then
-          echo "seeded hyprland overlay ($rel)"
-          [[ $rev != unknown ]] && record_owned "$rev" "$rel"
-        fi
-        continue
+    # Hexciri sections: the binds/autostart bodies (repo config/hypr/sections/)
+    # paste once into the stock binds.lua/autostart.lua under a HEXCIRI
+    # marker. Seed-once, niri-fragment style: never refreshed afterwards, so
+    # hand-edits and machine customs live with the file forever. Stale overlay
+    # requires are removed below (a require of a missing file is a config
+    # error); hexciri-layout.lua stays a separate owned file (the cycler
+    # rewrites it per press — embedding it would churn user files).
+    # shellcheck disable=SC2086
+    for _pair in "binds.lua:binds" "autostart.lua:autostart"; do
+      _lf="$dst/${_pair%%:*}"; _name="${_pair##*:}"; _src="$REPO/config/hypr/sections/$_name.lua"
+      if [[ -f $_src && -f $_lf ]] && ! grep -qxF -- "-- ── HEXCIRI $_name ──" "$_lf" 2>/dev/null; then
+        { printf '\n-- ── HEXCIRI %s ──\n' "$_name"; cat "$_src"; printf -- '-- ── END HEXCIRI %s ──\n' "$_name"; } >> "$_lf" && \
+          echo "hyprland: added hexciri $_name section ($(basename "$_lf"))"
       fi
-      if grep -qxF "! $rel" "$manifest" 2>/dev/null; then
-        continue
-      fi
-      if oldrev="$(owned "$rel")"; then
-        if git -C "$REPO" show "$oldrev:config/hypr/config/$rel" 2>/dev/null | cmp -s - "$dst/$rel"; then
-          if ! cmp -s "$f" "$dst/$rel" 2>/dev/null; then
-            cp -f "$f" "$dst/$rel" 2>/dev/null && echo "refreshed hyprland overlay ($rel)" || true
-          fi
-          [[ $rev != unknown ]] && record_owned "$rev" "$rel"
-        else
-          record_custom "$rel"
-          echo "kept custom hyprland overlay ($rel)"
-        fi
-        continue
-      fi
-      # No record: classify via git history (pre-manifest seed or user file).
-      found=""
-      custom=""
-      if [[ $rev != unknown ]]; then
-        found="$(git -C "$REPO" log --format=%H -- "config/hypr/config/$rel" 2>/dev/null | \
-          while IFS= read -r r; do
-            [[ -n $r ]] || continue
-            if git -C "$REPO" show "$r:config/hypr/config/$rel" 2>/dev/null | cmp -s - "$dst/$rel"; then
-              echo "$r"; break
-            fi
-          done || true)"
-      fi
-      if [[ -z $found ]]; then
-        record_custom "$rel"
-        echo "kept custom hyprland overlay ($rel)"
-      elif cmp -s "$f" "$dst/$rel" 2>/dev/null; then
-        record_owned "$found" "$rel"
-      else
-        cp -f "$f" "$dst/$rel" 2>/dev/null && echo "refreshed hyprland overlay ($rel)" || true
-        [[ $rev != unknown ]] && record_owned "$rev" "$rel"
-      fi
-    done < <(find "$src" -type f 2>/dev/null || true)
+    done
+    unset _pair _lf _name _src
 
-    # Assert the requires: hexciri-binds AFTER config.binds, hexciri-autostart
-    # AFTER config.autostart (last require wins for a given combo). Back the
-    # main file up once so a user can diff what changed.
-    if ! grep -q 'require("config.hexciri-binds")' "$main" 2>/dev/null; then
-      cp -f "$main" "$main.hexciri.bak" 2>/dev/null || true
-      if grep -q 'require("config.binds")' "$main" 2>/dev/null; then
-        sed -i '/require("config.binds")/a require("config.hexciri-binds")' "$main"
-      elif grep -q 'require("config.binds.lua")' "$main" 2>/dev/null; then
-        sed -i '/require("config.binds.lua")/a require("config.hexciri-binds")' "$main"
+    # Retire the binds/autostart overlay requires: the files are gone
+    # (sections live in the stock files now) — a stale require is a config
+    # error. Back up once. Leftover overlay files on disk are never loaded
+    # again; sync says so in the windowrules-era NOTE below instead of
+    # deleting user files.
+    for _rm in binds autostart; do
+      if grep -q "require(\"config.hexciri-$_rm\")" "$main" 2>/dev/null; then
+        cp -f "$main" "$main.hexciri.bak" 2>/dev/null || true
+        # shellcheck disable=SC2086
+        sed -i "/require(\"config.hexciri-$_rm\")/d" "$main" && \
+          echo "hyprland: removed stale require config.hexciri-$_rm (sections now)"
       fi
-      if grep -q 'config.hexciri-binds' "$main" 2>/dev/null; then
-        echo "hyprland: required config.hexciri-binds after stock binds"
-      else
-        echo "hyprland: NOTE could not place config.hexciri-binds (no stock binds require found)" >&2
-      fi
-    fi
-    if ! grep -q 'require("config.hexciri-autostart")' "$main" 2>/dev/null; then
-      cp -f "$main" "$main.hexciri.bak" 2>/dev/null || true
-      if grep -q 'require("config.autostart")' "$main" 2>/dev/null; then
-        sed -i '/require("config.autostart")/a require("config.hexciri-autostart")' "$main"
-      fi
-      if grep -q 'config.hexciri-autostart' "$main" 2>/dev/null; then
-        echo "hyprland: required config.hexciri-autostart after stock autostart"
-      else
-        echo "hyprland: NOTE could not place config.hexciri-autostart (no stock autostart require found)" >&2
-      fi
-    fi
+    done
+    unset _rm
 
     # hexciri-layout.lua (live layout file owned by hexciri-hyprland-layout):
     # seed from the repo template when absent — never overwrite, the cycler
@@ -435,9 +386,14 @@ update_self() {
     fi
 
     # hexciri-windowrules.lua (TUI.float float + size, fastfetch float):
-    # seeded by the generic overlay loop above like binds/autostart — assert
-    # the require AFTER stock config.windowrules so the overlay wins
-    # (anonymous rules resolve last-match-wins). Mirrors niri window-rules.kdl.
+    # file-based overlay (kept: rules must load AFTER stock config.windowrules
+    # and last-match-wins needs file order). Seed when absent, then assert
+    # the require after stock. Mirrors niri window-rules.kdl.
+    if [[ ! -f $dst/hexciri-windowrules.lua && -f $src/hexciri-windowrules.lua ]]; then
+      if cp -f "$src/hexciri-windowrules.lua" "$dst/hexciri-windowrules.lua" 2>/dev/null; then
+        echo "seeded hyprland overlay (hexciri-windowrules.lua)"
+      fi
+    fi
     if ! grep -q 'require("config.hexciri-windowrules")' "$main" 2>/dev/null; then
       cp -f "$main" "$main.hexciri.bak" 2>/dev/null || true
       if grep -q 'require("config.windowrules")' "$main" 2>/dev/null; then
@@ -448,7 +404,7 @@ update_self() {
       fi
     fi
 
-    # Neutralize stock binds that the hexciri overlay owns outright. In this
+    # Neutralize stock binds that the hexciri section owns outright. In this
     # shell a duplicate combo STACKS (both actions fire) — the overlay being
     # required later does NOT dislodge the stock line. Comment the stock ones
     # out once (first change backs up binds.lua → binds.lua.hexciri.bak):
