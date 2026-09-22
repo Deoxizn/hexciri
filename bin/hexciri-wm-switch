@@ -31,6 +31,19 @@ info() { echo "hexciri-wm-switch: $*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 have_pkg() { command -v pacman >/dev/null 2>&1 && pacman -Q "$1" >/dev/null 2>&1; }
 
+# Self-update first (same idiom as hexciri-update): a destructive run must
+# execute the newest code — a stale checkout would reintroduce fixed bugs
+# (e.g. the orphaned-shell gray screen). Best-effort: offline/dirty trees
+# continue with local code. --dry-run also benefits (plans with new logic).
+if [[ ${HXC_WS_RERUN:-0} == 0 && -d $REPO/.git ]]; then
+  export HXC_WS_RERUN=1
+  if git -C "$REPO" pull --ff-only --quiet 2>/dev/null; then
+    exec "$SCRIPT_DIR/hexciri-wm-switch" "$@"
+  else
+    info "repo pull skipped/failed (dirty tree or offline?) — continuing with local code"
+  fi
+fi
+
 TO="" DRY=false YES=false KEEP_OLD=false
 for a in "$@"; do
   case "$a" in
