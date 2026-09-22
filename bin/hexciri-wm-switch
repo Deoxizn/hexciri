@@ -439,8 +439,8 @@ if [[ $OLD_GONE == true ]]; then
   cat <<EOF
   NOTE: the old compositor was retired mid-session, so menu logout is broken
   now (its tools were just uninstalled) and the running $CURRENT is
-  configless — keybinds dying here is expected, not a bug. Finish from a
-  TTY: Ctrl+Alt+F3, log in, then reboot (or loginctl terminate-user $USER).
+  configless — dying keybinds here are expected, not a bug. This terminal
+  still works: run 'sudo reboot' right here (or TTY + reboot if it doesn't).
   Then pick '$TO' in the login picker.
 EOF
 else
