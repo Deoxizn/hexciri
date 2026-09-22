@@ -31,7 +31,7 @@ C = {
   "foreground": hexc("foreground", data, ["#c0d0e0"]),
   "dark_foreground": hexc("dark_foreground", data, [hexc("muted", data, ["#586070"])]),
   "light_foreground": hexc("light_foreground", data, [hexc("foreground", data, ["#c0d0e0"])]),
-  "bright_foreground": hexc("bright_foreground", data, ["#eeeeee"]),
+  "bright_foreground": hexc("bright_foreground", data, [hexc("bright_fg", data, [hexc("color15", data, [hexc("foreground", data, ["#eeeeee"])])])]),
   "selection": hexc("selection", data, ["#292e42"]),
   "selection_foreground": hexc("selection_foreground", data, [hexc("foreground", data, ["#c0d0e0"])]),
   "muted": hexc("muted", data, ["#586070"]),
@@ -61,6 +61,25 @@ tpl_dir = Path(os.environ.get("HEXCIRI_PATH", str(repo))) / "default" / "themed"
 if not tpl_dir.is_dir():  # dev tree: script.py lives in <repo>/bin
     tpl_dir = repo / "default" / "themed"
 C["selection_background"] = C["selection"]  # kitty.conf.tpl compat
+
+# Fuzzel selection mirrors opencode's selectedListItemText contrast rule
+# (hooks/theme-set.d/22-opencode.sh): selection bg is always the accent, and
+# the text is dark (background) on light accents, else bright_foreground.
+# The raw `selection` key is unreliable upstream — some themes set it to a
+# near-white foreground (white highlight bar, unreadable light-gray text) —
+# so fuzzel bypasses it entirely.
+def _accent_lum1000(hex_color):
+    try:
+        c = hex_color.lstrip("#")
+        return 299 * int(c[0:2], 16) + 587 * int(c[2:4], 16) + 114 * int(c[4:6], 16)
+    except (ValueError, IndexError):
+        return 0
+
+C["fuzzel_selection"] = C["accent"]
+C["fuzzel_selection_text"] = C["background"] if _accent_lum1000(C["accent"]) > 127500 else C["bright_foreground"]
+# Matched substring inside the selected row must stay readable on the accent
+# bg — accent-on-accent is invisible — so reuse the contrast text color.
+C["fuzzel_selection_match"] = C["fuzzel_selection_text"]
 
 # 1. generic {{key}} templates -> theme dir (strip .tpl); must be writable
 # (hexciri-theme-set always passes the state copy, never /usr/share)
