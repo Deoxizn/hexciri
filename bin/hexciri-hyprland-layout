@@ -9,6 +9,19 @@
 # per-workspace dwindle/scrolling toggle to a full cycle).
 set -euo pipefail
 
+# uwsm-managed Hyprland omits HYPRLAND_INSTANCE_SIGNATURE from its own
+# environ, so the Mod+T bind inherits a sig-less env and every hyprctl call
+# dies with "not set!". Resolve from the runtime dir (newest first) when
+# unset — same block as hexciri-compositor.
+if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+  _hdir="/run/user/${UID:-$(id -u)}/hypr"
+  if [[ -d $_hdir ]]; then
+    _sig="$(ls -t "$_hdir" 2>/dev/null | head -n1 || true)"
+    [[ -n $_sig ]] && export HYPRLAND_INSTANCE_SIGNATURE="$_sig"
+  fi
+  unset _hdir _sig
+fi
+
 LAYOUTS=(dwindle scrolling monocle)
 
 current_layout() {
