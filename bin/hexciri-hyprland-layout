@@ -66,7 +66,15 @@ esac
 # compositor missing the target, getoption won't move — fail loudly instead
 # of notifying a lie.
 hyprctl eval "hl.config({ general = { layout = \"$next\" } })" >/dev/null 2>&1 || exit 1
-got="$(current_layout)"
+# The live workspace can report the previous layout for a beat after a
+# successful set (observed: global moves instantly, tiledLayout lags) — so
+# re-read a few times before calling it a failure instead of notifying a lie.
+got=""
+for _ in 1 2 3 4; do
+  got="$(current_layout)"
+  [[ $got == "$next" ]] && break
+  sleep 0.3
+done
 if [[ $got != "$next" ]]; then
   echo "hexciri-hyprland-layout: set $next but compositor reports $got" >&2
   exit 1
