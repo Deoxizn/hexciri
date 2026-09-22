@@ -421,6 +421,7 @@ update_self() {
     #   Mod+Alt+Space      float toggle   → root menu owns it
     #   Mod+Escape         hyprctl kill   → power menu owns it
     #   Mod+Return         launch prefix  → hexciri-terminal owns it
+    #   Mod+W              BROWSER=firefox→ browser pick owns it (firefox replaced)
     #   Mod+Shift+S        move scratchpad→ web search owns it
     #   Mod+Shift+1..3     monitor moves  → workspace-move verb owns it
     if [[ -f $dst/hexciri-binds.lua && -f $dst/binds.lua ]]; then
@@ -432,6 +433,7 @@ pats = [
     'mainMod .. " + ALT + Space"',
     'mainMod .. " + Escape"',
     'mainMod .. " + Return"',
+    'mainMod .. " + W"',
     'mainMod .. " + SHIFT + S"',
     'window.move({ monitor = MONITOR1 })',
     'window.move({ monitor = MONITOR2 })',

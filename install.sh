@@ -100,8 +100,11 @@ fi
 # backgrounds (plus ~/.config/hexciri/wallpapers), never that pack.
 _hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd jq cliphist "
 # One-time stock removals (not the list — replaced CachyOS defaults, always
-# safe to attempt; kept when something still needs them).
-_hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro vlc-plugins-all cachyos-wallpapers"
+# safe to attempt; kept when something still needs them). The hyprland tail
+# (gnome-text-editor → zed, gnome-calculator → the fuzzel calc menu script)
+# covers the CachyOS hyprland preinstalls niri boxes never had; absent on niri
+# they are plain no-ops there.
+_hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro vlc-plugins-all cachyos-wallpapers gnome-text-editor gnome-calculator"
 # xwayland-satellite pin (upstream #468): 0.8.2 regressed popup positioning
 # (commit 3273a0f) — X11 dropdowns (Steam menus, etc.) spawn offset and lose
 # hover on niri. Hold at last-good 0.8.1 until a fixed 0.8.3+ lands, then drop

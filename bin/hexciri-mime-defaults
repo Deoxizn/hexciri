@@ -56,6 +56,7 @@ FILES_MIMES=(inode/directory)
 images_desktop() { # <pick>
   case "$1" in
     imv) set -- imv.desktop ;;
+    qview) set -- com.interversehq.qView.desktop ;;
     qimgv) set -- qimgv.desktop ;;
     *) return 1 ;;
   esac

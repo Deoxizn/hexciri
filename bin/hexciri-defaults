@@ -1,5 +1,5 @@
 #!/bin/bash
-# hexciri:summary=Default apps: kitty + fish + brave-origin + dolphin(hyprland)/nautilus(niri) + imv + zathura + zed + opencode (xdg-native)
+# hexciri:summary=Default apps: kitty + fish + brave-origin + dolphin(hyprland)/nautilus(niri) + qview(hyprland)/imv(niri) + zathura + zed + opencode (xdg-native)
 # Only shows apps that are actually installed; current choice is marked with ✓.
 # usage: hexciri-defaults [Browser|Editor|Images|PDF|Terminal|Shell|Files|Agent]
 set -euo pipefail
@@ -30,7 +30,16 @@ if ! [[ -f $STATE_BASE/files ]]; then
 fi
 [[ -f $STATE_BASE/editor ]]   || setv editor zed
 [[ -f $STATE_BASE/agent ]]    || setv agent opencode
-[[ -f $STATE_BASE/images ]]   || setv images imv
+# Per-WM image viewer, same rule as files: hyprland boxes ship qview (Qt,
+# owns image/*, dolphin's sibling); niri keeps the hexciri imv default.
+# First seed only — an explicit Defaults > Images pick is never overridden.
+if ! [[ -f $STATE_BASE/images ]]; then
+  if [[ $_active_wm == hyprland ]] && command -v qview >/dev/null 2>&1; then
+    setv images qview
+  else
+    setv images imv
+  fi
+fi
 [[ -f $STATE_BASE/pdf ]]      || setv pdf zathura
 
 # available(): only list candidates whose binary exists (browser: via desktop file)
@@ -72,6 +81,14 @@ available() { # <browser|terminal|...> <current> <candidates...>
   done
 }
 
+# imv → qview migration for the stored pick (hyprland only): a kept "imv"
+# value whose box grew qview flips to the Qt viewer — same idiom as the
+# mupdf → zathura flip below. A deliberate re-pick of imv (its binary still
+# present) is an explicit pick and is never flipped back.
+if [[ $(get images) == imv && $_active_wm == hyprland ]] && command -v qview >/dev/null 2>&1; then
+  setv images qview
+fi
+
 # mupdf → zathura migration for the stored pick: a kept "mupdf" value whose
 # reader is gone flips to zathura once its desktop exists. A deliberate
 # reinstall of mupdf keeps working (its desktop exists → no flip).
@@ -97,12 +114,13 @@ if [[ -z $pick_type ]]; then
 fi
 
 # hexciri-defaults run <type>: launch the current default, no menu. Used by
-# the hyprland File manager bind (Mod+Shift+F → hexciri-defaults run files).
-# files only today — seeding above already guarantees a valid pick.
+# the hyprland binds that take over stock slots (Mod+Shift+F → run files,
+# Mod+W → run browser). files/images/browser only — seeding above already
+# guarantees a valid pick.
 if [[ ${pick_type,,} == run ]] && [[ $# -ge 2 ]]; then
   case "${2,,}" in
-    files)
-      _run="$(get files)"
+    files|browser|images)
+      _run="$(get "${2,,}")"
       case "$_run" in
         yazi) exec kitty --class yazi -e yazi 2>/dev/null || exec yazi ;;
         *)    [[ -n $_run ]] && command -v "$_run" >/dev/null 2>&1 && exec "$_run" ;;
@@ -158,7 +176,7 @@ case "${pick_type,,}" in
     ;;
   images)
     current="$(get images)"
-    choice="$(menu_via_fuzzel 'Images: ' -- "$(available images "$current" imv qimgv)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
+    choice="$(menu_via_fuzzel 'Images: ' -- "$(available images "$current" qview imv qimgv)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv images "$choice"
     # imv needs its displayable override deployed too — the mime-defaults

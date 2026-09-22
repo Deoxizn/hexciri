@@ -187,7 +187,9 @@ Launchers alongside the menu: `Mod+Space` Noctalia app launcher,
 calculator (fuzzel), `Mod+Return`
 terminal, `Mod+Shift+E` editor, `Mod+Shift+B` browser, `Mod+Shift+F` file
 manager (dolphin on Hyprland, nautilus on niri — one pick in
-`System > Defaults > Files` serves both WMs), ``Mod+` `` AI agent
+`System > Defaults > Files` serves both WMs), `Mod+W` browser on Hyprland
+(taking over the stock slot, whose `BROWSER="firefox"` is a dead key since
+firefox is replaced), ``Mod+` `` AI agent
 (`opencode` by default), `Mod+Escape` power menu, `Mod+Ctrl+V` clipboard
 history.
 Workspaces are niri verbs on both WMs: `Mod+1…9` switches, `Mod+Shift+1…9`
@@ -361,6 +363,8 @@ already mirrors it on niri.
 | `firefox` | replaced by Brave Origin (+ `~/.mozilla` purged) |
 | `meld` | not part of the workflow (+ config purged) |
 | `cachyos-micro-settings`, `micro` | replaced by zed (+ config purged) |
+| `gnome-text-editor` | stock editor on CachyOS hyprland boxes, replaced by zed (niri boxes never had it — no-op there) |
+| `gnome-calculator` | stock calculator on CachyOS hyprland boxes; hexciri's calculator is the `Mod+Shift+C` fuzzel menu script, not an app |
 | `vim` | force-removed (`-Rdd` breaks only `cachyos-zsh-config`'s declared dep; reinstalling vim undoes it; `~/.vim`/`~/.viminfo` purged) |
 
 ## More of what's inside
@@ -371,9 +375,12 @@ config files by hand. The notes below are what's happening behind those rows.
 
 - **Default Apps** (`System > Default Apps`, `hexciri-defaults`) — Browser
   (brave-origin…), Editor (zed…), Terminal (kitty…), Shell (fish…), Files
-  (nautilus…), Images (imv…), PDF (zathura…), Agent (opencode…). Only installed candidates are
+  (dolphin on Hyprland / nautilus on niri…), Images (qview on Hyprland / imv on
+  niri…), PDF (zathura…), Agent (opencode…). Only installed candidates are
   offered; current is marked ✓. Shell switches kitty's shell without touching
-  your login shell.
+  your login shell. Seeding is per-WM and first-run only — an explicit pick is
+  never overridden (a kept generic seed migrates forward, e.g. imv → qview on
+  Hyprland, like mupdf → zathura).
 - **Keybinds** — one combo set, two homes. On Niri the repo file
   `config/niri/cfg/keybinds.kdl` is the master: first sync adapts a stock
   CachyOS file once (keeping your combos plus stock-only keepers), then
