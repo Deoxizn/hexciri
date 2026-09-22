@@ -1,55 +1,46 @@
 #!/bin/bash
-# hexciri:summary=Cycle Hyprland tiling layouts (dwindle/master/scrolling…)
+# hexciri:summary=Cycle Hyprland tiling layouts (dwindle/master/scrolling/monocle)
 # usage: hexciri-hyprland-layout [next|prev|<name>]  (default: next)
-# Rotates through every layout the compositor actually supports: built-ins
-# dwindle + master always, plus scrolling when the hyprscrolling plugin is
-# loaded. Bound to Mod+T on hyprland (the Omarchy toggle idiom, generalized
-# from a two-way toggle to a full cycle so future layouts join free).
+# Rotates through every layout the compositor ships: dwindle, master,
+# scrolling and monocle are all built into current Hyprland (verified live —
+# each eval applies with set:true, no plugin needed). Bound to Mod+T on
+# hyprland (the Omarchy toggle idiom, generalized from their per-workspace
+# dwindle/scrolling toggle to a full cycle over all four).
 set -euo pipefail
 
-BUILTINS=(dwindle master)
-
-# scrolling registers a layout literally named "scrolling" — present only
-# when its plugin is loaded. Probe both plugin-list spellings; unknown
-# subcommands fail silently and scrolling is simply skipped.
-have_scrolling() {
-  hyprctl plugin list 2>/dev/null | grep -qiE "scrolling" || \
-    hyprctl plugins list 2>/dev/null | grep -qiE "scrolling"
-}
+LAYOUTS=(dwindle master scrolling monocle)
 
 current_layout() {
   local cur=""
   if command -v jq >/dev/null 2>&1; then
-    cur="$(hyprctl getoption general:layout -j 2>/dev/null | jq -r '.str // empty' 2>/dev/null || true)"
+    # Per-workspace-aware first: a workspace rule pinning a layout beats the
+    # global option, so the effective layout is the honest rotation base.
+    cur="$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.tiledLayout // empty' 2>/dev/null || true)"
+    [[ -z $cur ]] && cur="$(hyprctl getoption general:layout -j 2>/dev/null | jq -r '.str // empty' 2>/dev/null || true)"
   fi
   if [[ -z $cur ]]; then
-    cur="$(hyprctl getoption general:layout 2>/dev/null | grep -oE '"(dwindle|master|scrolling|[a-z]+)"' | head -1 | tr -d '"' || true)"
+    cur="$(hyprctl getoption general:layout 2>/dev/null | grep -oE '"(dwindle|master|scrolling|monocle|[a-z]+)"' | head -1 | tr -d '"' || true)"
   fi
   printf '%s' "${cur:-dwindle}"
 }
 
-layouts=("${BUILTINS[@]}")
-if have_scrolling; then
-  layouts+=(scrolling)
-fi
-
 mode="${1:-next}"
 cur="$(current_layout)"
 idx=-1
-for i in "${!layouts[@]}"; do
-  [[ ${layouts[$i]} == "$cur" ]] && idx=$i
+for i in "${!LAYOUTS[@]}"; do
+  [[ ${LAYOUTS[$i]} == "$cur" ]] && idx=$i
 done
 
 case "$mode" in
-  next) next=${layouts[$(( (idx + 1) % ${#layouts[@]} ))]} ;;
-  prev) next=${layouts[$(( (idx - 1 + ${#layouts[@]}) % ${#layouts[@]} ))]} ;;
+  next) next=${LAYOUTS[$(( (idx + 1) % ${#LAYOUTS[@]} ))]} ;;
+  prev) next=${LAYOUTS[$(( (idx - 1 + ${#LAYOUTS[@]}) % ${#LAYOUTS[@]} ))]} ;;
   *)
     next=""
-    for l in "${layouts[@]}"; do
+    for l in "${LAYOUTS[@]}"; do
       [[ $l == "$mode" ]] && next=$l
     done
     if [[ -z $next ]]; then
-      echo "hexciri-hyprland-layout: unknown layout '$mode' (have: ${layouts[*]})" >&2
+      echo "hexciri-hyprland-layout: unknown layout '$mode' (have: ${LAYOUTS[*]})" >&2
       exit 1
     fi
     ;;
@@ -57,8 +48,14 @@ esac
 
 # Live-apply: this box runs the Lua config (non-legacy parser), where
 # `hyprctl keyword` is a no-op ("use eval"). The same hl.config() call the
-# config files make applies live through eval — verified: getoption flips
-# with set:true and no reload needed.
+# config files make applies live through eval. Verify after set: on a
+# compositor missing the target, getoption won't move — fail loudly instead
+# of notifying a lie.
 hyprctl eval "hl.config({ general = { layout = \"$next\" } })" >/dev/null 2>&1 || exit 1
+got="$(current_layout)"
+if [[ $got != "$next" ]]; then
+  echo "hexciri-hyprland-layout: set $next but compositor reports $got" >&2
+  exit 1
+fi
 notify-send "Layout" "$next" 2>/dev/null || true
 echo "$next"

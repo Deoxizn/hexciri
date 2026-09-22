@@ -191,7 +191,8 @@ manager (dolphin on Hyprland, nautilus on niri — one pick in
 (`opencode` by default), `Mod+Escape` power menu, `Mod+Ctrl+V` clipboard
 history. Stock `Mod+W` (which launched the replaced firefox) is neutralized
 at deploy with no replacement — browser already lives on `Mod+Shift+B`.
-`Mod+T` cycles tiling layouts (dwindle/master/scrolling…).
+`Mod+T` cycles tiling layouts (dwindle/master/scrolling/monocle — all
+built-in, verified live via eval).
 Workspaces are niri verbs on both WMs: `Mod+1…9` switches, `Mod+Shift+1…9`
 moves the focused window. Binds use keycodes so they survive any layout
 (US/AZERTY alike), mirroring the stock CachyOS digit idiom.
@@ -367,8 +368,8 @@ already mirrors it on niri.
 | `firefox` | replaced by Brave Origin (+ `~/.mozilla` purged) |
 | `meld` | not part of the workflow (+ config purged) |
 | `cachyos-micro-settings`, `micro` | replaced by zed (+ config purged) |
-| `gnome-text-editor` | stock editor on CachyOS hyprland boxes, replaced by zed (niri boxes never had it — no-op there) |
-| `gnome-calculator` | stock calculator on CachyOS hyprland boxes; hexciri's calculator is the `Mod+Shift+C` fuzzel menu script, not an app |
+| `gnome-text-editor` | stock editor on CachyOS hyprland boxes, replaced by zed — force-removed (`-Rdd` breaks only `cachyos-hypr-noctalia`'s declared dep, vim precedent), existing boxes via the update migration (niri boxes never had it — no-op there) |
+| `gnome-calculator` | stock calculator on CachyOS hyprland boxes; hexciri's calculator is the `Mod+Shift+C` fuzzel menu script, not an app — same `-Rdd` treatment |
 | `vim` | force-removed (`-Rdd` breaks only `cachyos-zsh-config`'s declared dep; reinstalling vim undoes it; `~/.vim`/`~/.viminfo` purged) |
 
 ## More of what's inside
