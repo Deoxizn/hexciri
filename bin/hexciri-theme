@@ -60,6 +60,16 @@ theme_set() { # <theme-name>
   cp -rL "$NEXT_DIR" "$DEST_LINK"
   printf '%s' "$THEME_NAME" > "$STATE_BASE/theme.name"
 
+  # Strata/Omarchy follow compat: point the Quattro current-theme state at
+  # hexciri's live theme so Strata's Follow Omarchy tracks switches live
+  # (symlink trick as before — absolute links against the stable state
+  # paths, which survive the per-set directory replace above).
+  if command -v strata >/dev/null 2>&1; then
+    mkdir -p "$HOME/.local/state/omarchy/current/theme"
+    ln -sfn "$STATE_BASE/theme.name" "$HOME/.local/state/omarchy/current/theme.name"
+    ln -sfn "$STATE_BASE/theme/colors.toml" "$HOME/.local/state/omarchy/current/theme/colors.toml"
+  fi
+
   # restore preserved zz-user-* links (dangling as-is, so NFS mounts resolve later)
   if [[ -s $PRESERVE ]]; then
     while IFS= read -r -d '' lk && IFS= read -r -d '' tgt; do
