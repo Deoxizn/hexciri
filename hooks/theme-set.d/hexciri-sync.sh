@@ -375,6 +375,13 @@ if not re.search(r'^ColorScheme=hexciri$', kg, flags=re.M):
 # whatever was selected before (observed: black view text that only Dolphin's
 # own Window Color Scheme picker fixed). A deliberate per-app scheme loses to
 # theme-set by design (one pick recolors everything). Only when installed.
+# LIMITATION (minimal installs): with plain Qt "generic" platform theme (no
+# kde platform plugin mapped — check /proc/<dolphin>/maps), a fresh dolphin
+# can still show stale view text until its own menu re-selects hexciri, even
+# with all three files correct. Suspect: plasma-integration (the kde platform
+# theme provider) absent — and it is NOT part of cachyos-hypr-noctalia, so
+# installing it is conflict-free. If revisiting: sudo pacman -S --needed
+# plasma-integration + relaunch.
 import shutil
 if shutil.which("dolphin"):
     d_rc = Path.home() / ".config" / "dolphinrc"
