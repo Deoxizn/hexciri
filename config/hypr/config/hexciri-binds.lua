@@ -47,8 +47,14 @@ hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("hexciri-hyprland-layout"))
 -- does this globally too; these are the Mod-driven equivalents. Brackets, not
 -- PageUp/PageDown: laptop Fn-combos for paging don't reach the compositor
 -- with Mod held, but [ ] are physical keys everywhere.
+-- Each direction binds focus-next AND bring-to-top on one combo (Omarchy's
+-- Alt+Tab pair does exactly this): focus alone doesn't restack a monocle
+-- pile, so the raise is what makes the flip visible. Same-combo stacking is
+-- deliberate here — one logical op, not two fighting binds.
 hl.bind(mainMod .. " + bracketright", hl.dsp.window.cycle_next())
+hl.bind(mainMod .. " + bracketright", hl.dsp.window.bring_to_top())
 hl.bind(mainMod .. " + bracketleft", hl.dsp.window.cycle_next({ next = false }))
+hl.bind(mainMod .. " + bracketleft", hl.dsp.window.bring_to_top())
 
 -- Workspaces: niri verbs (Mod+digit switch / Mod+SHIFT+digit move). Stock
 -- CachyOS binds Mod+ALT+digit to switch and Mod+SHIFT+CONTROL|ALT+digit to
