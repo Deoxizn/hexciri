@@ -11,9 +11,10 @@ mkdir -p "$STATE_BASE"
 get() { cat "$STATE_BASE/$1" 2>/dev/null || true; }
 setv() { printf '%s' "$2" > "$STATE_BASE/$1"; }
 
-# Per-WM file manager: nemo on hyprland (GTK, dolphin's feature set without
-# the KDE theming tail), nautilus on niri. First seed only — an explicit
-# Defaults > Files pick is never overridden.
+# Per-WM file manager: strata on hyprland (keyboard-first Miller columns),
+# nautilus on niri. First seed only — an explicit Defaults > Files pick is
+# never overridden (strata installs per-user via hexciri-strata-install, so
+# the seed also fires on first open after installing it).
 _active_wm="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri)"
 
 # seed user core on first run
@@ -21,7 +22,9 @@ _active_wm="$("$SCRIPT_DIR/hexciri-session" wm 2>/dev/null || echo niri)"
 [[ -f $STATE_BASE/shell ]]    || setv shell fish
 [[ -f $STATE_BASE/browser ]]  || setv browser brave-origin
 if ! [[ -f $STATE_BASE/files ]]; then
-  if [[ $_active_wm == hyprland ]] && command -v nemo >/dev/null 2>&1; then
+  if [[ $_active_wm == hyprland ]] && command -v strata >/dev/null 2>&1; then
+    setv files strata
+  elif [[ $_active_wm == hyprland ]] && command -v nemo >/dev/null 2>&1; then
     setv files nemo
   else
     setv files nautilus
@@ -88,14 +91,15 @@ if [[ $(get images) == imv && $_active_wm == hyprland ]] && command -v qview >/d
   setv images qview
 fi
 
-# dolphin → nemo migration for the stored pick (hyprland only): nemo replaced
-# dolphin as the hyprland file manager (GTK, no KDE theming tail). A kept
-# "dolphin" value flips once nemo is installed; a deliberate dolphin
-# reinstall + re-pick keeps working (offered below, never flipped back —
-# same idiom as imv above, except removal of dolphin is kept-when-needed
-# elsewhere, so a present dolphin binary reads as explicit).
-if [[ $(get files) == dolphin && $_active_wm == hyprland ]] && command -v nemo >/dev/null 2>&1; then
-  setv files nemo
+# dolphin/nemo → strata migration for the stored pick (hyprland only): both
+# predecessors retire for strata once it's installed. A deliberate reinstall
+# + re-pick of either keeps working (offered below, never flipped back).
+if [[ $_active_wm == hyprland ]] && command -v strata >/dev/null 2>&1; then
+  _fpick="$(get files)"
+  if [[ $_fpick == dolphin || $_fpick == nemo ]]; then
+    setv files strata
+  fi
+  unset _fpick
 fi
 
 # mupdf → zathura migration for the stored pick: a kept "mupdf" value whose
@@ -188,7 +192,7 @@ case "${pick_type,,}" in
     ;;
   files)
     current="$(get files)"
-    choice="$(menu_via_fuzzel 'Files: ' -- "$(available files "$current" nemo nautilus dolphin thunar yazi)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
+    choice="$(menu_via_fuzzel 'Files: ' -- "$(available files "$current" strata nemo nautilus dolphin thunar yazi)")" || exec "$SCRIPT_DIR/hexciri-defaults"   # Esc = back to Defaults list
     [[ -n $choice ]] || exit 0
     setv files "$choice"
     "$SCRIPT_DIR/hexciri-mime-defaults" apply files >/dev/null 2>&1 || true

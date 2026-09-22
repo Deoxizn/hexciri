@@ -59,7 +59,7 @@ extra themes in `~/.config/hexciri/theme-sources/extra.list` — one
 Install adds what hexciri needs (kitty, Zed, Brave Origin, OpenCode…) and
 removes what they replace — once. Afterwards your installs and removals are
 yours; updates never undo them. File manager and image viewer follow the WM:
-nemo + qview on Hyprland, nautilus + imv on Niri — switchable any time in
+strata + qview on Hyprland, nautilus + imv on Niri — switchable any time in
 `System > Default Apps`.
 
 ## Niri or Hyprland
@@ -70,7 +70,7 @@ Same menu, themes and keys on both — only the tiling style differs:
 |---|---|---|
 | Tiling | scrollable columns | classic tiles + floating |
 | `Mod+L` | — (nothing to cycle) | cycles dwindle → scrolling → monocle |
-| Files / images | nautilus + imv | nemo + qview |
+| Files / images | nautilus + imv | strata + qview |
 
 Switch without reinstalling:
 

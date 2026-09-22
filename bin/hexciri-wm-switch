@@ -110,7 +110,7 @@ if [[ $TO == hyprland ]]; then
   OLD_STACK="cachyos-niri-noctalia niri xwayland-satellite"
   NEED_META=true  # stock hyprland.lua skeleton comes from the CachyOS meta
   META_PKG="cachyos-hypr-noctalia"
-  NATIVE_FM="nemo"
+  NATIVE_FM="strata"
   NATIVE_IMG="qview"
 else
   STACK_PKGS="niri xwayland-satellite xdg-desktop-portal-gtk noctalia"
@@ -127,12 +127,12 @@ fi
 # other pick — thunar, an explicit cross-WM choice — is never touched.
 # FM_OLDS covers both the other WM's native and the retired dolphin legacy.
 if [[ $TO == hyprland ]]; then
-  FM_OLDS="nautilus dolphin"; FM_NEW=nemo
-  IMG_OLD=imv;                IMG_NEW=qview
+  FM_OLDS="nautilus dolphin nemo"; FM_NEW=strata
+  IMG_OLD=imv;                   IMG_NEW=qview
   EXTRA_RM="gnome-text-editor gnome-calculator"
 else
-  FM_OLDS="nemo dolphin";     FM_NEW=nautilus
-  IMG_OLD=qview;              IMG_NEW=imv
+  FM_OLDS="strata nemo dolphin"; FM_NEW=nautilus
+  IMG_OLD=qview;                 IMG_NEW=imv
   EXTRA_RM=""
 fi
 # missing <pkgs...> → prints the subset not installed (empty when complete)
@@ -240,17 +240,34 @@ if [[ $YES != true ]]; then
   fi
 fi
 
-# 1. target stack
-if [[ -n $MISSING_STACK || -n $MISSING_APPS ]]; then
+# 1. target stack (pacman). Strata is a per-user release, never pacman —
+# handled in 1b below, so keep it out of the pacman line even when missing.
+if [[ $NATIVE_FM == strata ]]; then
+  _PAC_APPS="$(printf '%s' "$MISSING_APPS" | tr ' ' '\n' | grep -vx strata | tr '\n' ' ' | tr -s ' ' | sed 's/^ *//;s/ *$//')"
+else
+  _PAC_APPS="$MISSING_APPS"
+fi
+if [[ -n $MISSING_STACK || -n $_PAC_APPS ]]; then
   if have pacman; then
     # shellcheck disable=SC2086
-    sudo pacman -S --needed --noconfirm $MISSING_STACK $MISSING_APPS 2>&1 | tail -n 3 || \
-      info "package step partial — install by hand: sudo pacman -S --needed $MISSING_STACK $MISSING_APPS"
+    sudo pacman -S --needed --noconfirm $MISSING_STACK $_PAC_APPS 2>&1 | tail -n 3 || \
+      info "package step partial — install by hand: sudo pacman -S --needed $MISSING_STACK $_PAC_APPS"
   else
-    info "no pacman here — install by hand: $MISSING_STACK $MISSING_APPS"
+    info "no pacman here — install by hand: $MISSING_STACK $_PAC_APPS"
   fi
-else
+elif [[ $NATIVE_FM != strata ]] || have strata; then
   info "target stack already installed"
+fi
+unset _PAC_APPS
+
+# 1b. Strata (hyprland file manager): per-user release install, best-effort.
+if [[ $TO == hyprland ]] && ! have strata; then
+  if [[ -x $REPO/bin/hexciri-strata-install ]]; then
+    "$REPO/bin/hexciri-strata-install" 2>&1 | tail -n 3 || \
+      info "strata install skipped — run by hand: hexciri-strata-install"
+  else
+    info "no strata installer found — run by hand: hexciri-strata-install"
+  fi
 fi
 
 # 2. hyprland skeleton (stock hyprland.lua the overlays require into).
@@ -416,6 +433,23 @@ else
   else
     info "no pacman here — remove by hand: $OLD_STACK"
   fi
+fi
+# Per-user Strata install out (switching away from hyprland): binary, desktop
+# entry, icon and version state go; ~/.config/strata stays (custom themes and
+# actions are user data — a reinstall reuses them). Never the portal crumbs
+# purge here: with the binary gone first, a stale FileChooser override would
+# break dialogs — remove those too so GTK stays the chooser.
+if [[ $TO == niri && ${STORED_FM:-} == strata && $(cat "$STATE_BASE/files" 2>/dev/null || true) != strata ]]; then
+  pkill -x strata 2>/dev/null || true
+  rm -f "$HOME/.local/bin/strata" \
+    "$HOME/.local/share/applications/io.github.lgse.Strata.desktop" \
+    "$HOME/.local/share/icons/hicolor/scalable/apps/io.github.lgse.Strata.svg" \
+    "$HOME/.local/state/hexciri/strata.version" \
+    "$HOME/.local/share/xdg-desktop-portal/portals/strata.portal" \
+    "$HOME/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.strata.service" \
+    "$HOME/.local/share/dbus-1/services/io.github.lgse.Strata.FileManager1.service"
+  update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+  info "removed per-user Strata install (config kept)"
 fi
 # Second pass over replaced apps: the first pass ran while the old meta still
 # pinned them (blocked, kept); with the meta retired they uninstall. All

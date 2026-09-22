@@ -1,6 +1,6 @@
 #!/bin/bash
 # hexciri:setup=setup
-# hexciri:summary=Setup controller: Spotify+Spicetify bring-up, Battle.net launch, gaming setup menu (Strata retired)
+# hexciri:summary=Setup controller: Spotify+Spicetify bring-up, Battle.net launch, gaming setup menu, per-user Strata install
 # hexciri:subcommands=gaming strata spotify battlenet help
 set -euo pipefail
 
@@ -48,16 +48,90 @@ spotify_setup() {
   echo "done — restart Spotify to pick up the patched bundle."
 }
 
-# ══════════════════════════════════════════ Strata (retired)
+# ══════════════════════════════════════════ Strata
 strata_main() {
-  # Retired: hexciri used Strata as the default file manager + FileChooser,
-  # then reverted to Nautilus + GTK chooser (Strata's portal override leaves
-  # niri with no Open/Save dialog once removed). Kept as a stub so the
-  # hexciri-strata-install symlink and old autostart lines fail loudly
-  # instead of reinstalling the retired backend.
-  echo "hexciri-strata-install: retired — file manager is Nautilus, file chooser is GTK." >&2
-  echo "  (run 'hexciri-update self' to heal any Strata leftovers)" >&2
-  return 1
+  # Per-user Strata install from GitHub release archives (no pacman package).
+  # Idempotent: skips when the latest stable is already installed unless
+  # --force. Verifies sha256 before extracting. Installs binary + desktop
+  # entry + icon under ~/.local; NEVER the portal override (a stale strata
+  # FileChooser backend breaks every Open/Save dialog — FileChooser stays
+  # GTK) and never mime defaults (pick in System > Default Apps).
+  #   hexciri-strata-install [--check|--force|--version]
+  local GH=lgse/strata
+  local arch target
+  case "$(uname -m)" in
+    x86_64) target=x86_64-unknown-linux-gnu ;;
+    aarch64) target=aarch64-unknown-linux-gnu ;;
+    *) echo "hexciri-strata-install: unsupported arch $(uname -m)" >&2; return 1 ;;
+  esac
+  local glibc; glibc="$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}' || true)"
+  if [[ -n $glibc ]]; then
+    local maj=${glibc%%.*} rest=${glibc#*.} min=${rest%%.*}
+    if (( maj < 2 || (maj == 2 && min < 39) )); then
+      echo "hexciri-strata-install: glibc $glibc < 2.39 — build from source instead" >&2
+      return 1
+    fi
+  fi
+  local BIN="$HOME/.local/bin/strata"
+  local VER_FILE="$HOME/.local/state/hexciri/strata.version"
+  local CACHE="$HOME/.cache/hexciri/strata"
+  if [[ ${1:-} == "--version" ]]; then
+    if [[ -x $BIN ]]; then
+      cat "$VER_FILE" 2>/dev/null || echo "present (version unknown)"
+      return 0
+    fi
+    echo "not installed"; return 1
+  fi
+  local deps="gtk4 gtksourceview5 poppler-glib fontconfig bubblewrap ffmpeg gstreamer gst-libav gst-plugins-base gst-plugins-good gvfs"
+  local missing=""
+  local d
+  for d in $deps; do
+    pacman -Q "$d" >/dev/null 2>&1 || missing+="$d "
+  done
+  if [[ -n $missing ]]; then
+    echo "hexciri-strata-install: runtime deps missing ($missing)— installing"
+    # shellcheck disable=SC2086
+    sudo pacman -S --needed --noconfirm $missing || {
+      echo "hexciri-strata-install: dep install failed — run by hand: sudo pacman -S --needed $missing" >&2
+      return 1
+    }
+  fi
+  local tag
+  tag="$(curl -fsSL "https://api.github.com/repos/$GH/releases/latest" 2>/dev/null | python3 -c 'import sys,json
+try: print(json.load(sys.stdin).get("tag_name") or "")
+except Exception: print("")' || true)"
+  [[ -n $tag ]] || { echo "hexciri-strata-install: GitHub API unreachable (offline?)" >&2; return 1; }
+  local installed=""; [[ -f $VER_FILE ]] && installed="$(cat "$VER_FILE")"
+  if [[ ${1:-} == "--check" ]]; then
+    echo "installed: ${installed:-none} / latest: $tag"
+    [[ $installed == "$tag" ]] && return 0 || return 1
+  fi
+  if [[ -z ${1:-} || ${1:-} != "--force" ]] && [[ $installed == "$tag" && -x $BIN ]]; then
+    echo "hexciri-strata-install: $tag already installed"
+    return 0
+  fi
+  mkdir -p "$CACHE"
+  local arc="strata-${tag#v}-$target.tar.gz"
+  ( cd "$CACHE" && curl -fsSLO "https://github.com/$GH/releases/download/$tag/$arc" && curl -fsSLO "https://github.com/$GH/releases/download/$tag/$arc.sha256" ) || {
+    echo "hexciri-strata-install: download failed ($tag)" >&2; return 1
+  }
+  ( cd "$CACHE" && sha256sum --check "$arc.sha256" ) || {
+    echo "hexciri-strata-install: CHECKSUM FAILED — refusing to install" >&2; return 1
+  }
+  rm -rf "$CACHE/pkg" && mkdir -p "$CACHE/pkg"
+  tar -xzf "$CACHE/$arc" -C "$CACHE/pkg" || return 1
+  local srcdir="$CACHE/pkg/strata-${tag#v}-$target"
+  [[ -x $srcdir/strata ]] || { echo "hexciri-strata-install: archive layout changed (no strata binary at top level)" >&2; return 1; }
+  install -Dm755 "$srcdir/strata" "$BIN"
+  [[ -f $srcdir/io.github.lgse.Strata.svg ]] && install -Dm644 "$srcdir/io.github.lgse.Strata.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/io.github.lgse.Strata.svg"
+  if [[ -f $srcdir/io.github.lgse.Strata.desktop ]]; then
+    sed "s|^Exec=strata |Exec=$HOME/.local/bin/strata |" "$srcdir/io.github.lgse.Strata.desktop" > "$HOME/.local/share/applications/io.github.lgse.Strata.desktop"
+  fi
+  update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+  gtk-update-icon-cache -qtf "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+  mkdir -p "$(dirname "$VER_FILE")"
+  printf '%s' "$tag" > "$VER_FILE"
+  echo "hexciri-strata-install: $tag installed (pick it in System > Default Apps > Files)"
 }
 
 # ══════════════════════════════════════════ Battle.net

@@ -337,13 +337,13 @@ update_self() {
         printf '! %s\n' "$1" >> "$manifest"
       fi
     }
-    # Hexciri sections: the binds/autostart bodies (repo config/hypr/sections/)
-    # paste once into the stock binds.lua/autostart.lua under a HEXCIRI
+    # Hexciri sections: the binds/autostart/windowrules bodies (repo
+    # config/hypr/sections/) paste once into the stock files under a HEXCIRI
     # marker. Seed-once, niri-fragment style: never refreshed afterwards, so
-    # hand-edits and machine customs live with the file forever. Stale overlay
-    # requires are removed below (a require of a missing file is a config
-    # error); hexciri-layout.lua stays a separate owned file (the cycler
-    # rewrites it per press — embedding it would churn user files).
+    # hand-edits and machine customs live with the file forever. The live
+    # layout value is a marked block in misc.lua (patched per press by the
+    # cycler, seeded here when absent). Stale overlay requires are removed
+    # below (a require of a missing file is a config error).
     # shellcheck disable=SC2086
     for _pair in "binds.lua:binds" "autostart.lua:autostart"; do
       _lf="$dst/${_pair%%:*}"; _name="${_pair##*:}"; _src="$REPO/config/hypr/sections/$_name.lua"
@@ -369,40 +369,37 @@ update_self() {
     done
     unset _rm
 
-    # hexciri-layout.lua (live layout file owned by hexciri-hyprland-layout):
-    # seed from the repo template when absent — never overwrite, the cycler
-    # rewrites it on every press. Assert the require so the file loads.
-    if [[ ! -f $dst/hexciri-layout.lua && -f $src/hexciri-layout.lua ]]; then
-      if cp -f "$src/hexciri-layout.lua" "$dst/hexciri-layout.lua" 2>/dev/null; then
-        echo "seeded hyprland live layout (hexciri-layout.lua)"
-      fi
+    # Live layout state lives as a HEXCIRI-marked block in misc.lua (written
+    # by hexciri-hyprland-layout per press, seeded here when absent). Any
+    # stale require of the retired hexciri-layout.lua file is removed (a
+    # require of a missing file is a config error).
+    LAYOUT_MISC="$dst/misc.lua"
+    if [[ -f $LAYOUT_MISC ]] && ! grep -qxF -- "-- ── HEXCIRI layout ──" "$LAYOUT_MISC" 2>/dev/null; then
+      { printf '\n-- ── HEXCIRI layout ──\n'; printf 'hl.config({\n    general = {\n        layout = "dwindle",\n    },\n})\n'; printf -- '-- ── END HEXCIRI layout ──\n'; } >> "$LAYOUT_MISC" && \
+        echo "hyprland: added hexciri layout block (misc.lua)"
     fi
-    if ! grep -q 'require("config.hexciri-layout")' "$main" 2>/dev/null; then
-      cp -f "$main" "$main.hexciri.bak" 2>/dev/null || true
-      if grep -q 'require("config.hexciri-binds")' "$main" 2>/dev/null; then
-        sed -i '/require("config.hexciri-binds")/a require("config.hexciri-layout")' "$main" && \
-          echo "hyprland: required config.hexciri-layout after hexciri binds"
-      fi
+    unset LAYOUT_MISC
+    # Personal window rules live as a HEXCIRI-marked section in the stock
+    # windowrules.lua (seed-once from the repo source, never refreshed).
+    # Stale require of the retired overlay file is removed the same way.
+    if [[ -f $dst/windowrules.lua && -f "$REPO/config/hypr/sections/windowrules.lua" ]] && ! grep -qxF -- "-- ── HEXCIRI windowrules ──" "$dst/windowrules.lua" 2>/dev/null; then
+      { printf '\n-- ── HEXCIRI windowrules ──\n'; cat "$REPO/config/hypr/sections/windowrules.lua"; printf -- '-- ── END HEXCIRI windowrules ──\n'; } >> "$dst/windowrules.lua" && \
+        echo "hyprland: added hexciri windowrules section (windowrules.lua)"
     fi
-
-    # hexciri-windowrules.lua (TUI.float float + size, fastfetch float):
-    # file-based overlay (kept: rules must load AFTER stock config.windowrules
-    # and last-match-wins needs file order). Seed when absent, then assert
-    # the require after stock. Mirrors niri window-rules.kdl.
-    if [[ ! -f $dst/hexciri-windowrules.lua && -f $src/hexciri-windowrules.lua ]]; then
-      if cp -f "$src/hexciri-windowrules.lua" "$dst/hexciri-windowrules.lua" 2>/dev/null; then
-        echo "seeded hyprland overlay (hexciri-windowrules.lua)"
+    for _rm in layout windowrules; do
+      if grep -q "require(\"config.hexciri-$_rm\")" "$main" 2>/dev/null; then
+        cp -f "$main" "$main.hexciri.bak" 2>/dev/null || true
+        # shellcheck disable=SC2086
+        sed -i "/require(\"config.hexciri-$_rm\")/d" "$main" && \
+          echo "hyprland: removed stale require config.hexciri-$_rm (folded into stock files)"
       fi
-    fi
-    if ! grep -q 'require("config.hexciri-windowrules")' "$main" 2>/dev/null; then
-      cp -f "$main" "$main.hexciri.bak" 2>/dev/null || true
-      if grep -q 'require("config.windowrules")' "$main" 2>/dev/null; then
-        sed -i '/require("config.windowrules")/a require("config.hexciri-windowrules")' "$main" && \
-          echo "hyprland: required config.hexciri-windowrules after stock windowrules"
-      else
-        echo "hyprland: NOTE could not place config.hexciri-windowrules (no stock windowrules require found)" >&2
-      fi
-    fi
+    done
+    unset _rm
+    for _lf in "$dst/hexciri-layout.lua" "$dst/hexciri-windowrules.lua"; do
+      [[ -f $_lf ]] || continue
+      echo "hyprland: NOTE $_lf is retired (folded into stock files) — delete it by hand" >&2
+    done
+    unset _lf
 
     # Neutralize stock binds that the hexciri section owns outright. In this
     # shell a duplicate combo STACKS (both actions fire) — the overlay being
@@ -1053,6 +1050,11 @@ EOF
   # migration. Healing first lets the sync see an already-matching combo.
   migrate_strata_to_nautilus() {
     local changed=0 cur gtk_hook mimeapps strata_ref kb pc portal_changed=0
+    # Strata is a supported file manager again (hyprland default): a current
+    # strata pick is deliberate — never purge a live install from under it.
+    if [[ $(cat "$HOME/.local/state/hexciri/defaults/files" 2>/dev/null || true) == strata ]]; then
+      return 0
+    fi
     # 1. per-user Strata install out (binary, desktop, icon, portal, dbus
     #    services, share/cache, config, version state). A live --portal daemon
     #    recreates config, so stop it first. Runs unconditionally for the
@@ -1331,9 +1333,13 @@ EOF
     images_pick="$(cat "$HOME/.local/state/hexciri/defaults/images" 2>/dev/null || true)"
     # Dolphin retired for nemo: goes once nemo is live and the stored pick
     # isn't dolphin itself. Nautilus strays (pre-nemo seeds) go under the same
-    # gate — a box whose pick is nautilus keeps it.
+    # gate — a box whose pick is nautilus keeps it. Nemo itself retires the
+    # same way once strata (the current hyprland default) is picked.
     if command -v nemo >/dev/null 2>&1 && [[ $files_pick != dolphin && $files_pick != nautilus ]]; then
       rm_list+="dolphin nautilus "
+    fi
+    if command -v nemo >/dev/null 2>&1 && [[ $files_pick == strata ]]; then
+      rm_list+="nemo "
     fi
     if command -v qview >/dev/null 2>&1 && [[ $images_pick != imv ]]; then
       rm_list+="imv "

@@ -18,7 +18,7 @@ hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("xdg-open https://"))
 -- — firefox is replaced by Brave Origin — and is neutralized at deploy with
 -- NO replacement: browser already lives on Mod+Shift+B. One browser launcher.
 -- Mod+Shift+F = File manager, niri verb. Dispatches the user's Defaults pick
--- (nemo on hyprland boxes, nautilus on niri) via hexciri-defaults run files.
+-- (strata on hyprland boxes, nautilus on niri) via hexciri-defaults run files.
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.exec_cmd("hexciri-defaults run files"))
 
 -- Floating toggle on Mod+T (Omarchy parity): the niri verb and the stock

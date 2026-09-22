@@ -298,6 +298,15 @@ if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&
   sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \
     info "kept brave-bin (removal failed) — remove by hand if unwanted"
 fi
+# Per-user Strata install (hyprland file manager): release binary, no pacman
+# package — the installer verifies sha256 and skips when current. Needs
+# network; deps install via sudo inside. Best-effort, never fatal. niri
+# boxes skip it (nautilus serves there).
+if [[ ${_hexciri_install_wm:-niri} == hyprland ]] && [[ -x "$REPO/bin/hexciri-strata-install" ]]; then
+  info "installing Strata (hyprland file manager, per-user release)"
+  "$REPO/bin/hexciri-strata-install" 2>&1 | sed 's/^/  /' || \
+    info "Strata install skipped — run by hand: hexciri-strata-install"
+fi
 # Default-app file associations: one table (images, documents, files,
 # browser) pins the stored picks, healing only browser-stolen, empty, or
 # stale slots — a deliberate pick stays. Best-effort, never fatal; re-runs
