@@ -22,9 +22,36 @@ set -euo pipefail
 # hexciri-theme-set-templates regenerates from the active theme on every
 # theme switch. CLI --*-color flags would override that ini, so only
 # non-color flags live here.
+# --dpi-aware=no is deliberate: fuzzel's auto/yes scales by the panel's
+# physical DPI (~1.66x on a 174-DPI 1080p panel) while the compositor scale
+# is 1 and everything else (Noctalia, Qt) renders at 1x — auto makes every
+# menu gigantic next to a normal launcher. Revisit only for true scale-2
+# panels, and then gate on the live output scale, not a blanket revert.
 FZ=( fuzzel \
     --font="JetBrainsMono Nerd Font:size=11" \
+    --dpi-aware=no \
     --border-width=2 )
+
+# Fuzzel is single-instance per Wayland display (lockfile): launching a second
+# menu while one is open dies instantly ("failed to acquire lock"), and every
+# caller reads that as "cancelled" and bounces to its parent — which looks
+# like "menu X doesn't open at all". Probe the lock first and say so instead
+# of silently bouncing.
+_fuzzel_busy() {
+  local lock
+  [[ -n ${WAYLAND_DISPLAY:-} ]] || return 1
+  lock="${XDG_RUNTIME_DIR:-/run/user/$UID}/fuzzel-${WAYLAND_DISPLAY}.lock"
+  [[ -f $lock ]] || return 1
+  flock -n "$lock" true 2>/dev/null && return 1 || return 0
+}
+
+_require_free() {
+  if _fuzzel_busy; then
+    notify-send -a hexciri "Menu already open" \
+      "Close the open menu (Esc) first — only one fuzzel menu runs at a time." 2>/dev/null || true
+    exit 1
+  fi
+}
 
 # ── search providers ──
 # Builtin table only — the single source of truth for web searches. The picker
@@ -55,6 +82,7 @@ DEFAULT_PROVIDER="${HEXCIRI_SEARCH_PROVIDER:-$DEFAULT_PROVIDER}"
 urlenc() { python3 -c 'import sys,urllib.parse;sys.stdout.write(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
 
 mode_search() {
+    _require_free
     local prov="${1:-$DEFAULT_PROVIDER}"
     local tpl="${PROVIDERS[$prov]:-${PROVIDERS[$DEFAULT_PROVIDER]}}"
     local lbl="${LABELS[$prov]:-$prov}"
@@ -65,6 +93,7 @@ mode_search() {
 }
 
 mode_calc() {
+    _require_free
     local expr res
     expr="$("${FZ[@]}" --dmenu --prompt-only="Calc: " --width=45)" || exit 0
     [[ -n $expr ]] || exit 0
@@ -74,6 +103,7 @@ mode_calc() {
 }
 
 mode_run() {
+    _require_free
     local cmd
     cmd="$(compgen -c 2>/dev/null | sort -u | "${FZ[@]}" --dmenu --prompt="Run: " --width=70 --lines=12)" || exit 0
     [[ -n $cmd ]] || exit 0
@@ -94,5 +124,11 @@ case "${1:-}" in
     calc)   mode_calc ;;
     run)    mode_run ;;
     providers) mode_providers ;;
-    *)      exec "${FZ[@]}" "$@" ;;   # app launcher / --dmenu passthrough
+    *)
+      # Only dmenu consumers take the single-instance lock; --help/version
+      # and other passthrough must never notify.
+      case " $* " in
+        *" --dmenu"*) _require_free ;;
+      esac
+      exec "${FZ[@]}" "$@" ;;   # app launcher / --dmenu passthrough
 esac

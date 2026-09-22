@@ -303,7 +303,7 @@ would break keys, logins, or themes if missing).
 
 One-time swap at install, hands off after that. The framework sync
 (`hexciri-sync` / `hexciri-update self`) never touches packages except the
-tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl fwupd` (nautilus heals only when no file manager exists — dolphin boxes skip it)
+tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl fwupd ttf-jetbrains-mono-nerd` (nautilus heals only when no file manager exists — dolphin boxes skip it; the nerd font is the stack default for kitty/fuzzel/bar, installed not forced — your configured families stay yours)
 it self-heals — your later manual changes stick.
 Best-effort throughout: offline boxes finish, missing bits print their manual
 fallback.
@@ -321,7 +321,7 @@ stay as you left them.
 | `zed` | default editor |
 | `opencode` | default AI agent (``Mod+` ``) |
 | `localsend` | Share menu sender (ships `localsend-cli` ≥ 1.18) |
-| `fuzzel` | menu backbone (dmenu for root menu + all pickers) — the menu is dead without it |
+| `fuzzel` | menu backbone (dmenu for root menu + all pickers) — the menu is dead without it; runs `--dpi-aware=no` so menus render at the compositor scale instead of the panel's physical DPI |
 | `gtksourceview5` | text-viewer libs (gedit-style viewers) |
 | `gpu-screen-recorder` | Screen recording blade |
 | `tesseract` | OCR-text-from-screen blade |

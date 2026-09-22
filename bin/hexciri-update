@@ -1352,7 +1352,7 @@ EOF
   # without this gate every update would drag nautilus back onto hyprland.
   # (imv needs no gate here: it was never layer, install-time only.)
   ensure_layer_pkgs() {
-    local pkgs="polkit-gnome gnome-keyring adw-gtk-theme brightnessctl playerctl fwupd" missing=""
+    local pkgs="polkit-gnome gnome-keyring adw-gtk-theme brightnessctl playerctl fwupd ttf-jetbrains-mono-nerd" missing=""
     if ! command -v dolphin >/dev/null 2>&1 && ! command -v nautilus >/dev/null 2>&1; then
       pkgs+=" nautilus"
     fi

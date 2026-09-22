@@ -587,6 +587,29 @@ themes_menu() { # [choice]  — interactive menu; choice arg enables menu-search
 }
 
 # ══════════════════════════════════════════════ hexciri-themes-list (browser)
+# make_thumb <src> <dst>: shrink src to a menu-sized thumbnail for picker
+# icons. The themes picker renders rows at --line-height=150 with no
+# icon-size cap, so full-res previews (5120px wallpapers, symlinked raw into
+# the cache) blow rows to ~350px and the window off a 1080p screen (only ~3
+# themes visible). 144px thumbs keep rows at exactly 150. Regenerates when
+# src is newer; falls back to a symlink (today's behavior) when no scaler
+# exists on the box.
+make_thumb() {
+  local src=$1 dst=$2
+  if [[ -f $dst && ! $src -nt $dst ]]; then
+    return 0
+  fi
+  if command -v magick >/dev/null 2>&1; then
+    magick "$src[0]" -thumbnail '144x144>' -strip "$dst" 2>/dev/null && return 0
+  elif command -v convert >/dev/null 2>&1; then
+    convert "$src[0]" -thumbnail '144x144>' -strip "$dst" 2>/dev/null && return 0
+  elif command -v ffmpeg >/dev/null 2>&1; then
+    ffmpeg -hide_banner -loglevel error -y -i "$src" -frames:v 1 \
+      -vf "scale='min(144,iw)':-1" "$dst" 2>/dev/null && return 0
+  fi
+  ln -sfn "$src" "$dst" 2>/dev/null || return 1
+}
+
 themes_list() {
   local cache_dir current name preview theme here bindir SCRIPT_DIR_here
   here="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
@@ -597,13 +620,9 @@ themes_list() {
   current="$(theme_current)"
 
   find_preview() {
-    local name=$1 dir ext src base theme_path
+    local name=$1 dir ext src base theme_path thumb
 
     dir=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
-
-    for ext in png jpg jpeg webp gif bmp; do
-      [[ -e $cache_dir/$dir.$ext ]] && { printf '%s\n' "$cache_dir/$dir.$ext"; return; }
-    done
 
     theme_path=""
     for base in "$HOME/.config/hexciri/themes" "$HEXCIRI_PATH/themes"; do
@@ -623,9 +642,14 @@ themes_list() {
     fi
     [[ -n $src ]] || return 0
 
-    ext=${src##*.}
-    ln -sfn "$src" "$cache_dir/$dir.${ext,,}"
-    printf '%s\n' "$cache_dir/$dir.${ext,,}"
+    # Drop legacy full-res cache symlinks (pre-thumbnail era): same stem, any
+    # ext — they pin huge rows. Only symlinks, never real files.
+    for ext in png jpg jpeg webp gif bmp; do
+      [[ -L $cache_dir/$dir.$ext ]] && rm -f "$cache_dir/$dir.$ext"
+    done
+    thumb="$cache_dir/$dir.thumb.png"
+    make_thumb "$src" "$thumb" || return 0
+    printf '%s\n' "$thumb"
   }
 
   # List installable themes (user dir + repo-supplied), title-cased for display.
