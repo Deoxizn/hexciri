@@ -1275,6 +1275,55 @@ EOF
     fi
   }
 
+  # Hyprland-native app migration (runs every pass; no-op when clean or on
+  # niri). The first install.sh baked the niri stack (nautilus, imv,
+  # gtksourceview5) onto every box, and CachyOS hyprland preinstalls its own
+  # editor + calculator — but hyprland boxes ship Qt natives (dolphin, qview)
+  # and hexciri's editor/calculator are zed + the fuzzel calc menu script.
+  # Remove the redundant half once its replacement is live. Safety rules (same
+  # as the one-time stock removals): only-if-installed, kept-when-needed, and
+  # a role package goes only when the stored pick isn't itself (an explicit
+  # user pick is never uninstalled from under them). Stale per-user desktop
+  # overrides for removed packages go too (mirrors the mupdf stale override).
+  migrate_hyprland_native_apps() {
+    local wm files_pick images_pick p rm_list=""
+    command -v pacman >/dev/null 2>&1 || return 0
+    wm="$("$REPO/bin/hexciri-session" wm 2>/dev/null || echo niri)"
+    [[ $wm == hyprland ]] || return 0
+    files_pick="$(cat "$HOME/.local/state/hexciri/defaults/files" 2>/dev/null || true)"
+    images_pick="$(cat "$HOME/.local/state/hexciri/defaults/images" 2>/dev/null || true)"
+    if command -v dolphin >/dev/null 2>&1 && [[ $files_pick != nautilus ]]; then
+      rm_list+="nautilus "
+    fi
+    if command -v qview >/dev/null 2>&1 && [[ $images_pick != imv ]]; then
+      rm_list+="imv "
+    fi
+    if command -v zeditor >/dev/null 2>&1; then
+      rm_list+="gnome-text-editor "
+    fi
+    # No app dependency: hexciri's calculator is the Mod+Shift+C fuzzel menu
+    # script (libqalculate), and the viewer libs lost their last consumer
+    # with the editor + calculator.
+    rm_list+="gnome-calculator gtksourceview5 "
+    for p in $rm_list; do
+      pacman -Q "$p" >/dev/null 2>&1 || continue
+      # shellcheck disable=SC2086
+      if sudo pacman -Rns --noconfirm "$p" 2>&1 | tail -n 2; then
+        echo "migrated: removed $p (hyprland-native replacement is live)"
+      else
+        echo "migrated: kept $p (something still needs it)"
+      fi
+    done
+    if ! pacman -Q imv >/dev/null 2>&1; then
+      for p in imv imv-dir; do
+        if [[ -f $HOME/.local/share/applications/$p.desktop ]]; then
+          rm -f "$HOME/.local/share/applications/$p.desktop" && \
+            echo "migrated: removed stale $p desktop override"
+        fi
+      done
+    fi
+  }
+
   # Layer-critical packages: without polkit-gnome every pkexec app (btrfs-assistant,
   # gparted) is dead — no agent, no password dialog. gnome-keyring is Noctalia's
   # Secret Service provider (calendar tokens and other secrets have nowhere to
@@ -1381,6 +1430,7 @@ EOF
   migrate_fuzzel_launcher_to_noctalia
   migrate_mupdf_to_zathura
   migrate_vlc_to_mpv
+  migrate_hyprland_native_apps
   sync_keybinds
   sync_hyprland
   sync_kitty
