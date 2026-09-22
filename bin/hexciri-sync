@@ -264,6 +264,53 @@ if [[ $EUID -eq 0 ]] && command -v noctalia-greeter >/dev/null 2>&1 && [[ -n ${n
   fi
 fi
 
+# ── SDDM theme-follow privilege path: the theme hook stages wallpaper +
+# ── palette per theme-set and installs them via the constrained helper below
+# ── (pkexec action org.hexciri.sddm-apply). Root-only (writes libexec,
+# ── polkit action + rule); the user-context pass skips — the root pass owns
+# ── it. Refreshes when the repo advances (cmp-guarded, silent steady state):
+# ── the helper copy (root-owned trusted prefix — the repo copy is NEVER run
+# ── privileged), its polkit action, and the site-local rule that makes
+# ── active local sessions promptless (defaults stay auth_admin).
+if [[ $EUID -eq 0 && -n $REPO && -d $REPO/branding/sddm ]]; then
+  HELPER_SRC="$REPO/bin/hexciri-sddm-apply" HELPER_DST=/usr/local/libexec/hexciri-sddm-apply
+  if [[ -f $HELPER_SRC ]]; then
+    if [[ ! -f $HELPER_DST ]] || ! cmp -s "$HELPER_SRC" "$HELPER_DST" 2>/dev/null; then
+      mkdir -p "$(dirname "$HELPER_DST")"
+      install -m755 "$HELPER_SRC" "$HELPER_DST" 2>/dev/null && log "sddm follow helper installed ($HELPER_DST)"
+      chmod 755 "$HELPER_DST" 2>/dev/null || true
+    fi
+  fi
+  POLICY_SRC="$REPO/default/polkit/org.hexciri.sddm-apply.policy"
+  POLICY_DST=/usr/share/polkit-1/actions/org.hexciri.sddm-apply.policy
+  if [[ -f $POLICY_SRC ]]; then
+    if [[ ! -f $POLICY_DST ]] || ! cmp -s "$POLICY_SRC" "$POLICY_DST" 2>/dev/null; then
+      install -m644 "$POLICY_SRC" "$POLICY_DST" 2>/dev/null && log "sddm follow polkit action installed"
+    fi
+  fi
+  RULES_DST=/etc/polkit-1/rules.d/49-hexciri-sddm.rules
+  RULES_WANT="$(cat <<'RULEEOF'
+polkit.addRule(function (action, subject) {
+  if (
+    action.id == "org.hexciri.sddm-apply" &&
+    action.lookup("program") == "/usr/local/libexec/hexciri-sddm-apply" &&
+    action.lookup("user") == "root" &&
+    subject.local &&
+    subject.active
+  ) {
+    return polkit.Result.YES;
+  }
+});
+RULEEOF
+)"
+  if [[ ! -f $RULES_DST ]] || [[ $(cat "$RULES_DST" 2>/dev/null) != "$RULES_WANT" ]]; then
+    printf '%s\n' "$RULES_WANT" > "$RULES_DST" 2>/dev/null && chmod 644 "$RULES_DST" 2>/dev/null && \
+      log "sddm follow promptless for active local sessions ($RULES_DST)" || \
+      log "WARNING: could not write $RULES_DST (sddm follow will prompt for admin auth)"
+  fi
+  unset HELPER_SRC HELPER_DST POLICY_SRC POLICY_DST RULES_DST RULES_WANT
+fi
+
 # ── 6. xwayland-satellite pin (upstream #468): 0.8.2 regressed popup
 # ── positioning (commit 3273a0f) — X11 dropdowns (Steam menus, etc.) spawn
 # ── offset and lose hover on niri. Hold at last-good 0.8.1 until a fixed

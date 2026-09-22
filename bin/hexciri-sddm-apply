@@ -1,0 +1,75 @@
+#!/bin/bash
+# hexciri:summary=Install staged SDDM theme follow (wallpaper + palette) — root via pkexec only
+# hexciri-sddm-apply --sync <staging-dir>
+#
+# Constrained privilege helper: copies a caller-staged wallpaper + theme.conf
+# palette keys into the hexciri SDDM theme. Runs as root EXCLUSIVELY through
+# pkexec (action org.hexciri.sddm-apply, argv1 pinned to --sync); direct
+# sudo/doas/run0 and hand-rolled argv are refused. The staging dir must be
+# exactly /run/user/<pkexec-uid>/hexciri-sddm and owned by that uid, and the
+# target theme must already be deployed (root hexciri-sync owns that).
+# Install location (trusted, root-owned): /usr/local/libexec/hexciri-sddm-apply
+# — never run the repo copy privileged.
+set -euo pipefail
+
+fail() { echo "hexciri-sddm-apply: $*" >&2; exit 1; }
+
+[[ ${1:-} == "--sync" ]] || fail "usage: hexciri-sddm-apply --sync <staging-dir>"
+[[ -n ${2:-} ]] || fail "usage: hexciri-sddm-apply --sync <staging-dir>"
+[[ -n ${PKEXEC_UID:-} ]] || fail "refusing: run through pkexec, not sudo/su"
+[[ $PKEXEC_UID =~ ^[0-9]+$ ]] || fail "refusing: bad PKEXEC_UID"
+
+STAGING="$2"
+EXPECT="/run/user/$PKEXEC_UID/hexciri-sddm"
+[[ $STAGING == "$EXPECT" ]] || fail "refusing: staging must be $EXPECT"
+[[ -d $STAGING && ! -L $STAGING ]] || fail "refusing: no staging dir at $STAGING"
+owner="$(stat -c %u "$STAGING" 2>/dev/null || echo x)"
+[[ $owner == "$PKEXEC_UID" ]] || fail "refusing: staging not owned by uid $PKEXEC_UID"
+
+TARGET=/usr/share/sddm/themes/hexciri
+[[ -f $TARGET/Main.qml ]] || fail "no deployed hexciri SDDM theme (run sudo hexciri-sync first)"
+
+CONF="$STAGING/sddm-theme.conf"
+[[ -f $CONF ]] || fail "no staged sddm-theme.conf"
+
+# Whitelisted keys only; hex colors + a basenamed image filename. Anything
+# else in the staged file is ignored — a caller can't smuggle QML or paths.
+declare -A VALS=()
+while IFS='=' read -r k v; do
+  case "$k" in
+    Background|Muted|Error)
+      [[ $v =~ ^#[0-9a-fA-F]{6}$ ]] || fail "refusing: bad color for $k"
+      VALS[$k]="$v" ;;
+    BackgroundFile)
+      [[ $v =~ ^[A-Za-z0-9_.-]+$ && $v != *".."* ]] || fail "refusing: bad filename"
+      case "$v" in
+        *.jpg|*.jpeg|*.png|*.webp) VALS[$k]="$v" ;;
+        *) fail "refusing: bad image extension" ;;
+      esac ;;
+  esac
+done < "$CONF"
+[[ -n ${VALS[Background]:-} && -n ${VALS[Muted]:-} && -n ${VALS[Error]:-} ]] || \
+  fail "staged sddm-theme.conf misses a complete palette (Background/Muted/Error)"
+
+# Wallpaper first (optional): swap the single background.* file. Sibling
+# extensions from a previous theme are removed so only the live one exists.
+if [[ -n ${VALS[BackgroundFile]:-} ]]; then
+  src="$STAGING/${VALS[BackgroundFile]}"
+  [[ -f $src && ! -L $src && -s $src ]] || fail "refusing: staged wallpaper missing or empty"
+  rm -f "$TARGET"/background.jpg "$TARGET"/background.jpeg "$TARGET"/background.png "$TARGET"/background.webp
+  install -m644 "$src" "$TARGET/${VALS[BackgroundFile]}" \
+    || fail "could not install wallpaper"
+  echo "hexciri-sddm-apply: wallpaper → ${VALS[BackgroundFile]}"
+fi
+
+# Palette merge: surgical per-key replace-or-append, everything else in
+# theme.conf (Fingerprint, PreferredSession, Username) untouched.
+for k in Background Muted Error BackgroundFile; do
+  [[ -n ${VALS[$k]:-} ]] || continue
+  if grep -Eq "^$k=" "$TARGET/theme.conf" 2>/dev/null; then
+    sed -i -E "s/^$k=.*/$k=${VALS[$k]}/" "$TARGET/theme.conf"
+  else
+    printf '%s=%s\n' "$k" "${VALS[$k]}" >> "$TARGET/theme.conf"
+  fi
+done
+echo "hexciri-sddm-apply: palette synced (Background=${VALS[Background]} Muted=${VALS[Muted]} Error=${VALS[Error]})"

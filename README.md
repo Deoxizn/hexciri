@@ -242,7 +242,7 @@ windsurf, typora, obsidian-terminal), browsers (firefox, zen, qutebrowser,
 hermes), Discord (+ ClearVision/system24 variants), GTK, Qt6ct, Spotify /
 Spicetify, file managers (superfile), launchers (vicinae), bar and
 notifications (swaync, Noctalia palette), cava, cliamp, Steam, Heroic,
-branding (fastfetch logo, SDDM), cursor, nautilus, login greeter (noctalia-greeter
+branding (fastfetch logo, SDDM login follows each theme too), cursor, nautilus, login greeter (noctalia-greeter
 appearance sync on greetd boxes — needs the one-time
 `sudo noctalia-greeter passwordless-sync enable <user>` that install/root-sync
 own, else each sync asks for admin auth). Your own

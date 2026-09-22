@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+<policyconfig>
+  <!-- hexciri SDDM theme-follow: stage-then-install wallpaper + palette into
+       the hexciri SDDM theme only. Prompts for admin auth unless the
+       site-local 49-hexciri-sddm.rules allows active local sessions. -->
+  <action id="org.hexciri.sddm-apply">
+    <description>Apply staged theme to the hexciri SDDM login theme</description>
+    <message>Authentication is required to update the login screen theme</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/libexec/hexciri-sddm-apply</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">--sync</annotate>
+  </action>
+</policyconfig>

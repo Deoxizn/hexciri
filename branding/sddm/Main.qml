@@ -5,7 +5,24 @@ Rectangle {
   id: root
   width: Screen.width
   height: Screen.height
-  color: "#0b0911"
+  color: root.bgColor
+
+  // Theme wallpaper (staged per theme-set as background.<ext> beside this
+  // file). Missing/unreadable → renders nothing and the base color above
+  // carries the screen, i.e. the classic static look.
+  Image {
+    anchors.fill: parent
+    source: root.bgFile.length > 0 ? root.bgFile : ""
+    fillMode: Image.PreserveAspectCrop
+    asynchronous: true
+  }
+  // Readability dim over bright wallpapers (same static look when absent).
+  Rectangle {
+    anchors.fill: parent
+    visible: root.bgFile.length > 0
+    color: "#000000"
+    opacity: 0.45
+  }
 
   // Design canvas is 640x790 and never scales above 1x, so on big panels
   // (2880x1920 here) everything renders at true pixel size; smaller panels
@@ -25,6 +42,13 @@ Rectangle {
   // pinned WM first, then SDDM's remembered last session, then any known
   // compositor. A hardcoded niri default would drag a Hyprland box back
   // into niri whenever both sessions are installed.
+  // Live theme-follow (written per theme-set by hexciri-sddm-apply into
+  // theme.conf): wallpaper file + palette. Absent keys fall back to the
+  // static hexciri look, so an old theme.conf still renders fine.
+  property string bgColor: (config.Background && config.Background.length > 0) ? config.Background : "#0b0911"
+  property string mutedColor: (config.Muted && config.Muted.length > 0) ? config.Muted : "#b6849d"
+  property string errorColor: (config.Error && config.Error.length > 0) ? config.Error : "#f7768e"
+  property string bgFile: (config.BackgroundFile && config.BackgroundFile.length > 0) ? config.BackgroundFile : ""
   property string preferredSession: {
     if (config.PreferredSession && config.PreferredSession.length > 0) return config.PreferredSession
     return ""
@@ -180,7 +204,7 @@ Rectangle {
       Text {
         visible: root.infoText.length > 0 || root.errText.length > 0
         text: root.errText.length > 0 ? root.errText : root.infoText
-        color: root.errText.length > 0 ? "#f7768e" : "#b6849d"
+        color: root.errText.length > 0 ? root.errorColor : root.mutedColor
         font.family: "JetBrainsMono Nerd Font"
         font.pixelSize: 16
         anchors.horizontalCenter: parent.horizontalCenter
