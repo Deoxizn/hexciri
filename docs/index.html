@@ -73,6 +73,9 @@
   }
   .card h3 { font-size: 1.02rem; color: var(--rose); margin-bottom: 0.4rem; }
   .card p { font-size: 0.94rem; color: var(--muted); }
+  table.keys { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+  table.keys td { padding: 7px 10px; border-bottom: 1px solid var(--line); color: var(--muted); }
+  table.keys td:first-child { white-space: nowrap; width: 190px; }
 </style>
 </head>
 <body>
@@ -104,7 +107,22 @@
 </section>
 <section id="keys">
   <h2>The keys that matter</h2>
-  <p class="sub">Mod = Super. <code>Mod+Alt+Space</code> menu · <code>Mod+Space</code> launcher · <code>Mod+Return</code> terminal · <code>Mod+T</code> float · <code>Mod+L</code> layouts · <code>Mod+1…9</code> workspaces · <code>Mod+Escape</code> power · <code>Mod+K</code> searches them all.</p>
+  <p class="sub">Mod = Super. Search them all live with <code>Mod+K</code>.</p>
+  <table class="keys">
+    <tr><td><code>Mod+Alt+Space</code></td><td>hexciri menu — packages, sharing, hardware, themes, system, updates</td></tr>
+    <tr><td><code>Mod+Space</code></td><td>app launcher</td></tr>
+    <tr><td><code>Mod+Return</code></td><td>terminal (opens a new tab in your live kitty when one exists)</td></tr>
+    <tr><td><code>Mod+Q</code></td><td>close window</td></tr>
+    <tr><td><code>Mod+T</code></td><td>float / tile toggle</td></tr>
+    <tr><td><code>Mod+L</code></td><td>cycle tiling layouts (Hyprland)</td></tr>
+    <tr><td><code>Mod+1…9</code></td><td>workspaces (<code>Shift</code> moves windows; keycodes, so AZERTY-safe)</td></tr>
+    <tr><td><code>Mod+Shift+F</code></td><td>file manager (nemo on Hyprland, nautilus on Niri)</td></tr>
+    <tr><td><code>Mod+Shift+B</code></td><td>browser</td></tr>
+    <tr><td><code>Mod+Shift+S</code></td><td>web + file search with history</td></tr>
+    <tr><td><code>Mod+Shift+C</code></td><td>calculator with history</td></tr>
+    <tr><td><code>Mod+Ctrl+V</code></td><td>clipboard history</td></tr>
+    <tr><td><code>Mod+Escape</code></td><td>power menu (confirms before it acts)</td></tr>
+  </table>
 </section>
 </div>
 <footer>
