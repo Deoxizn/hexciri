@@ -297,6 +297,18 @@ if [[ -x "$REPO/bin/hexciri-aether-url" ]]; then
   "$REPO/bin/hexciri-aether-url" heal 2>&1 | sed 's/^/  /' || \
     info "aether handler skipped — run 'hexciri-aether-url heal' by hand"
 fi
+# Login-greeter appearance sync authorization (one-time): on greetd boxes the
+# login page is noctalia-greeter, and every theme-set pushes the new palette +
+# wallpaper there via `noctalia msg greeter-sync` (hooks/theme-set.d/
+# 90-greeter-sync.sh). That sync needs admin auth per call unless this narrow
+# polkit rule exists — enabling it once makes all future syncs promptless.
+# Scoped to the greeter appearance action only (never sudo, never legacy
+# paths). Best-effort, never fatal; existing boxes get it from root sync.
+if command -v noctalia-greeter >/dev/null 2>&1; then
+  info "authorizing passwordless login-greeter sync for $USER"
+  sudo noctalia-greeter passwordless-sync enable "$USER" 2>&1 | sed 's/^/  /' || \
+    info "greeter sync stays admin-prompted — run by hand: sudo noctalia-greeter passwordless-sync enable $USER"
+fi
 # Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
 # localsend current delivers it — nothing extra to install. The blades resolve
 # localsend-cli || jocalsend live and fail with a clear message otherwise.

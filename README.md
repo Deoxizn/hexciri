@@ -242,7 +242,10 @@ windsurf, typora, obsidian-terminal), browsers (firefox, zen, qutebrowser,
 hermes), Discord (+ ClearVision/system24 variants), GTK, Qt6ct, Spotify /
 Spicetify, file managers (superfile), launchers (vicinae), bar and
 notifications (swaync, Noctalia palette), cava, cliamp, Steam, Heroic,
-branding (fastfetch logo, SDDM), cursor, nautilus. Your own
+branding (fastfetch logo, SDDM), cursor, nautilus, login greeter (noctalia-greeter
+appearance sync on greetd boxes — needs the one-time
+`sudo noctalia-greeter passwordless-sync enable <user>` that install/root-sync
+own, else each sync asks for admin auth). Your own
 `~/.config/hexciri/hooks/theme-set.d/` drop-ins run too and are never
 overwritten (manifest-tracked: edited files are kept as custom).
 

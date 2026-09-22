@@ -246,6 +246,24 @@ if [[ -n $REPO && -d $REPO/branding/sddm ]]; then
   fi
 fi
 
+# ── login-greeter appearance sync authorization (one-time per user): on
+# ── greetd boxes the login page is noctalia-greeter and every theme-set
+# ── pushes the new look via `noctalia msg greeter-sync`
+# ── (hooks/theme-set.d/90-greeter-sync.sh). That sync needs admin auth per
+# ── call unless this narrow polkit rule exists — enabling once (additive,
+# ── never removes other accounts) makes all future syncs promptless.
+# ── Root-only (writes the polkit rule); the user-context pass skips.
+# ── FIX POLICY: mirrored in install.sh for fresh boxes. ──
+if [[ $EUID -eq 0 ]] && command -v noctalia-greeter >/dev/null 2>&1 && [[ -n ${noct_owner:-} && $noct_owner != root ]]; then
+  if noctalia-greeter passwordless-sync status "$noct_owner" >/dev/null 2>&1; then
+    : # already allowed — steady state is silent
+  elif noctalia-greeter passwordless-sync enable "$noct_owner" >/dev/null 2>&1; then
+    log "greeter sync authorized passwordless for $noct_owner"
+  else
+    log "greeter sync stays admin-prompted for $noct_owner (enable by hand: sudo noctalia-greeter passwordless-sync enable $noct_owner)"
+  fi
+fi
+
 # ── 6. xwayland-satellite pin (upstream #468): 0.8.2 regressed popup
 # ── positioning (commit 3273a0f) — X11 dropdowns (Steam menus, etc.) spawn
 # ── offset and lose hover on niri. Hold at last-good 0.8.1 until a fixed
