@@ -44,9 +44,11 @@ hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("hexciri-hyprland-layout"))
 
 -- Monocle stack flipping: every window is fullscreen, so directional focus
 -- is useless — cycle the stack instead (forward/back, wrapping). Alt+Tab
--- does this globally too; these are the Mod-driven equivalents.
-hl.bind(mainMod .. " + Page_Down", hl.dsp.window.cycle_next())
-hl.bind(mainMod .. " + Page_Up", hl.dsp.window.cycle_next({ next = false }))
+-- does this globally too; these are the Mod-driven equivalents. Brackets, not
+-- PageUp/PageDown: laptop Fn-combos for paging don't reach the compositor
+-- with Mod held, but [ ] are physical keys everywhere.
+hl.bind(mainMod .. " + bracketright", hl.dsp.window.cycle_next())
+hl.bind(mainMod .. " + bracketleft", hl.dsp.window.cycle_next({ next = false }))
 
 -- Workspaces: niri verbs (Mod+digit switch / Mod+SHIFT+digit move). Stock
 -- CachyOS binds Mod+ALT+digit to switch and Mod+SHIFT+CONTROL|ALT+digit to

@@ -587,31 +587,6 @@ themes_menu() { # [choice]  — interactive menu; choice arg enables menu-search
 }
 
 # ══════════════════════════════════════════════ hexciri-themes-list (browser)
-# make_thumb <src> <dst>: shrink src to a menu-sized thumbnail for picker
-# icons. The themes picker renders rows at --line-height=150 with no
-# icon-size cap, so full-res previews (5120px wallpapers, symlinked raw into
-# the cache) blow rows to ~350px and the window off a 1080p screen (only ~3
-# themes visible). Thumbs are generated at 192px — the size fuzzel's default
-# icon sizing actually renders (measured 424x1016 window = ~192px rows), so
-# icons land 1:1 with no upscale blur and no downscale waste, rows stay
-# ~192, and all 5 fit 1080p. Regenerates when src is newer; falls back to a
-# symlink (today's behavior) when no scaler exists on the box.
-make_thumb() {
-  local src=$1 dst=$2
-  if [[ -f $dst && ! $src -nt $dst ]]; then
-    return 0
-  fi
-  if command -v magick >/dev/null 2>&1; then
-    magick "$src[0]" -thumbnail '192x192>' -strip "$dst" 2>/dev/null && return 0
-  elif command -v convert >/dev/null 2>&1; then
-    convert "$src[0]" -thumbnail '192x192>' -strip "$dst" 2>/dev/null && return 0
-  elif command -v ffmpeg >/dev/null 2>&1; then
-    ffmpeg -hide_banner -loglevel error -y -i "$src" -frames:v 1 \
-      -vf "scale='min(192,iw)':-1" "$dst" 2>/dev/null && return 0
-  fi
-  ln -sfn "$src" "$dst" 2>/dev/null || return 1
-}
-
 themes_list() {
   local cache_dir current name preview theme here bindir SCRIPT_DIR_here
   here="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
@@ -622,9 +597,13 @@ themes_list() {
   current="$(theme_current)"
 
   find_preview() {
-    local name=$1 dir ext src base theme_path thumb
+    local name=$1 dir ext src base theme_path
 
     dir=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+
+    for ext in png jpg jpeg webp gif bmp; do
+      [[ -e $cache_dir/$dir.$ext ]] && { printf '%s\n' "$cache_dir/$dir.$ext"; return; }
+    done
 
     theme_path=""
     for base in "$HOME/.config/hexciri/themes" "$HEXCIRI_PATH/themes"; do
@@ -644,17 +623,12 @@ themes_list() {
     fi
     [[ -n $src ]] || return 0
 
-    # Drop legacy cache entries (pre-thumbnail full-res symlinks AND the
-    # first-gen 144px thumbs, which fuzzel upscales to its ~192px render
-    # size and look blurry): same stem, any ext. Only symlinks for the old
-    # set; the 144px files are real but ours by name, so remove directly.
-    for ext in png jpg jpeg webp gif bmp; do
-      [[ -L $cache_dir/$dir.$ext ]] && rm -f "$cache_dir/$dir.$ext"
-    done
-    rm -f "$cache_dir/$dir.thumb.png"
-    thumb="$cache_dir/$dir.thumb192.png"
-    make_thumb "$src" "$thumb" || return 0
-    printf '%s\n' "$thumb"
+    # Drop the thumbnail-era cache files (thumb.png/thumb192.png): reverted —
+    # previews render full-res again, tiny on both WMs alike.
+    rm -f "$cache_dir/$dir.thumb.png" "$cache_dir/$dir.thumb192.png"
+    ext=${src##*.}
+    ln -sfn "$src" "$cache_dir/$dir.${ext,,}"
+    printf '%s\n' "$cache_dir/$dir.${ext,,}"
   }
 
   # List installable themes (user dir + repo-supplied), title-cased for display.

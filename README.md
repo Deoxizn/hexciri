@@ -406,7 +406,7 @@ config files by hand. The notes below are what's happening behind those rows.
   Core: `Mod+Space` apps (Noctalia) · `Mod+Return` terminal · `Mod+Alt+Space` root menu · `Mod+K` this list · `Mod+Q` close ·
   `Mod+F` maximize · `Mod+1…9,0` workspaces · `Mod+←/→` focus ·
   `Mod+Print`/`Ctrl+Print` screenshot · `Alt+Print` record · `Mod+Escape`
-  power · `Mod+PageUp`/`Mod+PageDown` flip the monocle stack.
+  power · `Mod+]`/`Mod+[` flip the monocle stack.
 - **Gaming + web apps** — one-press Steam / Heroic / Lutris / RetroArch /
   Minecraft / Battle.net (umu + GE-Proton, no Steam needed) / GeForce NOW /
   Xbox Cloud / controller (xpadneo) setup; any URL becomes a desktop app with
