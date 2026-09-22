@@ -591,21 +591,23 @@ themes_menu() { # [choice]  — interactive menu; choice arg enables menu-search
 # icons. The themes picker renders rows at --line-height=150 with no
 # icon-size cap, so full-res previews (5120px wallpapers, symlinked raw into
 # the cache) blow rows to ~350px and the window off a 1080p screen (only ~3
-# themes visible). 144px thumbs keep rows at exactly 150. Regenerates when
-# src is newer; falls back to a symlink (today's behavior) when no scaler
-# exists on the box.
+# themes visible). Thumbs are generated at 192px — the size fuzzel's default
+# icon sizing actually renders (measured 424x1016 window = ~192px rows), so
+# icons land 1:1 with no upscale blur and no downscale waste, rows stay
+# ~192, and all 5 fit 1080p. Regenerates when src is newer; falls back to a
+# symlink (today's behavior) when no scaler exists on the box.
 make_thumb() {
   local src=$1 dst=$2
   if [[ -f $dst && ! $src -nt $dst ]]; then
     return 0
   fi
   if command -v magick >/dev/null 2>&1; then
-    magick "$src[0]" -thumbnail '144x144>' -strip "$dst" 2>/dev/null && return 0
+    magick "$src[0]" -thumbnail '192x192>' -strip "$dst" 2>/dev/null && return 0
   elif command -v convert >/dev/null 2>&1; then
-    convert "$src[0]" -thumbnail '144x144>' -strip "$dst" 2>/dev/null && return 0
+    convert "$src[0]" -thumbnail '192x192>' -strip "$dst" 2>/dev/null && return 0
   elif command -v ffmpeg >/dev/null 2>&1; then
     ffmpeg -hide_banner -loglevel error -y -i "$src" -frames:v 1 \
-      -vf "scale='min(144,iw)':-1" "$dst" 2>/dev/null && return 0
+      -vf "scale='min(192,iw)':-1" "$dst" 2>/dev/null && return 0
   fi
   ln -sfn "$src" "$dst" 2>/dev/null || return 1
 }
@@ -642,12 +644,15 @@ themes_list() {
     fi
     [[ -n $src ]] || return 0
 
-    # Drop legacy full-res cache symlinks (pre-thumbnail era): same stem, any
-    # ext — they pin huge rows. Only symlinks, never real files.
+    # Drop legacy cache entries (pre-thumbnail full-res symlinks AND the
+    # first-gen 144px thumbs, which fuzzel upscales to its ~192px render
+    # size and look blurry): same stem, any ext. Only symlinks for the old
+    # set; the 144px files are real but ours by name, so remove directly.
     for ext in png jpg jpeg webp gif bmp; do
       [[ -L $cache_dir/$dir.$ext ]] && rm -f "$cache_dir/$dir.$ext"
     done
-    thumb="$cache_dir/$dir.thumb.png"
+    rm -f "$cache_dir/$dir.thumb.png"
+    thumb="$cache_dir/$dir.thumb192.png"
     make_thumb "$src" "$thumb" || return 0
     printf '%s\n' "$thumb"
   }
