@@ -98,7 +98,15 @@ fi
 # (vlc-plugins-all) is removed below; nothing in the layer references it.
 # NOTE: cachyos-wallpapers is removed below too — Noctalia shows theme
 # backgrounds (plus ~/.config/hexciri/wallpapers), never that pack.
-_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd jq cliphist "
+_hexciri_wants="kitty zed opencode localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd jq cliphist "
+# Per-WM-native file manager / image viewer: install hexciri's pick only when
+# the WM's own default is absent. Hyprland boxes ship dolphin+qview (Qt,
+# themed via the KDE scheme the theme hook writes); niri boxes get
+# nautilus+imv. Presence-gated, not WM-gated, so minimal spins stay working:
+# a hyprland box without dolphin still gets a file manager, a niri box
+# without nautilus still gets one.
+command -v dolphin >/dev/null 2>&1 || _hexciri_wants+="nautilus "
+command -v qview >/dev/null 2>&1 || _hexciri_wants+="imv "
 # One-time stock removals (not the list — replaced CachyOS defaults, always
 # safe to attempt; kept when something still needs them). The hyprland tail
 # (gnome-text-editor → zed, gnome-calculator → the fuzzel calc menu script)

@@ -1293,10 +1293,18 @@ EOF
   # defaults helper only pins the picked reader over browser-stolen, empty, or
   # stale (reader-removed) slots, so it never fights a deliberate pick. The
   # one-time mupdf → zathura migration below owns the switch.
-  # nautilus is layer here: it is the default file manager, so a box that lost
-  # it (removed meta, stray -Rns) gets it back instead of landing without one.
+  # nautilus is layer here when it is the box's file manager, so a box that
+  # lost it (removed meta, stray -Rns) gets it back instead of landing
+  # without one. Boxes whose FM is dolphin skip it (see gate above).
+  # nautilus is layer only when no file manager exists at all: hyprland
+  # boxes ship dolphin, so a missing nautilus there is not a hole to heal —
+  # without this gate every update would drag nautilus back onto hyprland.
+  # (imv needs no gate here: it was never layer, install-time only.)
   ensure_layer_pkgs() {
-    local pkgs="polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl fwupd" missing=""
+    local pkgs="polkit-gnome gnome-keyring adw-gtk-theme brightnessctl playerctl fwupd" missing=""
+    if ! command -v dolphin >/dev/null 2>&1 && ! command -v nautilus >/dev/null 2>&1; then
+      pkgs+=" nautilus"
+    fi
     command -v pacman >/dev/null 2>&1 || return 0
     for p in $pkgs; do
       pacman -Q "$p" >/dev/null 2>&1 || missing+="$p "

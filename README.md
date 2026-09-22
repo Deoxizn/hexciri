@@ -303,7 +303,7 @@ would break keys, logins, or themes if missing).
 
 One-time swap at install, hands off after that. The framework sync
 (`hexciri-sync` / `hexciri-update self`) never touches packages except the
-tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl fwupd`
+tiny layer-critical subset `polkit-gnome gnome-keyring adw-gtk-theme nautilus brightnessctl playerctl fwupd` (nautilus heals only when no file manager exists — dolphin boxes skip it)
 it self-heals — your later manual changes stick.
 Best-effort throughout: offline boxes finish, missing bits print their manual
 fallback.
@@ -325,7 +325,7 @@ stay as you left them.
 | `gtksourceview5` | text-viewer libs (gedit-style viewers) |
 | `gpu-screen-recorder` | Screen recording blade |
 | `tesseract` | OCR-text-from-screen blade |
-| `imv` | default image viewer (pinned over browser-stolen `image/*`) |
+| `imv` | default image viewer on niri (pinned over browser-stolen `image/*`); skipped at install on Hyprland when qview is present |
 | `mpv` | default video player (replaces the vlc plugin stack) |
 | `libqalculate` | fuzzel calculator provider |
 | `polkit-gnome` | auth agent — without it pkexec apps (gparted, btrfs-assistant) silently never open |
@@ -346,7 +346,11 @@ Origin is present; **Nautilus** stays the default file manager on niri (its
 `org.gnome.Nautilus.desktop` owns `inode/directory`) while **Dolphin** takes
 the role on Hyprland — the box ships both, hexciri picks per-WM (one `Files`
 default in `System > Default Apps`, seeded dolphin on hyprland / nautilus on
-niri, never clobbering an explicit pick). `Mod+Shift+F` opens whichever is
+niri, never clobbering an explicit pick). Neither is force-installed where
+the other already serves: install and the layer self-heal skip nautilus when
+dolphin is present (and skip imv when qview is present), so Hyprland boxes
+stop collecting the niri stack — a box with no file manager at all still gets
+one. `Mod+Shift+F` opens whichever is
 current on either WM. Dolphin plus the other KDE apps are themed via the KDE
 color scheme the theme hook writes (`~/.local/share/color-schemes/hexciri.colors`
 + `~/.config/kdeglobals` → `ColorScheme=hexciri`), so on Hyprland the file
