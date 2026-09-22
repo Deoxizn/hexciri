@@ -1323,6 +1323,21 @@ EOF
     command -v pacman >/dev/null 2>&1 || return 0
     wm="$("$REPO/bin/hexciri-session" wm 2>/dev/null || echo niri)"
     [[ $wm == hyprland ]] || return 0
+    # xdg-desktop-portal-gnome pins nautilus as its FileChooser dep: drop the
+    # portal first or the nautilus removal below fails every pass with a
+    # dependency error (kept, noisy). hexciri never uses the gnome portal
+    # (FileChooser is pinned to gtk; install.sh removes it on fresh boxes) —
+    # kept only if something else still needs it, in which case nautilus
+    # stays too. Restart the portal service so the removed backend drops out
+    # without a relogin (strata-migration precedent).
+    if pacman -Q xdg-desktop-portal-gnome >/dev/null 2>&1; then
+      if sudo pacman -Rns --noconfirm xdg-desktop-portal-gnome 2>&1 | tail -n 2; then
+        echo "migrated: removed xdg-desktop-portal-gnome (unused; pinned nautilus)"
+        systemctl --user restart xdg-desktop-portal.service 2>/dev/null || true
+      else
+        echo "migrated: kept xdg-desktop-portal-gnome (something still needs it)"
+      fi
+    fi
     files_pick="$(cat "$HOME/.local/state/hexciri/defaults/files" 2>/dev/null || true)"
     images_pick="$(cat "$HOME/.local/state/hexciri/defaults/images" 2>/dev/null || true)"
     if command -v dolphin >/dev/null 2>&1 && [[ $files_pick != nautilus ]]; then
