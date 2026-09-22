@@ -227,6 +227,13 @@ for gtk_ver in ("gtk-3.0", "gtk-4.0"):
     cfg_dir.mkdir(parents=True, exist_ok=True)
     (cfg_dir / "hexciri-gtk.css").write_text(gtk_css)
     gtk_css_main = cfg_dir / "gtk.css"
+    # gtk.css is sometimes a symlink into the system theme (adw-gtk3-dark):
+    # writing through it targets /usr/share as the user → EACCES, which
+    # aborts the whole theme-set (and every hook after it, incl. the KDE
+    # scheme + hyprland decorations). Replace the link with a real file first
+    # — the 10-gtk hook already keeps a gtk.css.backup of the original.
+    if gtk_css_main.is_symlink():
+        gtk_css_main.unlink()
     user_css = gtk_css_main.read_text() if gtk_css_main.is_file() else ""
     if user_css and "hexciri-gtk.css" not in user_css:
         gtk_css_main.write_text(user_css.rstrip() + '\n@import url("hexciri-gtk.css");\n')

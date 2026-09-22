@@ -28,10 +28,9 @@ hl.bind(mainMod .. " + SHIFT + C", hl.dsp.exec_cmd("hexciri-fuzzel calc"))
 hl.bind(mainMod .. " + Return",   hl.dsp.exec_cmd("hexciri-terminal"))
 hl.bind(mainMod .. " + SHIFT + E", hl.dsp.exec_cmd("zeditor"))
 hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("xdg-open https://"))
--- Mod+W = Browser, taking over the stock slot: stock binds it to
--- launchPrefix .. BROWSER with BROWSER="firefox" (variables.lua), but firefox
--- is replaced by Brave Origin — a dead key without this takeover.
-hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("hexciri-defaults run browser"))
+-- NOTE: stock Mod+W (launchPrefix .. BROWSER with BROWSER="firefox") is dead
+-- — firefox is replaced by Brave Origin — and is neutralized at deploy with
+-- NO replacement: browser already lives on Mod+Shift+B. One browser launcher.
 -- Mod+Shift+F = File manager, niri verb. Dispatches the user's Defaults pick
 -- (dolphin on hyprland boxes, nautilus on niri) via hexciri-defaults run files.
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.exec_cmd("hexciri-defaults run files"))

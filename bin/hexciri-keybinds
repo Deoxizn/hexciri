@@ -55,7 +55,6 @@ DESC = {
     "Mod+Shift+B": "Browser",
     "Mod+Shift+E": "Text editor",
     "Mod+Shift+F": "File manager",
-    "Mod+W": "Browser",
     "Mod+Ctrl+M": "Messenger webapp",
     "Mod+Q": "Close window",
     "Mod+Left": "Focus left", "Mod+H": "Focus left",
@@ -369,6 +368,13 @@ if wm == "hyprland":
             _text = open(_hf).read()
         except OSError:
             continue
+        # Drop lua comment lines first: the deploy patch neutralizes stock
+        # binds by commenting them out (-- [hexciri] ...), and the finditer
+        # below would otherwise resurrect them as phantom live rows (a
+        # commented Mod+W reappears as "Browser" though nothing fires it).
+        _text = "\n".join(
+            ln for ln in _text.split("\n") if not ln.strip().startswith("--")
+        )
         for m in re.finditer(r'hl\.bind\(\s*(.*?)\s*,', _text):
             combo = hypr_combo(m.group(1))
             if not combo:

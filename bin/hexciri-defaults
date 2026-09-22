@@ -114,12 +114,11 @@ if [[ -z $pick_type ]]; then
 fi
 
 # hexciri-defaults run <type>: launch the current default, no menu. Used by
-# the hyprland binds that take over stock slots (Mod+Shift+F → run files,
-# Mod+W → run browser). files/images/browser only — seeding above already
-# guarantees a valid pick.
+# the hyprland File manager bind (Mod+Shift+F → run files). files/images
+# only — seeding above already guarantees a valid pick.
 if [[ ${pick_type,,} == run ]] && [[ $# -ge 2 ]]; then
   case "${2,,}" in
-    files|browser|images)
+    files|images)
       _run="$(get "${2,,}")"
       case "$_run" in
         yazi) exec kitty --class yazi -e yazi 2>/dev/null || exec yazi ;;

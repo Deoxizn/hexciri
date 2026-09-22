@@ -187,11 +187,10 @@ Launchers alongside the menu: `Mod+Space` Noctalia app launcher,
 calculator (fuzzel), `Mod+Return`
 terminal, `Mod+Shift+E` editor, `Mod+Shift+B` browser, `Mod+Shift+F` file
 manager (dolphin on Hyprland, nautilus on niri — one pick in
-`System > Defaults > Files` serves both WMs), `Mod+W` browser on Hyprland
-(taking over the stock slot, whose `BROWSER="firefox"` is a dead key since
-firefox is replaced), ``Mod+` `` AI agent
+`System > Defaults > Files` serves both WMs), ``Mod+` `` AI agent
 (`opencode` by default), `Mod+Escape` power menu, `Mod+Ctrl+V` clipboard
-history.
+history. Stock `Mod+W` (which launched the replaced firefox) is neutralized
+at deploy with no replacement — browser already lives on `Mod+Shift+B`.
 Workspaces are niri verbs on both WMs: `Mod+1…9` switches, `Mod+Shift+1…9`
 moves the focused window. Binds use keycodes so they survive any layout
 (US/AZERTY alike), mirroring the stock CachyOS digit idiom.
