@@ -76,6 +76,7 @@ binds {
     Mod+Ctrl+S { spawn "noctalia" "msg" "settings-toggle"; }
     Mod+BracketLeft { consume-window-into-column; }
     Mod+Shift+Space { toggle-window-floating; }
+    Mod+T { toggle-window-floating; }
     Mod+BracketRight { expel-window-from-column; }
     XF86AudioMicMute { spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SOURCE@" "toggle"; }
     XF86MonBrightnessUp { spawn "brightnessctl" "set" "5%+"; }

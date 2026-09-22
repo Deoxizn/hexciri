@@ -35,12 +35,16 @@ hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("xdg-open https://"))
 -- (dolphin on hyprland boxes, nautilus on niri) via hexciri-defaults run files.
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.exec_cmd("hexciri-defaults run files"))
 
--- Layout cycle (dwindle/scrolling/monocle): Omarchy's Mod+T toggle idiom,
--- generalized to rotate every layout the compositor supports. Takes over the
--- stock slot — stock binds Mod+T to the editor, which hexciri replaces with
--- zed on Mod+Shift+E (and whose stock binary, gnome-text-editor, is removed
+-- Floating toggle on Mod+T (Omarchy parity): the niri verb and the stock
+-- float slot agree here — tiling/floating flip, no menus involved.
+hl.bind(mainMod .. " + T", hl.dsp.window.float({ action = "toggle" }))
+
+-- Layout cycle (dwindle/scrolling/monocle) on Mod+Shift+L: Omarchy puts it
+-- on L, but stock binds L to session lock here, so Shift+L keeps the letter
+-- without breaking lock. The stock Mod+T editor bind stays neutralized at
+-- deploy since zed lives on Mod+Shift+E (and gnome-text-editor is removed
 -- on hyprland anyway).
-hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("hexciri-hyprland-layout"))
+hl.bind(mainMod .. " + SHIFT + L", hl.dsp.exec_cmd("hexciri-hyprland-layout"))
 
 -- Monocle stack flipping: every window is fullscreen, so directional focus
 -- is useless — cycle the stack instead (forward/back, wrapping). Alt+Tab
@@ -53,11 +57,6 @@ hl.bind(mainMod .. " + T", hl.dsp.exec_cmd("hexciri-hyprland-layout"))
 -- monocle, unknown-message under dwindle as expected).
 hl.bind(mainMod .. " + bracketright", hl.dsp.layout("cyclenext"))
 hl.bind(mainMod .. " + bracketleft", hl.dsp.layout("cycleprev"))
-
--- Floating toggle (the niri Mod+Shift+Space verb): stock bound this slot to
--- float-toggle but it was neutralized at deploy for the root menu, leaving
--- Hyprland with no tiling/floating flip at all.
-hl.bind(mainMod .. " + SHIFT + Space", hl.dsp.window.float({ action = "toggle" }))
 
 -- Workspaces: niri verbs (Mod+digit switch / Mod+SHIFT+digit move). Stock
 -- CachyOS binds Mod+ALT+digit to switch and Mod+SHIFT+CONTROL|ALT+digit to
