@@ -783,8 +783,7 @@ EOF
       fi
     done < <(git -C "$REPO" log --format=%H -- config/fastfetch/config.jsonc 2>/dev/null || true)
     if [[ -z $found ]]; then
-      echo "kept custom fastfetch config ($dst)"
-      return 0
+      return 0  # custom config — silent steady state (was: printed every pass)
     fi
     cp -f "$src" "$dst" && echo "refreshed fastfetch config ($dst)"
     return 0
