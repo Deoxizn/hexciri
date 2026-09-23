@@ -102,7 +102,7 @@ fi
 # notifications are all the shell; CachyOS preinstalls it via the WM meta,
 # but a meta removal orphans it and leaves a gray compositor with no shell.
 # Explicit here (and in the layer heal + WM switch) so it is never an orphan.
-_hexciri_wants="kitty zed opencode localsend fuzzel gpu-screen-recorder tesseract mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd jq cliphist noctalia "
+_hexciri_wants="kitty zed opencode localsend fuzzel gpu-screen-recorder tesseract mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd jq cliphist noctalia bottom "
 # Per-WM-native file manager / image viewer: install hexciri's pick only when
 # no file manager / viewer serves the box. Hyprland takes strata (per-user
 # release, installed below); niri keeps nautilus. qview/imv unchanged. Presence-gated, not WM-gated, so minimal spins stay working.
@@ -128,7 +128,7 @@ fi
 # (gnome-text-editor → zed, gnome-calculator → the fuzzel calc menu script)
 # covers the CachyOS hyprland preinstalls niri boxes never had; absent on niri
 # they are plain no-ops there.
-_hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro vlc-plugins-all cachyos-wallpapers"
+_hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro vlc-plugins-all cachyos-wallpapers btop"
 # xwayland-satellite pin (upstream #468): 0.8.2 regressed popup positioning
 # (commit 3273a0f) — X11 dropdowns (Steam menus, etc.) spawn offset and lose
 # hover on niri. Hold at last-good 0.8.1 until a fixed 0.8.3+ lands, then drop
@@ -156,7 +156,7 @@ if command -v pacman >/dev/null 2>&1; then
       info "downgrade skipped — run by hand: sudo pacman -U https://archive.archlinux.org/packages/x/xwayland-satellite/xwayland-satellite-0.8.1-2-x86_64.pkg.tar.zst"
   fi
 fi
-_hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro"
+_hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro btop:$HOME/.config/btop"
 if command -v pacman >/dev/null 2>&1; then
   info "one-time app swap (hexciri wants + stock removals)"
   # shellcheck disable=SC2086

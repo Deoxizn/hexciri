@@ -98,6 +98,7 @@ new session, done.
 | `Mod+Shift+F` | files |
 | `Mod+Shift+B` | browser |
 | `Mod+Shift+S` / `Mod+Shift+C` | web search / calculator |
+| `Mod+Shift+T` | system monitor |
 | `Mod+Ctrl+V` | clipboard history |
 | `Mod+Escape` | power menu |
 

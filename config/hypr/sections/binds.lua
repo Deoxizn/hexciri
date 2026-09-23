@@ -10,6 +10,9 @@ hl.bind(mainMod .. " + grave",       hl.dsp.exec_cmd("hexciri-agent"))
 hl.bind(mainMod .. " + SHIFT + S", hl.dsp.exec_cmd("hexciri-fuzzel search"))
 hl.bind(mainMod .. " + SHIFT + C", hl.dsp.exec_cmd("hexciri-fuzzel calc"))
 
+-- System monitor (bottom)
+hl.bind(mainMod .. " + SHIFT + T", hl.dsp.exec_cmd(launchPrefix .. TERMINAL .. " -e btm"))
+
 -- Default apps (terminal/editor/browser/file manager via hexciri defaults layer)
 hl.bind(mainMod .. " + Return",   hl.dsp.exec_cmd("hexciri-terminal"))
 hl.bind(mainMod .. " + SHIFT + E", hl.dsp.exec_cmd("zeditor"))

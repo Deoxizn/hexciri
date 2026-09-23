@@ -57,6 +57,7 @@ DESC = {
     "Mod+K": "Keybind reference (this list)",
     "Mod+Shift+S": "Web search (default provider)",
     "Mod+Shift+C": "Calculator (fuzzel)",
+    "Mod+Shift+T": "System monitor (bottom)",
     "Mod+Return": "Terminal",
     "Mod+grave": "AI agent",
     "Mod+Shift+B": "Browser",

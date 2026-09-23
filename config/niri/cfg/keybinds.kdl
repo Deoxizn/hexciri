@@ -64,6 +64,7 @@ binds {
     Mod+Shift+P { focus-tiling; }
     Mod+Shift+R { toggle-column-tabbed-display; }
     Mod+Shift+S { spawn "hexciri-fuzzel" "search"; }
+    Mod+Shift+T { spawn "kitty" "btm"; }
     Mod+Alt+Space { spawn "hexciri-menu"; }
     Mod+Ctrl+Down { move-window-down; }
     Mod+Ctrl+Left { move-column-left; }

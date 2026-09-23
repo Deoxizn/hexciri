@@ -402,9 +402,10 @@ update_self() {
     unset _lf
 
     # Neutralize stock binds that the hexciri section owns outright. In this
-    # shell a duplicate combo STACKS (both actions fire) — the overlay being
-    # required later does NOT dislodge the stock line. Comment the stock ones
-    # out once (first change backs up binds.lua → binds.lua.hexciri.bak):
+    # shell a duplicate combo STACKS (both actions fire) — the section coming
+    # later in the same file does NOT dislodge the stock line. Comment the
+    # stock ones out once (first change backs up binds.lua →
+    # binds.lua.hexciri.bak):
     #   Mod+Alt+Space      float toggle   → root menu owns it
     #   Mod+Escape         hyprctl kill   → power menu owns it
     #   Mod+Return         launch prefix  → hexciri-terminal owns it
@@ -413,7 +414,7 @@ update_self() {
     #   Mod+W              BROWSER=firefox (dead) → removed outright; browser lives on Mod+Shift+B
     #   Mod+Shift+S        move scratchpad→ web search owns it
     #   Mod+Shift+1..3     monitor moves  → workspace-move verb owns it
-    if [[ -f $dst/hexciri-binds.lua && -f $dst/binds.lua ]]; then
+    if [[ -f $dst/binds.lua ]]; then
       python3 - "$dst/binds.lua" <<'PYEOF'
 import re, sys, shutil, os
 kb = sys.argv[1]
@@ -435,7 +436,12 @@ for line in src.split("\n"):
     if line.lstrip().startswith("--"):
         out.append(line)
         continue
-    if any(p in line for p in pats):
+    if "-e btop" in line:
+        # btop retired for bottom: keep the stock Ctrl+Shift+Escape terminal
+        # slot working by repointing it (same fixup class as neutralizing).
+        out.append(line.replace("-e btop", "-e btm"))
+        changed = True
+    elif any(p in line for p in pats):
         indent = line[:len(line) - len(line.lstrip())]
         out.append(indent + "-- [hexciri] " + line.strip())
         changed = True
@@ -446,7 +452,7 @@ if changed:
     if not os.path.exists(bak):
         shutil.copy2(kb, bak)
     open(kb, "w").write("\n".join(out) + ("\n" if src.endswith("\n") else "\n"))
-    print("hyprland: neutralized stock binds owned by the hexciri overlay (backup: binds.lua.hexciri.bak)")
+    print("hyprland: neutralized stock binds owned by the hexciri section (backup: binds.lua.hexciri.bak)")
 PYEOF
     fi
 
@@ -1479,6 +1485,32 @@ EOF
     fi
   }
 
+  # btop → bottom monitor migration (runs every pass; no-op when clean).
+  # Installs bottom, removes btop (nothing depends on it — clean -Rns).
+  # Best-effort; offline boxes print the manual fallback.
+  migrate_btop_to_bottom() {
+    command -v pacman >/dev/null 2>&1 || return 0
+    if ! pacman -Q bottom >/dev/null 2>&1; then
+      echo "migrated: installing bottom (replaces btop)"
+      if sudo pacman -S --needed --noconfirm bottom 2>&1 | tail -n 3; then
+        echo "migrated: bottom installed"
+      else
+        echo "migrated: bottom install skipped/partial (offline?) — run: sudo pacman -S --needed bottom"
+        return 0
+      fi
+    fi
+    if pacman -Q btop >/dev/null 2>&1; then
+      if sudo pacman -Rns --noconfirm btop 2>&1 | tail -n 2; then
+        echo "migrated: removed btop (replaced by bottom)"
+      else
+        echo "migrated: kept btop (something still needs it)"
+      fi
+    fi
+    if ! pacman -Q btop >/dev/null 2>&1; then
+      rm -rf "$HOME/.config/btop" 2>/dev/null || true
+    fi
+  }
+
   # Desktop faillock tuning (runs every pass; no-op when clean). Stock
   # faillock (deny=3, unlock_time=600) turns one typo burst into a
   # reboot-only saga: 3 rapid fails lock the account 10 minutes, and every
@@ -1625,6 +1657,7 @@ EOF
   migrate_vlc_to_mpv
   migrate_hyprland_native_apps
   migrate_faillock_desktop_tuning
+  migrate_btop_to_bottom
   migrate_greeter_hook_fold
   sync_keybinds
   sync_hyprland
