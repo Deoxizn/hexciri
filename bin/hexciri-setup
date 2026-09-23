@@ -83,6 +83,9 @@ strata_main() {
     fi
     echo "not installed"; return 1
   fi
+  # Runtime deps enforce on every run (not just fresh installs): a manually
+  # placed binary skips provisioning but still needs the backends — trash
+  # lives in gvfs, which reads as simply missing otherwise.
   local deps="gtk4 gtksourceview5 poppler-glib fontconfig bubblewrap ffmpeg gstreamer gst-libav gst-plugins-base gst-plugins-good gvfs"
   local missing=""
   local d

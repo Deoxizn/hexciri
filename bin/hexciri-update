@@ -1406,9 +1406,12 @@ EOF
     [[ $wm == hyprland ]] || return 0
     # Strata is the hyprland file manager (per-user release, not pacman):
     # provision it here so updates converge without a manual install step.
-    # Best-effort (needs network + sudo for runtime deps); a failure just
-    # skips, and the flip/removal below gate on the binary anyway.
-    if ! command -v strata >/dev/null 2>&1 && [[ -x $REPO/bin/hexciri-strata-install ]]; then
+    # Always invoke (not just when the binary is missing): the installer is
+    # idempotent and enforces runtime deps (gvfs trash backend et al) that a
+    # manually placed binary would otherwise lack. Best-effort (needs network
+    # + sudo for deps); a failure just skips, and the flip/removal below gate
+    # on the binary anyway.
+    if [[ -x $REPO/bin/hexciri-strata-install ]]; then
       "$REPO/bin/hexciri-strata-install" 2>&1 | tail -n 3 || \
         echo "migrated: strata install skipped (offline?) — run by hand: hexciri-strata-install"
     fi
