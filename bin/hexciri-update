@@ -857,6 +857,7 @@ def merge(path, tag):
         print("noctalia bar (%s): added missing key(s): %s" % (tag, ", ".join(m.split("=")[0].strip() for m in missing)))
 merge(os.environ["LIVE_CFG"], "config")
 merge(os.environ["STATE_CFG"], "state")
+EOF
 # Urgent workspace highlight off (same merge shape, other section): paint
 # urgent pills the occupied color. Present values always win.
 REPO_CFG="$src" LIVE_CFG="$dst" STATE_CFG="$STATE_CFG" python3 <<'EOF' || true
