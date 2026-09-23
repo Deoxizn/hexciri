@@ -852,6 +852,55 @@ def merge(path, tag):
 merge(os.environ["LIVE_CFG"], "config")
 merge(os.environ["STATE_CFG"], "state")
 EOF
+    # Screenshot save folder: Noctalia Print binds (screenshot-region /
+    # fullscreen) default to ~/Pictures when directory is empty — pin to
+    # ~/Pictures/Screenshots to match hexciri-compositor grim/slurp flow.
+    # Additive only (a deliberate custom directory always wins). Covers both
+    # the config file and the state settings file (state wins per-key).
+    mkdir -p "$HOME/Pictures/Screenshots" 2>/dev/null || true
+    REPO_CFG="$src" LIVE_CFG="$dst" STATE_CFG="$STATE_CFG" python3 <<'EOF' || true
+import os
+want_dir = '"~/Pictures/Screenshots"'
+def ensure(path, tag):
+    try:
+        text = open(path).read()
+    except OSError:
+        return
+    lines = text.split("\n")
+    table = "[shell.screenshot]"
+    start = None
+    for i, l in enumerate(lines):
+        if l.strip() == table:
+            start = i
+            break
+    if start is None:
+        lines += ["", table, "directory = %s" % want_dir]
+        open(path, "w").write("\n".join(lines))
+        print("noctalia screenshot (%s): added [shell.screenshot] directory %s" % (tag, want_dir))
+        return
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i].strip().startswith("["):
+            end = i
+            break
+    for i in range(start + 1, end):
+        s = lines[i].strip()
+        if s.startswith("directory"):
+            val = s.split("=", 1)[1].strip() if "=" in s else ""
+            if val in ('""', "''", '"" #', "") or val.startswith('""') or val.startswith("''"):
+                lines[i] = "directory = %s" % want_dir
+                open(path, "w").write("\n".join(lines))
+                print("noctalia screenshot (%s): directory empty -> %s" % (tag, want_dir))
+            return
+    lines.insert(end, "directory = %s" % want_dir)
+    open(path, "w").write("\n".join(lines))
+    print("noctalia screenshot (%s): added missing directory %s" % (tag, want_dir))
+ensure(os.environ["LIVE_CFG"], "config")
+try:
+    ensure(os.environ["STATE_CFG"], "state")
+except KeyError:
+    pass
+EOF
     # Plugin preset: merge MISSING keys from the shipped preset into the live
     # settings (GUI values always win). Seeding only when settings.toml is
     # absent misses every box whose file already exists — the exact hole that
@@ -1351,7 +1400,10 @@ EOF
       fi
     fi
     # Retired managers (dolphin, nemo, stray nautilus) go once strata is live
-    # and the stored pick isn't itself.
+    # and the stored pick isn't itself. The strata gate is load-bearing:
+    # without it a missing strata + present pick would uninstall the box's
+    # only file manager every pass, and the layer heal would reinstall
+    # nautilus behind it — install/remove churn forever.
     if command -v strata >/dev/null 2>&1; then
       for p in dolphin nautilus nemo; do
         if command -v "$p" >/dev/null 2>&1 && [[ $files_pick != "$p" ]]; then
@@ -1366,19 +1418,21 @@ EOF
       rm_list+="gnome-text-editor "
     fi
     # No app dependency: hexciri's calculator is the Mod+Shift+C fuzzel menu
-    # script (libqalculate).
-    rm_list+="gnome-calculator "
+    # script (libqalculate). Swash (CachyOS hypr screenshot annotator) is
+    # replaced by Noctalia screenshot + hexciri-compositor grim/slurp flow
+    # (~/Pictures/Screenshots).
+    rm_list+="gnome-calculator swash "
     # NOTE: gtksourceview5 is deliberately NOT removed — libspelling depends
     # on it, so the removal always fails (pacman dependency error, kept
     # anyway) and would print that error on every single pass. It stays:
     # invisible, still required.
     local rdd_list=""
     # Forced removals (vim precedent): the CachyOS hyprland meta pins the
-    # stock editor + calculator, so plain -Rns refuses while it's installed.
-    # -Rdd breaks only the meta's declared dep. Without the meta they take
-    # the clean -Rns path above instead.
+    # stock editor + calculator + screenshot annotator, so plain -Rns refuses
+    # while it's installed. -Rdd breaks only the meta's declared dep. Without
+    # the meta they take the clean -Rns path above instead.
     if pacman -Q cachyos-hypr-noctalia >/dev/null 2>&1; then
-      for p in gnome-text-editor gnome-calculator dolphin; do
+      for p in gnome-text-editor gnome-calculator dolphin swash; do
         # shellcheck disable=SC2076
         if [[ " $rm_list " =~ " $p " ]]; then
           rm_list=${rm_list//"$p "/}
@@ -1415,6 +1469,12 @@ EOF
       if [[ -f $HOME/.local/share/applications/org.kde.dolphin.desktop ]]; then
         rm -f "$HOME/.local/share/applications/org.kde.dolphin.desktop" && \
           echo "migrated: removed stale org.kde.dolphin desktop override"
+      fi
+    fi
+    if ! pacman -Q swash >/dev/null 2>&1; then
+      if [[ -f $HOME/.local/share/applications/dev.lemmy.swash.desktop ]]; then
+        rm -f "$HOME/.local/share/applications/dev.lemmy.swash.desktop" && \
+          echo "migrated: removed stale dev.lemmy.swash desktop override"
       fi
     fi
   }
@@ -1468,13 +1528,13 @@ EOF
   # one-time mupdf → zathura migration below owns the switch.
   # nautilus is layer here when it is the box's file manager, so a box that
   # lost it (removed meta, stray -Rns) gets it back instead of landing
-  # without one. Boxes whose FM is nemo, dolphin or thunar skip it (see gate
-  # below) — without the gate every update would drag nautilus back onto
-  # hyprland boxes.
+  # without one. Boxes whose FM is strata, nemo, dolphin or thunar skip it
+  # (see gate below) — without the gate every update would drag nautilus back
+  # onto hyprland (strata) boxes, then migrate it straight back off.
   # (imv needs no gate here: it was never layer, install-time only.)
   ensure_layer_pkgs() {
     local pkgs="polkit-gnome gnome-keyring adw-gtk-theme brightnessctl playerctl fwupd noctalia jq" missing=""
-    if ! command -v nemo >/dev/null 2>&1 && ! command -v dolphin >/dev/null 2>&1 && ! command -v nautilus >/dev/null 2>&1 && ! command -v thunar >/dev/null 2>&1; then
+    if ! command -v strata >/dev/null 2>&1 && ! command -v nemo >/dev/null 2>&1 && ! command -v dolphin >/dev/null 2>&1 && ! command -v nautilus >/dev/null 2>&1 && ! command -v thunar >/dev/null 2>&1; then
       pkgs+=" nautilus"
     fi
     command -v pacman >/dev/null 2>&1 || return 0
