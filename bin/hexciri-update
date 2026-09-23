@@ -857,6 +857,41 @@ def merge(path, tag):
         print("noctalia bar (%s): added missing key(s): %s" % (tag, ", ".join(m.split("=")[0].strip() for m in missing)))
 merge(os.environ["LIVE_CFG"], "config")
 merge(os.environ["STATE_CFG"], "state")
+# Urgent workspace highlight off (same merge shape, other section): paint
+# urgent pills the occupied color. Present values always win.
+REPO_CFG="$src" LIVE_CFG="$dst" STATE_CFG="$STATE_CFG" python3 <<'EOF' || true
+import os, re
+wanted = ['urgent_color = "secondary"']
+def merge(path, tag):
+    try:
+        lines = open(path).read().split("\n")
+    except OSError:
+        return
+    start = end = None
+    for i, l in enumerate(lines):
+        if l.strip() == "[widget.workspaces]":
+            start = i
+            continue
+        if start is not None and re.match(r"^\[", l.strip()):
+            end = i
+            break
+    if start is None:
+        return
+    if end is None:
+        end = len(lines)
+    have = set()
+    for l in lines[start + 1:end]:
+        m = re.match(r'^\s*([A-Za-z0-9_]+)\s*=', l)
+        if m:
+            have.add(m.group(1))
+    missing = [w for w in wanted if re.match(r"^([A-Za-z0-9_]+)", w).group(1) not in have]
+    if missing:
+        ins = ["", "# Urgent highlight off (hexciri default — tune freely)"] + missing
+        lines[end:end] = ins
+        open(path, "w").write("\n".join(lines))
+        print("noctalia workspaces (%s): added missing key(s): %s" % (tag, ", ".join(m.split("=")[0].strip() for m in missing)))
+merge(os.environ["LIVE_CFG"], "config")
+merge(os.environ["STATE_CFG"], "state")
 EOF
     # Screenshot save folder: Noctalia Print binds (screenshot-region /
     # fullscreen) default to ~/Pictures when directory is empty — pin to
