@@ -31,6 +31,14 @@ theme_set() { # <theme-name>
     for base in "$HOME/.config/hexciri/themes/$THEME_NAME" "$HEXCIRI_PATH/themes/$THEME_NAME"; do
       [[ -d $base ]] && { printf '%s' "$base"; return 0; }
     done
+    # Case-insensitive fallback (theme dirs ship whatever case the author
+    # used — e.g. AniPop — while input normalizes to lowercase).
+    local hit
+    for base in "$HOME/.config/hexciri/themes" "$HEXCIRI_PATH/themes"; do
+      [[ -d $base ]] || continue
+      hit="$(find "$base" -maxdepth 1 -mindepth 1 -type d -iname "$THEME_NAME" 2>/dev/null | sort | head -n 1 || true)"
+      [[ -n $hit ]] && { printf '%s' "$hit"; return 0; }
+    done
     return 1
   }
 
