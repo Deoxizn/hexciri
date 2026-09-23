@@ -109,7 +109,7 @@ _hexciri_wants="kitty zed opencode localsend fuzzel gpu-screen-recorder tesserac
 # WM resolves via hexciri-session (live session → installed compositor →
 # niri default; HXC_WM env overrides for testing/bring-up).
 _hexciri_install_wm="$("$REPO/bin/hexciri-session" wm 2>/dev/null || echo niri)"
-if ! command -v nemo >/dev/null 2>&1 && ! command -v nautilus >/dev/null 2>&1 && ! command -v dolphin >/dev/null 2>&1 && ! command -v thunar >/dev/null 2>&1; then
+if ! command -v strata >/dev/null 2>&1 && ! command -v nemo >/dev/null 2>&1 && ! command -v nautilus >/dev/null 2>&1 && ! command -v dolphin >/dev/null 2>&1 && ! command -v thunar >/dev/null 2>&1; then
   if [[ $_hexciri_install_wm == hyprland ]]; then
     _hexciri_wants+="nemo "
   else
@@ -199,11 +199,13 @@ if command -v pacman >/dev/null 2>&1; then
       info "kept vim (forced removal failed)"
     fi
   fi
-  # Stock hyprland editor + calculator (vim precedent): the CachyOS hyprland
-  # meta pins them so plain -Rns refuses — -Rdd breaks only the meta's
-  # declared dep. The editor goes only when zed (its replacement) is present;
-  # the calculator is hexciri's fuzzel menu script, not an app.
-  for _p in gnome-text-editor gnome-calculator; do
+  # Stock hyprland editor + calculator + screenshot annotator (vim precedent):
+  # the CachyOS hyprland meta pins them so plain -Rns refuses — -Rdd breaks
+  # only the meta's declared dep. The editor goes only when zed (its
+  # replacement) is present; the calculator is hexciri's fuzzel menu script,
+  # not an app; Swash is replaced by Noctalia screenshot + hexciri-compositor
+  # grim/slurp flow (~/Pictures/Screenshots).
+  for _p in gnome-text-editor gnome-calculator swash; do
     pacman -Q "$_p" >/dev/null 2>&1 || continue
     if [[ $_p == gnome-text-editor ]] && ! command -v zeditor >/dev/null 2>&1; then
       info "kept $_p (zed not present yet)"

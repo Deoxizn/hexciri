@@ -129,7 +129,7 @@ fi
 if [[ $TO == hyprland ]]; then
   FM_OLDS="nautilus dolphin nemo"; FM_NEW=strata
   IMG_OLD=imv;                   IMG_NEW=qview
-  EXTRA_RM="gnome-text-editor gnome-calculator"
+  EXTRA_RM="gnome-text-editor gnome-calculator swash"
 else
   FM_OLDS="strata nemo dolphin"; FM_NEW=nautilus
   IMG_OLD=qview;                 IMG_NEW=imv
@@ -168,14 +168,16 @@ STATE_BASE="$HOME/.local/state/hexciri/defaults"
 STORED_FM="$(cat "$STATE_BASE/files" 2>/dev/null || true)"
 STORED_IMG="$(cat "$STATE_BASE/images" 2>/dev/null || true)"
 # Replacement removals beyond the old natives (hyprland direction mirrors
-# migrate_hyprland_native_apps: editor only with zed live, forced -Rdd while
-# the CachyOS hyprland meta pins editor/calculator — vim precedent).
+# migrate_hyprland_native_apps: editor only with zed live, calculator + Swash
+# unconditional — forced -Rdd while the CachyOS hyprland meta pins
+# editor/calculator/Swash — vim precedent).
 RM_LIST=""; RDD_LIST=""
 OLD_GONE=false
 if [[ $TO == hyprland ]]; then
   if have zeditor; then
     if have_pkg cachyos-hypr-noctalia; then RDD_LIST+="gnome-text-editor gnome-calculator "; else RM_LIST+="gnome-text-editor gnome-calculator "; fi
   fi
+  if have_pkg cachyos-hypr-noctalia; then RDD_LIST+="swash "; else RM_LIST+="swash "; fi
   # gtksourceview5 stays on purpose (libspelling needs it — attempting the
   # removal errors every run, see migrate_hyprland_native_apps).
 fi
@@ -366,6 +368,7 @@ stale_desktops() { # <pkg> → per-user desktop basenames left behind by removal
     qview) echo "qview" ;;
     gnome-text-editor) echo "org.gnome.TextEditor" ;;
     gnome-calculator) echo "org.gnome.Calculator" ;;
+    swash) echo "dev.lemmy.swash" ;;
   esac
 }
 drop_stale_desktops() { # <pkg>

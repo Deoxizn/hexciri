@@ -69,6 +69,11 @@ clipboard_enabled = true
 clipboard_history_max_entries = 100
 time_format = "{:%I:%M %p}"           # 12-hour time (Control Center / dashboard headers)
 
+# Screenshots (Noctalia Print binds: screenshot-region / screenshot-fullscreen)
+# match hexciri-compositor grim/slurp flow — empty defaults to ~/Pictures.
+[shell.screenshot]
+directory = "~/Pictures/Screenshots"
+
 # ──────────────────────────────────────────────
 # Notifications
 # ──────────────────────────────────────────────
