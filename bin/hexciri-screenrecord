@@ -138,7 +138,7 @@ start_screenrecording() {
 
   if kill -0 $pid 2>/dev/null; then
     echo "$filename" >"$RECORDING_FILE"
-    note "Recording started" "Run again to stop"
+    note -t 8000 "● Recording" "Press Alt+Print again to stop"
   else
     note -u critical -t 5000 "Screen recording failed to start"
     cleanup_webcam
