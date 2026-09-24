@@ -97,7 +97,8 @@ local function send_key_once(mods, key)
     end, { timeout = 50, type = "oneshot" })
   end
 end
-local TERMINAL_CLASSES = { kitty = true, foot = true, ghostty = true, Alacritty = true }
+local TERMINAL_CLASSES = { kitty = true, foot = true, ghostty = true, Alacritty = true,
+  ["tui.float"] = true, ["app.hexciri.ff"] = true }
 local function active_is_terminal()
   local ok, w = pcall(hl.get_active_window)
   if not ok or not w then return false end
