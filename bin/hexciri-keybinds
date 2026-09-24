@@ -50,6 +50,8 @@ HYPR_DESC = {
     "Mod+BracketLeft": "Cycle to previous window",
     "Mod+BracketRight": "Cycle to next window",
     "Mod+L": "Cycle tiling layout",
+    "Mod+C": "Universal copy",
+    "Mod+V": "Universal paste",
 }
 DESC = {
     "Mod+Space": "App launcher (Noctalia)",

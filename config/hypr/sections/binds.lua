@@ -82,6 +82,38 @@ hl.bind(mainMod .. " + CONTROL + L", hl.dsp.exec_cmd("hexciri-lock"))
 
 -- Clipboard history
 hl.bind(mainMod .. " + CONTROL + V", hl.dsp.exec_cmd("hexciri-clipboard"))
+-- Clipboard panel (moved off Mod+V for universal paste — same family)
+hl.bind(mainMod .. " + SHIFT + V", hl.dsp.exec_cmd("noctalia msg panel-toggle clipboard"))
+
+-- Universal copy/paste (Omarchy parity): Super chords work everywhere —
+-- terminals get Ctrl+Shift, everything else gets Ctrl+C/V. Synthetic keys go
+-- down/up split (50ms oneshot) so key state never sticks or repeats.
+-- Terminals are matched by window class (no tag system here).
+local function send_key_once(mods, key)
+  return function()
+    hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = key, state = "down" }))
+    hl.timer(function()
+      hl.dispatch(hl.dsp.send_key_state({ mods = mods, key = key, state = "up" }))
+    end, { timeout = 50, type = "oneshot" })
+  end
+end
+local TERMINAL_CLASSES = { kitty = true, foot = true, ghostty = true, Alacritty = true }
+local function active_is_terminal()
+  local ok, w = pcall(hl.get_active_window)
+  if not ok or not w then return false end
+  return TERMINAL_CLASSES[w.class] == true
+end
+local function universal_key(gui_mods, gui_key, term_mods, term_key)
+  return function()
+    if active_is_terminal() then
+      send_key_once(term_mods, term_key)()
+    else
+      send_key_once(gui_mods, gui_key)()
+    end
+  end
+end
+hl.bind(mainMod .. " + C", universal_key("CTRL", "C", "CTRL SHIFT", "C"))
+hl.bind(mainMod .. " + V", universal_key("CTRL", "V", "CTRL SHIFT", "V"))
 
 -- Messenger webapp
 hl.bind(mainMod .. " + CONTROL + M", hl.dsp.exec_cmd("hexciri-launch-or-focus-webapp messenger https://www.messenger.com"))
