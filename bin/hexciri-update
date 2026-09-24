@@ -1696,6 +1696,27 @@ EOF
     rm -f "$old" && echo "migrated: removed superseded 90-greeter-sync.sh hook (greeter sync runs at the end of the theme bridge)"
   }
 
+  # Fingerprint PAM cleanup (runs every pass; no-op when clean). Login logic
+  # (fprintd in the SDDM stack) exists only after explicit enrollment — a
+  # present-but-unusable reader, or no enrolled prints, leaves password-only
+  # logins that an empty auto-submit would otherwise wedge. Only strips when
+  # the fprintd query itself succeeds (reachable daemon) and shows no prints;
+  # anything else (no daemon, headless, error) leaves the stack alone.
+  migrate_fingerprint_pam_cleanup() {
+    grep -q "pam_fprintd" /etc/pam.d/sddm 2>/dev/null || return 0
+    local listed
+    listed="$(fprintd-list "$USER" 2>/dev/null)" || return 0
+    grep -qE '^ - #' <<<"$listed" && return 0
+    [[ -f /etc/pam.d/sddm.hexciri.bak ]] || sudo cp /etc/pam.d/sddm /etc/pam.d/sddm.hexciri.bak 2>/dev/null || return 0
+    if sudo sed -i "/pam_fprintd\\.so/d" /etc/pam.d/sddm 2>/dev/null; then
+      sudo rm -f /etc/hexciri/fingerprint-enabled 2>/dev/null || true
+      if grep -Eq "^Fingerprint=" /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null; then
+        sudo sed -i -E "s/^Fingerprint=.*/Fingerprint=false/" /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null || true
+      fi
+      echo "migrated: fprintd removed from SDDM stack (no enrolled prints — password login stays clean)"
+    fi
+  }
+
   ensure_layer_pkgs
   migrate_strata_to_nautilus
   migrate_fuzzel_launcher_to_noctalia
@@ -1704,6 +1725,7 @@ EOF
   migrate_hyprland_native_apps
   migrate_faillock_desktop_tuning
   migrate_btop_to_bottom
+  migrate_fingerprint_pam_cleanup
   migrate_greeter_hook_fold
   sync_keybinds
   sync_hyprland
