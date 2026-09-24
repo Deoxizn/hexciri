@@ -24,6 +24,25 @@ RECORDING_FILE="/tmp/hexciri-screenrecord-filename"
 
 note() { notify-send "Hexciri" "${1:-}" "${2:-}" 2>/dev/null || true; }
 
+# Recording lifecycle shares one stack tag: the start note, the periodic
+# elapsed reminders and the saved note replace each other instead of
+# stacking — a single living toast for the whole session.
+REC_TAG="hexciri-screenrecord"
+rec_note() { notify-send -h "string:x-kanon-stack-tag:$REC_TAG" "Hexciri" "$@" 2>/dev/null || true; }
+
+# Elapsed-time reminders while the recorder lives (started alongside it,
+# exits itself when the recorder dies — no pid files to leak).
+watch_recording() {
+  local start=$1 el
+  while pgrep -f "^gpu-screen-recorder" >/dev/null; do
+    sleep 30
+    pgrep -f "^gpu-screen-recorder" >/dev/null || break
+    el=$(( $(date +%s) - start ))
+    # shellcheck disable=SC2183
+    rec_note "● Recording" "$(printf '%02d:%02d elapsed — Alt+Print stops' $((el / 60)) $((el % 60)))"
+  done
+}
+
 DESKTOP_AUDIO="false"
 MICROPHONE_AUDIO="false"
 WEBCAM="false"
@@ -138,7 +157,8 @@ start_screenrecording() {
 
   if kill -0 $pid 2>/dev/null; then
     echo "$filename" >"$RECORDING_FILE"
-    note -t 8000 "● Recording" "Press Alt+Print again to stop"
+    rec_note -t 8000 "● Recording" "Press Alt+Print again to stop"
+    ( watch_recording "$(date +%s)" ) & disown 2>/dev/null || true
   else
     note -u critical -t 5000 "Screen recording failed to start"
     cleanup_webcam
@@ -183,7 +203,7 @@ stop_screenrecording() {
     filename=$(cat "$RECORDING_FILE" 2>/dev/null || true)
     local preview="${filename%.mp4}-preview.png"
     [[ -n $filename ]] && ffmpeg -y -i "$filename" -ss 00:00:00.1 -vframes 1 -q:v 2 "$preview" -loglevel quiet 2>/dev/null || true
-    note "Screen recording saved" "${filename:-unknown file}" -t 10000
+    rec_note -t 10000 "Screen recording saved" "${filename:-unknown file}"
     (sleep 2; rm -f "$preview") &
   fi
   rm -f "$RECORDING_FILE"
