@@ -33,10 +33,13 @@ Rectangle {
     return userModel.lastUser
   }
   // install.sh stamps theme.conf with Fingerprint=true only when a reader was
-  // detected at deploy time. Auto-starting the login with an empty password is
-  // only safe with a reader to claim it; on a readerless box pam_fprintd falls
-  // through and that empty submit fails red before the user can type.
-  property bool hasFingerprint: config.Fingerprint === undefined ? true : config.Fingerprint === "true"
+  // detected at deploy time. Auto-starting the login with an empty password
+  // is only safe with a reader to claim it; on a readerless (or not yet
+  // set-up) box that empty submit fails red — or sits in fprintd's timeout
+  // looking stuck — before the user can type. So the default is OFF: a
+  // missing key means type-your-password, and only an explicit stamped
+  // Fingerprint=true enables touch-to-login.
+  property bool hasFingerprint: config.Fingerprint === "true"
   // WM-aware default session (stamped per-box by hexciri-sync as
   // PreferredSession=<niri|hyprland> from ~/.config/hexciri/wm):
   // pinned WM first, then SDDM's remembered last session, then any known
