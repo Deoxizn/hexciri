@@ -111,8 +111,7 @@ except Exception: print("")' || true)"
     [[ $installed == "$tag" ]] && return 0 || return 1
   fi
   if [[ -z ${1:-} || ${1:-} != "--force" ]] && [[ $installed == "$tag" && -x $BIN ]]; then
-    echo "hexciri-strata-install: $tag already installed"
-    return 0
+    return 0  # current — silent steady state (see --check for versions)
   fi
   mkdir -p "$CACHE"
   local arc="strata-${tag#v}-$target.tar.gz"

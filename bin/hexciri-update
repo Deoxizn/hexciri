@@ -1412,8 +1412,12 @@ EOF
     # + sudo for deps); a failure just skips, and the flip/removal below gate
     # on the binary anyway.
     if [[ -x $REPO/bin/hexciri-strata-install ]]; then
-      "$REPO/bin/hexciri-strata-install" 2>&1 | tail -n 3 || \
+      if _strata_out="$("$REPO/bin/hexciri-strata-install" 2>&1)"; then
+        [[ -n $_strata_out ]] && printf '%s\n' "$_strata_out" | tail -n 3
+      else
         echo "migrated: strata install skipped (offline?) — run by hand: hexciri-strata-install"
+      fi
+      unset _strata_out
     fi
     # xdg-desktop-portal-gnome pins nautilus as its FileChooser dep: drop the
     # portal first or the nautilus removal below fails every pass with a
