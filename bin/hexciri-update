@@ -1696,17 +1696,26 @@ EOF
     rm -f "$old" && echo "migrated: removed superseded 90-greeter-sync.sh hook (greeter sync runs at the end of the theme bridge)"
   }
 
-  # Fingerprint PAM cleanup (runs every pass; no-op when clean). Login logic
-  # (fprintd in the SDDM stack) exists only after explicit enrollment — a
-  # present-but-unusable reader, or no enrolled prints, leaves password-only
-  # logins that an empty auto-submit would otherwise wedge. Only strips when
-  # the fprintd query itself succeeds (reachable daemon) and shows no prints;
-  # anything else (no daemon, headless, error) leaves the stack alone.
+  # Fingerprint PAM reconcile (runs every pass; no-op when clean). Enrollment
+  # itself is the explicit signal — a user who scanned prints opted in, so an
+  # enrolled box without the flag gets adopted (flag + stamp, PAM line kept).
+  # No prints + fprintd line present = grandfathered or stale logic on a box
+  # that can't use it: strip the line, clear flag + stamp. Only acts when the
+  # fprintd query itself succeeds (reachable daemon); anything else (no
+  # daemon, headless, error) leaves everything alone.
   migrate_fingerprint_pam_cleanup() {
-    grep -q "pam_fprintd" /etc/pam.d/sddm 2>/dev/null || return 0
     local listed
     listed="$(fprintd-list "$USER" 2>/dev/null)" || return 0
-    grep -qE '^ - #' <<<"$listed" && return 0
+    if grep -qE '^ - #' <<<"$listed"; then
+      if [[ ! -f /etc/hexciri/fingerprint-enabled ]]; then
+        sudo mkdir -p /etc/hexciri 2>/dev/null && \
+        sudo touch /etc/hexciri/fingerprint-enabled 2>/dev/null && \
+        sudo chmod 644 /etc/hexciri/fingerprint-enabled 2>/dev/null && \
+        echo "migrated: enrolled prints adopted (touch-login enabled)"
+      fi
+      return 0
+    fi
+    grep -q "pam_fprintd" /etc/pam.d/sddm 2>/dev/null || return 0
     [[ -f /etc/pam.d/sddm.hexciri.bak ]] || sudo cp /etc/pam.d/sddm /etc/pam.d/sddm.hexciri.bak 2>/dev/null || return 0
     if sudo sed -i "/pam_fprintd\\.so/d" /etc/pam.d/sddm 2>/dev/null; then
       sudo rm -f /etc/hexciri/fingerprint-enabled 2>/dev/null || true
