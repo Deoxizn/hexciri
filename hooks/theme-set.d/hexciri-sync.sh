@@ -157,17 +157,68 @@ bright_blue     = hex_color("bright_blue",       blue.lstrip("#"), ("color12",))
 bright_magenta  = hex_color("bright_magenta",    magenta.lstrip("#"), ("color13",))
 bright_cyan     = hex_color("bright_cyan",       cyan.lstrip("#"), ("color14",))
 
+# ── Contrast floor (theme-hook stability) ──
+# Authors ship whatever contrast they like — monochrome themes (solitude:
+# muted #4b4e55 on #0c0e10 = 2.3:1) leave secondary text unreadable on some
+# box or another. So after resolving, enforce minimum ratios by shifting
+# TEXT roles only (backgrounds/accents/selections carry the theme's identity
+# and are never touched). Pairs mirror the consumers: primary text, muted
+# text (3.0 floor — meant to be dim, just not invisible), on-primary,
+# selection text, bright text. Adjustments print (no silent restyling).
+def _lum(h):
+    h = h.lstrip("#")
+    c = [int(h[i:i+2], 16) / 255 for i in (0, 2, 4)]
+    c = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in c]
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+def _ratio(a, b):
+    x, y = sorted([_lum(a), _lum(b)])
+    return (y + 0.05) / (x + 0.05)
+
+def _ensure(fg, bg, floor, name):
+    if _ratio(fg, bg) >= floor:
+        return fg
+    # Shift away from the background's luminance, 8/step, capped.
+    light_bg = _lum(bg) > _lum(fg)
+    step = -8 if light_bg else 8
+    c = fg.lstrip("#")
+    r, g, b = (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16))
+    for _ in range(12):
+        r = min(255, max(0, r + step))
+        g = min(255, max(0, g + step))
+        b = min(255, max(0, b + step))
+        fg = "#%02x%02x%02x" % (r, g, b)
+        if _ratio(fg, bg) >= floor:
+            break
+    else:
+        fg = max(("#000000", "#ffffff"), key=lambda c: _ratio(c, bg))
+    print(f"hexciri-sync: contrast {name} {fg} (floored to {floor}:1)")
+    return fg
+
+foreground  = _ensure(foreground,  background,      4.5, "foreground/bg")
+muted       = _ensure(muted,       dark_background, 3.0, "muted/dark-bg")
+bright_fg   = _ensure(bright_fg,   background,      4.5, "bright-fg/bg")
+selection   = selection  # identity role — text side moves instead
+# Derived on-colors (text worn ON identity roles): same floors, so an accent
+# or selection that fights its text gets readable text instead of a restyle.
+on_primary   = _ensure(background, accent,    4.5, "on-primary/accent")
+on_secondary = _ensure(foreground, muted,     4.5, "on-secondary/muted")
+on_tertiary  = _ensure(background, blue,      4.5, "on-tertiary/blue")
+on_error     = _ensure(background, red,       4.5, "on-error/red")
+selection_fg = _ensure(foreground, selection, 4.5, "selection-fg/selection")
+
+
 # ── 1. Generate custom palette JSON ──
 palette = {
     "dark": {
         "mPrimary": accent,
-        "mOnPrimary": background,
+        "mOnPrimary": on_primary,
         "mSecondary": muted,
-        "mOnSecondary": foreground,
+        "mOnSecondary": on_secondary,
         "mTertiary": blue,
-        "mOnTertiary": background,
+        "mOnTertiary": on_tertiary,
         "mError": red,
-        "mOnError": background,
+        "mOnError": on_error,
         "mSurface": dark_background,
         "mOnSurface": foreground,
         "mSurfaceVariant": lighter_bg,
@@ -182,7 +233,7 @@ palette = {
             "cursor": foreground,
             "cursorText": background,
             "selectionBg": selection,
-            "selectionFg": foreground,
+            "selectionFg": selection_fg,
             "normal": {
                 "black": dark_background,
                 "red": red,
