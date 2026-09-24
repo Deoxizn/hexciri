@@ -8,7 +8,8 @@
 #     ~/.local/opt/hexciri/install.sh [--yes]
 #
 # --yes/-y answers the update deploy's "Run system update?" with yes
-# (non-interactive bring-up). The reboot offer always still asks.
+# (non-interactive bring-up). --reboot auto-reboots at the end without
+# asking; otherwise the reboot offer always still asks (never auto-reboots).
 #
 # One-shot CachyOS bring-up: clone, link controllers, root sync pass,
 # one-time app swap, per-user Brave Origin, then the update deploy
@@ -18,11 +19,13 @@
 set -euo pipefail
 
 UPDATE_YES=""
+AUTO_REBOOT=""
 for _a in "$@"; do
   case "$_a" in
     --yes|-y) UPDATE_YES="--yes" ;;
-    -h|--help) echo "usage: install.sh [--yes]"; exit 0 ;;
-    *) echo "install.sh: unknown arg: $_a (usage: install.sh [--yes])" >&2; exit 1 ;;
+    --reboot) AUTO_REBOOT=1 ;;
+    -h|--help) echo "usage: install.sh [--yes] [--reboot]"; exit 0 ;;
+    *) echo "install.sh: unknown arg: $_a (usage: install.sh [--yes] [--reboot])" >&2; exit 1 ;;
   esac
 done
 unset _a
@@ -31,6 +34,72 @@ REPO_URL="https://github.com/Deoxizn/hexciri.git"
 DEFAULT_REPO="$HOME/.local/opt/hexciri"
 
 info() { echo "hexciri: $*"; }
+
+# === BEGIN health-check (test harness sources this block) ===
+# Post-install sanity: catches a broken bring-up (e.g. invalid compositor
+# config = dead keybinds) before the user logs into it. Best-effort reads
+# only; returns nonzero if anything needs attention.
+health_check() {
+  local fail=0 failed
+  info "post-install health check"
+  if command -v systemctl >/dev/null 2>&1; then
+    failed="$(systemctl --failed --no-legend 2>/dev/null || true)"
+    if [[ -z $failed ]]; then
+      info "  systemd: no failed units"
+    else
+      info "  systemd: FAILED units present:"
+      printf '%s\n' "$failed" | sed 's/^/    /'
+      fail=1
+    fi
+  fi
+  # Broken compositor config is the usual "all keybinds dead" cause.
+  if command -v niri >/dev/null 2>&1; then
+    if niri validate >/dev/null 2>&1; then
+      info "  niri config: valid"
+    else
+      info "  niri config: INVALID — keybinds may be dead, check ~/.config/niri/config.kdl"
+      fail=1
+    fi
+  fi
+  if [[ -x "$HOME/.local/bin/hexciri-sync" ]]; then
+    info "  controllers: linked"
+  else
+    info "  controllers: ~/.local/bin/hexciri-sync missing"
+    fail=1
+  fi
+  if [[ ! -e /var/lib/pacman/db.lck ]]; then
+    info "  pacman: no stale lock"
+  else
+    info "  pacman: stale lock present (/var/lib/pacman/db.lck)"
+    fail=1
+  fi
+  return "$fail"
+}
+
+# Reboot offer. Never hangs: with --reboot it reboots outright, with a tty
+# it asks (default No), without a tty it just says relogin.
+# $1 = health_check status (0 clean).
+offer_reboot() {
+  if [[ -n ${AUTO_REBOOT:-} ]]; then
+    info "rebooting now (--reboot)"
+    sudo reboot || info "reboot manually: sudo reboot"
+    return 0
+  fi
+  if [[ ${1:-0} -ne 0 ]]; then
+    info "health check flagged issues above — a reboot clears session-level ones"
+  fi
+  if [[ -t 0 ]]; then
+    local ans=""
+    read -rp "Reboot now to activate everything (keybinds, drivers, groups)? [y/N] " ans || ans=""
+    if [[ $ans == [Yy]* ]]; then
+      info "rebooting..."
+      sudo reboot || info "reboot manually: sudo reboot"
+      return 0
+    fi
+  fi
+  info "no reboot — at minimum relogin (new keybinds need a fresh session)"
+}
+# === END health-check ===
 
 # Resolve repo: script's dir if it holds bin/, else clone/default.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -363,12 +432,12 @@ fi
 # Best-effort, never fatal.
 if [[ -x "$REPO/bin/hexciri-theme-omarchy" ]]; then
   info "syncing omarchy theme defaults"
-  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-omarchy" 2>&1 | sed 's/^/  /' || \
+  HEXCIRI_UNATTENDED=1 HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-omarchy" 2>&1 | sed 's/^/  /' || \
     info "omarchy themes skipped — run them from Update > Themes later"
 fi
 if [[ -x "$REPO/bin/hexciri-theme-extras" ]]; then
   info "syncing extra themes"
-  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-extras" --run sync 2>&1 | sed 's/^/  /' || \
+  HEXCIRI_UNATTENDED=1 HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-extras" --run sync 2>&1 | sed 's/^/  /' || \
     info "extra themes skipped — run them from Update > Themes later"
 fi
 # Update deploy (one-time here; afterwards run it by hand or from the menu):
@@ -382,4 +451,8 @@ if [[ -x "$REPO/bin/hexciri-update" ]]; then
   "$REPO/bin/hexciri-update" $UPDATE_YES || \
     info "update skipped — run 'hexciri-update' by hand later"
 fi
+# Verify the bring-up didn't leave the box broken, then offer the reboot
+# fresh keybinds/drivers/groups only take effect in a new session.
+if health_check; then hc=0; else hc=1; fi
+offer_reboot "$hc"
 info "done — pick a theme ('hexciri-theme set'), then relogin. Update: git -C $REPO pull && sh $REPO/install.sh"

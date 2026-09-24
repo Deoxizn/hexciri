@@ -192,6 +192,12 @@ PY
     printf '%s\n' "$sync_out"
   fi
 
+  # Session agent on the install/update path too (update_self is not what
+  # install.sh runs): pkexec apps need a polkit agent in the graphical
+  # session. Same ensures as the self flow; best-effort, never fatal.
+  sync_autostart || true
+  sync_hyprland_autostart || true
+
   # Reboot offer only when the kernel hexciri is pinned to boot differs from the
   # one currently running.
   local running expected entry pin e vmlinuz pkg d
@@ -232,6 +238,71 @@ PY
 
 # ══════════════════════════════════════════════ hexciri-update-hexciri
 # Hexciri repo sync: pull newer commits. Nothing new → says up to date and stops.
+# ── session-agent ensures (top level: needed by both update_sys and update_self) ──
+# === BEGIN sync-autostart (test harness sources this block) ===
+# Autostart fragment: seed when absent (fresh boxes whose config.kdl stub
+# predates the repo layout never got it). Otherwise ensure the polkit auth
+# agent line exists — pkexec apps like btrfs-assistant silently fail with
+# no session agent. Never removes user lines; one backup; idempotent.
+sync_autostart() {
+  local REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+  command -v niri >/dev/null 2>&1 || return 0   # no niri here — nothing to do
+  local src="$REPO/config/niri/cfg/autostart.kdl"
+  local dst="${XDG_CONFIG_HOME:-$HOME/.config}/niri/cfg/autostart.kdl"
+  local agent='/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1'
+  # File ensure needs the repo template; the live spawn below does not.
+  if [[ -f $src ]]; then
+    if [[ ! -f $dst && ! -L $dst ]]; then
+      mkdir -p "$(dirname "$dst")"
+      cp -f "$src" "$dst"
+      echo "seeded niri autostart ($dst)"
+    elif ! grep -qF "$agent" "$dst" 2>/dev/null; then
+      cp -f "$dst" "$dst.bak.$(date +%s)" 2>/dev/null || true
+      [[ -n $(tail -c 1 "$dst" 2>/dev/null) ]] && printf '\n' >> "$dst"
+      printf '%s\n' "spawn-at-startup \"$agent\"   // HEXCIRI: polkit auth dialogs (pkexec apps like btrfs-assistant)" >> "$dst"
+      echo "added polkit agent to niri autostart ($dst)"
+    fi
+  fi
+  # Best-effort: start the agent in THIS session too (config replug only
+  # takes effect at next login; spawn-at-startup never fires on reload).
+  if ! pgrep -f polkit-gnome-authentication-agent-1 >/dev/null 2>&1 \
+      && [[ -n ${NIRI_SOCKET:-} ]]; then
+    niri msg action spawn -- "$agent" >/dev/null 2>&1 \
+      && echo "started polkit agent in this session" || true
+  fi
+}
+# === END sync-autostart ===
+
+# === BEGIN sync-hyprland-autostart (test harness sources this block) ===
+# Hyprland autostart agent: the HEXCIRI autostart section is seed-once, so
+# boxes seeded before the agent line shipped never got it — and pkexec apps
+# like btrfs-assistant silently fail with no session agent. If the live
+# autostart.lua lacks the agent entirely, append a tiny marked block (never
+# touch the rest; boxes with no file yet get just the block, valid in the
+# hl context and ignored if unrequired). Idempotent via its marker.
+sync_hyprland_autostart() {
+  local REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
+  command -v Hyprland >/dev/null 2>&1 || command -v hyprland >/dev/null 2>&1 || return 0
+  local dst="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/config/autostart.lua"
+  local agent='/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1'
+  if ! grep -qF "$agent" "$dst" 2>/dev/null; then
+    if [[ -f $dst ]]; then cp -f "$dst" "$dst.hexciri.bak" 2>/dev/null || true; else mkdir -p "$(dirname "$dst")"; fi
+    { printf '\n-- ── HEXCIRI polkit-agent ──\n'
+      printf 'hl.on("hyprland.start", function()\n'
+      printf '    hl.exec_cmd("%s")\n' "$agent"
+      printf 'end)\n'
+      printf -- '-- ── END HEXCIRI polkit-agent ──\n'; } >> "$dst" && \
+      echo "hyprland: added polkit agent block (autostart.lua)"
+  fi
+  # Best-effort: start the agent in THIS session too.
+  if ! pgrep -f polkit-gnome-authentication-agent-1 >/dev/null 2>&1 \
+      && [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] && command -v hyprctl >/dev/null 2>&1; then
+    hyprctl dispatch exec "$agent" >/dev/null 2>&1 \
+      && echo "started polkit agent in this session" || true
+  fi
+}
+# === END sync-hyprland-autostart ===
+
 update_self() {
   local REPO="${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}"
   if [[ ! -d $REPO ]]; then
@@ -305,6 +376,7 @@ update_self() {
     adapt_stock_keybinds "$src" "$dst"
     sync_new_binds "$src" "$dst"
   }
+
 
   # Hyprland section deploy: the hexciri binds/autostart bodies (repo
   # config/hypr/sections/) paste once into the stock binds.lua/autostart.lua
@@ -484,6 +556,7 @@ PYEOF
       echo "hyprland: added ~/.local/bin to the session PATH ($HOME/.config/uwsm/env)"
     fi
   }
+
 
   adapt_stock_keybinds() {
     local src="$1" dst="$2"
@@ -1737,7 +1810,9 @@ EOF
   migrate_fingerprint_pam_cleanup
   migrate_greeter_hook_fold
   sync_keybinds
+  sync_autostart
   sync_hyprland
+  sync_hyprland_autostart
   sync_kitty
   sync_fastfetch
   sync_noctalia

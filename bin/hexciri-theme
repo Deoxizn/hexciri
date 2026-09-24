@@ -441,7 +441,10 @@ theme_extras() { # [--run sync|remove]
       remove) op_remove_extra ;;
       *) echo "usage: hexciri-theme-extras --run <sync|remove>"; exit 1 ;;
     esac
-    [[ -t 0 ]] && read -rp "press enter to close"
+    # Menu dispatch holds the terminal open, but the installer pipes this
+    # through sed — an unconditional pause hangs fresh installs at an
+    # invisible prompt. Skip it when the installer says unattended.
+    if [[ -z ${HEXCIRI_UNATTENDED:-} && -t 0 ]]; then read -rp "press enter to close"; fi
     exit 0
   fi
 
