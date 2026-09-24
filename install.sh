@@ -164,12 +164,31 @@ if command -v pacman >/dev/null 2>&1; then
     info "wants skipped/partial — install by hand: pacman -S $_hexciri_wants"
   for _p in $_hexciri_stock_rm; do
     pacman -Q "$_p" >/dev/null 2>&1 || continue
+    # Never orphan-sweep a compositor: on a fresh CachyOS-niri box niri
+    # itself is installed only as a dep of the meta below, so a plain -Rns
+    # would uninstall the running desktop (observed: no niri, no sessions
+    # dir, unbootable GUI). Mark any present compositor explicit first.
+    if [[ $_p == cachyos-niri-noctalia ]]; then
+      for _c in niri hyprland; do
+        pacman -Q "$_c" >/dev/null 2>&1 && \
+          sudo pacman -D --asexplicit "$_c" >/dev/null 2>&1 && \
+          info "pinned $_c explicit (meta removal can't sweep it)" || true
+      done
+    fi
     if sudo pacman -Rns --noconfirm "$_p" 2>&1 | sed 's/^/  /'; then
       info "removed $_p"
     else
       info "kept $_p (something still needs it)"
     fi
   done
+  unset _c
+  # Verify a compositor survived the swap (belt-and-suspenders behind the
+  # asexplicit pin above): a box with no compositor has no GUI at all.
+  if ! command -v niri >/dev/null 2>&1 && ! command -v Hyprland >/dev/null 2>&1; then
+    info "WARNING: no compositor installed after the swap — installing niri"
+    sudo pacman -S --needed --noconfirm niri xdg-desktop-portal-gtk 2>&1 | sed 's/^/  /' || \
+      info "compositor install failed — run by hand: sudo pacman -S --needed niri"
+  fi
   for _m in $_hexciri_purge; do
     _pkg="${_m%%:*}"; _dir="${_m#*:}"
     pacman -Q "$_pkg" >/dev/null 2>&1 || rm -rf "$_dir"
