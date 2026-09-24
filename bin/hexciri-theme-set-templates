@@ -68,15 +68,26 @@ C["selection_background"] = C["selection"]  # kitty.conf.tpl compat
 # The raw `selection` key is unreliable upstream — some themes set it to a
 # near-white foreground (white highlight bar, unreadable light-gray text) —
 # so fuzzel bypasses it entirely.
-def _accent_lum1000(hex_color):
+def _lum(h):
     try:
-        c = hex_color.lstrip("#")
-        return 299 * int(c[0:2], 16) + 587 * int(c[2:4], 16) + 114 * int(c[4:6], 16)
+        c = h.lstrip("#")
+        rgb = [int(c[i:i+2], 16) / 255 for i in (0, 2, 4)]
     except (ValueError, IndexError):
-        return 0
+        return 0.0
+    rgb = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
+    return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+
+def _ratio(a, b):
+    x, y = sorted([_lum(a), _lum(b)])
+    return (y + 0.05) / (x + 0.05)
 
 C["fuzzel_selection"] = C["accent"]
-C["fuzzel_selection_text"] = C["background"] if _accent_lum1000(C["accent"]) > 127500 else C["bright_foreground"]
+# Knife-edge luminance thresholds fail mid-tone accents (solitude: light text
+# picked for a medium accent ≈ 2:1) — compare both candidates properly.
+C["fuzzel_selection_text"] = max(
+    (C["background"], C["bright_foreground"]),
+    key=lambda fg: _ratio(fg, C["accent"]),
+)
 # Matched substring inside the selected row must stay readable on the accent
 # bg — accent-on-accent is invisible — so reuse the contrast text color.
 C["fuzzel_selection_match"] = C["fuzzel_selection_text"]
