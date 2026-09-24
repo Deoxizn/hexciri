@@ -11,8 +11,12 @@ bindir="${bindir:-$SCRIPT_DIR}"
 menu=""
 add() { menu+="$1"$'\n'; }
 
-# Fingerprint only when the reader exists on this machine
-"$bindir/hexciri-hw-fingerprint" >/dev/null 2>&1 && add 'Fingerprint'
+# Fingerprint only when the reader exists on this machine.
+# Marked ✓ when greeter touch-login is explicitly enabled.
+FP_FLAG=/etc/hexciri/fingerprint-enabled
+if "$bindir/hexciri-hw-fingerprint" >/dev/null 2>&1; then
+  if [[ -f $FP_FLAG ]]; then add 'Fingerprint ✓'; else add 'Fingerprint'; fi
+fi
 add 'Fido2'
 add 'SSHD'
 add 'Passwordless Sudo'
@@ -25,8 +29,8 @@ choice=$(
 enter_term() { "$SCRIPT_DIR/hexciri-terminal" -e bash -c "$1"; }
 
 case "$choice" in
-  "Fingerprint")
-    enter_term 'if ! command -v fprintd-enroll >/dev/null 2>&1; then echo "Installing fprintd (fingerprint support)..."; sudo pacman -S --noconfirm fprintd; fi; if command -v fprintd-enroll >/dev/null 2>&1; then fprintd-enroll; else echo "fprintd failed to install -- run: sudo pacman -S fprintd"; fi; read -rp "Press Enter to close"'
+  "Fingerprint"|"Fingerprint ✓")
+    enter_term 'if ! command -v fprintd-enroll >/dev/null 2>&1; then echo "Installing fprintd (fingerprint support)..."; sudo pacman -S --noconfirm fprintd; fi; if command -v fprintd-enroll >/dev/null 2>&1; then fprintd-enroll; else echo "fprintd failed to install -- run: sudo pacman -S fprintd"; read -rp "Press Enter to close"; exit 0; fi; echo; read -rp "Enable touch-to-login at the greeter? (empty submits now, password still works) [y/N] " yn; if [[ $yn =~ ^[Yy]$ ]]; then sudo mkdir -p /etc/hexciri && sudo touch /etc/hexciri/fingerprint-enabled && sudo chmod 644 /etc/hexciri/fingerprint-enabled && (grep -Eq "^Fingerprint=" /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null && sudo sed -i -E "s/^Fingerprint=.*/Fingerprint=true/" /usr/share/sddm/themes/hexciri/theme.conf || printf "Fingerprint=true\n" | sudo tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null) && echo "touch-to-login ON (applies at next login)"; else sudo rm -f /etc/hexciri/fingerprint-enabled; if grep -Eq "^Fingerprint=" /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null; then sudo sed -i -E "s/^Fingerprint=.*/Fingerprint=false/" /usr/share/sddm/themes/hexciri/theme.conf; fi; echo "touch-to-login OFF"; fi; read -rp "Press Enter to close"'
     ;;
   "Fido2")
     enter_term 'echo "Plug in your FIDO2 key."; read -rp "It should register via your app. Configure: sudo systemctl enable fido2-token-gc; See arch-wiki FIDO2."; echo done'

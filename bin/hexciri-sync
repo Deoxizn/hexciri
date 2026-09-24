@@ -193,8 +193,11 @@ if [[ -f /usr/share/applications/org.gnome.Nautilus.desktop ]] && \
     && log "unhid org.gnome.Nautilus.desktop (Strata-era NoDisplay removed)"
 fi
 # ── deleting /etc/sddm.conf.d/10-hexciri-theme.conf restores prior behavior.
-# ── Fingerprint auto-submit is stamped per-box (reader → true, else false) so
-# ── readerless boxes never red-flash an empty submit.
+# ── Fingerprint touch-login is EXPLICIT-only: /etc/hexciri/fingerprint-enabled
+# ── (written by System > Security > Fingerprint) is the sole source of true.
+# ── No auto-detection here — a reader existing never enables anything, so new
+# ── and readerless boxes always land on type-your-password.
+FLAG=/etc/hexciri/fingerprint-enabled
 if [[ -n $REPO && -d $REPO/branding/sddm ]]; then
   tdir=/usr/share/sddm/themes/hexciri
   if [[ ! -f $tdir/Main.qml ]] || ! cmp -s "$REPO/branding/sddm/Main.qml" "$tdir/Main.qml" 2>/dev/null; then
@@ -212,8 +215,7 @@ if [[ -n $REPO && -d $REPO/branding/sddm ]]; then
     [[ -f $tdir/theme.conf ]] || cp -f "$REPO/branding/sddm/theme.conf" "$tdir/theme.conf" 2>/dev/null || true
     log "sddm theme deployed"
   fi
-  fp=false
-  if grep -ril finger /sys/bus/usb/devices/*/product 2>/dev/null | grep -q .; then fp=true; fi
+  if [[ -f $FLAG ]]; then fp=true; else fp=false; fi
   if ! grep -Eq "^Fingerprint=$fp\$" "$tdir/theme.conf" 2>/dev/null; then
     if grep -Eq '^Fingerprint=' "$tdir/theme.conf" 2>/dev/null; then
       sed -i -E "s/^Fingerprint=.*/Fingerprint=$fp/" "$tdir/theme.conf"

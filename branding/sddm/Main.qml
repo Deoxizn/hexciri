@@ -32,13 +32,9 @@ Rectangle {
     if (config.Username && config.Username.length > 0) return config.Username
     return userModel.lastUser
   }
-  // install.sh stamps theme.conf with Fingerprint=true only when a reader was
-  // detected at deploy time. Auto-starting the login with an empty password
-  // is only safe with a reader to claim it; on a readerless (or not yet
-  // set-up) box that empty submit fails red — or sits in fprintd's timeout
-  // looking stuck — before the user can type. So the default is OFF: a
-  // missing key means type-your-password, and only an explicit stamped
-  // Fingerprint=true enables touch-to-login.
+  // Touch-login is explicit-only: System > Security > Fingerprint writes
+  // /etc/hexciri/fingerprint-enabled, and root sync mirrors it here. No
+  // auto-detection anywhere — a missing key means type-your-password.
   property bool hasFingerprint: config.Fingerprint === "true"
   // WM-aware default session (stamped per-box by hexciri-sync as
   // PreferredSession=<niri|hyprland> from ~/.config/hexciri/wm):
@@ -248,6 +244,11 @@ Rectangle {
     interval: 1000
     repeat: false
     onTriggered: {
+      // Only when the field is still empty: SDDM runs a single serial PAM
+      // conversation, so an empty submit racing typed input swallows the
+      // user's Enter (password stays filled, nothing happens). Typing first
+      // wins; the empty submit only fires on an untouched field.
+      if (password.text.length > 0) return
       if (root.hasFingerprint && root.currentUser.length > 0) {
         root.infoText = "touch the reader or enter your password"
         sddm.login(root.currentUser, "", root.sessionIndex)
