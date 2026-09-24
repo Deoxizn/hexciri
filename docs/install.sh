@@ -1,19 +1,14 @@
 #!/bin/bash
-# hexciri dotfiles bring-up — CachyOS + Niri, then this.
+# hexciri bootstrap — thin wrapper, deliberately NOT a second installer.
+# (docs/install.sh once held a full copy of the bring-up and drifted behind
+# the real install.sh — which is exactly how fresh boxes lost Niri to an
+# unguarded meta removal. There is one installer now: REPO/install.sh.)
 #
 #   curl -LO https://hexciri.dirty.pizza/install.sh
-#   sh install.sh
+#   sh install.sh [--yes]
 #
-# or: git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri
-#     ~/.local/opt/hexciri/install.sh [--yes]
-#
-# --yes/-y answers the update deploy's "Run system update?" with yes
-# (non-interactive bring-up). The reboot offer always still asks.
-#
-# One-shot CachyOS+Niri bring-up: clone, link controllers, root sync pass,
-# one-time app swap, per-user Brave Origin, then the update deploy
-# (keybinds adapt, kitty seed, themes). Idempotent; safe to re-run.
-# Afterwards sync never touches packages — later manual changes stick.
+# Clones (or fast-forwards) ~/.local/opt/hexciri, then execs its install.sh
+# with your args, so this path always runs the newest bring-up.
 set -euo pipefail
 
 UPDATE_YES=""
@@ -27,217 +22,25 @@ done
 unset _a
 
 REPO_URL="https://github.com/Deoxizn/hexciri.git"
-DEFAULT_REPO="$HOME/.local/opt/hexciri"
+REPO="${HEXCIRI_REPO:-$HOME/.local/opt/hexciri}"
 
-info() { echo "hexciri: $*"; }
-
-# Resolve repo: script's dir if it holds bin/, else clone/default.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 if [[ -d "$SCRIPT_DIR/bin" && -x "$SCRIPT_DIR/bin/hexciri-sync" ]]; then
   REPO="$SCRIPT_DIR"
 else
-  REPO="${HEXCIRI_REPO:-$DEFAULT_REPO}"
-  if [[ ! -x "$REPO/bin/hexciri-sync" ]]; then
-    info "cloning into $REPO"
+  if [[ -x "$REPO/bin/hexciri-sync" ]]; then
+    echo "hexciri: updating $REPO"
+    git -C "$REPO" pull --ff-only 2>/dev/null || echo "hexciri: pull skipped — running local checkout"
+  else
+    echo "hexciri: cloning into $REPO"
     mkdir -p "$(dirname "$REPO")"
     git clone "$REPO_URL" "$REPO"
   fi
 fi
 
-# Link sweep (same step hexciri-sync owns) so sync itself is on PATH first.
-mkdir -p "$HOME/.local/bin"
-for f in "$REPO"/bin/*; do
-  [[ -f $f && -x $f ]] || continue
-  ln -sfn "$f" "$HOME/.local/bin/$(basename "$f")"
-done
-info "linked controllers into ~/.local/bin"
-
-# Delegate the re-apply; best-effort (sync may need interactive/root steps).
-if [[ -x "$REPO/bin/hexciri-sync" ]]; then
-  info "re-applying layer via hexciri-sync"
-  HEXCIRI_REPO="$REPO" "$REPO/bin/hexciri-sync" || info "sync returned non-zero; re-run after reboot"
+if [[ ! -x "$REPO/install.sh" ]]; then
+  echo "hexciri: checkout broken ($REPO/install.sh missing)" >&2
+  exit 1
 fi
-# Root pass: ufw/sshd/hides/hook need root. Prompts once here; falls back to
-# a manual `sudo hexciri-sync` if sudo isn't available.
-if [[ -x "$REPO/bin/hexciri-sync" ]]; then
-  info "root pass via hexciri-sync (ufw, sshd, menu hides)"
-  sudo HEXCIRI_REPO="$REPO" "$REPO/bin/hexciri-sync" 2>&1 | sed 's/^/  /' || \
-    info "root pass skipped — run 'sudo $REPO/bin/hexciri-sync' by hand later"
-fi
-# One-time app swap: hexciri's apps in, replaced stock ones out (with
-# their config dirs, but only once something is actually absent). The wants
-# below are hardcoded — there is no list to curate. The framework sync
-# (hexciri-sync / hexciri-update self) still never touches packages (except
-# the tiny layer-critical subset it self-heals: polkit-gnome gnome-keyring
-# adw-gtk-theme nautilus brightnessctl playerctl fwupd), so your later manual changes stick.
-# Best-effort, never fatal.
-# NOTE: removal order matters — the CachyOS niri meta goes first so the portal
-# it pins comes out cleanly behind it. vim is force-removed
-# below (held by the deliberately kept cachyos-zsh-config; -Rdd breaks only
-# that declared dep, reinstalling vim undoes it). fuzzel + gtksourceview5 are
-# layer needs (menu would be dead without fuzzel; gtksourceview5 covers
-# text-viewer libs).
-# NOTE: polkit-gnome is a layer need too — niri autostart spawns its agent
-# binary, and without it pkexec apps (btrfs-assistant, gparted) silently
-# never open: no agent, no password dialog.
-# NOTE: brightnessctl + playerctl are layer needs too — niri keybinds spawn
-# them for XF86MonBrightness* / XF86AudioPlay/Next/Prev (Framework F7/F8 +
-# media keys). Without them brightness + media keys are dead while volume
-# (wpctl) keeps working.
-# NOTE: adw-gtk-theme ships the adw-gtk3-dark base theme the GTK hook sets
-# (hooks/theme-set.d/10-gtk.sh) — without it GTK3/plain-GTK4 apps fall back
-# to built-in styling and look unthemed; gtk.css is only an overlay on top.
-# NOTE: fwupd is a layer need too — Update > Firmware runs fwupdmgr update,
-# and without it the blade fails with "command not found".
-# NOTE: xdg-terminal-exec is NOT in CachyOS repos (aborts the whole transaction
-# when named) — blades fall back to hexciri-terminal, which needs only kitty.
-# brave-origin-bin installs below via yay/paru, not pacman.
-_hexciri_wants="kitty zed opencode nautilus localsend gtksourceview5 fuzzel gpu-screen-recorder tesseract imv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd "
-# One-time stock removals (not the list — replaced CachyOS defaults, always
-# safe to attempt; kept when something still needs them).
-_hexciri_stock_rm="cachyos-niri-noctalia xdg-desktop-portal-gnome alacritty firefox meld cachyos-micro-settings micro"
-_hexciri_purge="alacritty:$HOME/.config/alacritty firefox:$HOME/.mozilla meld:$HOME/.config/meld micro:$HOME/.config/micro"
-if command -v pacman >/dev/null 2>&1; then
-  info "one-time app swap (hexciri wants + stock removals)"
-  # shellcheck disable=SC2086
-  sudo pacman -S --needed --noconfirm $_hexciri_wants 2>&1 | sed 's/^/  /' || \
-    info "wants skipped/partial — install by hand: pacman -S $_hexciri_wants"
-  for _p in $_hexciri_stock_rm; do
-    pacman -Q "$_p" >/dev/null 2>&1 || continue
-    if sudo pacman -Rns --noconfirm "$_p" 2>&1 | sed 's/^/  /'; then
-      info "removed $_p"
-    else
-      info "kept $_p (something still needs it)"
-    fi
-  done
-  for _m in $_hexciri_purge; do
-    _pkg="${_m%%:*}"; _dir="${_m#*:}"
-    pacman -Q "$_pkg" >/dev/null 2>&1 || rm -rf "$_dir"
-  done
-  if pacman -Q vim >/dev/null 2>&1; then
-    info "removing vim (forced: breaks only cachyos-zsh-config's declared dep)"
-    if sudo pacman -Rdd --noconfirm vim 2>&1 | sed 's/^/  /'; then
-      rm -rf "$HOME/.vim" "$HOME/.viminfo"
-      info "removed vim"
-    else
-      info "kept vim (forced removal failed)"
-    fi
-  fi
-  unset _p _m _pkg _dir
-fi
-unset _hexciri_wants _hexciri_stock_rm _hexciri_purge
-# mupdf → zathura migration (one-time; no-op when clean): a re-run of
-# install.sh must converge boxes that got mupdf from an older bring-up.
-# zathura-pdf-mupdf conflicts with the poppler backend, so that goes first.
-if command -v pacman >/dev/null 2>&1; then
-  if pacman -Q zathura-pdf-poppler >/dev/null 2>&1; then
-    if sudo pacman -Rns --noconfirm zathura-pdf-poppler 2>&1 | sed 's/^/  /'; then
-      info "removed zathura-pdf-poppler (mupdf backend is the default)"
-    else
-      info "kept zathura-pdf-poppler (removal failed)"
-    fi
-  fi
-  if pacman -Q mupdf >/dev/null 2>&1; then
-    if sudo pacman -Rns --noconfirm mupdf 2>&1 | sed 's/^/  /'; then
-      info "removed mupdf (replaced by zathura)"
-    else
-      info "kept mupdf (something still needs it)"
-    fi
-  fi
-  if ! pacman -Q mupdf >/dev/null 2>&1 && [[ -f $HOME/.local/share/applications/mupdf.desktop ]]; then
-    rm -f "$HOME/.local/share/applications/mupdf.desktop" && \
-      info "removed stale mupdf desktop override"
-  fi
-fi
-if [[ $(cat "$HOME/.local/state/hexciri/defaults/pdf" 2>/dev/null || true) == mupdf ]]; then
-  mkdir -p "$HOME/.local/state/hexciri/defaults"
-  printf '%s' "zathura" > "$HOME/.local/state/hexciri/defaults/pdf" && \
-    info "default pdf mupdf → zathura"
-fi
-# Nautilus is the default file manager (pacman package, in _hexciri_wants so a
-# fresh box gets it even if the removed niri meta took it). A stale
-# Hidden=true override from the Strata era would keep it out of menus, so drop
-# it; the stock desktop entry applies again.
-if [[ -f $HOME/.local/share/applications/org.gnome.Nautilus.desktop ]]; then
-  rm -f "$HOME/.local/share/applications/org.gnome.Nautilus.desktop" && \
-    info "unhid nautilus launcher entry (Strata-era override removed)"
-fi
-# inode/directory is owned by the mime-defaults table (heal pins the stored
-# Files pick when the slot is empty/stale, never over a deliberate pick).
-# AUR helper bootstrap (one-time): Brave Origin needs yay or paru, and a
-# fresh box has neither. Builds yay via makepkg (needs base-devel+git).
-# Best-effort: without it, AUR steps below print their manual fallback.
-if ! command -v yay >/dev/null 2>&1 && ! command -v paru >/dev/null 2>&1; then
-  if command -v pacman >/dev/null 2>&1 && command -v git >/dev/null 2>&1; then
-    info "bootstrapping yay (AUR helper)"
-    sudo pacman -S --needed --noconfirm base-devel git 2>&1 | sed 's/^/  /' || true
-    rm -rf /tmp/hexciri-yay && git clone https://aur.archlinux.org/yay.git /tmp/hexciri-yay 2>&1 | sed 's/^/  /' || true
-    ( cd /tmp/hexciri-yay 2>/dev/null && makepkg -si --noconfirm 2>&1 | sed 's/^/  /' ) || \
-      info "yay bootstrap skipped — install an AUR helper by hand for Brave Origin"
-  else
-    info "yay bootstrap skipped (no pacman/git) — install an AUR helper by hand for Brave Origin"
-  fi
-fi
-# AUR want (Brave Origin). Installs via yay/paru as you, then drops
-# the brave-bin stand-in once origin is present. Best-effort, never fatal.
-_hexciri_aur_pkgs="brave-origin-bin "
-if command -v brave-origin >/dev/null 2>&1 && [[ $_hexciri_aur_pkgs == *"brave-origin-bin"* ]]; then
-  info "Brave Origin already present — keeping it, no Brave stand-in wanted"
-  # strip the satisfied want so the helper step below only handles the rest
-  _hexciri_aur_pkgs="$(printf '%s' "$_hexciri_aur_pkgs" | tr ' ' '\n' | grep -vx 'brave-origin-bin' | tr '\n' ' ')"
-fi
-if [[ -n $(printf '%s' "$_hexciri_aur_pkgs" | tr -d ' ') ]]; then
-  _aur=""
-  for _h in yay paru; do command -v "$_h" >/dev/null 2>&1 && { _aur=$_h; break; }; done
-  if [[ -n $_aur ]]; then
-    info "installing AUR wants via $_aur: $_hexciri_aur_pkgs"
-    # shellcheck disable=SC2086
-    "$_aur" -S --needed --noconfirm $_hexciri_aur_pkgs 2>&1 | sed 's/^/  /' || \
-      info "AUR wants skipped — run by hand: $_aur -S $_hexciri_aur_pkgs"
-  else
-    info "AUR wants skipped (no yay/paru) — run by hand: yay -S $_hexciri_aur_pkgs"
-  fi
-fi
-unset _aur _h _hexciri_aur_pkgs
-if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&1; then
-  info "removing Brave stand-in (Origin is present)"
-  sudo pacman -Rns --noconfirm brave-bin 2>&1 | sed 's/^/  /' || \
-    info "kept brave-bin (removal failed) — remove by hand if unwanted"
-fi
-# Default-app file associations: one table (images, documents, files,
-# browser) pins the stored picks, healing only browser-stolen, empty, or
-# stale slots — a deliberate pick stays. Best-effort, never fatal; re-runs
-# heal whatever the browser re-stole.
-if [[ -x "$REPO/bin/hexciri-mime-defaults" ]]; then
-  info "applying default-app file associations"
-  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-mime-defaults" heal 2>&1 | sed 's/^/  /' || \
-    info "mime defaults skipped — pick System > Default Apps by hand"
-fi
-# Share-menu sender: localsend >= 1.18 ships localsend-cli itself, so keeping
-# localsend current delivers it — nothing extra to install. The blades resolve
-# localsend-cli || jocalsend live and fail with a clear message otherwise.
-# Theme content (one-time here; afterwards Update > Themes owns it — the
-# framework sync deliberately never pulls themes, so system updates stay quiet).
-# Best-effort, never fatal.
-if [[ -x "$REPO/bin/hexciri-theme-omarchy" ]]; then
-  info "syncing omarchy theme defaults"
-  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-omarchy" 2>&1 | sed 's/^/  /' || \
-    info "omarchy themes skipped — run them from Update > Themes later"
-fi
-if [[ -x "$REPO/bin/hexciri-theme-extras" ]]; then
-  info "syncing extra themes"
-  HEXCIRI_PATH="$REPO" "$REPO/bin/hexciri-theme-extras" --run sync 2>&1 | sed 's/^/  /' || \
-    info "extra themes skipped — run them from Update > Themes later"
-fi
-# Update deploy (one-time here; afterwards run it by hand or from the menu):
-# keybinds adapt, kitty seed, themes, then the full system update it offers.
-# Runs attached to the terminal (no pipe): its "Run system update? [y/N]"
-# prompt is written without a trailing newline, so piping stdout through sed
-# swallows it and the install looks hung at an invisible question.
-if [[ -x "$REPO/bin/hexciri-update" ]]; then
-  info "update deploy via hexciri-update (keybinds, kitty, themes)"
-  # shellcheck disable=SC2086
-  "$REPO/bin/hexciri-update" $UPDATE_YES || \
-    info "update skipped — run 'hexciri-update' by hand later"
-fi
-info "done — pick a theme ('hexciri-theme set'), then relogin. Update: git -C $REPO pull && sh $REPO/install.sh"
+# shellcheck disable=SC2086
+exec bash "$REPO/install.sh" $UPDATE_YES
