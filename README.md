@@ -99,6 +99,7 @@ new session, done.
 | `Mod+Shift+B` | browser |
 | `Mod+Shift+S` / `Mod+Shift+C` | web search / calculator |
 | `Mod+C` / `Mod+V` | copy / paste everywhere (Hyprland only — needs the compositor to send the keys) |
+| `Mod+Ctrl+B` | private browser window |
 | `Mod+Shift+T` | system monitor |
 | `Mod+Ctrl+V` | clipboard history |
 | `Mod+Escape` | power menu |

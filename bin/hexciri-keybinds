@@ -63,6 +63,7 @@ DESC = {
     "Mod+Return": "Terminal",
     "Mod+grave": "AI agent",
     "Mod+Shift+B": "Browser",
+    "Mod+Ctrl+B": "Private browser window",
     "Mod+Shift+E": "Text editor",
     "Mod+Shift+F": "File manager",
     "Mod+T": "Toggle floating",

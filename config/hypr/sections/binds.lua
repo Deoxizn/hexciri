@@ -17,6 +17,7 @@ hl.bind(mainMod .. " + SHIFT + T", hl.dsp.exec_cmd(launchPrefix .. TERMINAL .. "
 hl.bind(mainMod .. " + Return",   hl.dsp.exec_cmd("hexciri-terminal"))
 hl.bind(mainMod .. " + SHIFT + E", hl.dsp.exec_cmd("zeditor"))
 hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("xdg-open https://"))
+hl.bind(mainMod .. " + CONTROL + B", hl.dsp.exec_cmd("brave-origin --incognito"))
 -- NOTE: stock Mod+W (launchPrefix .. BROWSER with BROWSER="firefox") is dead
 -- — firefox is replaced by Brave Origin — and is neutralized at deploy with
 -- NO replacement: browser already lives on Mod+Shift+B. One browser launcher.
