@@ -45,8 +45,24 @@ if [[ -d $REPO/.git ]]; then
   if [[ $EUID -eq 0 ]]; then
     owner="$(stat -c %U "$REPO" 2>/dev/null || echo root)"
     if command -v runuser >/dev/null && [[ $owner != root ]]; then
-      runuser -u "$owner" -- git -C "$REPO" pull --ff-only >/dev/null 2>&1 || \
-        log "warning: repo pull skipped/failed (dirty tree or offline?) — continuing with local code"
+      # Root has no SSH keys/agent of its own: pull as the repo owner,
+      # non-interactive so a missing key fails fast instead of hanging the
+      # transaction on a password prompt.
+      pull_err="$(runuser -u "$owner" -- env GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=20" git -C "$REPO" pull --ff-only 2>&1)" || {
+        pull_err="${pull_err%%$'\n'*}"
+        if [[ -n $(runuser -u "$owner" -- git -C "$REPO" status --porcelain 2>/dev/null) ]]; then
+          log "repo has local changes — skipping self-update, continuing with local code"
+        elif runuser -u "$owner" -- git -C "$REPO" fetch --quiet https://github.com/Deoxizn/hexciri.git main 2>&1; then
+          if runuser -u "$owner" -- git -C "$REPO" merge --ff-only FETCH_HEAD >/dev/null 2>&1; then
+            log "framework pulled via anonymous HTTPS fallback"
+          else
+            log "warning: repo fetched but fast-forward failed — continuing with local code"
+          fi
+        else
+          log "warning: repo pull failed (${pull_err:-unknown error}) — continuing with local code"
+        fi
+      }
+      unset pull_err
     else
       git -C "$REPO" pull --ff-only >/dev/null 2>&1 || true
     fi
