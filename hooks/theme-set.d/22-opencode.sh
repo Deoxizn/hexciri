@@ -22,13 +22,26 @@ bg_element="$(extract_color "lighter_background")"
 
 # Selected list items render their text over the primary color
 # (selectedListItemText; opencode's own fallback is the background color).
-# A hardcoded light text is unreadable on light primaries (sapphire #f7c3c6),
-# so mirror opencode's selectedForeground contrast rule (luminance > 0.5 ->
-# dark text): light primary -> background text, dark primary -> bright text.
+# Mirror fuzzel (hexciri-theme-set-templates): selection bg is always the
+# accent, text is whichever of background / bright_foreground has the higher
+# WCAG contrast ratio. Knife-edge luminance thresholds fail mid-tone accents
+# (solitude #798186: light text picked for a medium accent ≈ 1.76:1).
 sel_fg="$bright_white"
-if [[ $accent =~ ^[0-9a-fA-F]{6}$ ]]; then
-  accent_lum1000=$(( 299*16#${accent:0:2} + 587*16#${accent:2:2} + 114*16#${accent:4:2} ))
-  (( accent_lum1000 > 127500 )) && sel_fg="$primary_background"
+if [[ $accent =~ ^[0-9a-fA-F]{6}$ && $bright_white =~ ^[0-9a-fA-F]{6}$ && $primary_background =~ ^[0-9a-fA-F]{6}$ ]]; then
+  sel_fg="$(python3 - "$accent" "$bright_white" "$primary_background" << 'PY'
+import sys
+def _lum(h):
+    c = h.lstrip('#')
+    rgb = [int(c[i:i+2], 16) / 255 for i in (0, 2, 4)]
+    rgb = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
+    return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+def _ratio(a, b):
+    x, y = sorted([_lum(a), _lum(b)])
+    return (y + 0.05) / (x + 0.05)
+accent, bright, bg = sys.argv[1], sys.argv[2], sys.argv[3]
+print(bg if _ratio(bg, accent) >= _ratio(bright, accent) else bright, end='')
+PY
+)"
 fi
 
 theme_dir="$HOME/.config/opencode/themes"
