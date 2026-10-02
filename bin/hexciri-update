@@ -451,6 +451,24 @@ update_self() {
         echo "hyprland: added hexciri layout block (misc.lua)"
     fi
     unset LAYOUT_MISC
+    # Follow activation requests (links, notification clicks switch workspace).
+    # Hyprland defaults misc:focus_on_activate=false, so xdg-activation is
+    # ignored: a Discord link leaves you on Discord, a notif click never
+    # pulls you to the app. Seed-once override; later hl.config wins.
+    # Runs on update_self, which install.sh also runs (update deploy), so
+    # fresh and existing boxes both converge.
+    FOCUS_MISC="$dst/misc.lua"
+    if [[ -f $FOCUS_MISC ]] && ! grep -qE 'focus_on_activate\s*=\s*true' "$FOCUS_MISC" 2>/dev/null; then
+      cp -f "$FOCUS_MISC" "$FOCUS_MISC.hexciri.bak" 2>/dev/null || true
+      if grep -qE 'focus_on_activate\s*=' "$FOCUS_MISC" 2>/dev/null; then
+        sed -Ei 's/focus_on_activate\s*=\s*false/focus_on_activate = true/' "$FOCUS_MISC" && \
+          echo "hyprland: flipped focus_on_activate false -> true (misc.lua)"
+      elif ! grep -qxF -- "-- ── HEXCIRI focus ──" "$FOCUS_MISC" 2>/dev/null; then
+        { printf '\n-- ── HEXCIRI focus ──\n'; printf 'hl.config({\n    misc = {\n        focus_on_activate = true,\n    },\n})\n'; printf -- '-- ── END HEXCIRI focus ──\n'; } >> "$FOCUS_MISC" && \
+          echo "hyprland: added hexciri focus block (misc.lua)"
+      fi
+    fi
+    unset FOCUS_MISC
     # Personal window rules live as a HEXCIRI-marked section in the stock
     # windowrules.lua (seed-once from the repo source, never refreshed).
     # Stale require of the retired overlay file is removed the same way.
