@@ -386,7 +386,12 @@ update_self() {
   # hexciri-session resolves hyprland deterministically (incl. ssh bring-up).
   sync_hyprland() {
     command -v Hyprland >/dev/null 2>&1 || command -v hyprland >/dev/null 2>&1 || return 0
-    local src="$REPO/config/hypr/config" dst="$HOME/.config/hypr/config"
+    # The repo ships the section bodies under config/hypr/sections/ (they are
+    # pasted into the stock files below, seed-once). config/hypr/config/ was
+    # the old overlay layout and no longer exists — guarding on it made this
+    # whole function return 0, silently skipping seeding, the WM pin and the
+    # uwsm PATH line. Guard on the directory that actually exists.
+    local src="$REPO/config/hypr/sections" dst="$HOME/.config/hypr/config"
     local main="$HOME/.config/hypr/hyprland.lua"
     local rev manifest entry oldrev found r
     [[ -d $src && -d $dst ]] || return 0
@@ -525,8 +530,23 @@ pats = [
     'window.move({ monitor = MONITOR2 })',
     'window.move({ monitor = MONITOR3 })',
 ]
-out, changed = [], False
+SEC_START, SEC_END = "-- ── HEXCIRI binds ──", "-- ── END HEXCIRI binds ──"
+out, changed, in_section = [], False, False
 for line in src.split("\n"):
+    bare = line.strip()
+    if in_section:
+        # Hands off inside the section seeded just above: those lines ARE the
+        # hexciri binds (menu/terminal/float/layout/copy/paste/power), and
+        # seeding is seed-once, so anything commented here stays dead on every
+        # later run. Resume neutralizing after the END marker.
+        out.append(line)
+        if bare == SEC_END:
+            in_section = False
+        continue
+    if bare == SEC_START:
+        in_section = True
+        out.append(line)
+        continue
     if line.lstrip().startswith("--"):
         out.append(line)
         continue
