@@ -511,6 +511,9 @@ update_self() {
     #   Mod+W              BROWSER=firefox (dead) → removed outright; browser lives on Mod+Shift+B
     #   Mod+Shift+S        move scratchpad→ web search owns it
     #   Mod+Shift+1..3     monitor moves  → workspace-move verb owns it
+    #   Ctrl+Shift+Escape  stock btop     → retired, hexciri owns the terminal
+    #                                        slot on Mod+Shift+T (btm) and btop
+    #                                        is not installed anyway
     if [[ -f $dst/binds.lua ]]; then
       python3 - "$dst/binds.lua" <<'PYEOF'
 import re, sys, shutil, os
@@ -551,9 +554,11 @@ for line in src.split("\n"):
         out.append(line)
         continue
     if "-e btop" in line:
-        # btop retired for bottom: keep the stock Ctrl+Shift+Escape terminal
-        # slot working by repointing it (same fixup class as neutralizing).
-        out.append(line.replace("-e btop", "-e btm"))
+        # btop is retired for bottom and the section already owns the terminal
+        # slot (Mod+Shift+T -> btm), so the stock line is redundant — and since
+        # btop is not installed it was a dead bind. Retire it like the rest.
+        indent = line[:len(line) - len(line.lstrip())]
+        out.append(indent + "-- [hexciri] " + line.strip())
         changed = True
     elif any(p in line for p in pats):
         indent = line[:len(line) - len(line.lstrip())]
