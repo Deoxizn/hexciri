@@ -570,7 +570,11 @@ if changed:
     bak = kb + ".hexciri.bak"
     if not os.path.exists(bak):
         shutil.copy2(kb, bak)
-    open(kb, "w").write("\n".join(out) + ("\n" if src.endswith("\n") else "\n"))
+    # split("\n") leaves a trailing "" when the file ends in a newline, so the
+    # join already terminates it — append unconditionally (as this did) grew a
+    # blank line at EOF on every pass. Only terminate when one is missing.
+    text = "\n".join(out)
+    open(kb, "w").write(text if text.endswith("\n") else text + "\n")
     print("hyprland: neutralized stock binds owned by the hexciri section (backup: binds.lua.hexciri.bak)")
 PYEOF
     fi
