@@ -87,6 +87,32 @@ max_visible = 5                       # Max stacked toasts
 enable_daemon = true                  # Run the notification daemon
 
 # ──────────────────────────────────────────────
+# Audio / UI sounds
+#
+# enable_sounds = false: Noctalia's UI sounds (message-new-instant on every
+# notification, audio-volume-change, power-plug/unplug) each open a short-lived
+# PipeWire stream on whatever the current default sink is. When that sink is a
+# Bluetooth A2DP device, every Discord message added/removed a stream on the
+# live SBC session, forcing it to renegotiate — which gated the ongoing music
+# stream for ~1s and produced an audible dropout for ALL audio on that sink,
+# not just the notification. Busy channels made it constant.
+#
+# Verified by correlating PipeWire sink-input churn against notification
+# timestamps: transient "noctalia-sound" sink-inputs appeared within ~100 ms of
+# each notification (15:27:13.784 vs 15:27:13.722, 15:29:44.478 vs 15:29:44.365).
+#
+# Note this is stream churn, not profile churn. A Bluetooth headset profile
+# autoswitch rule (wireplumber bluetooth.autoswitch-to-headset-profile) is a
+# separate failure mode and is handled separately.
+#
+# To re-enable: flip this back to true. Notification *toasts* are unaffected —
+# only the audible chime is suppressed.
+# ──────────────────────────────────────────────
+
+[audio]
+enable_sounds = false
+
+# ──────────────────────────────────────────────
 # Idle → lock screen after 5 minutes
 # ──────────────────────────────────────────────
 
