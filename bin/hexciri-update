@@ -1316,7 +1316,8 @@ EOF
   # the live file — exactly why the Strata bind survived the original
   # migration. Healing first lets the sync see an already-matching combo.
   migrate_strata_to_nautilus() {
-    local changed=0 cur gtk_hook mimeapps strata_ref kb pc portal_changed=0
+    local changed=0 cur gtk_hook mimeapps strata_ref kb pc portal_changed=0 wm
+    wm="$("$REPO/bin/hexciri-session" wm 2>/dev/null || echo niri)"
     # Strata is a supported file manager again (hyprland default): a current
     # strata pick is deliberate — never purge a live install from under it.
     if [[ $(cat "$HOME/.local/state/hexciri/defaults/files" 2>/dev/null || true) == strata ]]; then
@@ -1327,7 +1328,21 @@ EOF
     #    recreates config, so stop it first. Runs unconditionally for the
     #    portal/dbus crumbs: the binary can already be gone while its
     #    FileChooser override still hijacks every Open/Save dialog.
-    if [[ -x $HOME/.local/bin/strata || -f $HOME/.local/share/applications/io.github.lgse.Strata.desktop || -d $HOME/.config/strata \
+    #    Hyprland exception: Strata is the hyprland file manager (provisioned
+    #    every pass below), so the binary/desktop/version stay — purging them
+    #    here would remove → reinstall on every pass (download + noise). Only
+    #    dead portal/dbus crumbs go (no pkill: the file manager may be open).
+    if [[ $wm == hyprland ]]; then
+      if [[ -f $HOME/.local/share/xdg-desktop-portal/portals/strata.portal \
+        || -f $HOME/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.strata.service \
+        || -f $HOME/.local/share/dbus-1/services/io.github.lgse.Strata.FileManager1.service ]]; then
+        rm -f "$HOME/.local/share/xdg-desktop-portal/portals/strata.portal" \
+          "$HOME/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.strata.service" \
+          "$HOME/.local/share/dbus-1/services/io.github.lgse.Strata.FileManager1.service"
+        echo "migrated: stale Strata portal backend removed"
+        changed=1
+      fi
+    elif [[ -x $HOME/.local/bin/strata || -f $HOME/.local/share/applications/io.github.lgse.Strata.desktop || -d $HOME/.config/strata \
       || -f $HOME/.local/share/xdg-desktop-portal/portals/strata.portal \
       || -f $HOME/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.strata.service ]]; then
       pkill -x strata 2>/dev/null || true
@@ -1589,10 +1604,16 @@ EOF
     # + sudo for deps); a failure just skips, and the flip/removal below gate
     # on the binary anyway.
     if [[ -x $REPO/bin/hexciri-strata-install ]]; then
-      if _strata_out="$("$REPO/bin/hexciri-strata-install" 2>&1)"; then
-        [[ -n $_strata_out ]] && printf '%s\n' "$_strata_out" | tail -n 3
-      else
-        echo "migrated: strata install skipped (offline?) — run by hand: hexciri-strata-install"
+      # Silent success AND silent steady state: upstream Strata cuts releases
+      # near-daily and a bump is not hexciri news — the installed version
+      # stays recorded in ~/.local/state/hexciri/strata.version (see
+      # hexciri-strata-install --check). Only a failure with no working
+      # Strata to show for it speaks.
+      if ! _strata_out="$("$REPO/bin/hexciri-strata-install" 2>&1)"; then
+        if ! command -v strata >/dev/null 2>&1; then
+          [[ -n $_strata_out ]] && printf '%s\n' "$_strata_out" | tail -n 3
+          echo "migrated: strata install skipped (offline?) — run by hand: hexciri-strata-install"
+        fi
       fi
       unset _strata_out
     fi

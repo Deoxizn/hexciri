@@ -118,7 +118,7 @@ except Exception: print("")' || true)"
   ( cd "$CACHE" && curl -fsSLO "https://github.com/$GH/releases/download/$tag/$arc" && curl -fsSLO "https://github.com/$GH/releases/download/$tag/$arc.sha256" ) || {
     echo "hexciri-strata-install: download failed ($tag)" >&2; return 1
   }
-  ( cd "$CACHE" && sha256sum --check "$arc.sha256" ) || {
+  ( cd "$CACHE" && sha256sum --check --status "$arc.sha256" ) || {
     echo "hexciri-strata-install: CHECKSUM FAILED — refusing to install" >&2; return 1
   }
   rm -rf "$CACHE/pkg" && mkdir -p "$CACHE/pkg"
