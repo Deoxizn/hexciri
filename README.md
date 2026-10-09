@@ -114,3 +114,11 @@ with history. `Mod+Ctrl+V` is the same idea for everything you copied.
    firewall and sshd settings, and heals anything missing.
 2. Still off? Re-run `install.sh` — safe on a working box too.
 3. Forgot a key? `Mod+K`. Need a doc? `Learn` in the root menu.
+
+## Credits
+
+- [Adapta](https://github.com/signaldirective/Adapta) by Signal Directive
+  (MIT) — the opt-in GTK 3/4 theme (`[gtk] adapta = true` in
+  `theme-hook.toml`), itself built on
+  [Catppuccin-GnomeTheme](https://github.com/Fausto-Korpsvart/Catppuccin-GnomeTheme)
+  by Fausto Korpsvart.
