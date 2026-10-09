@@ -108,17 +108,13 @@ Search and calculator aren't apps — they're menu modes: `Mod+Shift+S`
 searches the web (and your files), `Mod+Shift+C` is a full calculator, both
 with history. `Mod+Ctrl+V` is the same idea for everything you copied.
 
-## Credits
-
-- [Adapta](https://github.com/signaldirective/Adapta) by Signal Directive
-  (MIT) — the opt-in GTK 3/4 theme (`[gtk] adapta = true` in
-  `theme-hook.toml`), itself built on
-  [Catppuccin-GnomeTheme](https://github.com/Fausto-Korpsvart/Catppuccin-GnomeTheme)
-  by Fausto Korpsvart.
-
 ## When something looks off
 
 1. Press `Update > Hexciri` — every press re-applies links, keybinds,
    firewall and sshd settings, and heals anything missing.
 2. Still off? Re-run `install.sh` — safe on a working box too.
 3. Forgot a key? `Mod+K`. Need a doc? `Learn` in the root menu.
+
+## Sources
+
+[Omarchy](https://github.com/omacom/omarchy) × [Niri](https://github.com/YaLTeR/niri) × [Hyprland](https://hyprland.org) × [Noctalia](https://github.com/) × [Quickshell](https://github.com/outfoxxed/quickshell) × [theme-hook-plugin-manager](https://github.com/OldJobobo/theme-hook-plugin-manager) × [base16-Discord](https://github.com/imbypass/base16-discord) × [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7) × [system24](https://github.com/refact0r/system24) × [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme) × [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) × [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam) × [Adapta](https://github.com/signaldirective/Adapta) × [Catppuccin-GnomeTheme](https://github.com/Fausto-Korpsvart/Catppuccin-GnomeTheme)
