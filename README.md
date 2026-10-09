@@ -108,13 +108,6 @@ Search and calculator aren't apps — they're menu modes: `Mod+Shift+S`
 searches the web (and your files), `Mod+Shift+C` is a full calculator, both
 with history. `Mod+Ctrl+V` is the same idea for everything you copied.
 
-## When something looks off
-
-1. Press `Update > Hexciri` — every press re-applies links, keybinds,
-   firewall and sshd settings, and heals anything missing.
-2. Still off? Re-run `install.sh` — safe on a working box too.
-3. Forgot a key? `Mod+K`. Need a doc? `Learn` in the root menu.
-
 ## Credits
 
 - [Adapta](https://github.com/signaldirective/Adapta) by Signal Directive
@@ -122,3 +115,10 @@ with history. `Mod+Ctrl+V` is the same idea for everything you copied.
   `theme-hook.toml`), itself built on
   [Catppuccin-GnomeTheme](https://github.com/Fausto-Korpsvart/Catppuccin-GnomeTheme)
   by Fausto Korpsvart.
+
+## When something looks off
+
+1. Press `Update > Hexciri` — every press re-applies links, keybinds,
+   firewall and sshd settings, and heals anything missing.
+2. Still off? Re-run `install.sh` — safe on a working box too.
+3. Forgot a key? `Mod+K`. Need a doc? `Learn` in the root menu.
