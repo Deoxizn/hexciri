@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 source "${HEXCIRI_THEME_ENV:-$HOME/.config/hexciri/hooks/lib/theme-env.sh}"
 
+# Adapta mode: the real GTK theme is ~/.themes/Adapta (see 11-adapta.sh).
+# Writing the flat override sheet would win over it in GTK4, so skip.
+if thpm_truthy "$(thpm_config_value gtk adapta false)"; then
+    success "GTK override sheet skipped (Adapta active)"
+    exit 0
+fi
+
 output_file="$THPM_CURRENT_THEME_DIR/gtk.css"
 light_file="$THPM_LIGHT_MODE_FILE"
 gtk3_dir="$HOME/.config/gtk-3.0"
@@ -25,10 +32,15 @@ create_dynamic_theme() {
 # selection). These are scoped to nautilus-window and only emitted when
 # Nautilus is installed so no other GTK app -- e.g. the Strata file manager --
 # has its own checked/selected styling flattened by them.
+# Shared fragment with 11-adapta.sh (hooks/lib/nautilus-gtk4.fragment.css).
 local nautilus_rules=""
+local _nautilus_fragment=""
 if command -v nautilus >/dev/null 2>&1; then
-    nautilus_rules="$(cat <<'NAUTILUS'
-
+    _nautilus_fragment="$(dirname "${HEXCIRI_THEME_ENV:-$HOME/.config/hexciri/hooks/lib/theme-env.sh}")/nautilus-gtk4.fragment.css"
+    if [[ -f "$_nautilus_fragment" ]]; then
+        nautilus_rules="$(cat "$_nautilus_fragment")"
+    else
+        nautilus_rules="$(cat <<'NAUTILUS'
     nautilus-window flowboxchild:hover,
     nautilus-window gridview child:hover,
     nautilus-window columnview row:hover,
@@ -70,6 +82,7 @@ if command -v nautilus >/dev/null 2>&1; then
     }
 NAUTILUS
 )"
+    fi
 fi
 
 cat > "$output_file" << EOF

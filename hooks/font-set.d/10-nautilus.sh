@@ -3,6 +3,15 @@
 # shellcheck disable=SC1091
 source "${HEXCIRI_THEME_ENV:-$HOME/.config/hexciri/hooks/lib/theme-env.sh}"
 
+# Adapta mode: ~/.config/gtk-4.0/gtk.css is a symlink into ~/.themes/Adapta/.
+# Writing the stamped template through it would corrupt the theme file (until
+# the next build wipes it). Skip — Adapta sets no fonts, apps fall back to the
+# gsettings font-name value directly.
+if thpm_truthy "$(thpm_config_value gtk adapta false)"; then
+    success "GTK font restamp skipped (Adapta active)"
+    exit 0
+fi
+
 gtk4_file="$HOME/.config/gtk-4.0/gtk.css"
 template_file="$THPM_CURRENT_THEME_DIR/gtk.css"
 
