@@ -119,7 +119,10 @@ case "$op" in
       # Hyprland 0.56: `hyprctl dispatch dpms off` is broken — it serializes to
       # invalid unquoted Lua (hl.dispatch(dpms off)) and errors silently under
       # the `|| true`. Route through `hyprctl eval` with the real API call.
-      hyprland) hyprctl eval "hl.dispatch(hl.dsp.dpms('off'))" 2>/dev/null || true ;;
+      # Pass a TABLE: hl.dsp.dpms() maps a string/number argument to TOGGLE
+      # (tableToggleAction only reads "action" from a table), so dpms('off')
+      # silently toggled the panels back on every other lock-loop tick.
+      hyprland) hyprctl eval 'hl.dispatch(hl.dsp.dpms({ action = "disable" }))' 2>/dev/null || true ;;
       *)        true ;;
     esac
     exit 0
