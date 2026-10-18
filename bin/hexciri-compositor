@@ -116,7 +116,10 @@ case "$op" in
   power-off-monitors)
     case "$WM" in
       niri)     niri msg action power-off-monitors 2>/dev/null || true ;;
-      hyprland) hyprctl dispatch dpms off 2>/dev/null || true ;;
+      # Hyprland 0.56: `hyprctl dispatch dpms off` is broken — it serializes to
+      # invalid unquoted Lua (hl.dispatch(dpms off)) and errors silently under
+      # the `|| true`. Route through `hyprctl eval` with the real API call.
+      hyprland) hyprctl eval "hl.dispatch(hl.dsp.dpms('off'))" 2>/dev/null || true ;;
       *)        true ;;
     esac
     exit 0
