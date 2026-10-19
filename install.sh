@@ -413,9 +413,10 @@ if [[ -x "$REPO/bin/hexciri-aether-url" ]]; then
     info "aether handler skipped — run 'hexciri-aether-url heal' by hand"
 fi
 # Login-greeter appearance sync authorization (one-time): on greetd boxes the
-# login page is noctalia-greeter, and every theme-set pushes the new palette +
-# wallpaper there via `noctalia msg greeter-sync` (hooks/theme-set.d/
-# 90-greeter-sync.sh). That sync needs admin auth per call unless this narrow
+# login page is noctalia-greeter, and the shell pushes palette + wallpaper
+# there on every theme set and — with [shell.greeter_sync] auto_sync — on every
+# wallpaper / color / font change (hooks/theme-set.d/hexciri-sync.sh §6 keeps
+# the theme-set path). That sync needs admin auth per call unless this narrow
 # polkit rule exists — enabling it once makes all future syncs promptless.
 # Scoped to the greeter appearance action only (never sudo, never legacy
 # paths). Best-effort, never fatal; existing boxes get it from root sync.

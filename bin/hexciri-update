@@ -1119,6 +1119,43 @@ try:
 except KeyError:
     pass
 EOF
+    # Login greeter auto-sync: make the greeter follow wallpaper / palette /
+    # font changes from the running shell (picker picks and per-monitor
+    # wallpapers included), not only hexciri theme sets. Additive only — an
+    # explicit auto_sync = false written by Settings (state wins per-key) is
+    # left alone. The one-time `noctalia-greeter passwordless-sync enable`
+    # rule is owned by install.sh / root hexciri-sync.
+    LIVE_CFG="$dst" STATE_CFG="$STATE_CFG" python3 <<'EOF' || true
+import os, re
+def ensure(path, tag):
+    try:
+        lines = open(path).read().split("\n")
+    except OSError:
+        return
+    table = "[shell.greeter_sync]"
+    start = next((i for i, l in enumerate(lines) if l.strip() == table), None)
+    if start is None:
+        # Keep the subtable next to its parent block when possible; appending
+        # a fully-qualified table at EOF is valid TOML either way.
+        pos = len(lines)
+        shot = next((i for i, l in enumerate(lines) if l.strip() == "[shell.screenshot]"), None)
+        if shot is not None:
+            pos = shot + 1
+            while pos < len(lines) and not lines[pos].strip().startswith("["):
+                pos += 1
+        lines[pos:pos] = ["", table, "auto_sync = true"]
+        open(path, "w").write("\n".join(lines))
+        print("noctalia greeter (%s): added [shell.greeter_sync] auto_sync = true" % tag)
+        return
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].strip().startswith("[")), len(lines))
+    if any(re.match(r"^\s*auto_sync\s*=", lines[i]) for i in range(start + 1, end)):
+        return  # explicit value (user / GUI) wins
+    lines.insert(start + 1, "auto_sync = true")
+    open(path, "w").write("\n".join(lines))
+    print("noctalia greeter (%s): added missing auto_sync = true" % tag)
+ensure(os.environ["LIVE_CFG"], "config")
+ensure(os.environ["STATE_CFG"], "state")
+EOF
     # Plugin preset: merge MISSING keys from the shipped preset into the live
     # settings (GUI values always win). Seeding only when settings.toml is
     # absent misses every box whose file already exists — the exact hole that
