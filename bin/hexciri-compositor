@@ -58,7 +58,12 @@ case "$op" in
     if (($# < 2)); then exit 0; fi
     case "$WM" in
       niri)     niri msg action focus-window --id "$2" 2>/dev/null || true ;;
-      hyprland) hyprctl dispatch focuswindow "address:$2" 2>/dev/null || true ;;
+      # Hyprland 0.56: the legacy `hyprctl dispatch focuswindow address:...`
+      # serializes to invalid Lua (hl.dispatch(focuswindow address:0x...)) and
+      # dies silently under the `|| true` — the window never gets focused.
+      # Use the real API instead: the window selector is "address:0x...", and
+      # focusing a window that lives on another workspace follows it there.
+      hyprland) hyprctl eval "hl.dispatch(hl.dsp.focus({ window = \"address:$2\" }))" 2>/dev/null || true ;;
       *)        true ;;
     esac
     exit 0
@@ -70,7 +75,11 @@ case "$op" in
     # dispatch. window-id-for already returns hyprland addresses.
     if (($# < 2)); then exit 0; fi
     case "$WM" in
-      hyprland) hyprctl dispatch togglefloating "address:$2" >/dev/null 2>&1 || true ;;
+      # Hyprland 0.56: legacy `hyprctl dispatch togglefloating address:...`
+      # serializes to invalid Lua and dies silently. The Lua dispatcher takes
+      # the same "address:0x..." selector and toggles THAT window (not the
+      # focused one) — verified live.
+      hyprland) hyprctl eval "hl.dispatch(hl.dsp.window.float({ action = \"toggle\", window = \"address:$2\" }))" >/dev/null 2>&1 || true ;;
     esac
     exit 0
     ;;
@@ -132,14 +141,17 @@ case "$op" in
     case "$WM" in
       niri)     niri msg action quit 2>/dev/null || true ;;
       # uwsm-managed sessions (UWSM vars in the bind env) must end via
-      # `uwsm stop`: plain `hyprctl dispatch exit` kills only the compositor
+      # `uwsm stop`: plain compositor exit kills only the compositor
       # while the session unit lingers, so logout goes nowhere. Elsewhere
-      # dispatch exit is the right call.
+      # exiting the compositor is the right call.
       hyprland)
         if command -v uwsm >/dev/null 2>&1 && [[ -n ${UWSM_FINALIZE_VARNAMES:-} ]]; then
           uwsm stop >/dev/null 2>&1 || true
         else
-          hyprctl dispatch exit 2>/dev/null || true
+          # Hyprland 0.56: legacy `hyprctl dispatch exit` serializes to
+          # invalid Lua and silently does nothing. The shipped example
+          # config uses hl.dsp.exit() for the same thing.
+          hyprctl eval 'hl.dispatch(hl.dsp.exit())' 2>/dev/null || true
         fi ;;
       *)        loginctl terminate-session "${XDG_SESSION_ID:-}" 2>/dev/null || true ;;
     esac
@@ -168,7 +180,13 @@ case "$op" in
     cmd="${2} ${3-}"
     case "$WM" in
       niri)     niri msg action spawn -- "$cmd" 2>/dev/null || true ;;
-      hyprland) hyprctl dispatch exec -- "$cmd" 2>/dev/null || setsid bash -c "$cmd" &>/dev/null & disown 2>/dev/null || true ;;
+      # Hyprland 0.56: legacy `hyprctl dispatch exec -- ...` serializes to
+      # invalid Lua and dies silently (the setsid fallback used to carry
+      # every spawn). exec_cmd runs the string through a shell exactly like
+      # the legacy exec did, and the Lua long-bracket string leaves the
+      # command's own quotes untouched. Falls back to a detached shell if
+      # the compositor call fails.
+      hyprland) hyprctl eval "hl.dispatch(hl.dsp.exec_cmd([====[$cmd]====]))" 2>/dev/null || setsid bash -c "$cmd" &>/dev/null & disown 2>/dev/null || true ;;
       *)        setsid "$cmd" &>/dev/null & disown 2>/dev/null || true ;;
     esac
     exit 0
