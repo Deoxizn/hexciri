@@ -316,7 +316,7 @@ pick primary_foreground c0d0e0 foreground fg
 pick primary_background 1a1a2e background bg
 pick cursor_color c0d0e0 cursor accent foreground
 pick selection_foreground c0d0e0 selection_foreground bright_fg foreground
-pick selection_background 292e42 selection
+pick selection_background 292e42 selection selection_background
 pick normal_black 11111b color0 dark_background dark_bg
 pick normal_red f7768e color1 red
 pick normal_green 9ece6a color2 green
