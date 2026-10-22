@@ -7,7 +7,6 @@ source "${HEXCIRI_THEME_ENV:-$HOME/.config/hexciri/hooks/lib/theme-env.sh}"
 output_file="$THPM_CURRENT_THEME_DIR/vencord-hexciri.theme.css"
 theme_name_file="$THPM_THEME_NAME_FILE"
 generated_file="$THPM_STATE_DIR/discord/vencord-hexciri.theme.css"
-background_link="$HOME/.local/state/hexciri/current/background"
 possible_paths=(
     "$HOME/.config/Vencord/themes"
     "$HOME/.config/vesktop/themes"
@@ -39,10 +38,17 @@ theme_source_file() {
 }
 
 create_dynamic_theme() {
-    local bg_image="none"
-    if [[ -L $background_link || -f $background_link ]]; then
-        bg_image="url(\"file://$(readlink -f "$background_link" 2>/dev/null || printf '%s' "$background_link")\")"
-    fi
+    local bg_base bg_raised bg_popout
+    local rgb_bg_raised rgb_bg_popout
+
+    # ClearVision's default shadings are fixed black/white, which leaves the app
+    # black once no wallpaper loads. Feed it palette shades at the stock alpha
+    # levels so the transparency effects stay exactly as ClearVision intended.
+    bg_base="$primary_background"
+    bg_raised="$(change_shade "$bg_base" 12)"
+    bg_popout="$(change_shade "$bg_base" 20)"
+    rgb_bg_raised="$(hex2rgb "$bg_raised")"
+    rgb_bg_popout="$(hex2rgb "$bg_popout")"
 
     color_luma() {
         local hex_input="${1#\#}"
@@ -86,25 +92,9 @@ create_dynamic_theme() {
   --dnd-color: #${normal_red};
   --streaming-color: #${normal_magenta};
   --offline-color: #${bright_black};
-  /* APP BACKGROUND: mirror the active hexciri wallpaper */
+  /* APP BACKGROUND: palette shadings, no wallpaper */
   --background-shading-percent: 80%;
-  --background-image: ${bg_image};
-  --background-position: center;
-  --background-size: cover;
-  --background-attachment: fixed;
-  --background-filter: saturate(calc(var(--saturation-factor, 1) * 1));
-  /* USER POPOUT BACKGROUND */
-  --user-popout-image: var(--background-image);
-  --user-popout-position: var(--background-position);
-  --user-popout-size: var(--background-size);
-  --user-popout-attachment: var(--background-attachment);
-  --user-popout-filter: var(--background-filter);
-  /* USER MODAL BACKGROUND */
-  --user-modal-image: var(--background-image);
-  --user-modal-position: var(--background-position);
-  --user-modal-size: var(--background-size);
-  --user-modal-attachment: var(--background-attachment);
-  --user-modal-filter: var(--background-filter);
+  --background-image: none;
   /* HOME ICON */
   --home-icon: url(https://clearvision.github.io/icons/discord.svg);
   --home-size: cover;
@@ -118,6 +108,24 @@ create_dynamic_theme() {
   --channel-unread-hover: var(--hover-color);
   /* ACCESSIBILITY */
   --focus-color: var(--main-color);
+}
+
+/* ClearVision sets these in :is(.theme-dark, .theme-light .theme-dark) and the
+   sibling theme blocks. Match those elements at the same specificity from a
+   later rule so the palette wins whether the theme class is on <html> or
+   <body>, instead of the fixed black/white defaults. */
+:root:root,
+.theme-dark.theme-dark,
+.theme-light.theme-light,
+.theme-darker.theme-darker,
+.theme-midnight.theme-midnight {
+  --background-shading: rgba(${rgb_primary_background}, 0.4);
+  --card-shading: rgba(${rgb_bg_raised}, 0.2);
+  --popout-shading: rgba(${rgb_bg_popout}, 0.6);
+  --modal-shading: rgba(${rgb_bg_popout}, 0.4);
+  --input-shading: rgba(${rgb_primary_foreground}, 0.05);
+  --normal-text: #${primary_foreground};
+  --muted-text: #${bright_black};
 }
 
 /* ClearVision colors the invite/action icons with --hsl-main-color, so on a
