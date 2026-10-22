@@ -7,7 +7,9 @@
 input {
     keyboard {
         xkb {
-            layout "us"                      // Keyboard layout (us, gb, de, etc.)
+            // No hardcoded layout: niri reads the system layout from
+            // org.freedesktop.locale1. Uncomment to force one.
+            // layout "us"                    // Keyboard layout (us, gb, de, etc.)
             // options "ctrl:nocaps"          // Uncomment to make CapsLock act as Ctrl
         }
         // numlock                           // Uncomment to enable Num Lock on startup (since Niri 25.05)

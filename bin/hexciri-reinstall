@@ -2,7 +2,7 @@
 # hexciri:summary=Reset defaults: reinstall hexciri packages + configs, then reset owned configs to shipped defaults
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 REPO="$(cat "$HOME/.local/state/hexciri/repo-path" 2>/dev/null || true)"
 [[ -n $REPO && -x "$REPO/install.sh" ]] || REPO="$(dirname "$SCRIPT_DIR")"
 
@@ -37,6 +37,11 @@ if [[ -d $src ]]; then
     fi
     cp -a "$f" "$dest"
   done < <(find "$src" -type f)
+  # The shipped niri env fragment carries a neutral PATH (no username); point
+  # it at THIS user's ~/.local/bin, same as install/update does.
+  if [[ -x "$REPO/bin/hexciri-migrate-niri-path" ]]; then
+    "$REPO/bin/hexciri-migrate-niri-path" >/dev/null 2>&1 || true
+  fi
   rm -f "$HOME/.local/state/hexciri/configs/"*.sha 2>/dev/null || true
   echo "hexciri configs reset to shipped defaults (backup: $bak)"
 fi

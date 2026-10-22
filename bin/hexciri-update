@@ -273,6 +273,106 @@ sync_autostart() {
 }
 # === END sync-autostart ===
 
+# === BEGIN sync-niri-entry (test harness sources this block) ===
+# Niri entry point: the cfg/ fragments only take effect when config.kdl
+# includes them. A box that got niri after its user existed never received
+# CachyOS's skel config, so niri auto-created the stock upstream config —
+# which includes nothing. Seed a fresh entry point when absent/stock, and
+# wire the safe includes into a live custom config, so an install can't
+# finish with valid-but-inert keybinds.
+sync_niri_entry() {
+  local REPO="${1:-${HEXCIRI_PATH:-$HOME/.local/opt/hexciri}}"
+  command -v niri >/dev/null 2>&1 || return 0   # no niri here — nothing to do
+  local ndir="${XDG_CONFIG_HOME:-$HOME/.config}/niri"
+  local cfg="$ndir/config.kdl"
+  local src="$REPO/config/niri/config.kdl"
+  local frags="cursors env input looknfeel window-rules keybinds autostart"
+  local f fresh=false
+
+  mkdir -p "$ndir/cfg"
+
+  # Stock upstream config: niri writes this on first start when no config
+  # exists. Nothing in it is user-authored, so replace it with the hexciri
+  # entry point instead of layering includes on top of its default binds.
+  if [[ ! -f $cfg ]] || [[ "$(sed -n '1p' "$cfg" 2>/dev/null)" == *"This config is in the KDL format"* ]]; then
+    fresh=true
+  fi
+
+  if [[ $fresh == true ]]; then
+    # Seed the fragments the entry point includes. Never overwrite a live
+    # fragment (the user may have edited one already).
+    for f in $frags; do
+      [[ -f "$ndir/cfg/$f.kdl" ]] && continue
+      [[ -f "$REPO/config/niri/cfg/$f.kdl" ]] || continue
+      cp -f "$REPO/config/niri/cfg/$f.kdl" "$ndir/cfg/$f.kdl"
+    done
+    # The shipped env fragment carries a neutral PATH (no username); point it
+    # at THIS user's ~/.local/bin before the entry point goes live.
+    if [[ -x "$REPO/bin/hexciri-migrate-niri-path" ]]; then
+      "$REPO/bin/hexciri-migrate-niri-path" >/dev/null 2>&1 || true
+    fi
+    if [[ -f $cfg ]]; then
+      cp -f "$cfg" "$cfg.bak.$(date +%s)" 2>/dev/null || true
+    fi
+    if [[ -f $src ]]; then
+      # Drop the machine-specific monitor block: niri auto-detects outputs,
+      # and hexciri's eDP-1 scale 2 is wrong on most boxes.
+      sed -E '/^[[:space:]]*include[[:space:]]+"(\.\/)?cfg\/monitors\.kdl"/d' "$src" > "$cfg"
+    else
+      {
+        for f in $frags; do
+          [[ -f "$ndir/cfg/$f.kdl" ]] && printf 'include "cfg/%s.kdl"\n' "$f"
+        done
+      } > "$cfg"
+    fi
+    echo "seeded niri entry point ($cfg)"
+    return 0
+  fi
+
+  # A live user config. Only add includes that merge safely: binds merge
+  # per-key (later wins) and environment merges per-variable. layout/input/
+  # monitor fragments replace whole sections, so they are left to the user.
+  # Seed the three fragments we may wire (never overwrite a live one).
+  for f in env keybinds autostart; do
+    [[ -f "$ndir/cfg/$f.kdl" ]] && continue
+    [[ -f "$REPO/config/niri/cfg/$f.kdl" ]] || continue
+    cp -f "$REPO/config/niri/cfg/$f.kdl" "$ndir/cfg/$f.kdl"
+  done
+  if [[ -x "$REPO/bin/hexciri-migrate-niri-path" ]]; then
+    "$REPO/bin/hexciri-migrate-niri-path" >/dev/null 2>&1 || true
+  fi
+
+  local add="" has_binds=false
+  if grep -Eq '^[[:space:]]*binds[[:space:]]*\{' "$cfg" 2>/dev/null; then
+    has_binds=true
+  fi
+  if ! grep -Eq '^[[:space:]]*include[[:space:]]+"(\./)?cfg/keybinds\.kdl"' "$cfg" 2>/dev/null; then
+    if [[ $has_binds == false ]]; then
+      add+="keybinds "
+    else
+      echo "hexciri: custom niri config detected — not adding the keybinds include" >&2
+      echo "  add: include \"cfg/keybinds.kdl\" to $cfg to use hexciri's binds" >&2
+    fi
+  fi
+  grep -Eq '^[[:space:]]*include[[:space:]]+"(\./)?cfg/env\.kdl"' "$cfg" 2>/dev/null || add+="env "
+  if ! grep -q 'noctalia' "$cfg" 2>/dev/null; then
+    grep -Eq '^[[:space:]]*include[[:space:]]+"(\./)?cfg/autostart\.kdl"' "$cfg" 2>/dev/null || add+="autostart "
+  fi
+
+  if [[ -n $add ]]; then
+    cp -f "$cfg" "$cfg.bak.$(date +%s)" 2>/dev/null || true
+    [[ -n $(tail -c 1 "$cfg" 2>/dev/null) ]] && printf '\n' >> "$cfg"
+    {
+      printf '\n// hexciri: fragments wired by hexciri-update (safe to move; binds/environment merge)\n'
+      for f in $add; do
+        [[ -f "$ndir/cfg/$f.kdl" ]] && printf 'include "cfg/%s.kdl"\n' "$f"
+      done
+    } >> "$cfg"
+    echo "wired niri fragments into config.kdl ($add)"
+  fi
+}
+# === END sync-niri-entry ===
+
 # === BEGIN sync-hyprland-autostart (test harness sources this block) ===
 # Hyprland autostart agent: the HEXCIRI autostart section is seed-once, so
 # boxes seeded before the agent line shipped never got it — and pkexec apps
@@ -391,11 +491,31 @@ update_self() {
     # the old overlay layout and no longer exists — guarding on it made this
     # whole function return 0, silently skipping seeding, the WM pin and the
     # uwsm PATH line. Guard on the directory that actually exists.
-    local src="$REPO/config/hypr/sections" dst="$HOME/.config/hypr/config"
-    local main="$HOME/.config/hypr/hyprland.lua"
+    local hdir="$HOME/.config/hypr"
+    local src="$REPO/config/hypr/sections" dst="$hdir/config"
+    local main="$hdir/hyprland.lua"
     local rev manifest entry oldrev found r
-    [[ -d $src && -d $dst ]] || return 0
-    [[ -f $main ]] || return 0
+    [[ -d $src ]] || return 0
+
+    # CachyOS ships the Hyprland skeleton under /etc/skel, so a user created
+    # before Hyprland was installed never gets it. Fill in missing files
+    # without clobbering anything already in ~/.config/hypr.
+    if [[ ! -f $main && -f /etc/skel/.config/hypr/hyprland.lua ]]; then
+      mkdir -p "$hdir"
+      cp -an /etc/skel/.config/hypr/. "$hdir/" 2>/dev/null || true
+      [[ -f $main ]] && echo "hyprland: seeded stock config from /etc/skel ($hdir)"
+    fi
+    if [[ ! -f $main || ! -d $dst ]]; then
+      echo "hyprland: config missing ($main or $dst) — install the CachyOS Hyprland edition, or copy /etc/skel/.config/hypr" >&2
+      return 0
+    fi
+    # Same post-hoc gap for the UWSM session env: it carries the PATH every
+    # Hyprland spawn inherits. The PATH assertion below patches it when present.
+    if [[ ! -f $HOME/.config/uwsm/env && -f /etc/skel/.config/uwsm/env ]]; then
+      mkdir -p "$HOME/.config/uwsm"
+      cp -an /etc/skel/.config/uwsm/env "$HOME/.config/uwsm/env" 2>/dev/null || true
+      [[ -f $HOME/.config/uwsm/env ]] && echo "hyprland: seeded uwsm env from /etc/skel"
+    fi
     rev="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
     manifest="$dst/.hexciri-manifest"
     owned() {
@@ -1969,6 +2089,7 @@ EOF
   migrate_greeter_hook_fold
   sync_keybinds
   sync_autostart
+  sync_niri_entry "$REPO"
   sync_hyprland
   sync_hyprland_autostart
   sync_kitty

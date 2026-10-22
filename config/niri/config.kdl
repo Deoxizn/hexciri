@@ -7,7 +7,7 @@
 //
 //   include "cfg/cursors.kdl"        // cursor { } — cursor theme/size (per-machine)
 //   include "cfg/env.kdl"            // environment { } — Wayland hints for every app
-//   include "cfg/monitors.kdl"       // output { } — screens, scale, mode, VRR
+//   include "cfg/monitors.kdl"       // output { } — optional, per-machine screens
 //   include "cfg/input.kdl"          // input { } — keyboard layout, touchpad, mouse
 //   include "cfg/looknfeel.kdl"     // layout borders/focus-ring/shadow, blur,
 //                                    //   animations, hotkey-overlay (theme-owned feel)
@@ -22,7 +22,10 @@
 
 include "cfg/cursors.kdl"
 include "cfg/env.kdl"
-include "cfg/monitors.kdl"
+// Per-machine monitor rules are opt-in: niri auto-detects outputs, and a
+// hardcoded panel name/scale is wrong on most boxes. Uncomment and edit
+// cfg/monitors.kdl if you need a specific mode, scale, or VRR setting.
+// include "cfg/monitors.kdl"
 include "cfg/input.kdl"
 include "cfg/looknfeel.kdl"
 include "cfg/window-rules.kdl"

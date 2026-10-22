@@ -35,6 +35,19 @@ DEFAULT_REPO="$HOME/.local/opt/hexciri"
 
 info() { echo "hexciri: $*"; }
 
+# hexciri is a dotfiles layer, not a distro: the WM must already be installed.
+# (A live Sway session is rejected below; a TTY/SSH run has no desktop marker.)
+if ! command -v niri >/dev/null 2>&1 && ! command -v Hyprland >/dev/null 2>&1 && ! command -v hyprland >/dev/null 2>&1; then
+  info "no supported WM found (niri or Hyprland)"
+  info "install CachyOS with Niri or Hyprland first, then re-run this script"
+  exit 1
+fi
+if [[ ${XDG_CURRENT_DESKTOP:-} == *[Ss]way* || ${XDG_SESSION_DESKTOP:-} == *[Ss]way* ]]; then
+  info "Sway session detected — hexciri targets Niri or Hyprland"
+  info "log into Niri or Hyprland first, then re-run this script"
+  exit 1
+fi
+
 # === BEGIN health-check (test harness sources this block) ===
 # Post-install sanity: catches a broken bring-up (e.g. invalid compositor
 # config = dead keybinds) before the user logs into it. Best-effort reads
@@ -52,13 +65,71 @@ health_check() {
       fail=1
     fi
   fi
-  # Broken compositor config is the usual "all keybinds dead" cause.
-  if command -v niri >/dev/null 2>&1; then
+  # Broken compositor config is the usual "all keybinds dead" cause. A valid
+  # stock config is not enough: the hexciri sections only load when the live
+  # entry point includes them (a post-hoc WM install auto-creates the stock
+  # config, which includes nothing). Only judge the active WM: a box may have
+  # both installed.
+  local active_wm="" niri_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/niri/config.kdl"
+  local hypr_dir="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
+  local hypr_main="$hypr_dir/hyprland.lua"
+  local hypr_binds="$hypr_dir/config/binds.lua"
+  local hypr_autostart="$hypr_dir/config/autostart.lua"
+  if [[ -x "$HOME/.local/bin/hexciri-session" ]]; then
+    active_wm="$("$HOME/.local/bin/hexciri-session" wm 2>/dev/null || true)"
+  fi
+  if command -v niri >/dev/null 2>&1 && [[ ${active_wm:-niri} == niri ]]; then
     if niri validate >/dev/null 2>&1; then
       info "  niri config: valid"
     else
-      info "  niri config: INVALID — keybinds may be dead, check ~/.config/niri/config.kdl"
+      info "  niri config: INVALID — keybinds may be dead, check $niri_cfg"
       fail=1
+    fi
+    if [[ ! -f $niri_cfg ]]; then
+      info "  niri config: missing $niri_cfg"
+      fail=1
+    elif ! grep -Eq '^[[:space:]]*include[[:space:]]+"(\./)?cfg/keybinds\.kdl"' "$niri_cfg"; then
+      info "  niri config: hexciri keybinds not wired — run 'hexciri-update self' (or add include \"cfg/keybinds.kdl\" to a custom config)"
+      fail=1
+    fi
+  fi
+  if command -v hyprctl >/dev/null 2>&1 && [[ ${active_wm:-niri} == hyprland ]]; then
+    if [[ ! -f $hypr_main ]]; then
+      info "  hyprland config: missing $hypr_main"
+      fail=1
+    else
+      if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+        local hypr_errors=""
+        hypr_errors="$(hyprctl configerrors 2>/dev/null || true)"
+        if [[ -n $hypr_errors ]] && ! grep -qi 'no errors' <<<"$hypr_errors"; then
+          info "  hyprland config: ERRORS — $hypr_errors"
+          fail=1
+        else
+          info "  hyprland config: valid"
+        fi
+      fi
+      if [[ ! -f $hypr_binds ]]; then
+        info "  hyprland config: missing $hypr_binds — install the CachyOS Hyprland edition"
+        fail=1
+      elif ! grep -qF -- '-- ── HEXCIRI binds ──' "$hypr_binds"; then
+        info "  hyprland config: hexciri keybinds not wired — run 'hexciri-update self'"
+        fail=1
+      fi
+      if ! grep -q 'config\.binds' "$hypr_main"; then
+        info "  hyprland config: hyprland.lua does not require config.binds — add require(\"config.binds\")"
+        fail=1
+      fi
+      if [[ ! -f $hypr_autostart ]]; then
+        info "  hyprland config: missing $hypr_autostart — install the CachyOS Hyprland edition"
+        fail=1
+      elif ! grep -qF -- '-- ── HEXCIRI autostart ──' "$hypr_autostart"; then
+        info "  hyprland config: hexciri autostart not wired — run 'hexciri-update self'"
+        fail=1
+      fi
+      if ! grep -q 'config\.autostart' "$hypr_main"; then
+        info "  hyprland config: hyprland.lua does not require config.autostart — add require(\"config.autostart\")"
+        fail=1
+      fi
     fi
   fi
   if [[ -x "$HOME/.local/bin/hexciri-sync" ]]; then
@@ -170,7 +241,7 @@ fi
 # NOTE: noctalia is a layer need too — the bar, lock screen, launcher and
 # notifications are all the shell; CachyOS preinstalls it via the WM meta,
 # but a meta removal orphans it and leaves a gray compositor with no shell.
-# Explicit here (and in the layer heal + WM switch) so it is never an orphan.
+# Explicit here (and in the layer heal) so it is never an orphan.
 _hexciri_wants="kitty zed opencode localsend fuzzel gpu-screen-recorder tesseract mpv libqalculate polkit-gnome zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb gnome-keyring seahorse adw-gtk-theme brightnessctl playerctl fwupd jq cliphist noctalia bottom "
 # Per-WM-native file manager / image viewer: install hexciri's pick only when
 # no file manager / viewer serves the box. Hyprland takes strata (per-user

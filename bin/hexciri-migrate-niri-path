@@ -63,6 +63,10 @@ cp -f "$TARGET" "$TARGET.bak.$(date +%s)"
 mv -f "$TMP" "$TARGET"
 echo "hexciri-migrate-niri-path: injected ~/.local/bin PATH into $TARGET (backup saved)"
 
-# Reload the compositor so the fix is live immediately (no-op outside a session)
-"$HOME/.local/opt/hexciri/bin/hexciri-compositor" load-config >/dev/null 2>&1 \
-  && echo "hexciri-migrate-niri-path: compositor config reloaded"
+# Reload the compositor so the fix is live immediately (no-op outside a session).
+# Resolve the repo from this script (it may not live at ~/.local/opt/hexciri).
+REPO_DIR="${HEXCIRI_PATH:-$(cd "$(dirname "$(readlink -f "$0")")/.." 2>/dev/null && pwd || true)}"
+if [[ -n $REPO_DIR && -x "$REPO_DIR/bin/hexciri-compositor" ]]; then
+  "$REPO_DIR/bin/hexciri-compositor" load-config >/dev/null 2>&1 \
+    && echo "hexciri-migrate-niri-path: compositor config reloaded" || true
+fi

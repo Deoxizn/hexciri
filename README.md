@@ -59,8 +59,8 @@ extra themes in `~/.config/hexciri/theme-sources/extra.list` — one
 Install adds what hexciri needs (kitty, Zed, Brave Origin, OpenCode…) and
 removes what they replace — once. Afterwards your installs and removals are
 yours; updates never undo them. File manager and image viewer follow the WM:
-strata + qview on Hyprland, nautilus + imv on Niri — switchable any time in
-`System > Default Apps`.
+strata + qview on Hyprland, nautilus + imv on Niri — change the pick any time
+in `System > Default Apps`.
 
 ## Niri or Hyprland
 
@@ -72,15 +72,15 @@ Same menu, themes and keys on both — only the tiling style differs:
 | `Mod+L` | — (nothing to cycle) | cycles dwindle → scrolling → monocle |
 | Files / images | nautilus + imv | strata + qview |
 
-Switch without reinstalling:
+Pick one at CachyOS install time. hexciri detects the active WM and applies
+the matching config — it does not install, remove, or switch window managers.
+If you add the other WM later, install the CachyOS edition for it first, then
+re-run the hexciri installer.
 
-```bash
-hexciri-wm-switch --to niri        # or hyprland; --dry-run plans first
-```
-
-It installs the other side, moves your old configs to a timestamped backup,
-flips your defaults, and removes what the new WM replaces. Relogin, pick the
-new session, done.
+Added Niri or Hyprland after creating your user? Run `hexciri-update self`
+once: it seeds the missing entry point/config and wires the hexciri sections
+(a stock Niri config includes nothing, so keybinds would be inert). Then
+reload — `niri msg action load-config-file` or `hyprctl reload` — or relogin.
 
 ## Keys that matter
 
