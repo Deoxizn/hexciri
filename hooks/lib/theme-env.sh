@@ -296,9 +296,12 @@ require_restart() {
 }
 
 # Themes come in two schemas: omarchy colorN keys and accent-style names.
-# An empty var poisons every consumer (fzf dies on `hl:#`, arithmetic chokes
-# on `16#`), so every var resolves primary key → fallback key → hard default.
-# Same fallback table as the Noctalia bridge (hooks/theme-set.d/hexciri-sync.sh).
+# Upstream thpm's quattro branch also accepts the semantic fg/bg/dark_bg/
+# light_fg/bright_fg aliases; keep them as later fallbacks so existing themes
+# retain their current precedence. An empty var poisons every consumer (fzf
+# dies on `hl:#`, arithmetic chokes on `16#`), so every var resolves primary
+# key → fallback key → hard default. Same fallback table as the Noctalia
+# bridge (hooks/theme-set.d/hexciri-sync.sh).
 pick() { # pick <var> <hard-default> <key>... — first present key wins
     local _var=$1 _hard=$2 _v="" _k
     shift 2
@@ -309,19 +312,19 @@ pick() { # pick <var> <hard-default> <key>... — first present key wins
     [[ -n $_v ]] || _v="$_hard"
     printf -v "$_var" '%s' "$_v"
 }
-pick primary_foreground c0d0e0 foreground
-pick primary_background 1a1a2e background
-pick cursor_color c0d0e0 cursor foreground
-pick selection_foreground c0d0e0 selection_foreground foreground
+pick primary_foreground c0d0e0 foreground fg
+pick primary_background 1a1a2e background bg
+pick cursor_color c0d0e0 cursor accent foreground
+pick selection_foreground c0d0e0 selection_foreground bright_fg foreground
 pick selection_background 292e42 selection
-pick normal_black 11111b color0 dark_background
+pick normal_black 11111b color0 dark_background dark_bg
 pick normal_red f7768e color1 red
 pick normal_green 9ece6a color2 green
 pick normal_yellow e0af68 color3 yellow
 pick normal_blue 7aa2f7 color4 blue
 pick normal_magenta bb9af7 color5 magenta
 pick normal_cyan 7dcfff color6 cyan
-pick normal_white ffffff color7 foreground
+pick normal_white ffffff color7 light_fg foreground
 pick bright_black 586070 color8 muted
 pick bright_red f7768e color9 bright_red red
 pick bright_green 9ece6a color10 bright_green green
@@ -329,7 +332,7 @@ pick bright_yellow e0af68 color11 bright_yellow yellow
 pick bright_blue 7aa2f7 color12 bright_blue blue
 pick bright_magenta bb9af7 color13 bright_magenta magenta
 pick bright_cyan 7dcfff color14 bright_cyan cyan
-pick bright_white ffffff color15 bright_foreground
+pick bright_white ffffff color15 bright_fg bright_foreground
 
 export primary_background primary_foreground cursor_color selection_foreground selection_background
 export normal_black normal_red normal_green normal_yellow normal_blue normal_magenta normal_cyan normal_white
