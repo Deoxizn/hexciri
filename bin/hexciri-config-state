@@ -3,7 +3,7 @@
 # hexciri:summary=Edit hexciri state lists (keybinds, search provider)
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" && pwd)"
 bindir="${HEXCIRI_BIN_DIR:-}"
 if [[ -z $bindir && -d $(dirname "$SCRIPT_DIR")/bin ]]; then bindir="$(dirname "$SCRIPT_DIR")/bin"; fi
 bindir="${bindir:-$SCRIPT_DIR}"
