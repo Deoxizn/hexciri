@@ -212,9 +212,52 @@ theme_install() { # <git-url>
   echo "installed $name (added $entry to the extras list — delete that line to uninstall)"
 }
 
+# ══════════════════════════════════════════════ theme git sync helpers
+# A blind `git pull` on every installed theme fetches from GitHub on every
+# Update run, even when nothing moved. Ask the remote for the upstream tip
+# first: ls-remote is only a ref advertisement (no packfile), so an unchanged
+# theme costs one small round trip instead of a fetch. Pull only when the tip
+# differs from local HEAD. Returns 0 = updated, 1 = already current,
+# 2 = check/pull failed (callers decide how loud to be).
+theme_git_update() { # <repo-dir>
+  local dir="$1" remote=origin branch upstream tip="" head_before head_after
+  upstream="$(git -C "$dir" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+  if [[ -n $upstream && $upstream == */* ]]; then
+    remote="${upstream%%/*}"
+    branch="${upstream#*/}"
+    tip="$(GIT_TERMINAL_PROMPT=0 git -C "$dir" ls-remote --heads "$remote" "refs/heads/$branch" 2>/dev/null \
+      | awk 'NR == 1 { print $1; exit }')" || true
+  else
+    # No upstream branch (unusual for a clone): compare the same-named remote
+    # branch when we're on one, then the remote's default HEAD, so movement is
+    # still detected.
+    branch="$(git -C "$dir" symbolic-ref --short -q HEAD 2>/dev/null || true)"
+    if [[ -n $branch ]]; then
+      tip="$(GIT_TERMINAL_PROMPT=0 git -C "$dir" ls-remote --heads "$remote" "refs/heads/$branch" 2>/dev/null \
+        | awk 'NR == 1 { print $1; exit }')" || true
+    fi
+    if [[ -z $tip ]]; then
+      tip="$(GIT_TERMINAL_PROMPT=0 git -C "$dir" ls-remote "$remote" HEAD 2>/dev/null \
+        | awk '$2 == "HEAD" { print $1; exit }')" || true
+    fi
+  fi
+  [[ -n $tip ]] || return 2
+  head_before="$(git -C "$dir" rev-parse HEAD 2>/dev/null || true)"
+  [[ -n $head_before ]] || return 2
+  [[ $tip == "$head_before" ]] && return 1
+  if ! GIT_TERMINAL_PROMPT=0 git -C "$dir" pull --ff-only --quiet >/dev/null 2>&1; then
+    return 2
+  fi
+  head_after="$(git -C "$dir" rev-parse HEAD 2>/dev/null || true)"
+  # A local branch ahead of the remote makes pull a no-op; don't report it as
+  # an update just because the SHAs differed before the pull.
+  [[ -n $head_after && $head_after != "$head_before" ]] || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════ hexciri-theme-omarchy
 theme_omarchy() {
-  local here repo CATALOG THEMES_DIR SRC_BASE branch subtree src_dir LIST removed n count list_file names_in
+  local here repo CATALOG THEMES_DIR SRC_BASE branch subtree src_dir LIST removed n count list_file names_in st
   THEMES_DIR="$HOME/.config/hexciri/themes"
   SRC_BASE="$HOME/.local/state/hexciri/theme-src"
   mkdir -p "$THEMES_DIR" "$SRC_BASE"
@@ -245,7 +288,12 @@ theme_omarchy() {
       "https://github.com/omacom/omarchy.git" "$src_dir"
     git -C "$src_dir" sparse-checkout set "$subtree"
   else
-    git -C "$src_dir" pull --ff-only 2>&1 | rg -q 'Updating' && echo "updating Omarchy defaults ..." || true
+    st=0
+    theme_git_update "$src_dir" || st=$?
+    case $st in
+      0) echo "updating Omarchy defaults ..." ;;
+      2) echo "warning: could not refresh Omarchy defaults (offline?)" >&2 ;;
+    esac
   fi
 
   # prune any symlink into the omarchy subtree whose name is no longer in the list
@@ -344,7 +392,7 @@ theme_extras() { # [--run sync|remove]
   split_line() { printf '%s\n' "$1" | sed 's|^\(.*\)/\([^/]*\)$|\1 \2|'; }
 
   op_sync_extra() {
-    local line owner name dest url conv_url count=0 pulled=0 skipped=0 removed=0 installed listed
+    local line owner name dest url conv_url count=0 pulled=0 unchanged=0 skipped=0 removed=0 installed listed st
     echo "Syncing Extra themes from $(basename "$(list_for extra)") ..."
     while read -r line; do
       [[ -z $line ]] && continue
@@ -377,8 +425,13 @@ theme_extras() { # [--run sync|remove]
       dest="$THEMES_DIR/$name"
       if [[ -e $dest ]]; then
         if [[ -d $dest/.git ]]; then
-          git -C "$dest" pull --ff-only &>/dev/null && { pulled=$((pulled+1)); echo "- updated $name"; } \
-            || echo "- FAILED pull for $name"
+          st=0
+          theme_git_update "$dest" || st=$?
+          case $st in
+            0) pulled=$((pulled+1)); echo "- updated $name" ;;
+            2) echo "- FAILED update for $name" ;;
+            *) unchanged=$((unchanged+1)) ;;
+          esac
         else
           echo "- $name already present (not a clone — skipping)"
         fi
@@ -414,7 +467,7 @@ theme_extras() { # [--run sync|remove]
         rm -rf "$installed"; removed=$((removed+1))
       fi
     done
-    echo "extras: installed $count, updated $pulled, skipped $skipped, removed $removed"
+    echo "extras: installed $count, updated $pulled, unchanged $unchanged, skipped $skipped, removed $removed"
   }
 
   op_remove_extra() {

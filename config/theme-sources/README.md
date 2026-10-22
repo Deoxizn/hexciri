@@ -35,9 +35,15 @@ does the whole job for both lists:
 
 - **Omarchy defaults**: pulls the sparse source clone, links anything new,
   unlinks any symlink whose name you removed from the omarchy list.
-- **Extra themes**: clones every listed line that isn't installed, `git pull`s
-  every installed one, and removes any locally-cloned extra whose line was
-  deleted from the list.
+- **Extra themes**: clones every listed line that isn't installed, checks each
+  installed clone for new commits, and removes any locally-cloned extra whose
+  line was deleted from the list.
+
+Both paths check the remote tip first (`git ls-remote`) and only run
+`git pull --ff-only` when it differs from the local HEAD. An update run where
+nothing changed therefore transfers no objects — it costs one small ref
+round trip per repo instead of a full fetch, and reports those themes as
+`unchanged`.
 
 To uninstall extras entirely, empty their `extra.list` and run it again.
 
