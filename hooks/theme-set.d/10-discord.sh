@@ -38,17 +38,15 @@ theme_source_file() {
 }
 
 create_dynamic_theme() {
-    local bg_base bg_raised bg_popout
-    local rgb_bg_raised rgb_bg_popout
+    local bg_base bg_raised bg_popout bg_input
 
-    # ClearVision's default shadings are fixed black/white, which leaves the app
-    # black once no wallpaper loads. Feed it palette shades at the stock alpha
-    # levels so the transparency effects stay exactly as ClearVision intended.
+    # Vesktop now runs opaque: ClearVision's translucent black/white shadings
+    # would only tint the app's own background, so paint each surface with a
+    # solid palette shade instead.
     bg_base="$primary_background"
     bg_raised="$(change_shade "$bg_base" 12)"
     bg_popout="$(change_shade "$bg_base" 20)"
-    rgb_bg_raised="$(hex2rgb "$bg_raised")"
-    rgb_bg_popout="$(hex2rgb "$bg_popout")"
+    bg_input="$(change_shade "$bg_base" 6)"
 
     color_luma() {
         local hex_input="${1#\#}"
@@ -92,8 +90,8 @@ create_dynamic_theme() {
   --dnd-color: #${normal_red};
   --streaming-color: #${normal_magenta};
   --offline-color: #${bright_black};
-  /* APP BACKGROUND: palette shadings, no wallpaper */
-  --background-shading-percent: 80%;
+  /* APP BACKGROUND: solid palette surface, no wallpaper */
+  --background-shading-percent: 100%;
   --background-image: none;
   /* HOME ICON */
   --home-icon: url(https://clearvision.github.io/icons/discord.svg);
@@ -113,19 +111,26 @@ create_dynamic_theme() {
 /* ClearVision sets these in :is(.theme-dark, .theme-light .theme-dark) and the
    sibling theme blocks. Match those elements at the same specificity from a
    later rule so the palette wins whether the theme class is on <html> or
-   <body>, instead of the fixed black/white defaults. */
+   <body>, instead of the fixed black/white defaults. Vesktop transparency is
+   off, so every surface uses an opaque palette shade. */
 :root:root,
 .theme-dark.theme-dark,
 .theme-light.theme-light,
 .theme-darker.theme-darker,
 .theme-midnight.theme-midnight {
-  --background-shading: rgba(${rgb_primary_background}, 0.4);
-  --card-shading: rgba(${rgb_bg_raised}, 0.2);
-  --popout-shading: rgba(${rgb_bg_popout}, 0.6);
-  --modal-shading: rgba(${rgb_bg_popout}, 0.4);
-  --input-shading: rgba(${rgb_primary_foreground}, 0.05);
+  --background-shading: #${primary_background};
+  --card-shading: #${bg_raised};
+  --popout-shading: #${bg_popout};
+  --modal-shading: #${bg_popout};
+  --input-shading: #${bg_input};
   --normal-text: #${primary_foreground};
   --muted-text: #${bright_black};
+}
+
+/* The wallpaper layer is gone; paint it solid so no transparent gap (or a
+   stale file:// URL) can show through behind the app. */
+.bg__960e4 {
+  background-color: #${primary_background};
 }
 
 /* ClearVision colors the invite/action icons with --hsl-main-color, so on a
