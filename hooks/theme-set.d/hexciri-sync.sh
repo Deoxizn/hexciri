@@ -209,54 +209,64 @@ selection_fg = _ensure(foreground, selection, 4.5, "selection-fg/selection")
 
 
 # ── 1. Generate custom palette JSON ──
-palette = {
-    "dark": {
-        "mPrimary": accent,
-        "mOnPrimary": on_primary,
-        "mSecondary": muted,
-        "mOnSecondary": on_secondary,
-        "mTertiary": blue,
-        "mOnTertiary": on_tertiary,
-        "mError": red,
-        "mOnError": on_error,
-        "mSurface": dark_background,
-        "mOnSurface": foreground,
-        "mSurfaceVariant": lighter_bg,
-        "mOnSurfaceVariant": foreground,
-        "mOutline": muted,
-        "mShadow": darker_bg,
-        "mHover": darker_bg,
-        "mOnHover": foreground,
-        "terminal": {
-            "background": background,
-            "foreground": foreground,
-            "cursor": foreground,
-            "cursorText": background,
-            "selectionBg": selection,
-            "selectionFg": selection_fg,
-            "normal": {
-                "black": dark_background,
-                "red": red,
-                "green": green,
-                "yellow": yellow,
-                "blue": blue,
-                "magenta": magenta,
-                "cyan": cyan,
-                "white": white
-            },
-            "bright": {
-                "black": muted,
-                "red": bright_red,
-                "green": bright_green,
-                "yellow": bright_yellow,
-                "blue": bright_blue,
-                "magenta": bright_magenta,
-                "cyan": bright_cyan,
-                "white": bright_fg
-            }
+# Noctalia expands a custom palette's 16 base colors into the full role set.
+# 5.4's new surface_container_low/high/highest ramp is derived differently
+# for each variant (isDark), so a light theme stored ONLY under "dark" gets
+# the dark ramp: high/highest clamp to mid-grey (#666/#737) on a light shell.
+# Emit the same 16 colors under both keys for light themes; "dark" is
+# mandatory (the loader rejects a palette without it), and the light variant
+# is the one resolved while the theme mode is light. Dark themes keep a
+# single "dark" key — the loader then reuses the dark ramp for both modes.
+palette_dark = {
+    "mPrimary": accent,
+    "mOnPrimary": on_primary,
+    "mSecondary": muted,
+    "mOnSecondary": on_secondary,
+    "mTertiary": blue,
+    "mOnTertiary": on_tertiary,
+    "mError": red,
+    "mOnError": on_error,
+    "mSurface": dark_background,
+    "mOnSurface": foreground,
+    "mSurfaceVariant": lighter_bg,
+    "mOnSurfaceVariant": foreground,
+    "mOutline": muted,
+    "mShadow": darker_bg,
+    "mHover": darker_bg,
+    "mOnHover": foreground,
+    "terminal": {
+        "background": background,
+        "foreground": foreground,
+        "cursor": foreground,
+        "cursorText": background,
+        "selectionBg": selection,
+        "selectionFg": selection_fg,
+        "normal": {
+            "black": dark_background,
+            "red": red,
+            "green": green,
+            "yellow": yellow,
+            "blue": blue,
+            "magenta": magenta,
+            "cyan": cyan,
+            "white": white
+        },
+        "bright": {
+            "black": muted,
+            "red": bright_red,
+            "green": bright_green,
+            "yellow": bright_yellow,
+            "blue": bright_blue,
+            "magenta": bright_magenta,
+            "cyan": bright_cyan,
+            "white": bright_fg
         }
     }
 }
+
+palette = {"dark": palette_dark}
+if data.get("mode") == "light":
+    palette["light"] = palette_dark
 
 palette_path = noctalia_dir / "palettes" / "hexciri.json"
 palette_path.write_text(json.dumps(palette, indent=2) + "\n")
@@ -266,24 +276,60 @@ print(f"hexciri-sync: wrote palette → {palette_path}")
 # Palette source is the user's independent choice (Themes menu → Palette
 # source): a wallpaper/stock palette is preserved — we only force "custom"
 # when the section is unset or already on the hexciri custom palette.
+#
+# Only the three keys the bridge owns are rewritten. Never regenerate the
+# whole [theme] table: 5.3/5.4 grew it (shell_mode, pure_black_dark,
+# sync_color_scheme, wallpaper_scheme, builtin, community_palette, ...) and a
+# whole-section rewrite silently dropped every one of those user settings.
 if noctalia_cfg.exists():
     cfg = noctalia_cfg.read_text()
-    mode = data.get("mode", "dark")
-    cur_src = ""
-    if '[theme]' in cfg:
-        m = re.search(r'^source\s*=\s*"([^"]+)"', cfg.split('[theme]', 1)[1], flags=re.MULTILINE)
-        cur_src = m.group(1) if m else ""
+    lines = cfg.split("\n")
+    start = end = None
+    for i, line in enumerate(lines):
+        if line.strip() == "[theme]":
+            start = i
+            break
+    if start is not None:
+        end = len(lines)
+        for i in range(start + 1, len(lines)):
+            if re.match(r'^\[', lines[i]):
+                end = i
+                break
+
+    def theme_val(key):
+        if start is None:
+            return ""
+        for line in lines[start + 1:end]:
+            m = re.match(r'^%s\s*=\s*"([^"]*)"' % re.escape(key), line)
+            if m:
+                return m.group(1)
+        return ""
+
+    cur_src = theme_val("source")
     if cur_src in ("", "custom"):
-        theme_block = f"""[theme]
-source = "custom"
-custom_palette = "hexciri"
-mode = "{"dark" if mode == "dark" else "light"}\""""
-        if '[theme]' in cfg:
-            cfg = re.sub(r'\[theme\].*?(?=\n\[|\Z)', theme_block, cfg, flags=re.DOTALL)
+        wanted = {
+            "source": "custom",
+            "custom_palette": "hexciri",
+            "mode": "dark" if data.get("mode", "dark") == "dark" else "light",
+        }
+        if start is None:
+            cfg = "[theme]\n" + "\n".join(f'{k} = "{v}"' for k, v in wanted.items()) + "\n\n" + cfg
         else:
-            cfg = theme_block + "\n\n" + cfg
+            seen = set()
+            for i in range(start + 1, end):
+                m = re.match(r'^([A-Za-z0-9_]+)\s*=', lines[i])
+                if m and m.group(1) in wanted:
+                    lines[i] = f'{m.group(1)} = "{wanted[m.group(1)]}"'
+                    seen.add(m.group(1))
+            missing = [k for k in wanted if k not in seen]
+            if missing:
+                at = end
+                while at > start + 1 and lines[at - 1].strip() == "":
+                    at -= 1
+                lines[at:at] = [f'{k} = "{wanted[k]}"' for k in missing]
+            cfg = "\n".join(lines)
         noctalia_cfg.write_text(cfg)
-        print(f"hexciri-sync: patched config.toml → custom palette 'hexciri'")
+        print(f"hexciri-sync: patched config.toml → custom palette 'hexciri' (mode={wanted['mode']})")
     else:
         print(f"hexciri-sync: preserving palette source '{cur_src}' (user choice)")
     # Wallpaper directory → hexciri standard, but only when the section is
