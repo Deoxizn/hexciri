@@ -45,7 +45,7 @@ if [ "$EUID" -eq 0 ]; then
   die "Do not run as root. Run as your normal user with sudo available."
 fi
 
-for cmd in curl tar mktemp; do
+for cmd in curl tar mktemp wc; do
   command -v "$cmd" >/dev/null 2>&1 || die "missing required command: $cmd"
 done
 
@@ -54,20 +54,29 @@ TARBALL="$WORKDIR/hexciri-nyx.tar.gz"
 info "Work dir: $WORKDIR"
 
 info "Downloading Hexiri 2.0, branch nyx, as a public tarball (no git, no auth)"
-curl -fsSL --max-time 300 -o "$TARBALL" "$HEXCIRI_TARBALL_URL" || die "curl download of Hexiri nyx tarball failed. Fix networking, then rerun."
+info "URL: $HEXCIRI_TARBALL_URL"
+info "Expected size: about 43 MB, this can take a minute on a slow connection"
+curl --progress-bar -fSL --max-time 300 -o "$TARBALL" "$HEXCIRI_TARBALL_URL" || die "curl download of Hexiri nyx tarball failed. Fix networking, then rerun."
 [ -s "$TARBALL" ] || die "Downloaded Hexiri tarball is empty: $TARBALL"
+SIZE_BYTES="$(wc -c < "$TARBALL" | tr -d ' ')"
+info "Downloaded: $SIZE_BYTES bytes (~$((SIZE_BYTES / 1024 / 1024)) MB): $TARBALL"
+info "Validating tarball (gzip, top dir $EXPECTED_TOP_DIR)..."
 # Validate it is really a gzip tarball, not an HTML error page.
 tar -tzf "$TARBALL" >/dev/null || die "Downloaded file is not a valid gzip tarball: $TARBALL. Check the URL and networking, then rerun."
+info "Validation passed: valid gzip tarball"
 
 TOP_DIR="$(tar -tzf "$TARBALL" | head -1 | cut -d/ -f1)"
 if [ "$TOP_DIR" != "$EXPECTED_TOP_DIR" ]; then
   die "tarball top dir is '$TOP_DIR', expected '$EXPECTED_TOP_DIR'. Refusing to continue."
 fi
+info "Top dir: $TOP_DIR"
 
+info "Extracting tarball..."
 tar -xzf "$TARBALL" -C "$WORKDIR" || die "Failed to extract Hexiri tarball."
 EXTRACTED="$WORKDIR/$TOP_DIR"
 [ -d "$EXTRACTED" ] || die "Extracted Hexiri tree not found: $EXTRACTED"
 [ -f "$EXTRACTED/v2/install.sh" ] || die "Extracted Hexiri tree is missing v2/install.sh: $EXTRACTED"
+info "Extracted to: $EXTRACTED"
 info "Verified: $EXTRACTED/v2/install.sh present"
 
 # Exec replaces this process, so the temp dir is left in /tmp for
