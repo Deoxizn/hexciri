@@ -104,6 +104,32 @@ info() { printf '[hexciri] %s\n' "$1"; }
 warn() { printf 'WARN: %s\n' "$1"; }
 die() { printf 'ERROR: %s\n' "$1" >&2; exit 1; }
 
+# --- Re-run detection (2026-11-24, Devi: every update reset shell/theme) ---
+# A re-run is any install where Hexciri is already installed: the
+# self-update path (hexciri-update-hexciri) re-runs this installer whenever
+# its sha changed, and a bootstrap after a working install is the same
+# thing. On a re-run user config is PRESERVED, only code is updated.
+# Fresh install: no marker, no shell.json, no theme.name -> IS_RERUN=0.
+IS_RERUN=0
+if [ -f "/usr/share/hexciri/.installer-sha" ] || [ -f "$HOME/.config/hexciri/shell.json" ] || [ -f "$HOME/.local/state/hexciri/current/theme.name" ]; then
+  IS_RERUN=1
+  info "Re-run detected (existing Hexciri install): user settings, theme and shell.json will be preserved, only code is updated"
+fi
+# Current theme name, if one is staged and still exists in the (new) tree.
+# Used by the theme and SDDM steps so a re-run re-applies the user's theme,
+# never the first theme dir alphabetically.
+current_theme_name() {
+  local _t=""
+  if [ -f "$HOME/.local/state/hexciri/current/theme.name" ]; then
+    _t="$(cat "$HOME/.local/state/hexciri/current/theme.name" 2>/dev/null | tr -d '[:space:]')"
+  fi
+  if [ -n "$_t" ] && [ -d "$HEXCIRI_PATH/themes/$_t" ]; then
+    printf '%s' "$_t"
+    return 0
+  fi
+  return 1
+}
+
 cleanup() {
   if [ -n "${TMP_WORK:-}" ] && [ -d "$TMP_WORK" ]; then
     rm -rf "$TMP_WORK"
@@ -450,7 +476,7 @@ fi
 # via omarchy-cmd-default-browser.
 mkdir -p "$HOME/.local/state/hexciri/defaults"
 if command -v brave-origin >/dev/null 2>&1; then
-  printf '%s' "brave-origin" > "$HOME/.local/state/hexciri/defaults/browser"
+  [ -f "$HOME/.local/state/hexciri/defaults/browser" ] || printf '%s' "brave-origin" > "$HOME/.local/state/hexciri/defaults/browser"
   if [ -f /usr/share/applications/brave-origin.desktop ] || [ -f "$HOME/.local/share/applications/brave-origin.desktop" ]; then
     if xdg-settings set default-web-browser brave-origin.desktop 2>/dev/null; then
       info "Default browser: Brave Origin (brave-origin.desktop)"
@@ -465,22 +491,22 @@ else
   warn "brave-origin not installed, default browser not set"
 fi
 if command -v zathura >/dev/null 2>&1; then
-  printf '%s' "zathura" > "$HOME/.local/state/hexciri/defaults/pdf"
+  [ -f "$HOME/.local/state/hexciri/defaults/pdf" ] || printf '%s' "zathura" > "$HOME/.local/state/hexciri/defaults/pdf"
   xdg-mime default org.pwmt.zathura.desktop application/pdf application/epub+zip application/postscript image/vnd.djvu 2>/dev/null || warn "xdg-mime could not pin zathura for documents"
   info "Default PDF reader: zathura"
 fi
 if command -v zeditor >/dev/null 2>&1; then
-  printf '%s' "zeditor" > "$HOME/.local/state/hexciri/defaults/editor"
+  [ -f "$HOME/.local/state/hexciri/defaults/editor" ] || printf '%s' "zeditor" > "$HOME/.local/state/hexciri/defaults/editor"
   info "Default editor: zed (zeditor)"
 elif command -v zed >/dev/null 2>&1; then
-  printf '%s' "zed" > "$HOME/.local/state/hexciri/defaults/editor"
+  [ -f "$HOME/.local/state/hexciri/defaults/editor" ] || printf '%s' "zed" > "$HOME/.local/state/hexciri/defaults/editor"
   info "Default editor: zed"
 elif command -v nano >/dev/null 2>&1; then
-  printf '%s' "nano" > "$HOME/.local/state/hexciri/defaults/editor"
+  [ -f "$HOME/.local/state/hexciri/defaults/editor" ] || printf '%s' "nano" > "$HOME/.local/state/hexciri/defaults/editor"
   info "Default editor: nano (zed not installed, neovim removed 2026-11-23)"
 fi
 if command -v imv >/dev/null 2>&1; then
-  printf '%s' "imv" > "$HOME/.local/state/hexciri/defaults/images"
+  [ -f "$HOME/.local/state/hexciri/defaults/images" ] || printf '%s' "imv" > "$HOME/.local/state/hexciri/defaults/images"
   info "Default image viewer: imv"
 fi
 
@@ -497,9 +523,11 @@ fi
 # Best-effort, never fatal: a missing config still leaves a working
 # fastfetch.
 mkdir -p "$HOME/.config/fastfetch"
-if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then
+if [ -f "$HOME/.config/fastfetch/config.jsonc" ] && [ "${IS_RERUN:-0}" = "0" ]; then
   mv "$HOME/.config/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc.hexciri.bak"
   info "Moved existing ~/.config/fastfetch/config.jsonc aside to config.jsonc.hexciri.bak (About would use it instead of the Hexciri config)"
+elif [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then
+  info "Kept your ~/.config/fastfetch/config.jsonc (re-run, not moved aside again)"
 fi
 if [ -f "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" ]; then
   if sudo install -Dm644 "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" /etc/fastfetch/config.jsonc; then
@@ -2938,10 +2966,33 @@ place_user_file() {
   local src="$1"
   local dest="$2"
   mkdir -p "$(dirname "$dest")"
-  if [ -e "$dest" ] && ! cmp -s "$src" "$dest"; then
-    cp -a "$dest" "$dest.hexciri.bak"
-    info "Backed up existing $dest to $dest.hexciri.bak"
+  if [ ! -e "$dest" ]; then
+    cp -a "$src" "$dest"
+    info "Placed: $dest"
+    return 0
   fi
+  if cmp -s "$src" "$dest"; then
+    info "Kept: $dest (already current)"
+    return 0
+  fi
+  # Re-run: NEVER overwrite a user file. Save the upstream version next
+  # to it so a fix can be merged by hand, and keep the user's file.
+  # This is the shell.json / hyprland.lua / kitty.conf reset fix.
+  if [ "${IS_RERUN:-0}" = "1" ]; then
+    cp -a "$src" "$dest.hexciri.new"
+    info "Kept your $dest (re-run, upstream version saved to $dest.hexciri.new)"
+    # Safety migration only: an old hyprland.lua still requiring
+    # default.hypr.omarchy trips Hyprland emergency mode at boot.
+    # Fix that one line in place, touch nothing else in the file.
+    if [ "$(basename "$dest")" = "hyprland.lua" ] && grep -q 'default\.hypr\.omarchy' "$dest"; then
+      sed -i 's/default\.hypr\.omarchy/default.hypr.hexciri/g' "$dest"
+      info "Migrated $dest: default.hypr.omarchy -> default.hypr.hexciri (emergency-mode fix, rest of file kept)"
+    fi
+    return 0
+  fi
+  # Fresh install with a pre-existing file: back it up, then place.
+  cp -a "$dest" "$dest.hexciri.bak"
+  info "Backed up existing $dest to $dest.hexciri.bak"
   cp -a "$src" "$dest"
   info "Placed: $dest"
 }
@@ -3351,16 +3402,26 @@ info "PASS: update pipeline verified (Update > Hexciri row live, eos-update --au
 # Kitty. hexciri-browser / hexciri-terminal are deliberately NOT pinned,
 # they are wrappers for Brave Origin / Kitty and would duplicate them.
 for _pin in io.github.lgse.Strata spotify brave-origin dev.zed.Zed kitty; do
-  grep -q "\"$_pin\"" "$HOME/.config/hexciri/shell.json" || die "dock pinned list missing $_pin in ~/.config/hexciri/shell.json"
+  if ! grep -q "\"$_pin\"" "$HOME/.config/hexciri/shell.json"; then
+    if [ "${IS_RERUN:-0}" = "1" ]; then
+      warn "dock pinned list missing $_pin in ~/.config/hexciri/shell.json (re-run, your dock kept, not fatal)"
+    else
+      die "dock pinned list missing $_pin in ~/.config/hexciri/shell.json"
+    fi
+  fi
 done
 unset _pin
 for _dead_pin in folio omacalc omawrite hype monologue cliamp hexciri-browser hexciri-terminal; do
   if grep -q "\"$_dead_pin\"" "$HOME/.config/hexciri/shell.json"; then
-    die "dock pinned list still contains dead/duplicate pin $_dead_pin"
+    if [ "${IS_RERUN:-0}" = "1" ]; then
+      warn "dock pinned list still contains dead/duplicate pin $_dead_pin (re-run, your dock kept, not fatal)"
+    else
+      die "dock pinned list still contains dead/duplicate pin $_dead_pin"
+    fi
   fi
 done
 unset _dead_pin
-info "PASS: dock pinned list verified (Strata, Spotify, Brave Origin, Zed, Kitty)"
+info "PASS: dock pinned list checked (Strata, Spotify, Brave Origin, Zed, Kitty)"
 [ -f "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" ] || die "missing: default/hexciri/hexciri-menu.jsonc, Super+Alt+Space menu has no routes"
 if ! grep -rl 'hexciri.menu' "$HEXCIRI_PATH/shell/plugins" --include='manifest.json' >/dev/null 2>&1; then
   warn "no plugin manifest registers hexciri.menu, Super+Alt+Space menu will do nothing"
@@ -3584,16 +3645,39 @@ unset _boot_esp _boot_cands _boot_found _boot_loader _cand _boot_efi_before _boo
 # if theme-set cannot run before a login, the stock bar still starts and
 # the user can set a theme after reboot.
 
-step "Applying a default theme"
+# --- Apply a theme: CURRENT theme on a re-run, default only on fresh ---
+# This was the theme reset: every re-run applied the FIRST theme dir
+# alphabetically, wiping the user's chosen theme, staged colors.toml,
+# GTK mode and SDDM background. On a re-run, re-applying the current
+# theme regenerates the staged files from the same theme (safe, and
+# needed after the /usr/share tree was replaced), without changing it.
+# Fresh install: no current theme yet, pick the first dir as before.
+step "Applying theme"
+DEFAULT_THEME=""
 THEME_DIRS=("$HEXCIRI_PATH"/themes/*/)
 if [ "${#THEME_DIRS[@]}" -ge 1 ] && [ -d "${THEME_DIRS[0]}" ]; then
   DEFAULT_THEME="$(basename "${THEME_DIRS[0]}")"
+fi
+APPLY_THEME="$DEFAULT_THEME"
+if [ "${IS_RERUN:-0}" = "1" ]; then
+  if _cur="$(current_theme_name)"; then
+    APPLY_THEME="$_cur"
+    info "Re-run: keeping your theme: $APPLY_THEME (not the default $DEFAULT_THEME)"
+  else
+    info "Re-run: no current theme found, falling back to default: $DEFAULT_THEME"
+  fi
+else
   info "Default theme: $DEFAULT_THEME"
+fi
+unset _cur
+# APPLY_THEME is deliberately NOT unset: the SDDM step below reads it as
+# the applied (current on re-run, default on fresh) theme for its background.
+if [ -n "$APPLY_THEME" ]; then
   if [ -x "$HEXCIRI_PATH/bin/hexciri-theme-set" ]; then
-    if "$HEXCIRI_PATH/bin/hexciri-theme-set" "$DEFAULT_THEME"; then
-      info "Theme applied: $DEFAULT_THEME"
+    if "$HEXCIRI_PATH/bin/hexciri-theme-set" "$APPLY_THEME"; then
+      info "Theme applied: $APPLY_THEME"
     else
-      warn "hexciri-theme-set $DEFAULT_THEME failed, not fatal. Set a theme after reboot: hexciri-theme-set <theme>"
+      warn "hexciri-theme-set $APPLY_THEME failed, not fatal. Set a theme after reboot: hexciri-theme-set <theme>"
     fi
   else
     warn "hexciri-theme-set not found, skipping theme apply. Set a theme after reboot."
@@ -3782,7 +3866,7 @@ if [ -n "$SDDM_SRC" ]; then
   # theme.conf (Background=): branding Main.qml reads root.bgColor from
   # config, so a sed recolor of Main.qml cannot work here.
   SDDM_BG=""
-  for _colors in "$HOME/.local/state/hexciri/current/theme/colors.toml" "$HEXCIRI_PATH/themes/${DEFAULT_THEME:-}/colors.toml"; do
+  for _colors in "$HOME/.local/state/hexciri/current/theme/colors.toml" "$HEXCIRI_PATH/themes/${APPLY_THEME:-${DEFAULT_THEME:-}}/colors.toml"; do
     if [ -f "$_colors" ]; then
       SDDM_BG="$(grep -m1 -E '^[[:space:]]*background[[:space:]]*=' "$_colors" 2>/dev/null | sed -E 's/.*"([^"]+)".*/\1/' || true)"
       [ -n "$SDDM_BG" ] && break
@@ -3799,7 +3883,7 @@ if [ -n "$SDDM_SRC" ]; then
       printf 'Fingerprint=true\n' >> "$TMP_SDDM_CONF"
     fi
     if sudo install -Dm644 "$TMP_SDDM_CONF" /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null; then
-      info "SDDM theme background set to the ${DEFAULT_THEME:-current} theme background: $SDDM_BG"
+      info "SDDM theme background set to the current theme background: $SDDM_BG"
     else
       warn "could not write SDDM theme.conf, it keeps its packaged background colour."
     fi
@@ -3842,7 +3926,7 @@ if [ -x "$HOME/.local/bin/strata" ]; then
   # Pin Strata as the file manager (v1 mime-defaults pick: strata ->
   # io.github.lgse.Strata.desktop), now that its desktop entry exists.
   if [ -f "$HOME/.local/share/applications/io.github.lgse.Strata.desktop" ]; then
-    printf '%s' "strata" > "$HOME/.local/state/hexciri/defaults/files"
+    [ -f "$HOME/.local/state/hexciri/defaults/files" ] || printf '%s' "strata" > "$HOME/.local/state/hexciri/defaults/files"
     xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null && info "Default file manager: Strata" || warn "xdg-mime could not pin Strata for inode/directory"
   fi
 else
