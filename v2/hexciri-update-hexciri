@@ -17,10 +17,17 @@
 # Yes, the installer DOES re-run inside an update, but only when the
 # installer itself changed, and it is not a fresh bootstrap: it does not
 # re-install EndeavourOS, wipe anything, or start over. It is an
-# idempotent re-apply (re-fork Omarchy at the pinned commit, re-place the
-# tree, re-apply theme and fixes, re-run the trim). When the installer
-# sha matches and the installed tree is not drifting, it skips the
-# re-install entirely and the update goes straight to eos-update.
+# idempotent re-apply, and it is INCREMENTAL now (2026-11-24, Devi:
+# every update re-forked Omarchy from scratch): the installer reuses
+# its cached fork (~/.cache/hexciri/fork-cache) unless the fork
+# fingerprint changed (fork code, pinned upstream commit, or a repo
+# file copied into the fork). A minor installer change (update
+# output, keyring, trim) re-runs the installer but does NOT re-fork:
+# no 94 MB download, no 488-bin copy, no 874-file rewrite. A full
+# re-fork happens only on a fork change, or with --force / --refork.
+# When the installer sha matches and the installed tree is not
+# drifting, it skips the re-install entirely and the update goes
+# straight to the system packages.
 # The git fetch to check that is tiny, so an unchanged update no longer
 # downloads 43 MB first.
 #
@@ -177,7 +184,11 @@ if [[ -n $SHORT ]]; then
 else
   echo "Updating Hexciri..."
 fi
-bash "$SOURCE_ROOT/v2/install.sh" --yes --no-reboot
+if [[ $FORCE -eq 1 ]]; then
+  bash "$SOURCE_ROOT/v2/install.sh" --yes --no-reboot --refork
+else
+  bash "$SOURCE_ROOT/v2/install.sh" --yes --no-reboot
+fi
 
 # The installer writes the new marker itself; verify it landed.
 NEW_MARKER="$(cat "$MARKER" 2>/dev/null || true)"

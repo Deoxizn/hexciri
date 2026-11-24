@@ -11,7 +11,13 @@
 #      Hexciri default apps (Omarchy defaults + Hexciri replacements, so
 #      binds can be tested: Brave Origin, zathura, imv, zed, Obsidian, mpv)
 #   2. Download omacom/omarchy at the pinned commit as a tarball (no git, no auth),
-#      verify SHA from the tarball top dir, then fork and rename the shell inline
+#      verify SHA from the tarball top dir, then fork and rename the shell inline.
+#      On a re-run the fork is CACHED (2026-11-24, Devi: every update re-forked
+#      Omarchy from scratch): if the fork fingerprint (fork code + pinned
+#      commit + repo files copied into the fork) is unchanged, the download
+#      and the whole fork are skipped and the cached tree is reused.
+#      --refork forces a full re-fork. Per-file fork noise goes to
+#      /tmp/hexciri-install-fork.log, screen gets one summary per stage.
 #   4. Place the forked tree to /usr/share/hexciri, ~/.config/hexciri,
 #      ~/.local/state/hexciri, and ~/.config/hypr, and wire the compat alias in
 #   5. Apply a default theme, theme SDDM with that theme, health check,
@@ -65,12 +71,14 @@ trap 'printf "ERROR: [hexciri] failed at line %s, exit %s, command: %s\n" "$LINE
 UPDATE_YES=""
 AUTO_REBOOT=0
 NO_REBOOT=0
+REFORK=0
 for _a in "$@"; do
   case "$_a" in
     --yes|-y) UPDATE_YES="--yes" ;;
     --reboot) AUTO_REBOOT=1 ;;
     --no-reboot) NO_REBOOT=1 ;;
-    -h|--help) echo "usage: install.sh [--yes] [--reboot] [--no-reboot]"; exit 0 ;;
+    --refork|--force) REFORK=1 ;;
+    -h|--help) echo "usage: install.sh [--yes] [--reboot] [--no-reboot] [--refork]"; exit 0 ;;
     *) printf 'install.sh: unknown arg: %s (usage: install.sh [--yes] [--reboot] [--no-reboot])\n' "$_a" >&2; exit 1 ;;
   esac
 done
@@ -100,6 +108,32 @@ INSTALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 HEXCIRI_REPO_ROOT="$(dirname "$INSTALLER_DIR")"
 
 step() { printf '\n==> %s\n' "$1"; }
+
+# Fork detail log: per-file fork noise (Copied bin, Renamed paths, the
+# full fork-out listing) goes here, not to the screen. Screen gets one
+# summary line per fork stage; full detail is in the log, or on screen
+# with HEXCIRI_INSTALL_VERBOSE=1 / HEXCIRI_UPDATE_VERBOSE=1.
+FORK_LOG="${HEXCIRI_INSTALL_FORK_LOG:-/tmp/hexciri-install-fork.log}"
+FORK_CACHE_DIR="$HOME/.cache/hexciri/fork-cache"
+SKIP_FORK=0
+FORK_FP=""
+
+# Fork fingerprint: what a fresh fork would produce. Hash of the fork +
+# fork-patch code in THIS installer (fork marker to placement marker),
+# the pinned upstream commit, and the repo files copied into the fork
+# (hexciri-update-hexciri, hexciri-theme-ansi). A change to any of those
+# changes the fingerprint and forces a full re-fork; a change to
+# anything else (packages, SDDM, trim, theme re-apply, health check,
+# update output wording) does not, so a re-run reuses the cache.
+fork_fingerprint() {
+  {
+    sed -n '/^# --- Fork and rename, inline/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
+    printf 'pinned=%s\n' "$PINNED_SHA"
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi"; do
+      if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
+    done
+  } | sha256sum | cut -d' ' -f1
+}
 info() { printf '[hexciri] %s\n' "$1"; }
 warn() { printf 'WARN: %s\n' "$1"; }
 die() { printf 'ERROR: %s\n' "$1" >&2; exit 1; }
@@ -674,8 +708,30 @@ done
 step "Quick service state check"
 systemctl is-enabled NetworkManager bluetooth power-profiles-daemon firewalld sddm || warn "One or more services above did not report enabled. Check systemctl status for that service."
 
+# --- Fork cache check (2026-11-24, Devi: every update re-forked Omarchy) ---
+# BEGIN FORK CACHE CHECK
+FORK_FP="$(fork_fingerprint)"
+if [ "${REFORK:-0}" = "1" ]; then
+  rm -rf "$FORK_CACHE_DIR"
+  info "Re-fork requested (--refork), fork cache cleared"
+fi
+if [ -f "$FORK_CACHE_DIR/fork-fingerprint" ] && [ -f "$FORK_CACHE_DIR/fork-out/bin/hexciri" ] && [ "$(cat "$FORK_CACHE_DIR/fork-fingerprint" 2>/dev/null)" = "$FORK_FP" ]; then
+  SKIP_FORK=1
+  rm -rf "$FORK_OUT"
+  cp -a "$FORK_CACHE_DIR/fork-out" "$FORK_OUT"
+  _fc_files="$(find "$FORK_OUT" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  _fc_themes="$(find "$FORK_OUT/themes" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')"
+  _fc_bins="$(find "$FORK_OUT/bin" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  info "Fork cache hit: Omarchy $PINNED_SHA, fork unchanged, reusing cached fork ($_fc_files files, $_fc_themes themes, $_fc_bins bin scripts, no download, no re-fork)"
+  unset _fc_files _fc_themes _fc_bins
+else
+  info "Fork cache miss: forking Omarchy $PINNED_SHA (full fork; per-file detail: $FORK_LOG)"
+fi
+# END FORK CACHE CHECK
+
 # --- Download Omarchy at the pinned commit as a tarball, no git, no auth ---
 
+if [ "${SKIP_FORK:-0}" = "0" ]; then
 step "Downloading Omarchy, branch $PINNED_BRANCH, pinned commit $PINNED_SHA ($PINNED_DATE)"
 step "No git clone, no username or password prompt: public codeload tarball via curl"
 for cmd in curl python3 tar grep find cp mkdir rm; do
@@ -713,12 +769,27 @@ for marker in shell/shell.qml default/hypr config/omarchy/shell.json themes; do
   [ -e "$OMARCHY_SRC/$marker" ] || die "Extracted Omarchy tree is missing expected path: $marker"
 done
 info "Commit verified by tarball top dir: $TOP_DIR"
+fi # end SKIP_FORK download guard
 
 # --- Fork and rename, inline (was fork-shell.sh) ---
 # Phase 1 only: extract the listed subsets verbatim, then rename. No Phase 2 Hexciri edits.
 # Stock Lua only. Lua double backslashes are preserved byte-safe:
 # a regex dot is \\. in Lua, and this script never collapses \\ to \.
 # It uses Python byte replacement, not sed, for content rewrites.
+#
+# Fork cache (2026-11-24): when SKIP_FORK=1 the whole block below,
+# fork + all fork patches, is skipped and FORK_OUT is the cached tree
+# restored above. Fresh installs and fork changes run it in full.
+# Per-file noise in here goes to the fork detail log, screen gets one
+# summary line per stage.
+fork_detail() {
+  : >> "${FORK_LOG:-/tmp/hexciri-install-fork.log}" 2>/dev/null || true
+  printf '[hexciri] %s\n' "$1" >> "${FORK_LOG:-/tmp/hexciri-install-fork.log}" 2>/dev/null || true
+  if [[ "${HEXCIRI_INSTALL_VERBOSE:-0}" == "1" || "${HEXCIRI_UPDATE_VERBOSE:-0}" == "1" ]]; then
+    printf '[hexciri] %s\n' "$1"
+  fi
+}
+if [ "${SKIP_FORK:-0}" = "0" ]; then
 
 copy_subset() {
   local src="$1"
@@ -727,7 +798,7 @@ copy_subset() {
   if [ -e "$src" ]; then
     mkdir -p "$(dirname "$dest")"
     cp -a "$src" "$dest"
-    info "Copied: $label ($src -> $dest)"
+    fork_detail "Copied: $label ($src -> $dest)"
   else
     die "required subset missing in source: $label ($src)"
   fi
@@ -740,7 +811,7 @@ copy_optional_file() {
   if [ -f "$src" ]; then
     mkdir -p "$(dirname "$dest")"
     cp -a "$src" "$dest"
-    info "Copied: $label ($src -> $dest)"
+    fork_detail "Copied: $label ($src -> $dest)"
     return 0
   fi
   return 1
@@ -753,7 +824,7 @@ copy_optional_path() {
   if [ -e "$src" ]; then
     mkdir -p "$(dirname "$dest")"
     cp -a "$src" "$dest"
-    info "Copied: $label ($src -> $dest)"
+    fork_detail "Copied: $label ($src -> $dest)"
     return 0
   fi
   return 1
@@ -1008,10 +1079,10 @@ HEXCIRI_LOGO_EOF
       fi
       cp -a "$src_file" "$FORK_OUT/bin/$dest_name"
       copied_bin=$((copied_bin + 1))
-      info "Copied bin: $base -> bin/$dest_name"
+      fork_detail "Copied bin: $base -> bin/$dest_name"
     else
       skipped_bin=$((skipped_bin + 1))
-      info "Skipped bin (not called by shell): $base"
+      fork_detail "Skipped bin (not called by shell): $base"
     fi
   done
   info "Bin copy done: $copied_bin copied, $skipped_bin skipped"
@@ -1030,7 +1101,7 @@ HEXCIRI_LOGO_EOF
 
 rename_files() {
   step "Renaming files and directories: omarchy -> hexciri"
-  python3 - "$FORK_OUT" <<'PY'
+  python3 - "$FORK_OUT" >"${TMP_WORK:-/tmp}/rename.log" 2>&1 <<'PY'
 import os
 import sys
 
@@ -1048,13 +1119,15 @@ for dirpath, dirnames, filenames in os.walk(root, topdown=False):
                 print("Renamed: %s -> %s" % (old, new))
 print("Files and dirs renamed: %d" % renamed)
 PY
+  cat "${TMP_WORK:-/tmp}/rename.log" >> "${FORK_LOG:-/tmp/hexciri-install-fork.log}" 2>/dev/null || true
+  info "$(grep '^Files and dirs renamed:' "${TMP_WORK:-/tmp}/rename.log" | tail -1)"
   info "File and directory rename complete"
 }
 
 rewrite_contents() {
   step "Rewriting contents with rename map (Python byte replacement, Lua safe)"
   info "Lua safety: replacements are exact byte matches only, so \\\\ in Lua stays \\\\ and is never collapsed to \\"
-  python3 - "$FORK_OUT" <<'PY'
+  python3 - "$FORK_OUT" >"${TMP_WORK:-/tmp}/rewrite.log" 2>&1 <<'PY'
 import os
 import sys
 
@@ -1338,8 +1411,10 @@ if _dt_new != _dtb:
     print("Default-terminal repair: foot.desktop restored in hexciri-default-terminal getter/setter")
 print("Content rewrite: %d files scanned, %d files changed" % (total_files, changed_files))
 PY
+  cat "${TMP_WORK:-/tmp}/rewrite.log" >> "${FORK_LOG:-/tmp/hexciri-install-fork.log}" 2>/dev/null || true
+  grep -E 'WARN|Content rewrite:' "${TMP_WORK:-/tmp}/rewrite.log" | while IFS= read -r _rw; do info "$_rw"; done
   info "Content rewrite complete"
-  info "Renames applied: /usr/share/omarchy -> /usr/share/hexciri, ~/.config/omarchy -> ~/.config/hexciri, ~/.local/state/omarchy -> ~/.local/state/hexciri, ~/.local/share/omarchy -> ~/.local/share/hexciri, OMARCHY_PATH -> HEXCIRI_PATH, omarchy.bar etc -> hexciri.bar etc, omarchy-shell -> hexciri-shell, omarchy-theme-set -> hexciri-theme-set, omarchy-launch-* -> hexciri-launch-*, default/hypr/omarchy.lua -> default/hypr/hexciri.lua, config/hypr/hyprland.lua env fallback updated by the same map, omarchy-* commands -> hexciri-* (generic hyphen rule), folio -> strata (launch-files only), foot.desktop -> kitty.desktop, menu trigger Omarchy logo glyph -> Arch Nerd Font glyph U+F303"
+  fork_detail "Renames applied: /usr/share/omarchy -> /usr/share/hexciri, ~/.config/omarchy -> ~/.config/hexciri, ~/.local/state/omarchy -> ~/.local/state/hexciri, ~/.local/share/omarchy -> ~/.local/share/hexciri, OMARCHY_PATH -> HEXCIRI_PATH, omarchy.bar etc -> hexciri.bar etc, omarchy-shell -> hexciri-shell, omarchy-theme-set -> hexciri-theme-set, omarchy-launch-* -> hexciri-launch-*, default/hypr/omarchy.lua -> default/hypr/hexciri.lua, config/hypr/hyprland.lua env fallback updated by the same map, omarchy-* commands -> hexciri-* (generic hyphen rule), folio -> strata (launch-files only), foot.desktop -> kitty.desktop, menu trigger Omarchy logo glyph -> Arch Nerd Font glyph U+F303"
 }
 
 generate_compat() {
@@ -1502,9 +1577,9 @@ verify_no_omarchy_paths
 verify_no_omarchy_lua_modules
 
 step "Fork summary"
-info "Fork output: $FORK_OUT"
-info "Files: $(find "$FORK_OUT" -type f | wc -l | tr -d ' '), dirs: $(find "$FORK_OUT" -type d | wc -l | tr -d ' '), themes: $(find "$FORK_OUT/themes" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' '), bin scripts: $(find "$FORK_OUT/bin" -type f 2>/dev/null | wc -l | tr -d ' ')"
-find "$FORK_OUT" -mindepth 1 -maxdepth 2 -print | sort
+fork_detail "Fork output: $FORK_OUT"
+info "Fork: $(find "$FORK_OUT" -type f | wc -l | tr -d ' ') files, $(find "$FORK_OUT" -type d | wc -l | tr -d ' ') dirs, $(find "$FORK_OUT/themes" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ') themes, $(find "$FORK_OUT/bin" -type f 2>/dev/null | wc -l | tr -d ' ') bin scripts (Omarchy ${PINNED_SHA:-unknown}, renamed omarchy -> hexciri; full file list: ${FORK_LOG:-/tmp/hexciri-install-fork.log})"
+find "$FORK_OUT" -mindepth 1 -maxdepth 2 -print | sort >> "${FORK_LOG:-/tmp/hexciri-install-fork.log}" 2>/dev/null || true
 
 # --- Wire the compat alias in, before placement ---
 # This was the missing step in Phase 1. Wiring happens on the fork output
@@ -2533,11 +2608,17 @@ PY
 # only its steps are swapped for EndeavourOS:
 #   * No snapshot. Devi 2026-11-24: systemd-boot + ext4, no GRUB/btrfs, so
 #     snapshots are not a thing; eos-update --aur + Hexciri sync is enough.
-#   * System packages: eos-update --aur (repo pacman -Syu, then yay -Sua,
-#     plus keyring refresh, db lock handling, disk space check, .pacnew
-#     check). eos-update has NO --noconfirm flag, so under
-#     HEXCIRI_UPDATE_UNATTENDED=1 the pacman path below runs instead,
-#     keeping -y non-interactive.
+#   * System packages: pacman directly, unattended. The start confirm
+#     in hexciri-update is the one approval; after it
+#     HEXCIRI_UPDATE_UNATTENDED=1, so the pacman --noconfirm path runs
+#     and eos-update --aur does not (eos-update has NO --noconfirm
+#     flag, and yay inside it prompts [Y/n] for e.g. mise). Db sync
+#     runs captured (no "is up to date" lines), checkupdates counts
+#     pending updates, pacman -Su runs live so the ILoveCandy bar
+#     shows, then one status line. A .pacnew in /etc gets one line.
+#   * AUR: yay output is captured, one status line instead ("AUR
+#     packages are up to date" / "AUR packages updated"). The EOS
+#     marker branch prints the same one line, never "skipping".
 #   * Hexciri self-update: the dev-checkout step is a no-op on an installed
 #     machine (HEXCIRI_PATH is /usr/share/hexciri, not a checkout), so
 #     hexciri-update-hexciri (repo file v2/hexciri-update-hexciri) syncs
@@ -2649,6 +2730,18 @@ must_replace(upd, "  authorize_update\n",
     "  authorize_update\n  # Marker file for this run only (underscores, not hyphens, so the\n  # fork scan does not read it as a hexciri-* command name).\n  export HEXCIRI_UPDATE_EOS_MARKER=\"/tmp/hexciri_update_eos_aur_$$.marker\"\n",
     "hexciri-update exports the eos-update AUR marker path")
 
+# 3b. Unattended after the single start confirm (2026-11-24, Devi:
+# once it finds an update it should all just be -y, no more Y/n
+# prompts). The confirm above is the one approval; after it the run
+# is unattended, so system-pkgs takes the pacman --noconfirm path
+# instead of eos-update (whose yay prompts [Y/n]), the reboot step
+# prints "reboot later" instead of prompting, and a real package
+# conflict fails with "run interactively" instead of sitting on a
+# prompt nobody answers.
+must_replace(upd, "  authorize_update\n",
+    "  authorize_update\n  export HEXCIRI_UPDATE_UNATTENDED=1\n",
+    "hexciri-update is unattended after the single start confirm")
+
 # 4. Cleanup removes the marker (cleanup_update calls end_update_authorization;
 # the same call also appears in the main flow after boot verification, so
 # anchor on the cleanup_update function header, not on the call alone).
@@ -2656,11 +2749,63 @@ must_replace(upd, "cleanup_update() {\n  local status=$?\n  trap - EXIT HUP INT 
     "cleanup_update() {\n  local status=$?\n  trap - EXIT HUP INT TERM\n  end_update_authorization\n  rm -f \"${HEXCIRI_UPDATE_EOS_MARKER:-}\" 2>/dev/null || true\n",
     "hexciri-update cleanup removes the eos-update AUR marker")
 
-# 5. aur-pkgs: skip when eos-update --aur already did the AUR this run.
-# (This file has no set -e; anchor on its unset line, before the pacman check.)
-must_replace(fork + "/bin/hexciri-update-aur-pkgs", "unset GOROOT GOBIN\n",
-    "unset GOROOT GOBIN\n\n# eos-update --aur already updated the AUR in the system-pkgs step; the\n# marker file is set by hexciri-update for this run only.\nif [[ -n ${HEXCIRI_UPDATE_EOS_MARKER:-} && -f $HEXCIRI_UPDATE_EOS_MARKER ]]; then\n  echo \"AUR packages already updated by eos-update --aur, skipping\"\n  exit 0\nfi\n",
-    "hexciri-update-aur-pkgs skips when eos-update already did the AUR")
+# 5. aur-pkgs: whole-file rewrite (2026-11-24, Devi: quiet AUR step).
+# The EOS-marker branch prints one line ("AUR packages are up to
+# date"), never "already updated by eos-update --aur, skipping".
+# Otherwise yay output is captured and one status line is shown.
+_aur = fork + "/bin/hexciri-update-aur-pkgs"
+with open(_aur, "w") as f:
+    f.write(r'''#!/bin/bash
+
+# omarchy:summary=Update AUR packages if any are installed
+
+# mise exports GOROOT and GOBIN for its own Go. hexciri-upgrade-to-quattro runs
+# this with the system PATH but the caller's environment, so /usr/bin/go would
+# compile with mise's toolchain and every Go PKGBUILD fails with
+# "compile: version ... does not match go tool version". With both unset,
+# whichever go is on PATH uses its own root.
+unset GOROOT GOBIN
+
+# eos-update --aur already did the AUR in the system-pkgs step; the marker
+# file is set by hexciri-update for this run only. One line, no "skipping",
+# no duplicate yay run. In a normal `hexciri update` this branch is not
+# reached (system-pkgs takes the pacman path and leaves the marker unset);
+# it is kept for a standalone interactive run.
+if [[ -n ${HEXCIRI_UPDATE_EOS_MARKER:-} && -f $HEXCIRI_UPDATE_EOS_MARKER ]]; then
+  echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.aur)\e[0m"
+  echo "AUR packages are up to date"
+  exit 0
+fi
+
+if pacman -Qem >/dev/null; then
+  if hexciri-pkg-aur-accessible; then
+    echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.aur)\e[0m"
+    # Quiet on purpose (2026-11-24, Devi): yay prints "Searching AUR for
+    # updates... there is nothing to do" and build logs. Capture it, show
+    # one status line instead. Real failures print the captured output.
+    _aur_log="$(mktemp /tmp/hexciri-aur.XXXXXX)"
+    if yay -Sua --noconfirm --cleanafter --ignore gcc14,gcc14-libs >"$_aur_log" 2>&1; then
+      if grep -q "there is nothing to do" "$_aur_log"; then
+        echo "AUR packages are up to date"
+      else
+        echo "AUR packages updated"
+        grep -E "upgrading" "$_aur_log" | sed 's/^/  /' || true
+      fi
+      rm -f "$_aur_log"
+    else
+      echo "ERROR: AUR update failed, output:" >&2
+      cat "$_aur_log" >&2
+      rm -f "$_aur_log"
+      exit 1
+    fi
+    echo
+  else
+    echo -e "$(hexciri-theme-ansi red)\n$(hexciri-i18n update.aurUnavailable)\e[0m"
+    echo
+  fi
+fi
+''')
+print("  update: hexciri-update-aur-pkgs rewritten (quiet: one status line, no duplicate yay output)")
 
 # 6. boot: verify systemd-boot directly when lifecycle-dispatch is absent.
 must_replace(fork + "/bin/hexciri-update-boot", "set -e\n",
@@ -2784,11 +2929,17 @@ cat > "$FORK_OUT/bin/hexciri-update-system-pkgs" <<'SYSPKGS_EOF'
 #!/bin/bash
 # omarchy:summary=Update system packages with pacman
 # omarchy:requires-sudo=true
-# Hexciri (2026-11-24): eos-update --aur is the package engine on
-# EndeavourOS (repo pacman -Syu, then yay -Sua, plus keyring refresh, db
-# lock handling, disk space check, .pacnew check). eos-update has NO
-# --noconfirm flag, so under HEXCIRI_UPDATE_UNATTENDED=1 the pacman path
-# below runs instead, keeping -y non-interactive.
+# Hexciri (2026-11-24): the package engine is pacman directly, unattended.
+# The start confirm in hexciri-update is the one approval; after it
+# HEXCIRI_UPDATE_UNATTENDED=1, so this file never runs eos-update in a
+# normal update (eos-update has no --noconfirm flag, and yay inside it
+# prompts [Y/n] for e.g. mise). eos-update --aur is kept only for a
+# standalone interactive run of this file.
+# Flow: db sync quietly (captured, no "is up to date" lines), then
+# checkupdates counts pending repo updates; if none, one line
+# "System packages are up to date" and no upgrade run at all. If there
+# are updates, pacman -Su runs live so the ILoveCandy Pac-Man bar shows,
+# then one closing line. A .pacnew in /etc gets one warning line.
 set -e
 
 # The conflict handler's last resort: pacman puts its questions to the person
@@ -2799,9 +2950,9 @@ if [[ ${HEXCIRI_UPDATE_CONFLICT:-} == 1 && ${HEXCIRI_UPDATE_INTERACTIVE:-} == 1 
   exec hexciri-update-pacman -Syu --overwrite '/usr/share/hexciri/*'
 fi
 
-# EndeavourOS package engine: eos-update --aur. It prompts on conflicts
-# itself, so it only runs in interactive mode. On failure, fall through to
-# the pacman path below instead of stopping the whole update.
+# Standalone interactive run only: eos-update --aur. In a normal
+# `hexciri update` UNATTENDED is already 1 (set after the start confirm),
+# so this branch never runs there and its banner never prints.
 if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} != "1" ]] && command -v eos-update >/dev/null 2>&1; then
   echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.systemPackages) (eos-update --aur)\e[0m"
   if eos-update --aur; then
@@ -2809,10 +2960,35 @@ if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} != "1" ]] && command -v eos-update >/dev/n
     [[ -n ${HEXCIRI_UPDATE_EOS_MARKER:-} ]] && : > "$HEXCIRI_UPDATE_EOS_MARKER"
     exit 0
   fi
-  echo "eos-update --aur failed, falling back to pacman -Syu --noconfirm (review /tmp/hexciri-update.log for details)." >&2
+  echo "eos-update --aur failed, falling back to pacman (review /tmp/hexciri-update.log for details)." >&2
 fi
 
 echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.systemPackages)\e[0m"
+
+# Db sync, quiet: capture it, the "is up to date" lines are not shown.
+_sync_log="$(mktemp /tmp/hexciri-syspkgs-sync.XXXXXX)"
+if ! LC_ALL=C hexciri-update-pacman -Sy --noconfirm >"$_sync_log" 2>&1; then
+  echo "ERROR: package database sync failed, output:" >&2
+  cat "$_sync_log" >&2
+  rm -f "$_sync_log"
+  exit 1
+fi
+rm -f "$_sync_log"
+
+# Nothing pending: one line, no upgrade run, no "there is nothing to do".
+# checkupdates reads the just-synced db. If it cannot run at all, assume
+# there is something to do and let pacman -Su below decide.
+_pending_file="$(mktemp /tmp/hexciri-syspkgs-pending.XXXXXX)"
+if checkupdates >"$_pending_file" 2>/dev/null; then
+  _pending="$(wc -l < "$_pending_file" | tr -d ' ')"
+else
+  _pending=1
+fi
+rm -f "$_pending_file"
+if [[ "$_pending" == "0" ]]; then
+  echo "System packages are up to date"
+  exit 0
+fi
 
 errors=$(mktemp)
 trap 'rm -f "$errors"' EXIT
@@ -2820,11 +2996,17 @@ trap 'rm -f "$errors"' EXIT
 # /usr/share/hexciri is wholly Hexciri's; files can land there unowned and would
 # otherwise abort the upgrade. Packaged content wins there.
 #
-# Progress bars stay on stdout. Errors are on stderr, kept for the conflict
-# handler below; LC_ALL=C is what keeps them parseable in any locale.
-if LC_ALL=C hexciri-update-pacman -Syu --noconfirm \
+# Progress bars stay on stdout (ILoveCandy Pac-Man bar). Errors are on stderr,
+# kept for the conflict handler below; LC_ALL=C is what keeps them parseable
+# in any locale.
+if LC_ALL=C hexciri-update-pacman -Su --noconfirm \
   --overwrite '/usr/share/hexciri/*' 2>"$errors"; then
   cat "$errors" >&2
+  _pacnew="$(find /etc -name '*.pacnew' 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ "$_pacnew" != "0" ]]; then
+    echo "Note: $_pacnew .pacnew file(s) in /etc need review (run pacdiff)" >&2
+  fi
+  echo "System packages updated ($_pending package(s))"
   exit 0
 fi
 cat "$errors" >&2
@@ -2836,6 +3018,7 @@ cat "$errors" >&2
 # exec, so the EXIT trap above does not fire and the handler can still read the
 # report. It takes over deleting it.
 exec env HEXCIRI_UPDATE_CONFLICT=1 hexciri-update-system-pkgs-when-conflicted "$errors"
+
 SYSPKGS_EOF
 chmod +x "$FORK_OUT/bin/hexciri-update-system-pkgs"
 
@@ -2918,6 +3101,20 @@ done
 unset _f
 info "  update: hexciri-update patched (eos-update --aur, no snapshot, Hexciri self-update, mise, dracut log scan)"
 
+# Save the fully patched fork for the next re-run (fork cache,
+# 2026-11-24). Only when this run actually forked (SKIP_FORK=0) and
+# the fingerprint was computed (a real install, not sim7, which
+# sources only the fork block and has no FORK_FP).
+if [ "${SKIP_FORK:-0}" = "0" ] && [ -n "${FORK_FP:-}" ] && [ -n "${FORK_CACHE_DIR:-}" ]; then
+  rm -rf "$FORK_CACHE_DIR"
+  mkdir -p "$FORK_CACHE_DIR"
+  cp -a "$FORK_OUT" "$FORK_CACHE_DIR/fork-out"
+  printf '%s\n' "$FORK_FP" > "$FORK_CACHE_DIR/fork-fingerprint"
+  info "Fork cache saved: $FORK_CACHE_DIR/fork-out (reused on the next update unless the fork changes)"
+fi
+
+fi # end SKIP_FORK fork guard: the block above (fork + all fork patches) runs only on a fresh install or a fork change
+
 # --- mise + Hexciri tools config (Phase 2, 2026-11-24) ---
 # mise was out of scope in the Phase 1 base; reinstall it so the rest of the
 # Omarchy scripts work. /etc/mise/conf.d/hexciri-tools.toml is the trimmed
@@ -2958,6 +3155,7 @@ sudo chmod +x "$HEXCIRI_PATH"/bin/* 2>/dev/null || true
 # Installer sha marker for hexciri-update-hexciri: it re-runs this installer
 # only when the installer itself changed.
 sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1 | sudo tee "$HEXCIRI_PATH/.installer-sha" >/dev/null && info "Wrote installer sha marker /usr/share/hexciri/.installer-sha (hexciri update re-runs the installer only when this changes)" || warn "could not write installer sha marker, hexciri update will re-run the installer every time"
+[ -n "${FORK_FP:-}" ] && printf '%s\n' "$FORK_FP" | sudo tee "$HEXCIRI_PATH/.fork-fingerprint" >/dev/null || true
 info "Installed: $HEXCIRI_PATH/shell, $HEXCIRI_PATH/default, $HEXCIRI_PATH/themes, $HEXCIRI_PATH/bin, $HEXCIRI_PATH/install (browser-policy helpers), $HEXCIRI_PATH/icons, $HEXCIRI_PATH/logo.txt, $HEXCIRI_PATH/icon.txt"
 
 mkdir -p "$HOME/.config/hypr" "$HOME/.config/hexciri" \
@@ -3395,6 +3593,12 @@ grep -q 'Updating Hexciri' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" || die "he
 grep -q 'Hexciri installer sha: installed' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" && die "hexciri-update-hexciri still prints full installer shas on screen"
 grep -q 'Hexciri nyx synced with git' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" && die "hexciri-update-hexciri still prints the noisy git sync line"
 grep -q 'Hexciri is up to date' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" || die "hexciri-update-hexciri has no short up-to-date status line"
+grep -q 'HEXCIRI_UPDATE_UNATTENDED=1' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not go unattended after the start confirm (yay inside eos-update would prompt [Y/n])"
+grep -q 'System packages are up to date' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs has no quiet up-to-date status line"
+grep -q 'AUR packages are up to date' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" || die "hexciri-update-aur-pkgs has no quiet up-to-date status line"
+grep -q 'already updated by eos-update --aur, skipping' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" && die "hexciri-update-aur-pkgs still prints the noisy skipping line"
+[ -f "$HEXCIRI_PATH/.fork-fingerprint" ] || die "fork fingerprint missing, hexciri update cannot tell if the fork changed"
+grep -q 'fork_fingerprint' "$INSTALLER_DIR/install.sh" || die "installer has no fork cache (fork_fingerprint missing)"
 grep -q 'hexciri-snapshot create' "$HEXCIRI_PATH/bin/hexciri-update" && die "hexciri-update still calls the snapshot step (dropped 2026-11-24)"
 grep -q 'dracut' "$HEXCIRI_PATH/bin/hexciri-update-analyze-logs" || die "hexciri-update-analyze-logs has no dracut scan"
 grep -q 'hexciri-theme-ansi green' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "update headers are not theme-matched (no hexciri-theme-ansi call in hexciri-update-system-pkgs)"
