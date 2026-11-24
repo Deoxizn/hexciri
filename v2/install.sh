@@ -53,7 +53,9 @@
 #   v2/hexciri-custom-binds.lua + hexciri-custom-apps.lua in the fork,
 #   v2/hexciri-theme-hook-*.sh + theme-env.sh in theme-set.d, THPM
 #   from GitHub source. Theme support itself needs no separate
-#   fork/re-add: the forked Omarchy shell/code already provides it.)
+#   fork/re-add: the forked Omarchy shell/code already provides it.
+#   theme-link done 2026-11-24: ministry-of-taste/theme-link restores
+#   theme Lua via trusted symlinks, v2/hexciri-theme-link wrapper.)
 #   (hexciri-update rework done 2026-11-24: eos-update --aur + Hexciri
 #   self-update + mise, see the fork-time update patch below)
 #   Nyxiri overlay, THPM install
@@ -151,7 +153,7 @@ upstream_fingerprint() {
 patch_fingerprint() {
   {
     sed -n '/^# --- Wire the compat alias in, before placement ---/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
-    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua"; do
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
@@ -226,12 +228,12 @@ current_theme_name() {
 
 # --light-sync: v1-style self-update. Both fingerprints match, so the
 # installed fork is already correct and nothing in the system needs to
-# change; only the installer sha marker (and the two repo bins that are
+# change; only the installer sha marker (and the repo bins that are
 # copied straight into /usr/share/hexciri/bin) need syncing. No pacman,
 # no fork, no theme re-apply, no settings touched at all.
 if [ "${LIGHT_SYNC:-0}" = "1" ]; then
   _ls_sha="$(sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1)"
-  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi; do
+  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link; do
     if [ -f "$HEXCIRI_REPO_ROOT/v2/$_ls_f" ] && [ -d /usr/share/hexciri/bin ]; then
       if ! cmp -s "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" 2>/dev/null; then
         sudo install -Dm755 "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" && info "Light sync: updated /usr/share/hexciri/bin/$_ls_f"
@@ -2826,6 +2828,18 @@ if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" ]; then
 else
   die "v2/hexciri-theme-ansi not in the installer tree, update output falls back to stock green"
 fi
+# hexciri-theme-link (repo file v2/hexciri-theme-link): `hexciri theme
+# link <url>` wrapper over theme-link (ministry-of-taste/theme-link).
+# The dispatcher routes hexciri-theme-* bins, so this lands as the
+# theme link command. Copied here like hexciri-theme-ansi; the
+# upstream tool itself is installed by the theme-link step below.
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$FORK_OUT/bin/hexciri-theme-link"
+  chmod +x "$FORK_OUT/bin/hexciri-theme-link"
+  info "  theme link: hexciri-theme-link installed (hexciri theme link <git-url>)"
+else
+  die "v2/hexciri-theme-link not in the installer tree, hexciri theme link will not exist"
+fi
 # Hexciri custom Lua, 2026-11-24 (Devi: Hexciri Lua, custom parts only).
 # v1 binds.lua / windowrules.lua mostly mimic Omarchy, so only the
 # Hexciri-only binds/rules live here; everything Omarchy already
@@ -4781,6 +4795,77 @@ elif command -v thpm >/dev/null 2>&1; then
   info "  THPM steam integration left disabled (enable with: thpm enable steam, once Steam is installed)"
 fi
 
+# --- theme-link (Phase 2, 2026-11-24, Devi: Omarchy blocked Lua from themes) ---
+# Omarchy 4.0.1 (#7884) stages only colors.toml / light.mode / images
+# from a git-installed theme: *.lua, alacritty.toml, foot.ini,
+# ghostty.conf, kitty.conf and vscode.json are ignored, because staging
+# one would run its author's code. That makes some themes less special.
+# theme-link (ministry-of-taste/theme-link, by the THPM author) brings
+# it back unofficially: it clones a theme repo into a user-owned store
+# (~/.config/theme-link-store/<name>) and symlinks it into the themes
+# dir. The forked hexciri-theme-set treats a symlinked theme dir as a
+# trusted local working copy (theme_came_from_a_repo() is false for a
+# symlink, and hexciri-theme-extras skips symlinks the same way), so
+# the whole theme stages, Lua included.
+# theme-link is a tool, NOT a theme-set.d hook: it never activates a
+# theme, never updates one, never runs theme code. This step only
+# installs the tool and seeds its config; Devi adds themes himself
+# with `hexciri theme link <url>` (or `theme-link add <url>`),
+# confirms the trust warning himself, and applies with
+# `hexciri theme set <name>`. No theme is ever auto-added here.
+# Best-effort, never dies: without it, theme install/set still work,
+# just without the Lua restore.
+step "Installing theme-link (trusted theme symlinks, restores theme Lua)"
+THEME_LINK_SRC="$HOME/.local/opt/theme-link"
+THEME_LINK_PIN="76def15f239fad04464bc3e1ab996e1a1e00c526"
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$THEME_LINK_SRC/.git" ]; then
+    git -C "$THEME_LINK_SRC" fetch --quiet origin 2>/dev/null && git -C "$THEME_LINK_SRC" checkout --quiet "$THEME_LINK_PIN" 2>/dev/null && info "  theme-link source updated to pinned $THEME_LINK_PIN" || warn "  theme-link source checkout failed, keeping existing checkout at $THEME_LINK_SRC"
+  else
+    git clone --quiet https://github.com/ministry-of-taste/theme-link.git "$THEME_LINK_SRC" 2>/dev/null && git -C "$THEME_LINK_SRC" checkout --quiet "$THEME_LINK_PIN" 2>/dev/null && info "  theme-link source cloned, pinned $THEME_LINK_PIN" || warn "  theme-link source clone failed, hexciri theme link will not be available"
+  fi
+else
+  warn "  git not found, theme-link source install skipped"
+fi
+if [ -x "$THEME_LINK_SRC/theme-link" ]; then
+  if [ "$(git -C "$THEME_LINK_SRC" rev-parse HEAD 2>/dev/null || echo none)" = "$THEME_LINK_PIN" ]; then
+    if (cd "$THEME_LINK_SRC" && make install >/tmp/hexciri-theme-link-install.log 2>&1); then
+      info "  theme-link installed: $(theme-link --version 2>/dev/null || echo theme-link) (make install -> ~/.local/bin/theme-link)"
+    elif install -Dm755 "$THEME_LINK_SRC/theme-link" "$HOME/.local/bin/theme-link" 2>/dev/null; then
+      info "  theme-link installed: $(theme-link --version 2>/dev/null || echo theme-link) (direct install, make failed)"
+    else
+      warn "  theme-link install failed (see /tmp/hexciri-theme-link-install.log), hexciri theme link will not be available"
+    fi
+  else
+    warn "  theme-link checkout is not at pinned $THEME_LINK_PIN, not installing it (inspect: git -C $THEME_LINK_SRC rev-parse HEAD)"
+  fi
+fi
+# Config: seed-once, never overwrite. The upstream default themes_dir
+# is ~/.config/omarchy/themes, which Hexciri never reads (user themes
+# live in ~/.config/hexciri/themes); without this override every link
+# would land in the wrong dir and do nothing. theme-link parses this
+# file as data, it is never sourced or evaluated.
+if [ ! -f "$HOME/.config/theme-link/config" ]; then
+  mkdir -p "$HOME/.config/theme-link"
+  cat > "$HOME/.config/theme-link/config" <<'THEME_LINK_CONFIG_EOF'
+# theme-link config (Hexciri). Values are data, never shell code.
+store_dir = ~/.config/theme-link-store
+themes_dir = ~/.config/hexciri/themes
+THEME_LINK_CONFIG_EOF
+  info "  theme-link config seeded: ~/.config/theme-link/config (themes_dir = ~/.config/hexciri/themes)"
+else
+  info "  theme-link config kept: ~/.config/theme-link/config (re-run, your settings preserved)"
+fi
+# Verify the resolved config actually points at Hexciri's themes dir.
+if command -v theme-link >/dev/null 2>&1; then
+  if theme-link config show 2>/dev/null | grep -q "themes_dir = \"$HOME/.config/hexciri/themes\""; then
+    info "  theme-link ready: $(theme-link --version 2>/dev/null || echo theme-link) (add a trusted theme with: hexciri theme link <git-url>)"
+  else
+    warn "  theme-link config does not point at ~/.config/hexciri/themes, hexciri theme link refuses until it does (theme-link config show)"
+  fi
+fi
+unset THEME_LINK_SRC THEME_LINK_PIN
+
 # --- Spotify fallback wrapper (post-placement) ---
 # The Super+Shift+M bind calls `spotify`. The AUR `spotify` package
 # provides that binary directly, but if only the Arch extra
@@ -5032,6 +5117,9 @@ command -v mise >/dev/null 2>&1 && hc_info "  mise: $(mise --version 2>/dev/null
 [ -x "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-gtk" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/11-hexciri-adapta" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/20-hexciri-thpm" ] && [ -f "$HOME/.config/hexciri/hooks/lib/theme-env.sh" ] && hc_info "  theme hooks: 10-gtk + 11-adapta + 20-thpm + theme-env.sh present (theme-set.d)" || warn "  theme hooks: a Hexciri theme hook is missing from ~/.config/hexciri/hooks/theme-set.d/, theme switch will skip GTK/Adapta/THPM"
 command -v thpm >/dev/null 2>&1 && hc_info "  thpm: $(thpm --version 2>/dev/null || echo present) (source install, not AUR)" || warn "  thpm: NOT installed, theme switch skips THPM integrations (install: git clone OldJobobo/thpm, ./install.sh --no-ui)"
 [ -x /usr/local/bin/omarchy ] && hc_info "  thpm compat: /usr/local/bin/omarchy -> hexciri (THPM hardcodes the omarchy CLI)" || warn "  thpm compat: /usr/local/bin/omarchy missing, thpm install/doctor will fail its capability check"
+if command -v theme-link >/dev/null 2>&1; then hc_info "  theme-link: $(theme-link --version 2>/dev/null || echo present) (trusted theme symlinks, restores theme Lua)"; else warn "  theme-link: NOT installed, hexciri theme link is unavailable (install: git clone ministry-of-taste/theme-link, make install)"; fi
+if command -v theme-link >/dev/null 2>&1 && theme-link config show 2>/dev/null | grep -q "themes_dir = \"$HOME/.config/hexciri/themes\""; then hc_info "  theme-link config: themes_dir = ~/.config/hexciri/themes (links land where Hexciri reads them)"; elif command -v theme-link >/dev/null 2>&1; then warn "  theme-link config: themes_dir is not ~/.config/hexciri/themes, hexciri theme link refuses until it does (theme-link config show)"; fi
+[ -x "$HEXCIRI_PATH/bin/hexciri-theme-link" ] && hc_info "  theme link: hexciri-theme-link present (hexciri theme link <git-url>)" || warn "  theme link: hexciri-theme-link missing from $HEXCIRI_PATH/bin, hexciri theme link will fail (theme-link add still works)"
 [ -d "$HOME/.local/share/steam-adwaita" ] && hc_info "  steam-adwaita: checkout present (THPM steam target)" || warn "  steam-adwaita: checkout missing at ~/.local/share/steam-adwaita, THPM steam integration stays unavailable (thpm report steam)"
 if command -v grim >/dev/null 2>&1 && command -v slurp >/dev/null 2>&1; then hc_info "  screenshot: grim + slurp present (PRINT, hexciri-capture-screenshot)"; else warn "  screenshot: grim/slurp missing, PRINT will fail"; fi
 command -v tesseract >/dev/null 2>&1 && hc_info "  OCR: tesseract present (SUPER+CTRL+PRINT capture-text)" || warn "  OCR: tesseract NOT installed, capture-text will fail"

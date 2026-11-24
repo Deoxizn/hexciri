@@ -1,0 +1,80 @@
+#!/bin/bash
+
+# omarchy:summary=Link a trusted theme repo so its Lua and terminal configs survive theme-set
+# omarchy:args=[git-repo-url] [theme-name]
+# omarchy:examples=hexciri theme link https://github.com/example/omarchy-example-theme.git
+# omarchy:examples=hexciri theme link https://github.com/example/omarchy-example-theme.git example
+#
+# Hexciri theme link: thin wrapper over theme-link
+# (ministry-of-taste/theme-link, installed by the Hexciri installer
+# from GitHub source into ~/.local/bin/theme-link, pinned commit
+# 76def15f239fad04464bc3e1ab996e1a1e00c526, v0.1.0).
+#
+# Why this exists: Omarchy 4.0.1 (#7884) stages only colors.toml,
+# light.mode and images from a git-installed theme: *.lua,
+# alacritty.toml, foot.ini, ghostty.conf, kitty.conf and vscode.json
+# are ignored, because staging one would run its author's code. That
+# makes some themes less special than they could be. theme-link brings
+# it back unofficially: it clones the repo into a user-owned store
+# (~/.config/theme-link-store/<name>) and symlinks it into
+# ~/.config/hexciri/themes. The forked hexciri-theme-set treats a
+# symlinked theme dir as a trusted local working copy
+# (theme_came_from_a_repo() is false for a symlink), so it stages the
+# whole theme, Lua included. hexciri-theme-extras draws the same line:
+# a symlinked theme is a working copy, never auto-pulled.
+#
+# theme-link itself never activates a theme, never updates one, and
+# never runs theme code: it clones and symlinks, then you apply the
+# theme yourself with `hexciri theme set <name>`. It always shows its
+# trust warning and asks for explicit confirmation; this wrapper never
+# passes --yes for you. Only link themes from sources you trust:
+# applying one runs its Lua with your user permissions. That is the
+# whole point, and the risk.
+# Linked themes are NOT updated by `hexciri theme update`: update one
+# with git -C ~/.config/theme-link-store/<name> pull, then re-apply
+# it. Remove one with: theme-link remove <name>
+
+set -euo pipefail
+
+if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
+  cat <<'EOF'
+Usage: hexciri theme link <git-repo-url> [theme-name]
+       theme-link add <git-repo-url> [theme-name]
+
+Links a trusted theme repo into ~/.config/hexciri/themes as a
+symlink, so its Lua and terminal configs survive theme-set (Omarchy
+strips those from git-installed themes). Shows theme-link's trust
+warning and asks for confirmation; never activates the theme.
+Apply it yourself after: hexciri theme set <name>
+EOF
+  exit 0
+fi
+
+if [[ $# -eq 0 ]]; then
+  echo "Usage: hexciri theme link <git-repo-url> [theme-name]" >&2
+  echo "Only link themes from sources you trust: applying one runs its Lua." >&2
+  exit 1
+fi
+
+command -v theme-link >/dev/null 2>&1 || {
+  echo "theme-link is not installed. Install it with: hexciri update" >&2
+  echo "(installer clones ministry-of-taste/theme-link and runs make install)" >&2
+  exit 1
+}
+
+# Guard: theme-link's built-in default themes_dir is
+# ~/.config/omarchy/themes, which Hexciri never reads. The installer
+# seeds ~/.config/theme-link/config with themes_dir =
+# ~/.config/hexciri/themes. Refuse rather than link into the wrong
+# dir, where the theme would silently never appear.
+_TL_THEMES_DIR="$(theme-link config show 2>/dev/null | sed -n 's/^themes_dir = "\(.*\)"$/\1/p')"
+if [[ "$_TL_THEMES_DIR" != "$HOME/.config/hexciri/themes" ]]; then
+  echo "theme-link is configured for themes_dir=${_TL_THEMES_DIR:-unknown}," >&2
+  echo "not $HOME/.config/hexciri/themes, so hexciri theme link refuses." >&2
+  echo "Fix it in ~/.config/theme-link/config (themes_dir = ~/.config/hexciri/themes)," >&2
+  echo "or delete that config and re-run: hexciri update" >&2
+  exit 1
+fi
+unset _TL_THEMES_DIR
+
+exec theme-link add "$@"
