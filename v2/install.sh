@@ -55,6 +55,28 @@
 #   v2/hexciri-theme-hook-*.sh + theme-env.sh in theme-set.d, THPM
 #   from GitHub source. Theme support itself needs no separate
 #   fork/re-add: the forked Omarchy shell/code already provides it.
+#   hyprctl reload fix + quiet re-run done 2026-11-24 (third breakage):
+#   the 926c9d7 update placed a good hexciri.lua, but the running Hyprland
+#   kept its stale/emergency config until a manual `hyprctl reload` fixed
+#   it, because hexciri-update-restart only restarts Quickshell and
+#   theme-set reloads Hyprland only on a real theme change. Installer now
+#   reloads Hyprland after placement/health, and placement runs a real
+#   boot-path test (dofile bootstrap.lua, search default.hypr.hexciri in
+#   package.path) plus hyprlua_ok() content checks everywhere
+#   bootstrap_ok() is used. Re-run spam cut again: Kept/already-present
+#   lines to the detail log, fork-patch python blocks to the fork log.
+#   System packages count fixed: pacman printed "upgrading flex..." with
+#   no (n/n) prefix, old ^(n/n) pattern counted 0 and claimed up to date
+#   after a real upgrade (flex 2.7.1 -> 2.7.6); loose pattern + _pending
+#   fallback when the log has no "there is nothing to do".
+#   updater reload done 2026-11-24 (fourth breakage, Devi 11:07 MST):
+#   after the e80264a2 update bootstrap.lua emergency came back and a
+#   manual hyprctl reload fixed it again. The alias patch is atomic
+#   (os.replace, in live e80264a2), so this is not a half-written file:
+#   the emergency state is sticky and NO update step ever reloaded
+#   Hyprland, so it persisted across updates until a manual reload.
+#   hexciri-update-restart now reloads Hyprland config after the shell
+#   restart, on EVERY update, even when the installer does not re-run.
 #   bootstrap.lua integrity done 2026-11-24 (second breakage): content
 #   checks everywhere instead of -f, atomic alias write, verified fork
 #   cache saves, self-heal in the drift check; update noise cut ~90%
@@ -188,7 +210,7 @@ run_pacman() {
   local _log _n
   _log="$(mktemp /tmp/hexciri-pacman.XXXXXX)"
   if sudo pacman "$@" >"$_log" 2>&1; then
-    _n="$(grep -cE '^\([0-9]+/[0-9]+\) (installing|upgrading|reinstalling)' "$_log" 2>/dev/null || true)"
+    _n="$(grep -cE '(\\([0-9]+/[0-9]+\\) )?(installing|upgrading|reinstalling) ' "$_log" 2>/dev/null || true)"
     _n="${_n:-0}"
     if [ "$_n" -gt 0 ]; then
       info "$_label: $_n package(s) installed/updated"
@@ -203,7 +225,24 @@ run_pacman() {
   grep -E 'error:|failed|target not found|conflicting|invalid' "$_log" 2>/dev/null | head -20 | sed 's/^/[hexciri] pacman: /' >&2 || true
   return 1
 }
-info() { printf '[hexciri] %s\n' "$1"; }
+INSTALL_DETAIL_LOG="${HEXCIRI_INSTALL_DETAIL_LOG:-/tmp/hexciri-install.log}"
+info() {
+  # Re-run quiet (2026-11-24, Devi: a plain `hexciri update` printed
+  # ~500 lines of installer re-run spam, most of them "Kept: ... (already
+  # current)" / "already present" / "already correct"). On a re-run those
+  # go to the detail log only; changed / failed steps still print, and
+  # the one-line "already up to date" status lines (run_pacman) stay on
+  # screen, they are the per-step result.
+  if [ "${IS_RERUN:-0}" = "1" ]; then
+    case "$1" in
+      Kept*|*already\ present*|*already\ correct*|*already\ current*|Theme\ already\ applied:*|*already\ enabled*)
+        printf '[hexciri] %s\n' "$1" >> "$INSTALL_DETAIL_LOG" 2>/dev/null || true
+        return 0
+        ;;
+    esac
+  fi
+  printf '[hexciri] %s\n' "$1"
+}
 warn() { printf 'WARN: %s\n' "$1"; }
 die() { printf 'ERROR: %s\n' "$1" >&2; exit 1; }
 # bootstrap.lua integrity (2026-11-24, second emergency-mode breakage):
@@ -223,6 +262,51 @@ bootstrap_ok() {
   grep -q 'package.path' "$_f" 2>/dev/null || return 1
   grep -q 'HEXCIRI_PATH' "$_f" 2>/dev/null || return 1
   return 0
+}
+# hexciri.lua integrity (2026-11-24, third breakage): same class as
+# bootstrap.lua, existence is NOT enough. Hyprland requires
+# default.hypr.hexciri at hyprland.lua:17; a 0-byte or truncated copy
+# passes every -f / -s check and still trips emergency mode. A good
+# patched file is 1428 bytes and requires default.hypr.helpers (plus
+# the hexciri-compat require, checked separately at placement).
+hyprlua_ok() {
+  local _f="$1" _n
+  [ -f "$_f" ] || return 1
+  [ -s "$_f" ] || return 1
+  _n="$(wc -c < "$_f" 2>/dev/null | tr -d ' ')"
+  [ "${_n:-0}" -ge 1000 ] || return 1
+  grep -q 'require("default.hypr.helpers")' "$_f" 2>/dev/null || return 1
+  return 0
+}
+# hypr_searchpath_ok(): reproduce what Hyprland itself does at boot.
+# hyprland.lua dofiles bootstrap.lua (sets package.path), then requires
+# default.hypr.hexciri. Existence checks never proved that search, and
+# the 926c9d7 update said placement PASS while the next boot still
+# could not find the module. Run the exact search with lua5.1
+# (5.1-safe: package.searchpath does not exist in Lua 5.1, so walk
+# package.path by hand with io.open). Skips silently when lua5.1 is
+# not installed; the content checks above still apply.
+hypr_searchpath_ok() {
+  command -v lua5.1 >/dev/null 2>&1 || { info "hyprland lua searchpath test skipped (lua5.1 not installed)"; return 0; }
+  local _lua
+  _lua="$(mktemp /tmp/hexciri-hypr-searchpath.XXXXXX.lua)"
+  cat > "$_lua" <<'LUA'
+dofile((os.getenv("HEXCIRI_PATH") or "/usr/share/hexciri") .. "/default/hypr/bootstrap.lua")
+local mod = "default.hypr.hexciri"
+local found = nil
+for pat in string.gmatch(package.path, "[^;]+") do
+  local p = string.gsub(pat, "%?", string.gsub(mod, "%.", "/"))
+  local f = io.open(p, "r")
+  if f then f:close(); found = p; break end
+end
+if not found then
+  io.stderr:write("hyprland lua searchpath: module '" .. mod .. "' not found in package.path\n")
+  os.exit(1)
+end
+print("hyprland lua searchpath: " .. mod .. " -> " .. found)
+LUA
+  if HEXCIRI_PATH="$HEXCIRI_PATH" lua5.1 "$_lua"; then rm -f "$_lua"; return 0; fi
+  rm -f "$_lua"; return 1
 }
 
 # --- Re-run detection (2026-11-24, Devi: every update reset shell/theme) ---
@@ -888,8 +972,8 @@ if [ -f "$FORK_CACHE_DIR/upstream-fingerprint" ] && [ -d "$FORK_CACHE_DIR/upstre
   # emergency mode, no binds) while the installer reported success.
   # If the cached upstream tree lacks it, the cache is stale or
   # incomplete: drop it and full re-fork below instead of shipping it.
-  if ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua"; then
-    warn "Fork cache invalid: cached upstream tree is missing or corrupt (empty/truncated) default/hypr/bootstrap.lua, dropping the cache and full re-forking"
+  if ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua" || ! hyprlua_ok "$FORK_OUT/default/hypr/hexciri.lua"; then
+    warn "Fork cache invalid: cached upstream tree is missing or corrupt (empty/truncated) default/hypr/bootstrap.lua or hexciri.lua, dropping the cache and full re-forking"
     rm -rf "$FORK_CACHE_DIR"
     SKIP_UPSTREAM=0
   fi
@@ -913,7 +997,7 @@ if [ "${SKIP_UPSTREAM:-0}" = "1" ] && [ -f "$FORK_CACHE_DIR/patch-fingerprint" ]
   # Same emergency-mode guard for the patched cache: if it lacks
   # bootstrap.lua (or hexciri.lua) it is stale -- drop back to the
   # cached upstream tree and re-apply patches instead of shipping it.
-  if ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua" || [ ! -s "$FORK_OUT/default/hypr/hexciri.lua" ]; then
+  if ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua" || ! hyprlua_ok "$FORK_OUT/default/hypr/hexciri.lua"; then
     warn "Fork cache invalid: cached patched tree is missing or corrupt (empty/truncated) default/hypr/bootstrap.lua or hexciri.lua, re-applying patches to the cached upstream tree"
     rm -rf "$FORK_CACHE_DIR/fork-out" "$FORK_CACHE_DIR/patch-fingerprint" "$FORK_CACHE_DIR/fork-fingerprint"
     SKIP_PATCHES=0
@@ -924,8 +1008,8 @@ if [ "${SKIP_UPSTREAM:-0}" = "1" ] && [ -f "$FORK_CACHE_DIR/patch-fingerprint" ]
     # from: if that is corrupt too, patches would run on a broken tree
     # and the fork-stage guard below is skipped (SKIP_UPSTREAM is still
     # 1), so check it here and full re-fork instead of shipping it.
-    if ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua"; then
-      warn "Fork cache invalid: cached upstream tree is also missing or corrupt bootstrap.lua, dropping the whole cache and full re-forking"
+    if ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua" || ! hyprlua_ok "$FORK_OUT/default/hypr/hexciri.lua"; then
+      warn "Fork cache invalid: cached upstream tree is also missing or corrupt bootstrap.lua or hexciri.lua, dropping the whole cache and full re-forking"
       rm -rf "$FORK_CACHE_DIR"
       SKIP_UPSTREAM=0
     fi
@@ -996,6 +1080,15 @@ fork_detail() {
     printf '[hexciri] %s\n' "$1"
   fi
  }
+# _patch_log: fork-patch python blocks print "already present, skipping"
+# / "menu removed: ..." on every patch re-apply (2026-11-24, Devi: a
+# plain update printed ~500 lines of installer re-run spam, and a patch
+# re-apply re-runs them on the pristine upstream tree, so the menu audit
+# prints its removals every time). Those go to the fork log; only
+# changed / failed steps print. stderr stays on the terminal, so a
+# patch failure still shows. Verbose mode prints them as before.
+_patch_log="${FORK_LOG:-/tmp/hexciri-install-fork.log}"
+if [[ "${HEXCIRI_INSTALL_VERBOSE:-0}" == "1" || "${HEXCIRI_UPDATE_VERBOSE:-0}" == "1" ]]; then _patch_log="/dev/stdout"; fi
 if [ "${SKIP_UPSTREAM:-0}" = "0" ]; then
 
 copy_subset() {
@@ -1801,7 +1894,7 @@ if [ "${SKIP_UPSTREAM:-0}" = "0" ] && [ -n "${UP_FP:-}" ] && [ -n "${FORK_CACHE_
   # cannot preserve ownership, even though the content was copied fine.
   # Content + file count decide; a genuinely partial copy fails those.
   cp -a "$FORK_OUT" "$FORK_CACHE_DIR/upstream-out" 2>/dev/null || true
-  if bootstrap_ok "$FORK_CACHE_DIR/upstream-out/default/hypr/bootstrap.lua" && [ "$(find "$FORK_OUT" -type f 2>/dev/null | wc -l | tr -d ' ')" = "$(find "$FORK_CACHE_DIR/upstream-out" -type f 2>/dev/null | wc -l | tr -d ' ')" ]; then
+  if bootstrap_ok "$FORK_CACHE_DIR/upstream-out/default/hypr/bootstrap.lua" && hyprlua_ok "$FORK_CACHE_DIR/upstream-out/default/hypr/hexciri.lua" && [ "$(find "$FORK_OUT" -type f 2>/dev/null | wc -l | tr -d ' ')" = "$(find "$FORK_CACHE_DIR/upstream-out" -type f 2>/dev/null | wc -l | tr -d ' ')" ]; then
     printf '%s\n' "$UP_FP" > "$FORK_CACHE_DIR/upstream-fingerprint"
     fork_detail "Upstream fork cache saved: $FORK_CACHE_DIR/upstream-out"
   else
@@ -1813,8 +1906,8 @@ fi
 # bootstrap.lua, before patches run and before placement wipes the
 # last good /usr/share/hexciri. Hyprland dofiles this file first;
 # without it the next boot trips emergency mode with no binds.
-if [ "${SKIP_PATCHES:-0}" = "0" ] && ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua"; then
-  die "fork lost default/hypr/bootstrap.lua (missing, empty or truncated; Hyprland dofiles it first, without it the next boot trips emergency mode). Refusing to continue with a broken fork."
+if [ "${SKIP_PATCHES:-0}" = "0" ] && ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua" || [ "${SKIP_PATCHES:-0}" = "0" ] && ! hyprlua_ok "$FORK_OUT/default/hypr/hexciri.lua"; then
+  die "fork lost default/hypr/bootstrap.lua or hexciri.lua (missing, empty or truncated; Hyprland dofiles bootstrap first, then requires hexciri.lua at hyprland.lua:17, without either the next boot trips emergency mode). Refusing to continue with a broken fork."
 fi
 
 # Patch guard: compat wiring + all fork patches run on the upstream
@@ -1834,7 +1927,7 @@ HEXCIRI_LUA="$FORK_OUT/default/hypr/hexciri.lua"
 
 if [ -f "$LAUNCH_SHELL" ]; then
   if head -1 "$LAUNCH_SHELL" | grep -q 'bash'; then
-    python3 - "$LAUNCH_SHELL" <<'PY'
+    python3 - "$LAUNCH_SHELL" <<'PY' >>"$_patch_log"
 import sys
 path = sys.argv[1]
 line = 'source "$(dirname "$0")/hexciri-compat.sh" 2>/dev/null || source "/usr/share/hexciri/bin/hexciri-compat.sh" 2>/dev/null || true'
@@ -1875,7 +1968,7 @@ else
 fi
 
 if [ -f "$HEXCIRI_LUA" ]; then
-  python3 - "$HEXCIRI_LUA" <<'PY'
+  python3 - "$HEXCIRI_LUA" <<'PY' >>"$_patch_log"
 import sys
 path = sys.argv[1]
 line = 'pcall(require, "default.hypr.hexciri-compat")'
@@ -1921,7 +2014,7 @@ fi
 # is created. This runs from tty with no GUI, like the rest of the installer.
 BOOTSTRAP_LUA="$FORK_OUT/default/hypr/bootstrap.lua"
 if [ -f "$BOOTSTRAP_LUA" ]; then
-  python3 - "$BOOTSTRAP_LUA" <<'PY'
+  python3 - "$BOOTSTRAP_LUA" <<'PY' >>"$_patch_log"
 import os, sys
 path = sys.argv[1]
 alias = (
@@ -1981,7 +2074,7 @@ fi
 # Idempotent: every replacement checks it is not already applied, so a
 # rerun does not double-insert the Spotify bind.
 step "Patching Hexciri binds: Super+Shift+M Spotify, Arch substitutes for Omarchy-only apps"
-python3 - "$FORK_OUT" <<'PY'
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
 import sys
 
 root = sys.argv[1]
@@ -2309,7 +2402,7 @@ PY
 #     hexciri-pkg-add).
 # Idempotent: every replacement checks it is not already applied.
 step "Patching menu audit fixes: dead rows out, shell IPC paths absolute"
-python3 - "$FORK_OUT" <<'PY'
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
 import os
 import re
 import sys
@@ -2590,7 +2683,7 @@ info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift
 # themselves. Idempotent: the patch rewrites dock.pinned to exactly this
 # list, whatever the forked file held before.
 step "Patching dock pinned list: Strata, Spotify, Brave Origin, Zed, Kitty"
-python3 - "$FORK_OUT" <<'PY'
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
 import json
 import sys
 
@@ -2628,7 +2721,7 @@ PY
 # launch-or-focus re-parses it with eval, so the -c string is split and
 # bash -c receives only `export`, prints the env and exits, which is why
 # About opened and closed instantly. Single-word args (--render) survive.
-python3 - "$FORK_OUT" <<'PY'
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
 import os
 import re
 import sys
@@ -2839,7 +2932,7 @@ PY
 # Every theme switch must rewrite both settings.ini files with theme name
 # Adwaita + prefer-dark, and set dconf (through dbus-run-session when there
 # is no live bus), or the file picker goes light again on the next switch.
-python3 - "$FORK_OUT" <<'PY'
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
 import os
 import sys
 
@@ -3013,7 +3106,7 @@ for _lua in "hexciri-custom-binds.lua:default/hypr/bindings/hexciri.lua" "hexcir
   fi
 done
 unset _lua _lua_src _lua_dst
-python3 - "$FORK_OUT" <<'PY'
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
 import sys
 fork = sys.argv[1]
 
@@ -3190,7 +3283,13 @@ if pacman -Qem >/dev/null; then
       echo "AUR packages are up to date"
       rm -f "$_aur_log" "$_aur_log.filtered"
     elif [[ "$_aur_ok" == "1" ]]; then
-      echo "AUR packages updated"
+      _aur_n="$(grep -cE '(\\([0-9]+/[0-9]+\\) )?upgrading ' "$_aur_log.filtered" 2>/dev/null || true)"
+      _aur_n="$(echo "$_aur_n" | tr -d ' ')"
+      if [[ "$_aur_n" -gt 0 ]]; then
+        echo "AUR packages updated ($_aur_n package(s))"
+      else
+        echo "AUR packages updated"
+      fi
       grep -E "upgrading" "$_aur_log.filtered" | sed 's/^/  /' || true
       rm -f "$_aur_log" "$_aur_log.filtered"
     else
@@ -3279,7 +3378,7 @@ PY
 # a variable first (show-done) and switch the analyze-logs line to
 # double quotes. The trap line in hexciri-update is NOT fixed here: a
 # trap string is evaluated when it fires, so $() inside it DOES expand.
-python3 - "$FORK_OUT" <<'PYEOF8B'
+python3 - "$FORK_OUT" <<'PYEOF8B' >>"$_patch_log"
 import sys
 fork = sys.argv[1]
 def read(p):
@@ -3327,7 +3426,7 @@ PYEOF8B
 # when it actually prints the reboot-later line (unattended mode), so a
 # --reboot-only run with no reboot needed prints nothing at all, no
 # trailing blank line at the end of the update.
-python3 - "$FORK_OUT" <<'PYEOF8C'
+python3 - "$FORK_OUT" <<'PYEOF8C' >>"$_patch_log"
 import sys
 fork = sys.argv[1]
 def read(p):
@@ -3363,6 +3462,48 @@ must_replace(_p,
     "confirm_reboot() {\n  if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} == \"1\" ]]; then\n    echo\n    echo \"$(hexciri-i18n update.rebootLater \"$1\" \"hexciri-system reboot\")\"",
     "confirm_reboot prints its own leading blank in unattended mode")
 PYEOF8C
+
+# 8d. Restart reloads Hyprland config after the shell restart
+# (2026-11-24, Devi 11:07 MST: after the e80264a2 update bootstrap.lua
+# emergency came back and a manual hyprctl reload fixed it again. The
+# installer reloads Hyprland after placement, but only when the
+# installer re-runs; this step runs on EVERY update, even a light-sync
+# or up-to-date one, so the running Hyprland always picks up the
+# current Lua tree. Best-effort, never fails the update; no-op when
+# Hyprland is not running (tty3).)
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
+import sys
+fork = sys.argv[1]
+def read(p):
+    with open(p) as f:
+        return f.read()
+def write(p, t):
+    with open(p, "w") as f:
+        f.write(t)
+def must_replace(path, old, new, what):
+    t = read(path)
+    assert old in t, what + ": pattern not found in " + path
+    assert t.count(old) == 1, what + ": pattern not unique in " + path
+    write(path, t.replace(old, new, 1))
+    print("  update: " + what)
+_p = fork + "/bin/hexciri-update-restart"
+must_replace(_p,
+    "  hexciri-restart-shell || true\nfi",
+    "  hexciri-restart-shell || true\n"
+    "\n"
+    "  # Hexciri: reload Hyprland config after the shell restart (2026-11-24,\n"
+    "  # Devi: emergency mode kept coming back after every update because\n"
+    "  # nothing reloaded Hyprland after the installer replaced\n"
+    "  # default/hypr/*.lua; this step only restarted Quickshell, and\n"
+    "  # theme-set reloads Hyprland only on a real theme change. Reload\n"
+    "  # here too, so EVERY update reloads it, even when the installer\n"
+    "  # does not re-run. Best-effort, never fails the update; no-op\n"
+    "  # when Hyprland is not running (tty3).\n"
+    "  if pgrep -x Hyprland >/dev/null 2>&1 && command -v hexciri-restart-hyprctl >/dev/null 2>&1; then\n"
+    "    hexciri-restart-hyprctl && echo \"Hyprland config reloaded (hyprctl reload)\"\n"
+    "  fi\nfi",
+    "restart reloads Hyprland config after the shell restart")
+PY
 
 # 9. pkg-prune: whole-file rewrite (2026-11-24, Devi: Prune package
 # cache was missing from hexciri update, see Fix 1 above). Upstream bin
@@ -3632,8 +3773,17 @@ LC_ALL=C hexciri-update-pacman -Su --noconfirm \
 _su_status="${PIPESTATUS[0]}"
 if [[ "$_su_status" == "0" ]]; then
   cat "$errors" >&2
-  _upgraded="$(grep -cE '^\([0-9]+/[0-9]+\) upgrading ' "$_su_log" 2>/dev/null || true)"
+  _upgraded="$(grep -cE '(\\([0-9]+/[0-9]+\\) )?upgrading ' "$_su_log" 2>/dev/null || true)"
   _upgraded="$(echo "$_upgraded" | tr -d ' ')"
+  # The 2026-11-24 log showed the upgrade line without a (n/n) prefix
+  # ("upgrading flex..."), so the old ^(n/n) pattern counted 0 and
+  # the update claimed "System packages are up to date" after a real
+  # upgrade (flex 2.7.1 -> 2.7.6). If the count is still 0 but pacman
+  # did not say "there is nothing to do", trust the pre-flight pending
+  # count instead of claiming up to date.
+  if [[ "$_upgraded" == "0" ]] && ! grep -q 'there is nothing to do' "$_su_log" 2>/dev/null; then
+    _upgraded="$_pending"
+  fi
   rm -f "$_su_log"
   _pacnew="$(find /etc -name '*.pacnew' 2>/dev/null | wc -l | tr -d ' ')"
   if [[ "$_pacnew" != "0" ]]; then
@@ -3756,7 +3906,7 @@ info "  update: hexciri-update patched (eos-update --aur, no snapshot, Hexciri s
 #     required there, and its tile signs in as opencode.
 DA_FILE="$FORK_OUT/bin/hexciri-default-agent"
 if [ -f "$DA_FILE" ]; then
-  python3 - "$DA_FILE" <<'PY'
+  python3 - "$DA_FILE" <<'PY' >>"$_patch_log"
 import sys
 path = sys.argv[1]
 with open(path) as f:
@@ -3804,7 +3954,7 @@ fi
 
 PANEL_QML="$FORK_OUT/shell/plugins/agents/Panel.qml"
 if [ -f "$PANEL_QML" ]; then
-  python3 - "$PANEL_QML" <<'PY'
+  python3 - "$PANEL_QML" <<'PY' >>"$_patch_log"
 import sys
 path = sys.argv[1]
 with open(path) as f:
@@ -3852,7 +4002,7 @@ if [ "${SKIP_PATCHES:-0}" = "0" ] && [ -n "${PATCH_FP:-}" ] && [ -n "${FORK_CACH
   # cp -a's exit status is NOT the authority (ownership EPERM can fail
   # it after a good copy); content + file count decide.
   cp -a "$FORK_OUT" "$FORK_CACHE_DIR/fork-out" 2>/dev/null || true
-  if bootstrap_ok "$FORK_CACHE_DIR/fork-out/default/hypr/bootstrap.lua" && [ -s "$FORK_CACHE_DIR/fork-out/default/hypr/hexciri.lua" ] && [ "$(find "$FORK_OUT" -type f 2>/dev/null | wc -l | tr -d ' ')" = "$(find "$FORK_CACHE_DIR/fork-out" -type f 2>/dev/null | wc -l | tr -d ' ')" ]; then
+  if bootstrap_ok "$FORK_CACHE_DIR/fork-out/default/hypr/bootstrap.lua" && hyprlua_ok "$FORK_CACHE_DIR/fork-out/default/hypr/hexciri.lua" && [ "$(find "$FORK_OUT" -type f 2>/dev/null | wc -l | tr -d ' ')" = "$(find "$FORK_CACHE_DIR/fork-out" -type f 2>/dev/null | wc -l | tr -d ' ')" ]; then
     printf '%s\n' "$PATCH_FP" > "$FORK_CACHE_DIR/patch-fingerprint"
     [ -n "${FORK_FP:-}" ] && printf '%s\n' "$FORK_FP" > "$FORK_CACHE_DIR/fork-fingerprint"
     info "Fork cache saved: $FORK_CACHE_DIR/fork-out (reused on the next update unless the fork changes)"
@@ -4201,7 +4351,8 @@ info "Installed: /usr/share/uwsm/env.d/10-hexciri"
 step "Verifying placement"
 [ -x "$HEXCIRI_PATH/bin/hexciri-launch-shell" ] || die "missing: $HEXCIRI_PATH/bin/hexciri-launch-shell"
 [ -f "$HEXCIRI_PATH/shell/shell.qml" ] || die "missing: $HEXCIRI_PATH/shell/shell.qml"
-[ -f "$HEXCIRI_PATH/default/hypr/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/hexciri.lua"
+hyprlua_ok "$HEXCIRI_PATH/default/hypr/hexciri.lua" || die "missing or corrupt: $HEXCIRI_PATH/default/hypr/hexciri.lua (empty/truncated, or no helpers require; Hyprland requires it at hyprland.lua:17, without it the next boot trips emergency mode with no binds)"
+[ -x "$HEXCIRI_PATH/bin/hexciri-restart-hyprctl" ] || die "missing: $HEXCIRI_PATH/bin/hexciri-restart-hyprctl (the installer reloads Hyprland after placement, 2026-11-24)" 
 [ -f "$HEXCIRI_PATH/default/hypr/hexciri-compat.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/hexciri-compat.lua"
 bootstrap_ok "$HEXCIRI_PATH/default/hypr/bootstrap.lua" || die "missing or corrupt: $HEXCIRI_PATH/default/hypr/bootstrap.lua (empty/truncated; Hyprland dofiles it first, without it the next boot trips emergency mode with no binds)"
 [ -f "$HEXCIRI_PATH/default/hypr/bindings/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/bindings/hexciri.lua (Hexciri custom binds, monocle cycle / Brave incognito / Messenger / screen record)"
@@ -4220,6 +4371,13 @@ THEME_COUNT="$(find "$HEXCIRI_PATH/themes" -mindepth 1 -maxdepth 1 | wc -l | tr 
 [ "$THEME_COUNT" -ge 1 ] || die "no themes found under $HEXCIRI_PATH/themes"
 info "Themes installed: $THEME_COUNT"
 grep -q 'hexciri-compat' "$HEXCIRI_PATH/default/hypr/hexciri.lua" || die "compat require missing from installed default/hypr/hexciri.lua"
+# Boot-path test (2026-11-24, Devi: hyprctl reload fixed emergency mode,
+# the file was present): placement verified existence, never what
+# Hyprland itself sees. Reproduce the exact require: dofile bootstrap
+# (sets package.path), then search default.hypr.hexciri in it.
+hypr_searchpath_ok || die "hyprland lua searchpath: default.hypr.hexciri does not resolve after dofile bootstrap.lua (see above; Hyprland will trip emergency mode at boot, run: hyprctl reload)"
+grep -q 'default/hypr/bootstrap.lua' "$HOME/.config/hypr/hyprland.lua" || die "placed ~/.config/hypr/hyprland.lua does not dofile default/hypr/bootstrap.lua (package.path is never set, requires fail)"
+grep -q '/usr/share/omarchy' "$HOME/.config/hypr/hyprland.lua" && die "placed ~/.config/hypr/hyprland.lua still references /usr/share/omarchy in a dofile line"
 grep -q 'hexciri-compat.sh' "$HEXCIRI_PATH/bin/hexciri-launch-shell" || die "compat source missing from installed bin/hexciri-launch-shell"
 if [ -f "$HEXCIRI_PATH/default/bash/env-bootstrap" ]; then
   grep -q 'hexciri-compat.sh' "$HEXCIRI_PATH/default/bash/env-bootstrap" || die "compat source missing from installed default/bash/env-bootstrap"
@@ -4471,6 +4629,7 @@ grep -q 'System packages are up to date' "$HEXCIRI_PATH/bin/hexciri-update-syste
 grep -q 'AUR packages are up to date' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" || die "hexciri-update-aur-pkgs has no quiet up-to-date status line"
 for _sp in hexciri-update-pkg-prune hexciri-update-orphan-pkgs hexciri-update-mise hexciri-update-aur-pkgs hexciri-update-restart; do grep -qx 'echo' "$HEXCIRI_PATH/bin/$_sp" && die "$_sp still prints a bare blank line (update section spacing, 2026-11-24: the header's leading newline is the only separator)"; done
 grep -q '_restart_needs_blank' "$HEXCIRI_PATH/bin/hexciri-update-restart" || die "hexciri-update-restart has no conditional top blank (update section spacing, 2026-11-24)"
+grep -q 'Hyprland config reloaded (hyprctl reload)' "$HEXCIRI_PATH/bin/hexciri-update-restart" || die "hexciri-update-restart does not reload Hyprland after the shell restart (emergency mode returns after every update, 2026-11-24)"
 grep -q 'already updated by eos-update --aur, skipping' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" && die "hexciri-update-aur-pkgs still prints the noisy skipping line"
 [ -x "$HEXCIRI_PATH/bin/hexciri-pkg-aur-accessible" ] || die "hexciri-pkg-aur-accessible missing from fork (hexciri-update-aur-pkgs calls it, 2026-11-24 live log: command not found)"
 grep -q 'HEXCIRI_UPDATE_REEXECED' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not skip the second confirm on a self-update re-exec"
@@ -5411,6 +5570,12 @@ else
   warn "  bootstrap.lua: MISSING or corrupt (empty/truncated), next boot trips emergency mode (repair: hexciri update hexciri --force)"
   HC_FAIL=1
 fi
+if hyprlua_ok "$HEXCIRI_PATH/default/hypr/hexciri.lua"; then
+  hc_info "  hexciri.lua: valid ($(wc -c < "$HEXCIRI_PATH/default/hypr/hexciri.lua" | tr -d ' ') bytes, helpers require present, required by hyprland.lua:17)"
+else
+  warn "  hexciri.lua: MISSING or corrupt (empty/truncated or no helpers require), next boot trips emergency mode (repair: hexciri update hexciri --force, then: hyprctl reload)"
+  HC_FAIL=1
+fi
 if command -v quickshell >/dev/null 2>&1; then
   if quickshell --version >/dev/null 2>&1; then
     QS_VER="$(quickshell --version 2>/dev/null || true)"
@@ -5502,6 +5667,21 @@ else
   warn "Health check: flagged issues above, see the warnings. Reboot may still work, check the logs if it does not."
 fi
 unset _check
+
+# --- Reload Hyprland config after placement (2026-11-24, Devi) ---
+# The 926c9d7 update placed a good hexciri.lua, but the running Hyprland
+# kept its stale/emergency config until a manual `hyprctl reload` fixed
+# it. Nothing in the update reloaded it: hexciri-update-restart only
+# restarts the Quickshell shell, and theme-set reloads Hyprland only
+# when a theme actually changes (it was skipped that run). Reload after
+# placement so the new Lua tree takes effect in the live session, no
+# reboot needed. Best-effort, never fatal, and a no-op when Hyprland
+# is not running (tty3 bootstrap). hexciri-restart-hyprctl already
+# handles the instance signature and exits 0 with no Hyprland.
+if pgrep -x Hyprland >/dev/null 2>&1 && [ -x "$HEXCIRI_PATH/bin/hexciri-restart-hyprctl" ]; then
+  step "Reloading Hyprland config (new Lua tree placed, clears a stale or emergency config)"
+  "$HEXCIRI_PATH/bin/hexciri-restart-hyprctl" && info "Hyprland config reloaded (hyprctl reload, binds live again without a reboot)"
+fi
 
 # --- Final checklist ---
 
