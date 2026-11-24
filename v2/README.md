@@ -8,8 +8,10 @@ End goal: a very minimal almost nothing installed Arch that still has the feel a
 
 ## Files in v2/
 
-- install-2.0.sh, Phase 1 EndeavourOS no-DE base installer. Run as normal user, not root: `bash v2/install-2.0.sh`
-- fork-shell.sh, Phase 1 fork and rename script. Takes a cloned Omarchy tree at the pinned commit, or a tarball, extracts only the listed subsets, renames omarchy to hexciri, generates the compatibility alias files, and fails loudly if any file named omarchy remains. Usage: `v2/fork-shell.sh ./omarchy ./v2-forked`
+- install.sh, the one command, primary entry point. Run as normal user, not root, on a fresh EndeavourOS no-DE install: `bash v2/install.sh`
+  It does it all in order, minus the EndeavourOS install itself: packages, GPU drivers, Quickshell, Hyprland, SDDM plus uwsm, then clones omacom/omarchy at the pinned commit, forks and renames the shell inline, places the forked tree to /usr/share/hexciri, ~/.config/hexciri, ~/.local/state/hexciri, and ~/.config/hypr, wires hexciri-compat.sh into hexciri-launch-shell and env-bootstrap, requires hexciri-compat.lua from default/hypr/hexciri.lua, and verifies placement. Sudo is used only for the /usr/share and /etc steps.
+- install-2.0.sh, old Phase 1 EndeavourOS no-DE base installer, kept as reference. Do not use it as the entry point anymore, its steps are now in install.sh.
+- fork-shell.sh, old Phase 1 fork and rename script, kept as reference. Do not use it as the entry point anymore, its logic is now inline in install.sh. It took a cloned Omarchy tree at the pinned commit, or a tarball, extracted only the listed subsets, renamed omarchy to hexciri, generated the compatibility alias files, and failed loudly if any file named omarchy remained.
 - hexciri-base.packages, minimal Phase 1 package list. No apps, no GUI preinstalls.
 - README.md, this file.
 
@@ -42,7 +44,15 @@ End goal: a very minimal almost nothing installed Arch that still has the feel a
 - shell/plugins/ has 16+ plugin dirs, plus shell/Commons/, shell/Ui/, shell/services/.
 - Runtime call-graph is UNVERIFIED: existence of the bin/ files is verified, which scripts the shell actually invokes at runtime was not proven by grep in this pass.
 
-## How to test Phase 1, after install-2.0.sh and fork-shell.sh
+## How to test Phase 1, after install.sh
+
+One command, run as normal user on a fresh EndeavourOS no-DE install:
+
+```bash
+bash v2/install.sh
+```
+
+Then:
 
 1. Reboot, SDDM login screen appears.
 2. Pick Hexiri at the SDDM session menu, log in.
