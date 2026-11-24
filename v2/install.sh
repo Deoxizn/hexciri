@@ -878,16 +878,17 @@ copy_subsets() {
   copy_optional_file "$OMARCHY_SRC/logo.txt" "$FORK_OUT/logo.txt" "logo.txt" || warn "logo.txt not found in source, hexciri-show-logo will fail."
   # 2026-11-24: replace the upstream OMARCHY art with HEXCIRI art in the
   # same block style. 2026-11-24 (2nd): Devi's exact art from
-  # workspace/user/files/hexciri.md, copied verbatim by the patch
-  # script (read from the file, never retyped). hexciri-branding-
+  # workspace/user/files/hexciriv2.md, copied verbatim by the patch
+  # script (read from the file, never retyped). 2026-11-24 (3rd): v2 art,
+  # more unique, less "omarchy clone". hexciri-branding-
   # screensaver copies this file too, so it gets the Hexciri art as well.
   cat > "$FORK_OUT/logo.txt" <<'HEXCIRI_LOGO_EOF'
-██╗  ██╗███████╗██╗  ██╗ ██████╗██╗██████╗ ██╗
-██║  ██║██╔════╝╚██╗██╔╝██╔════╝██║██╔══██╗██║
-███████║█████╗   ╚███╔╝ ██║     ██║██████╔╝██║
-██╔══██║██╔══╝   ██╔██╗ ██║     ██║██╔══██╗██║
-██║  ██║███████╗██╔╝ ██╗╚██████╗██║██║  ██║██║
-╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝╚═╝  ╚═╝╚═╝
+ ▄  █ ▄███▄      ▄  ▄█▄    ▄█ █▄▄▄▄ ▄█ 
+█   █ █▀   ▀ ▀▄   █ █▀ ▀▄  ██ █  ▄▀ ██ 
+██▀▀█ ██▄▄     █ ▀  █   ▀  ██ █▀▀▌  ██ 
+█   █ █▄   ▄▀ ▄ █   █▄  ▄▀ ▐█ █  █  ▐█ 
+   █  ▀███▀  █   ▀▄ ▀███▀   ▐   █    ▐ 
+  ▀           ▀                ▀
 HEXCIRI_LOGO_EOF
   info "Wrote Hexciri logo.txt (HEXCIRI block art, replaces upstream OMARCHY art)"
   copy_optional_file "$OMARCHY_SRC/icon.txt" "$FORK_OUT/icon.txt" "icon.txt" || warn "icon.txt not found in source, About branding reset will fail."
@@ -3313,7 +3314,7 @@ grep -q 'dracut' "$HEXCIRI_PATH/bin/hexciri-update-analyze-logs" || die "hexciri
 grep -q 'hexciri-theme-ansi green' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "update headers are not theme-matched (no hexciri-theme-ansi call in hexciri-update-system-pkgs)"
 grep -q 'hexciri-theme-ansi green' "$HEXCIRI_PATH/bin/hexciri-show-logo" || die "show-logo is not theme-matched (no hexciri-theme-ansi call)"
 grep -q "printf '.*hexciri-theme-ansi" "$HEXCIRI_PATH/bin/hexciri-show-done" && die "hexciri-show-done still has a literal \$(hexciri-theme-ansi ...) inside single quotes, it prints literally instead of colouring"
-head -1 "$HEXCIRI_PATH/logo.txt" | grep -q '██╗' || die "logo.txt is not the HEXCIRI block art (Devi's art, first line ██╗)"
+head -1 "$HEXCIRI_PATH/logo.txt" | grep -q '▄███▄' || die "logo.txt is not the HEXCIRI v2 art (Devi's art, first line has ▄███▄)"
 grep -q '^ILoveCandy' /etc/pacman.conf || warn "  pacman bars: ILoveCandy NOT set in /etc/pacman.conf, pacman shows the plain bar"
 [ -f "$HEXCIRI_PATH/.installer-sha" ] || die "installer sha marker missing, hexciri-update-hexciri cannot tell if the installer changed"
 [ -f /etc/mise/conf.d/hexciri-tools.toml ] || warn "  mise tools config missing at /etc/mise/conf.d/hexciri-tools.toml (node/uv/gh lazy declarations)"

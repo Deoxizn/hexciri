@@ -59,7 +59,7 @@ echo "Hexciri installer sha: installed ${OLD_SHA:-none} / nyx $NEW_SHA"
 # that the installed tree is complete. If theme-ansi is missing or the
 # logo is not Devi's art, re-run the installer even on a sha match.
 if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA == "$OLD_SHA" ]]; then
-  if [[ ! -x /usr/share/hexciri/bin/hexciri-theme-ansi ]] || ! head -1 /usr/share/hexciri/logo.txt 2>/dev/null | grep -q '██╗'; then
+  if [[ ! -x /usr/share/hexciri/bin/hexciri-theme-ansi ]] || ! head -1 /usr/share/hexciri/logo.txt 2>/dev/null | grep -q '▄███▄'; then
     echo "Hexciri installer sha matches but the installed tree is drifting (theme-ansi or logo.txt missing), re-running the installer..."
   else
     echo "Hexciri installer unchanged ($NEW_SHA), skipping re-install."
