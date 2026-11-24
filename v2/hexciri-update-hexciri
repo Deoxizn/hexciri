@@ -51,9 +51,20 @@ EXTRACTED="$WORKDIR/$TOP_DIR"
 
 NEW_SHA="$(sha256sum "$EXTRACTED/v2/install.sh" | cut -d' ' -f1)"
 OLD_SHA="$(cat "$MARKER" 2>/dev/null || true)"
+# Log BOTH shas, so a skip is provable in the update log: if they match,
+# the skip is correct and the installer already landed (e.g. via a
+# bootstrap just before this update). If they differ, re-install below.
+echo "Hexciri installer sha: installed ${OLD_SHA:-none} / nyx $NEW_SHA"
+# Drift check: a matching sha only proves the marker was written, not
+# that the installed tree is complete. If theme-ansi is missing or the
+# logo is not Devi's art, re-run the installer even on a sha match.
 if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA == "$OLD_SHA" ]]; then
-  echo "Hexciri installer unchanged ($NEW_SHA), skipping re-install."
-  exit 0
+  if [[ ! -x /usr/share/hexciri/bin/hexciri-theme-ansi ]] || ! head -1 /usr/share/hexciri/logo.txt 2>/dev/null | grep -q '██╗'; then
+    echo "Hexciri installer sha matches but the installed tree is drifting (theme-ansi or logo.txt missing), re-running the installer..."
+  else
+    echo "Hexciri installer unchanged ($NEW_SHA), skipping re-install."
+    exit 0
+  fi
 fi
 
 echo "Hexciri installer changed, re-running the installer (this is the Hexciri sync)..."

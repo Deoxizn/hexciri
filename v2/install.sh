@@ -873,21 +873,21 @@ copy_subsets() {
   # NOT neutral: upstream logo.txt is the OMARCHY block art, and
   # hexciri-show-logo cats it at the top of every hexciri update, so the
   # first full update showed OMARCHY. It is overwritten with HEXCIRI art
-  # just below, same 81-col width, 7 letters like OMARCHY.
+  # just below, Devi's exact art (see logo heredoc).
   copy_subset "$OMARCHY_SRC/icons" "$FORK_OUT/icons" "icons/"
   copy_optional_file "$OMARCHY_SRC/logo.txt" "$FORK_OUT/logo.txt" "logo.txt" || warn "logo.txt not found in source, hexciri-show-logo will fail."
   # 2026-11-24: replace the upstream OMARCHY art with HEXCIRI art in the
-  # same block style (81 cols, 8 rows). hexciri-branding-screensaver copies
-  # this file too, so it gets the Hexciri art as well.
+  # same block style. 2026-11-24 (2nd): Devi's exact art from
+  # workspace/user/files/hexciri.md, copied verbatim by the patch
+  # script (read from the file, never retyped). hexciri-branding-
+  # screensaver copies this file too, so it gets the Hexciri art as well.
   cat > "$FORK_OUT/logo.txt" <<'HEXCIRI_LOGO_EOF'
-███   ███   █████████   ███   ███    ▄███████   █████████   ████████    █████████
-███   ███   ███         ███   ███   ███            ███      ███   ███      ███
-███   ███   ███          ███ ███    ███            ███      ███   ███      ███
-█████████   ███████       █████     ███            ███      ████████       ███
-█████████   ███████       █████     ███            ███      ███ ███        ███
-███   ███   ███          ███ ███    ███            ███      ███  ███       ███
-███   ███   ███         ███   ███   ███            ███      ███   ███      ███
-███   ███   █████████   ███   ███    ▀███████   █████████   ███   ███   █████████
+██╗  ██╗███████╗██╗  ██╗ ██████╗██╗██████╗ ██╗
+██║  ██║██╔════╝╚██╗██╔╝██╔════╝██║██╔══██╗██║
+███████║█████╗   ╚███╔╝ ██║     ██║██████╔╝██║
+██╔══██║██╔══╝   ██╔██╗ ██║     ██║██╔══██╗██║
+██║  ██║███████╗██╔╝ ██╗╚██████╗██║██║  ██║██║
+╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝╚═╝  ╚═╝╚═╝
 HEXCIRI_LOGO_EOF
   info "Wrote Hexciri logo.txt (HEXCIRI block art, replaces upstream OMARCHY art)"
   copy_optional_file "$OMARCHY_SRC/icon.txt" "$FORK_OUT/icon.txt" "icon.txt" || warn "icon.txt not found in source, About branding reset will fail."
@@ -2596,7 +2596,7 @@ must_replace(upd, "  hexciri-update-dev\n", "\n".join([
     "    # the pipeline runs new code. Same PID after exec, so the sudo",
     "    # keepalive and the update lock survive.",
     "    if [[ -n \"$_hexciri_update_self_before\" && -n \"$_hexciri_update_self_after\" && \"$_hexciri_update_self_before\" != \"$_hexciri_update_self_after\" ]]; then",
-    "      exec env HEXCIRI_UPDATE_REEXECED=1 HEXCIRI_UPDATE_SELF_DONE=1 \"$0\" \"$@\"",
+    "      exec env HEXCIRI_UPDATE_REEXECED=1 HEXCIRI_UPDATE_SELF_DONE=1 HEXCIRI_UPDATE_LOGGED=1 \"$0\" \"$@\"",
     "    fi",
     "    export HEXCIRI_UPDATE_SELF_DONE=1",
     "  fi",
@@ -2653,6 +2653,48 @@ for _name in ["hexciri-update", "hexciri-update-system-pkgs", "hexciri-update-ke
     write(_p, _t)
     print("  update: theme-matched green/red in %s" % _name)
 PY
+
+# 8b. Single-quote fix, 2026-11-24: step 8 above replaced \e[32m / \e[31m
+# with $(hexciri-theme-ansi ...) even inside single-quoted strings, where
+# bash never expands $(). hexciri-show-done printed the literal
+# "$(hexciri-theme-ansi green)● Done!" and hexciri-update-analyze-logs
+# would print the literal on an initramfs failure. Capture the escape in
+# a variable first (show-done) and switch the analyze-logs line to
+# double quotes. The trap line in hexciri-update is NOT fixed here: a
+# trap string is evaluated when it fires, so $() inside it DOES expand.
+python3 - "$FORK_OUT" <<'PYEOF8B'
+import sys
+fork = sys.argv[1]
+def read(p):
+    with open(p) as f:
+        return f.read()
+def write(p, t):
+    with open(p, "w") as f:
+        f.write(t)
+SQ = chr(39)
+# show-done: two printf lines, green and red.
+_p = fork + "/bin/hexciri-show-done"
+_t = read(_p)
+_old_g = "  printf " + SQ + "\\n$(hexciri-theme-ansi green)\u25cf \\033[0m%s" + SQ + ' "$(hexciri-i18n done.success)" >/dev/tty'
+_new_g = '  _show_done_color="$(hexciri-theme-ansi green)"\n  printf ' + SQ + "\\n%s\u25cf \\033[0m%s" + SQ + ' "$_show_done_color" "$(hexciri-i18n done.success)" >/dev/tty'
+assert _old_g in _t, "show-done green line not found: " + repr(_t[-600:])
+_t = _t.replace(_old_g, _new_g, 1)
+_old_r = "  printf " + SQ + "\\n$(hexciri-theme-ansi red)\u25cf \\033[0m%s" + SQ + ' "$(hexciri-i18n done.failed "$code")" >/dev/tty'
+_new_r = '  _show_done_color="$(hexciri-theme-ansi red)"\n  printf ' + SQ + "\\n%s\u25cf \\033[0m%s" + SQ + ' "$_show_done_color" "$(hexciri-i18n done.failed "$code")" >/dev/tty'
+assert _old_r in _t, "show-done red line not found"
+_t = _t.replace(_old_r, _new_r, 1)
+write(_p, _t)
+print("  update: show-done captures theme colour in a variable (no more literal)")
+# analyze-logs: the initramfs line was echo -e '...' (single quotes).
+_p = fork + "/bin/hexciri-update-analyze-logs"
+_t = read(_p)
+_old = "echo -e " + SQ + "$(hexciri-theme-ansi red)Error: Initramfs generation may have failed. Review logs before restart.\\e[0m" + SQ
+_new = 'echo -e "$(hexciri-theme-ansi red)Error: Initramfs generation may have failed. Review logs before restart.\\e[0m"'
+assert _old in _t, "analyze-logs initramfs line not found"
+_t = _t.replace(_old, _new, 1)
+write(_p, _t)
+print("  update: analyze-logs initramfs line uses double quotes (no more literal)")
+PYEOF8B
 
 # Whole-file rewrites: keyring, system-pkgs, pacman guard, available.
 # The keyring file: Arch + EndeavourOS keyrings only. No Hexciri keyring
@@ -3270,7 +3312,8 @@ grep -q 'hexciri-snapshot create' "$HEXCIRI_PATH/bin/hexciri-update" && die "hex
 grep -q 'dracut' "$HEXCIRI_PATH/bin/hexciri-update-analyze-logs" || die "hexciri-update-analyze-logs has no dracut scan"
 grep -q 'hexciri-theme-ansi green' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "update headers are not theme-matched (no hexciri-theme-ansi call in hexciri-update-system-pkgs)"
 grep -q 'hexciri-theme-ansi green' "$HEXCIRI_PATH/bin/hexciri-show-logo" || die "show-logo is not theme-matched (no hexciri-theme-ansi call)"
-head -1 "$HEXCIRI_PATH/logo.txt" | grep -q '███' || die "logo.txt is not the HEXCIRI block art"
+grep -q "printf '.*hexciri-theme-ansi" "$HEXCIRI_PATH/bin/hexciri-show-done" && die "hexciri-show-done still has a literal \$(hexciri-theme-ansi ...) inside single quotes, it prints literally instead of colouring"
+head -1 "$HEXCIRI_PATH/logo.txt" | grep -q '██╗' || die "logo.txt is not the HEXCIRI block art (Devi's art, first line ██╗)"
 grep -q '^ILoveCandy' /etc/pacman.conf || warn "  pacman bars: ILoveCandy NOT set in /etc/pacman.conf, pacman shows the plain bar"
 [ -f "$HEXCIRI_PATH/.installer-sha" ] || die "installer sha marker missing, hexciri-update-hexciri cannot tell if the installer changed"
 [ -f /etc/mise/conf.d/hexciri-tools.toml ] || warn "  mise tools config missing at /etc/mise/conf.d/hexciri-tools.toml (node/uv/gh lazy declarations)"
