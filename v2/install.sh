@@ -351,6 +351,33 @@ LUA
   rm -f "$_lua"; return 1
 }
 
+# binds_chain_ok(): Super+Space (apps) / Super+Alt+Space (menu) chain
+# (2026-11-24, Devi: both chords died after the 2cdc33c7 update failed
+# placement on config/tmux/tmux.conf). Both chords dispatch through
+# Hyprland GlobalShortcuts, not plain commands: Hyprland Lua binds them
+# (default/hypr/bindings/utilities.lua, swapped from upstream so
+# SUPER+SPACE is apps and SUPER+ALT+SPACE is menu), the shell registers
+# them from default/hexciri/shortcuts, the custom binds file must be
+# required by hexciri.lua, and shell.qml must keep GlobalShortcut
+# appid "omarchy" (helpers.lua dispatches "omarchy:...", the rename
+# must not touch it). Existence is not enough: check the actual lines,
+# in the fork before placement and in the placed tree after it, so a
+# broken fork dies before rm -rf replaces the last good tree.
+binds_chain_ok() {
+  local _root="$1" _why=""
+  grep -q 'SUPER + ALT + SPACE.*{ menu = "root" }' "$_root/default/hypr/bindings/utilities.lua" 2>/dev/null || _why="utilities.lua: SUPER + ALT + SPACE is not bound to menu root (swap lost)"
+  [ -n "$_why" ] || grep -q 'SUPER + SPACE.*{ ipc = "hexciri.dock.apps" }' "$_root/default/hypr/bindings/utilities.lua" 2>/dev/null || _why="utilities.lua: SUPER + SPACE is not bound to ipc hexciri.dock.apps (swap lost)"
+  [ -n "$_why" ] || grep -qx 'menu root' "$_root/default/hexciri/shortcuts" 2>/dev/null || _why="shortcuts: 'menu root' missing, shell never registers omarchy:menu.root"
+  [ -n "$_why" ] || grep -qx 'ipc hexciri.dock.apps' "$_root/default/hexciri/shortcuts" 2>/dev/null || _why="shortcuts: 'ipc hexciri.dock.apps' missing, shell never registers omarchy:ipc.hexciri.dock.apps"
+  [ -n "$_why" ] || grep -q 'require("default.hypr.bindings.hexciri")' "$_root/default/hypr/hexciri.lua" 2>/dev/null || _why="hexciri.lua does not require default.hypr.bindings.hexciri (custom binds never execute)"
+  [ -n "$_why" ] || [ -s "$_root/default/hypr/bindings/hexciri.lua" ] || _why="bindings/hexciri.lua missing or empty"
+  [ -n "$_why" ] || grep -q 'appid: "omarchy"' "$_root/shell/shell.qml" 2>/dev/null || _why="shell.qml GlobalShortcut appid is not omarchy (helpers.lua dispatches omarchy:..., rename broke it)"
+  [ -n "$_why" ] || [ -f "$_root/config/tmux/tmux.conf" ] || _why="config/tmux/tmux.conf missing (placement verification dies on it, update aborts with a new unverified tree live)"
+  [ -n "$_why" ] || [ -f "$_root/config/chromium-flags.conf" ] || _why="config/chromium-flags.conf missing (same placement-verification die as tmux)"
+  if [ -n "$_why" ]; then printf 'binds chain broken in %s: %s\n' "$_root" "$_why" >&2; return 1; fi
+  return 0
+}
+
 # --- Hyprland reload guard (2026-11-24, Devi: emergency mode trips on
 # every installer re-run) ---
 # The guard binary is upstream's, forked into bin/ but never called:
@@ -4924,6 +4951,18 @@ if command -v thpm >/dev/null 2>&1; then
 fi
 unset THPM_SRC THPM_NEED_INSTALL STEAM_ADWAITA
 
+# Pre-placement binds guard (2026-11-24, Devi: Super+Space apps and
+# Super+Alt+Space menu both died after the 2cdc33c7 update): that update
+# replaced /usr/share/hexciri, then placement verification died on
+# config/tmux/tmux.conf, so the update aborted with a new, unverified
+# tree live, Hyprland reloaded on it by the guard resume, and the shell
+# never restarted. Both chords go through GlobalShortcuts, so a reload
+# onto a bad tree (or a shell that never re-registers them) kills both
+# at once while plain command binds keep working. Check the whole chain
+# in the FORK, before anything is replaced: a broken fork dies here
+# with the last good tree still live, never after rm -rf.
+binds_chain_ok "$FORK_OUT" || die "binds chain broken in fork (Super+Space apps / Super+Alt+Space menu would not register; see above). Refusing to place a broken fork over the working tree."
+
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
 # runs as the normal user.
@@ -5190,6 +5229,7 @@ hyprlua_ok "$HEXCIRI_PATH/default/hypr/hexciri.lua" || die "missing or corrupt: 
 bootstrap_ok "$HEXCIRI_PATH/default/hypr/bootstrap.lua" || die "missing or corrupt: $HEXCIRI_PATH/default/hypr/bootstrap.lua (empty/truncated; Hyprland dofiles it first, without it the next boot trips emergency mode with no binds)"
 [ -f "$HEXCIRI_PATH/default/hypr/bindings/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/bindings/hexciri.lua (Hexciri custom binds, monocle cycle / Brave incognito / Messenger / screen record)"
 grep -q 'require("default.hypr.bindings.hexciri")' "$HEXCIRI_PATH/default/hypr/hexciri.lua" || die "placed hexciri.lua does not require default.hypr.bindings.hexciri (the custom binds file is never executed, Super+Ctrl+S Settings / Super+Shift+S web search / Super+Shift+C calculator will not register; 2026-11-24)"
+binds_chain_ok "$HEXCIRI_PATH" || die "binds chain broken in placed tree (Super+Space apps / Super+Alt+Space menu will not register; the fork passed the pre-placement guard, so placement itself lost a file)"
 [ -f "$HEXCIRI_PATH/default/hypr/apps/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/apps/hexciri.lua (Hexciri custom window rules, TUI float / mpv+imv opacity)"
 [ -f "$HEXCIRI_PATH/bin/hexciri-compat.sh" ] || die "missing: $HEXCIRI_PATH/bin/hexciri-compat.sh"
 [ -f "$HOME/.config/hypr/hyprland.lua" ] || die "missing: $HOME/.config/hypr/hyprland.lua"
@@ -6967,6 +7007,28 @@ if [ "${HYPR_GUARD_PAUSED:-0}" = "1" ]; then
 elif pgrep -x Hyprland >/dev/null 2>&1 && [ -x "$HEXCIRI_PATH/bin/hexciri-restart-hyprctl" ]; then
   step "Reloading Hyprland config (new Lua tree placed, clears a stale or emergency config)"
   "$HEXCIRI_PATH/bin/hexciri-restart-hyprctl" && info "Hyprland config reloaded (hyprctl reload, binds live again without a reboot)"
+fi
+
+# Binds smoke check (2026-11-24, Devi: Super+Space / Super+Alt+Space
+# died after a failed update and nothing in the log said so): after the
+# reload, prove the two GlobalShortcuts actually registered. A non-empty
+# `hyprctl configerrors` means the reload tripped (emergency mode, no
+# normal binds at all). A shell that never registered omarchy:menu.root
+# / omarchy:ipc.hexciri.dock.apps means the chords dispatch nowhere.
+# Warn only, never die: the shell restart in hexciri-update-restart
+# runs after this installer and re-registers the shortcuts, and a tty3
+# run has no Hyprland at all. (hyprctl binds is not grepped here: its
+# output format varies, globalshortcuts is the authority.)
+if pgrep -x Hyprland >/dev/null 2>&1 && command -v hyprctl >/dev/null 2>&1; then
+  _cfgerr="$(hyprctl configerrors 2>/dev/null || true)"
+  if [ -n "$_cfgerr" ]; then
+    warn "Hyprland config errors after reload (binds may be dead, emergency mode?): $_cfgerr (check: hyprctl configerrors, then hyprctl reload)"
+  elif hyprctl globalshortcuts >/dev/null 2>&1; then
+    _gs="$(hyprctl globalshortcuts 2>/dev/null || true)"
+    echo "$_gs" | grep -q 'omarchy:menu.root' || warn "Super+Alt+Space menu shortcut not registered by the shell (omarchy:menu.root missing from hyprctl globalshortcuts; shell restart in hexciri-update-restart should re-register it, or run: hexciri-restart-shell)"
+    echo "$_gs" | grep -q 'omarchy:ipc.hexciri.dock.apps' || warn "Super+Space apps shortcut not registered by the shell (omarchy:ipc.hexciri.dock.apps missing from hyprctl globalshortcuts; shell restart in hexciri-update-restart should re-register it, or run: hexciri-restart-shell)"
+  fi
+  unset _cfgerr _gs
 fi
 
 # --- Final checklist ---
