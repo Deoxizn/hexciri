@@ -72,13 +72,17 @@ UPDATE_YES=""
 AUTO_REBOOT=0
 NO_REBOOT=0
 REFORK=0
+LIGHT_SYNC=0
+PRINT_FP=0
 for _a in "$@"; do
   case "$_a" in
     --yes|-y) UPDATE_YES="--yes" ;;
     --reboot) AUTO_REBOOT=1 ;;
     --no-reboot) NO_REBOOT=1 ;;
     --refork|--force) REFORK=1 ;;
-    -h|--help) echo "usage: install.sh [--yes] [--reboot] [--no-reboot] [--refork]"; exit 0 ;;
+    --light-sync) LIGHT_SYNC=1 ;;
+    --print-fingerprints) PRINT_FP=1 ;;
+    -h|--help) echo "usage: install.sh [--yes] [--reboot] [--no-reboot] [--refork] [--light-sync] [--print-fingerprints]"; exit 0 ;;
     *) printf 'install.sh: unknown arg: %s (usage: install.sh [--yes] [--reboot] [--no-reboot])\n' "$_a" >&2; exit 1 ;;
   esac
 done
@@ -118,21 +122,73 @@ FORK_CACHE_DIR="$HOME/.cache/hexciri/fork-cache"
 SKIP_FORK=0
 FORK_FP=""
 
-# Fork fingerprint: what a fresh fork would produce. Hash of the fork +
-# fork-patch code in THIS installer (fork marker to placement marker),
-# the pinned upstream commit, and the repo files copied into the fork
-# (hexciri-update-hexciri, hexciri-theme-ansi). A change to any of those
-# changes the fingerprint and forces a full re-fork; a change to
-# anything else (packages, SDDM, trim, theme re-apply, health check,
-# update output wording) does not, so a re-run reuses the cache.
-fork_fingerprint() {
+# Fork fingerprints, split 2026-11-24 (Devi: v1 left the system alone,
+# v2 re-forked on every installer tweak). The old single fingerprint
+# hashed fork marker -> placement marker, so ANY installer change that
+# touched a fork patch (update output, keyring, thpm filter) forced a
+# full 94 MB re-fork. Split it:
+#   upstream_fingerprint(): fork+rename+rewrite core only (fork marker
+#     -> compat wiring marker) + pinned commit. Changes only when the
+#     upstream fork itself changes.
+#   patch_fingerprint(): compat wiring + all fork patches (compat marker
+#     -> placement marker) + repo files copied into the fork
+#     (hexciri-update-hexciri, hexciri-theme-ansi). Changes when a
+#     patched bin/script changes.
+#   fork_fingerprint(): combined, kept for legacy checks.
+# A change to anything else (packages, SDDM, trim, theme re-apply,
+# health check, output wording) changes NEITHER fingerprint: the
+# self-update light-syncs instead of re-running the installer at all.
+upstream_fingerprint() {
   {
-    sed -n '/^# --- Fork and rename, inline/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
+    sed -n '/^# --- Fork and rename, inline/,/^# --- Wire the compat alias in, before placement ---/p' "$INSTALLER_DIR/install.sh"
     printf 'pinned=%s\n' "$PINNED_SHA"
+  } | sha256sum | cut -d' ' -f1
+}
+patch_fingerprint() {
+  {
+    sed -n '/^# --- Wire the compat alias in, before placement ---/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
     for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
+}
+fork_fingerprint() {
+  printf '%s %s\n' "$(upstream_fingerprint)" "$(patch_fingerprint)" | sha256sum | cut -d' ' -f1
+}
+# --print-fingerprints: no side effects, used by hexciri-update-hexciri
+# to decide light-sync vs full installer without running anything.
+# Must run before the IS_RERUN info line below, so the output is just
+# the two fingerprint lines and nothing else.
+if [ "${PRINT_FP:-0}" = "1" ]; then
+  printf 'upstream=%s\npatch=%s\n' "$(upstream_fingerprint)" "$(patch_fingerprint)"
+  exit 0
+fi
+# run_pacman: pacman bulk call with its noise captured. On a fresh
+# install pacman prints "warning: X is up to date -- skipping" for
+# every already-installed package and "there is nothing to do" -- on a
+# re-run that is most of the output and none of it is a problem. Capture
+# it to a log, print one status line, and only show the log on failure
+# (or on real error lines). Usage: run_pacman "<label>" <pacman args...>
+run_pacman() {
+  local _label="$1"; shift
+  local _log _n
+  _log="$(mktemp /tmp/hexciri-pacman.XXXXXX)"
+  if sudo pacman "$@" >"$_log" 2>&1; then
+    _n="$(grep -cE '^\([0-9]+/[0-9]+\) (installing|upgrading|reinstalling)' "$_log" 2>/dev/null || true)"
+    _n="${_n:-0}"
+    if [ "$_n" -gt 0 ]; then
+      info "$_label: $_n package(s) installed/updated"
+    else
+      info "$_label: already up to date"
+    fi
+    grep -E 'error:|failed to commit' "$_log" 2>/dev/null | head -5 | sed 's/^/[hexciri] pacman: /' || true
+    rm -f "$_log"
+    return 0
+  fi
+  printf '[hexciri] pacman failed (%s), output:\n' "$_label" >&2
+  cat "$_log" >&2
+  rm -f "$_log"
+  return 1
 }
 info() { printf '[hexciri] %s\n' "$1"; }
 warn() { printf 'WARN: %s\n' "$1"; }
@@ -163,6 +219,29 @@ current_theme_name() {
   fi
   return 1
 }
+
+# --light-sync: v1-style self-update. Both fingerprints match, so the
+# installed fork is already correct and nothing in the system needs to
+# change; only the installer sha marker (and the two repo bins that are
+# copied straight into /usr/share/hexciri/bin) need syncing. No pacman,
+# no fork, no theme re-apply, no settings touched at all.
+if [ "${LIGHT_SYNC:-0}" = "1" ]; then
+  _ls_sha="$(sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1)"
+  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi; do
+    if [ -f "$HEXCIRI_REPO_ROOT/v2/$_ls_f" ] && [ -d /usr/share/hexciri/bin ]; then
+      if ! cmp -s "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" 2>/dev/null; then
+        sudo install -Dm755 "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" && info "Light sync: updated /usr/share/hexciri/bin/$_ls_f"
+      fi
+    fi
+  done
+  unset _ls_f
+  printf '%s\n' "$_ls_sha" | sudo tee /usr/share/hexciri/.installer-sha >/dev/null
+  printf '%s\n' "$(upstream_fingerprint)" | sudo tee /usr/share/hexciri/.upstream-fingerprint >/dev/null
+  printf '%s\n' "$(patch_fingerprint)" | sudo tee /usr/share/hexciri/.patch-fingerprint >/dev/null
+  printf '%s\n' "$(fork_fingerprint)" | sudo tee /usr/share/hexciri/.fork-fingerprint >/dev/null
+  info "Light sync done: installer marker updated, no packages, theme or settings touched"
+  exit 0
+fi
 
 cleanup() {
   if [ -n "${TMP_WORK:-}" ] && [ -d "$TMP_WORK" ]; then
@@ -268,7 +347,7 @@ else
 fi
 
 step "Syncing package databases"
-sudo pacman -Sy --noconfirm
+run_pacman "Package databases" -Sy --noconfirm
 
 # --- Kernel headers helper (needed for dkms Nvidia drivers) ---
 
@@ -277,9 +356,9 @@ install_kernel_headers() {
   kernel="$(uname -r)"
   echo "Running kernel: $kernel"
   if [[ "$kernel" == *lts* ]]; then
-    sudo pacman -S --needed --noconfirm linux-lts-headers
+    run_pacman "Kernel headers (linux-lts-headers)" -S --needed --noconfirm linux-lts-headers
   else
-    sudo pacman -S --needed --noconfirm linux-headers
+    run_pacman "Kernel headers (linux-headers)" -S --needed --noconfirm linux-headers
   fi
 }
 
@@ -316,7 +395,7 @@ CORE_PKGS=(
   # Arch extra equivalents: noto-fonts-cjk, ttf-jetbrains-mono-nerd.
 )
 
-sudo pacman -S --needed --noconfirm "${CORE_PKGS[@]}"
+run_pacman "Core packages" -S --needed --noconfirm "${CORE_PKGS[@]}"
 
 # xdg-terminal-exec is NOT in stable extra and NOT in the AUR (only
 # extra-testing 0.14.4-1), so it must never go in the pacman CORE_PKGS call
@@ -326,7 +405,11 @@ sudo pacman -S --needed --noconfirm "${CORE_PKGS[@]}"
 # If it is missing, enable extra-testing and install it from there; until
 # then floating/presentation terminals fall back to the fast path.
 if ! command -v xdg-terminal-exec >/dev/null 2>&1; then
-  warn "xdg-terminal-exec not installed (only in Arch extra-testing, not AUR), terminal launches use the xdg-terminals.list fast path only. Install later from extra-testing if a floating terminal needs it."
+  if [ "${IS_RERUN:-0}" = "1" ]; then
+    info "xdg-terminal-exec not installed (extra-testing only, expected): terminal launches use the xdg-terminals.list fast path"
+  else
+    warn "xdg-terminal-exec not installed (only in Arch extra-testing, not AUR), terminal launches use the xdg-terminals.list fast path only. Install later from extra-testing if a floating terminal needs it."
+  fi
 fi
 
 step "Updating user directories"
@@ -403,16 +486,19 @@ APP_PKGS=(
   lazygit yt-dlp gvfs zbar qrencode imv eject
   gnome-calculator
 )
-if ! sudo pacman -S --needed --noconfirm "${APP_PKGS[@]}"; then
+if ! run_pacman "Default apps" -S --needed --noconfirm "${APP_PKGS[@]}"; then
   warn "Bulk default-apps install failed, retrying per package (best-effort)."
+  _app_ok=0; _app_bad=0
   for _pkg in "${APP_PKGS[@]}"; do
-    if sudo pacman -S --needed --noconfirm "$_pkg" 2>/dev/null; then
-      info "  installed: $_pkg"
+    if sudo pacman -S --needed --noconfirm "$_pkg" >/dev/null 2>&1; then
+      _app_ok=$((_app_ok + 1))
     else
+      _app_bad=$((_app_bad + 1))
       warn "  NOT installed: $_pkg (install by hand: sudo pacman -S $_pkg)"
     fi
   done
-  unset _pkg
+  info "Default apps retry: $_app_ok installed, $_app_bad failed"
+  unset _pkg _app_ok _app_bad
 fi
 
 # --- LocalSend (menu Share > Receive), AUR, best-effort ---
@@ -573,7 +659,7 @@ else
   warn "config/fastfetch/config.jsonc not found in the installer tree, fastfetch keeps its stock config."
 fi
 [ -f /etc/fastfetch/config.jsonc ] || warn "no /etc/fastfetch/config.jsonc, About will use the stock fastfetch layout"
-[ ! -f "$HOME/.config/fastfetch/config.jsonc" ] || warn "a user fastfetch config is still present, About falls back to it until it is moved aside"
+[ ! -f "$HOME/.config/fastfetch/config.jsonc" ] || { if [ "${IS_RERUN:-0}" = "1" ]; then info "a user fastfetch config is present (re-run, kept, About falls back to it)"; else warn "a user fastfetch config is still present, About falls back to it until it is moved aside"; fi; }
 if [ -f "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" ]; then
   cp -a "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" "$HOME/.config/fastfetch/hexciri-nb.png"
   info "Placed: ~/.config/fastfetch/hexciri-nb.png (fastfetch logo)"
@@ -584,7 +670,7 @@ fi
 # --- Quickshell ---
 
 step "Installing Quickshell from Arch extra (stock first, NOT quickshell-git by default)"
-if sudo pacman -S --needed --noconfirm quickshell; then
+if run_pacman "Quickshell" -S --needed --noconfirm quickshell; then
   echo "Stock quickshell installed."
 else
   warn "Stock quickshell install failed. Falling back to quickshell-git from AUR."
@@ -618,14 +704,14 @@ fi
 
 if [ "$HAS_AMD" -eq 1 ]; then
   step "AMD GPU detected (Framework laptop path). Installing Mesa and Vulkan, no Nvidia packages."
-  sudo pacman -S --needed --noconfirm mesa vulkan-radeon lib32-mesa lib32-vulkan-radeon amd-ucode linux-firmware
+  run_pacman "AMD GPU drivers" -S --needed --noconfirm mesa vulkan-radeon lib32-mesa lib32-vulkan-radeon amd-ucode linux-firmware
 fi
 
 if [ "$HAS_NVIDIA" -eq 1 ]; then
   if echo "$GPU_INFO" | grep -qiE 'RTX|GTX 16|GTX 20|GTX 30|GTX 40'; then
     step "Nvidia Turing or newer detected (RTX 4080 Super path). Installing nvidia-open."
     install_kernel_headers
-    sudo pacman -S --needed --noconfirm nvidia-open-dkms nvidia-utils lib32-nvidia-utils nvidia-settings egl-wayland
+    run_pacman "Nvidia drivers (nvidia-open)" -S --needed --noconfirm nvidia-open-dkms nvidia-utils lib32-nvidia-utils nvidia-settings egl-wayland
   elif echo "$GPU_INFO" | grep -qiE 'GTX 10'; then
     step "Nvidia Pascal detected (GTX 1080 Ti, 10xx path). Installing nvidia-580xx from AUR."
     warn "Pascal is legacy. nvidia-580xx is the legacy branch, end of support is coming. Do NOT install nvidia-open on this card."
@@ -635,13 +721,13 @@ if [ "$HAS_NVIDIA" -eq 1 ]; then
     warn "Nvidia GPU found but model not matched as Turing+ or Pascal 10xx. Check lspci output above."
     warn "Defaulting to nvidia-open. If this is a Pascal 10xx card, remove nvidia-open and install nvidia-580xx-dkms and nvidia-580xx-utils from AUR instead."
     install_kernel_headers
-    sudo pacman -S --needed --noconfirm nvidia-open-dkms nvidia-utils lib32-nvidia-utils nvidia-settings egl-wayland
+    run_pacman "Nvidia drivers (nvidia-open)" -S --needed --noconfirm nvidia-open-dkms nvidia-utils lib32-nvidia-utils nvidia-settings egl-wayland
   fi
 fi
 
 if [ "$HAS_AMD" -eq 0 ] && [ "$HAS_NVIDIA" -eq 0 ] && [ -n "$GPU_INFO" ]; then
   step "No AMD or Nvidia GPU matched. Installing generic Intel Mesa stack."
-  sudo pacman -S --needed --noconfirm mesa vulkan-intel lib32-mesa lib32-vulkan-intel
+  run_pacman "Intel GPU drivers" -S --needed --noconfirm mesa vulkan-intel lib32-mesa lib32-vulkan-intel
 fi
 
 # --- Hyprland version trap ---
@@ -687,7 +773,7 @@ EOF
 sudo install -Dm644 "$TMP_DESKTOP" /usr/share/wayland-sessions/hexciri.desktop
 rm -f "$TMP_DESKTOP"
 echo "Installed /usr/share/wayland-sessions/hexciri.desktop"
-cat /usr/share/wayland-sessions/hexciri.desktop
+if [ "${IS_RERUN:-0}" != "1" ]; then cat /usr/share/wayland-sessions/hexciri.desktop; fi
 
 step "Enabling SDDM"
 sudo systemctl enable sddm
@@ -706,16 +792,39 @@ for svc in NetworkManager bluetooth power-profiles-daemon firewalld sddm; do
 done
 
 step "Quick service state check"
-systemctl is-enabled NetworkManager bluetooth power-profiles-daemon firewalld sddm || warn "One or more services above did not report enabled. Check systemctl status for that service."
+if systemctl is-enabled --quiet NetworkManager bluetooth power-profiles-daemon firewalld sddm 2>/dev/null; then
+  info "Services enabled: NetworkManager, bluetooth, power-profiles-daemon, firewalld, sddm"
+else
+  warn "One or more services above did not report enabled. Check systemctl status for that service."
+fi
 
-# --- Fork cache check (2026-11-24, Devi: every update re-forked Omarchy) ---
+# --- Fork cache check (2026-11-24, split 2026-11-24: upstream vs patches) ---
 # BEGIN FORK CACHE CHECK
+UP_FP="$(upstream_fingerprint)"
+PATCH_FP="$(patch_fingerprint)"
 FORK_FP="$(fork_fingerprint)"
+SKIP_FORK=0
+SKIP_UPSTREAM=0
+SKIP_PATCHES=0
 if [ "${REFORK:-0}" = "1" ]; then
   rm -rf "$FORK_CACHE_DIR"
   info "Re-fork requested (--refork), fork cache cleared"
 fi
-if [ -f "$FORK_CACHE_DIR/fork-fingerprint" ] && [ -f "$FORK_CACHE_DIR/fork-out/bin/hexciri" ] && [ "$(cat "$FORK_CACHE_DIR/fork-fingerprint" 2>/dev/null)" = "$FORK_FP" ]; then
+# Upstream cache: the pre-patch fork (download + copy + rename + rewrite).
+if [ -f "$FORK_CACHE_DIR/upstream-fingerprint" ] && [ -d "$FORK_CACHE_DIR/upstream-out/bin" ] && [ "$(cat "$FORK_CACHE_DIR/upstream-fingerprint" 2>/dev/null)" = "$UP_FP" ]; then
+  SKIP_UPSTREAM=1
+  rm -rf "$FORK_OUT"
+  cp -a "$FORK_CACHE_DIR/upstream-out" "$FORK_OUT"
+  info "Fork cache hit (upstream): Omarchy $PINNED_SHA unchanged, reusing cached upstream fork (no download, no re-copy, no re-rename)"
+else
+  info "Fork cache miss (upstream): forking Omarchy $PINNED_SHA (full fork; per-file detail: $FORK_LOG)"
+fi
+# Patch cache: the fully patched fork. Only usable when the upstream
+# tree it was patched from is the same one (SKIP_UPSTREAM=1, or the
+# upstream fork just ran fresh in this run -- in that case the patched
+# cache is stale by definition and patches must run).
+if [ "${SKIP_UPSTREAM:-0}" = "1" ] && [ -f "$FORK_CACHE_DIR/patch-fingerprint" ] && [ -f "$FORK_CACHE_DIR/fork-out/bin/hexciri" ] && [ "$(cat "$FORK_CACHE_DIR/patch-fingerprint" 2>/dev/null)" = "$PATCH_FP" ]; then
+  SKIP_PATCHES=1
   SKIP_FORK=1
   rm -rf "$FORK_OUT"
   cp -a "$FORK_CACHE_DIR/fork-out" "$FORK_OUT"
@@ -724,14 +833,14 @@ if [ -f "$FORK_CACHE_DIR/fork-fingerprint" ] && [ -f "$FORK_CACHE_DIR/fork-out/b
   _fc_bins="$(find "$FORK_OUT/bin" -type f 2>/dev/null | wc -l | tr -d ' ')"
   info "Fork cache hit: Omarchy $PINNED_SHA, fork unchanged, reusing cached fork ($_fc_files files, $_fc_themes themes, $_fc_bins bin scripts, no download, no re-fork)"
   unset _fc_files _fc_themes _fc_bins
-else
-  info "Fork cache miss: forking Omarchy $PINNED_SHA (full fork; per-file detail: $FORK_LOG)"
+elif [ "${SKIP_UPSTREAM:-0}" = "1" ]; then
+  info "Fork cache hit (upstream only): patches changed, re-applying fork patches to the cached upstream tree (no download)"
 fi
 # END FORK CACHE CHECK
 
 # --- Download Omarchy at the pinned commit as a tarball, no git, no auth ---
 
-if [ "${SKIP_FORK:-0}" = "0" ]; then
+if [ "${SKIP_UPSTREAM:-0}" = "0" ]; then
 step "Downloading Omarchy, branch $PINNED_BRANCH, pinned commit $PINNED_SHA ($PINNED_DATE)"
 step "No git clone, no username or password prompt: public codeload tarball via curl"
 for cmd in curl python3 tar grep find cp mkdir rm; do
@@ -777,19 +886,20 @@ fi # end SKIP_FORK download guard
 # a regex dot is \\. in Lua, and this script never collapses \\ to \.
 # It uses Python byte replacement, not sed, for content rewrites.
 #
-# Fork cache (2026-11-24): when SKIP_FORK=1 the whole block below,
-# fork + all fork patches, is skipped and FORK_OUT is the cached tree
-# restored above. Fresh installs and fork changes run it in full.
-# Per-file noise in here goes to the fork detail log, screen gets one
-# summary line per stage.
+# Fork cache (2026-11-24, split): when SKIP_UPSTREAM=1 the upstream
+# block below is skipped and FORK_OUT is the cached upstream tree
+# restored above; when SKIP_PATCHES=1 the patch block below is skipped
+# and FORK_OUT is the cached patched tree. Fresh installs and fork
+# changes run them in full. Per-file noise in here goes to the fork
+# detail log, screen gets one summary line per stage.
 fork_detail() {
   : >> "${FORK_LOG:-/tmp/hexciri-install-fork.log}" 2>/dev/null || true
   printf '[hexciri] %s\n' "$1" >> "${FORK_LOG:-/tmp/hexciri-install-fork.log}" 2>/dev/null || true
   if [[ "${HEXCIRI_INSTALL_VERBOSE:-0}" == "1" || "${HEXCIRI_UPDATE_VERBOSE:-0}" == "1" ]]; then
     printf '[hexciri] %s\n' "$1"
   fi
-}
-if [ "${SKIP_FORK:-0}" = "0" ]; then
+ }
+if [ "${SKIP_UPSTREAM:-0}" = "0" ]; then
 
 copy_subset() {
   local src="$1"
@@ -1580,6 +1690,23 @@ step "Fork summary"
 fork_detail "Fork output: $FORK_OUT"
 info "Fork: $(find "$FORK_OUT" -type f | wc -l | tr -d ' ') files, $(find "$FORK_OUT" -type d | wc -l | tr -d ' ') dirs, $(find "$FORK_OUT/themes" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ') themes, $(find "$FORK_OUT/bin" -type f 2>/dev/null | wc -l | tr -d ' ') bin scripts (Omarchy ${PINNED_SHA:-unknown}, renamed omarchy -> hexciri; full file list: ${FORK_LOG:-/tmp/hexciri-install-fork.log})"
 find "$FORK_OUT" -mindepth 1 -maxdepth 2 -print | sort >> "${FORK_LOG:-/tmp/hexciri-install-fork.log}" 2>/dev/null || true
+
+fi # end upstream fork guard: download/copy/rename/rewrite only
+
+# Save the upstream (pre-patch) fork, so a patch-only change can
+# re-apply patches to this tree instead of re-forking Omarchy.
+if [ "${SKIP_UPSTREAM:-0}" = "0" ] && [ -n "${UP_FP:-}" ] && [ -n "${FORK_CACHE_DIR:-}" ]; then
+  rm -rf "$FORK_CACHE_DIR/upstream-out"
+  mkdir -p "$FORK_CACHE_DIR"
+  cp -a "$FORK_OUT" "$FORK_CACHE_DIR/upstream-out"
+  printf '%s\n' "$UP_FP" > "$FORK_CACHE_DIR/upstream-fingerprint"
+  fork_detail "Upstream fork cache saved: $FORK_CACHE_DIR/upstream-out"
+fi
+
+# Patch guard: compat wiring + all fork patches run on the upstream
+# tree (fresh, or restored from the upstream cache). They never run on
+# an already-patched tree, so whole-file rewrites stay idempotent.
+if [ "${SKIP_PATCHES:-0}" = "0" ]; then
 
 # --- Wire the compat alias in, before placement ---
 # This was the missing step in Phase 1. Wiring happens on the fork output
@@ -2867,10 +2994,11 @@ must_replace(fork + "/bin/hexciri-update-boot", "set -e\n",
     "hexciri-update-boot verifies systemd-boot directly when lifecycle-dispatch is absent")
 
 # 7. confirm: the whats-new link pointed at omacom/hexciri, which is not a repo.
+# 2026-11-24: repo root, not releases/latest -- Devi does no releases/ISOs.
 must_replace(fork + "/bin/hexciri-update-confirm",
     "https://github.com/omacom/hexciri/releases/latest",
-    "https://github.com/Deoxizn/hexciri/releases/latest",
-    "hexciri-update-confirm points at Deoxizn/hexciri releases")
+    "https://github.com/Deoxizn/hexciri",
+    "hexciri-update-confirm points at Deoxizn/hexciri (repo root, no releases)")
 
 # 8. Theme-matched green/red in update output, 2026-11-24: upstream prints
 # section headers with hardcoded \e[32m (stock Omarchy green) and errors
@@ -3317,18 +3445,19 @@ unset _f
 info "  update: hexciri-update patched (eos-update --aur, no snapshot, Hexciri self-update, mise, dracut log scan)"
 
 # Save the fully patched fork for the next re-run (fork cache,
-# 2026-11-24). Only when this run actually forked (SKIP_FORK=0) and
-# the fingerprint was computed (a real install, not sim7, which
-# sources only the fork block and has no FORK_FP).
-if [ "${SKIP_FORK:-0}" = "0" ] && [ -n "${FORK_FP:-}" ] && [ -n "${FORK_CACHE_DIR:-}" ]; then
-  rm -rf "$FORK_CACHE_DIR"
+# 2026-11-24). Only when patches actually ran (SKIP_PATCHES=0) and
+# the fingerprints were computed (a real install, not sim7, which
+# sources only the fork block and has no PATCH_FP).
+if [ "${SKIP_PATCHES:-0}" = "0" ] && [ -n "${PATCH_FP:-}" ] && [ -n "${FORK_CACHE_DIR:-}" ]; then
   mkdir -p "$FORK_CACHE_DIR"
+  rm -rf "$FORK_CACHE_DIR/fork-out"
   cp -a "$FORK_OUT" "$FORK_CACHE_DIR/fork-out"
-  printf '%s\n' "$FORK_FP" > "$FORK_CACHE_DIR/fork-fingerprint"
+  printf '%s\n' "$PATCH_FP" > "$FORK_CACHE_DIR/patch-fingerprint"
+  [ -n "${FORK_FP:-}" ] && printf '%s\n' "$FORK_FP" > "$FORK_CACHE_DIR/fork-fingerprint"
   info "Fork cache saved: $FORK_CACHE_DIR/fork-out (reused on the next update unless the fork changes)"
 fi
 
-fi # end SKIP_FORK fork guard: the block above (fork + all fork patches) runs only on a fresh install or a fork change
+fi # end patch guard: compat wiring + all fork patches
 
 # --- mise + Hexciri tools config (Phase 2, 2026-11-24) ---
 # mise was out of scope in the Phase 1 base; reinstall it so the rest of the
@@ -3371,6 +3500,8 @@ sudo chmod +x "$HEXCIRI_PATH"/bin/* 2>/dev/null || true
 # only when the installer itself changed.
 sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1 | sudo tee "$HEXCIRI_PATH/.installer-sha" >/dev/null && info "Wrote installer sha marker /usr/share/hexciri/.installer-sha (hexciri update re-runs the installer only when this changes)" || warn "could not write installer sha marker, hexciri update will re-run the installer every time"
 [ -n "${FORK_FP:-}" ] && printf '%s\n' "$FORK_FP" | sudo tee "$HEXCIRI_PATH/.fork-fingerprint" >/dev/null || true
+[ -n "${UP_FP:-}" ] && printf '%s\n' "$UP_FP" | sudo tee "$HEXCIRI_PATH/.upstream-fingerprint" >/dev/null || true
+[ -n "${PATCH_FP:-}" ] && printf '%s\n' "$PATCH_FP" | sudo tee "$HEXCIRI_PATH/.patch-fingerprint" >/dev/null || true
 info "Installed: $HEXCIRI_PATH/shell, $HEXCIRI_PATH/default, $HEXCIRI_PATH/themes, $HEXCIRI_PATH/bin, $HEXCIRI_PATH/install (browser-policy helpers), $HEXCIRI_PATH/icons, $HEXCIRI_PATH/logo.txt, $HEXCIRI_PATH/icon.txt"
 
 mkdir -p "$HOME/.config/hypr" "$HOME/.config/hexciri" \
@@ -3455,7 +3586,7 @@ info "Linked: ~/.local/bin/hexciri (bare dispatcher, the hexciri-* glob never ma
 mkdir -p "$HOME/.local/share/applications"
 for desk_file in "$FORK_OUT"/applications/*.desktop; do
   [ -e "$desk_file" ] || continue
-  cp -a "$desk_file" "$HOME/.local/share/applications/$(basename "$desk_file")"
+  place_user_file "$desk_file" "$HOME/.local/share/applications/$(basename "$desk_file")"
   # NoDisplay on the placed wrappers, 2026-11-23: without it the Super+Space
   # app grid shows Browser + Terminal wrapper entries next to Brave Origin
   # + Kitty, which are already pinned. The dock stand-in logic does not
@@ -3499,8 +3630,10 @@ fi
 # Without these files every terminal launch falls through to xdg-terminal-exec.
 if [ -f "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" ]; then
   mkdir -p "$HOME/.config/xdg-terminal-exec"
-  cp -a "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" "$HOME/.config/xdg-terminal-exec/hyprland-xdg-terminals.list"
-  cp -a "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" "$HOME/.config/xdg-terminals.list"
+  # User file, not code: place_user_file keeps it on a re-run (upstream
+  # saved as .hexciri.new) instead of cp -a overwriting it every run.
+  place_user_file "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" "$HOME/.config/xdg-terminal-exec/hyprland-xdg-terminals.list"
+  place_user_file "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" "$HOME/.config/xdg-terminals.list"
   info "Placed: ~/.config/xdg-terminals.list and ~/.config/xdg-terminal-exec/hyprland-xdg-terminals.list (kitty.desktop)"
 else
   warn "xdg-terminals.list not found in fork, terminal launches fall back to xdg-terminal-exec."
@@ -3512,12 +3645,20 @@ fi
 # Nerd Font the installer ships (the upstream line is commented out, which
 # left fastfetch reading the fc-match fallback Noto Sans).
 if [ -f "$FORK_OUT/config/kitty/kitty.conf" ]; then
+  # Font fix only when the file was actually placed/changed: on a
+  # re-run place_user_file keeps the user's file, and re-applying the
+  # font sed/append here would mutate a kept file every run.
+  _kitty_before="$(sha256sum "$HOME/.config/kitty/kitty.conf" 2>/dev/null | cut -d' ' -f1 || echo none)"
   place_user_file "$FORK_OUT/config/kitty/kitty.conf" "$HOME/.config/kitty/kitty.conf"
-  if grep -q '^# font_family' "$HOME/.config/kitty/kitty.conf"; then
+  _kitty_after="$(sha256sum "$HOME/.config/kitty/kitty.conf" 2>/dev/null | cut -d' ' -f1 || echo none)"
+  if [ "$_kitty_before" = "$_kitty_after" ] && [ "$_kitty_before" != "none" ]; then
+    info "Kept your ~/.config/kitty/kitty.conf font setting (re-run, file unchanged)"
+  elif grep -q '^# font_family' "$HOME/.config/kitty/kitty.conf"; then
     sed -i 's/^# font_family .*/font_family JetBrainsMono Nerd Font/' "$HOME/.config/kitty/kitty.conf"
   elif ! grep -q '^font_family' "$HOME/.config/kitty/kitty.conf"; then
     printf 'font_family JetBrainsMono Nerd Font\n' >> "$HOME/.config/kitty/kitty.conf"
   fi
+  unset _kitty_before _kitty_after
   info "Placed: ~/.config/kitty/kitty.conf (includes the staged theme kitty.conf, font JetBrainsMono Nerd Font)"
 else
   warn "config/kitty/kitty.conf not found in fork, Kitty will not load the theme colours."
@@ -3822,7 +3963,9 @@ grep -q 'HEXCIRI_UPDATE_REEXECED' "$HEXCIRI_PATH/bin/hexciri-update" || die "hex
 grep -q '_upgraded' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs does not count real upgrades (it claimed updated (1) after nothing to do)"
 grep -q 'endeavouros repo not found' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs has no endeavouros-repo check (EOS pkgs must still update via pacman)"
 [ -f "$HEXCIRI_PATH/.fork-fingerprint" ] || die "fork fingerprint missing, hexciri update cannot tell if the fork changed"
-grep -q 'fork_fingerprint' "$INSTALLER_DIR/install.sh" || die "installer has no fork cache (fork_fingerprint missing)"
+[ -f "$HEXCIRI_PATH/.patch-fingerprint" ] || die "patch fingerprint missing, hexciri update cannot tell if the fork patches changed"
+grep -q 'upstream_fingerprint' "$INSTALLER_DIR/install.sh" || die "installer has no fork cache (upstream_fingerprint missing)"
+grep -q 'patch_fingerprint' "$INSTALLER_DIR/install.sh" || die "installer has no fork cache (patch_fingerprint missing)"
 grep -q 'hexciri-snapshot create' "$HEXCIRI_PATH/bin/hexciri-update" && die "hexciri-update still calls the snapshot step (dropped 2026-11-24)"
 grep -q 'dracut' "$HEXCIRI_PATH/bin/hexciri-update-analyze-logs" || die "hexciri-update-analyze-logs has no dracut scan"
 grep -q 'hexciri-theme-ansi green' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "update headers are not theme-matched (no hexciri-theme-ansi call in hexciri-update-system-pkgs)"
@@ -4038,7 +4181,9 @@ for _boot_loader in $_boot_cands; do
   [ -f "$_boot_loader" ] || continue
   _boot_found=1
   info "systemd-boot loader.conf: $_boot_loader (timeout lines before: $(grep -E '^[[:space:]]*#?[[:space:]]*timeout[[:space:]]' "$_boot_loader" 2>/dev/null | tr '\n' ' ' || true))"
-  if grep -qE '^[[:space:]]*#?[[:space:]]*timeout[[:space:]]' "$_boot_loader" 2>/dev/null; then
+  if grep -q '^timeout 1$' "$_boot_loader" 2>/dev/null; then
+    info "systemd-boot timeout: already 1s in $_boot_loader (kept)"
+  elif grep -qE '^[[:space:]]*#?[[:space:]]*timeout[[:space:]]' "$_boot_loader" 2>/dev/null; then
     sudo sed -i -E 's|^[[:space:]]*#?[[:space:]]*timeout[[:space:]].*|timeout 1|' "$_boot_loader" && info "systemd-boot timeout: 1s in $_boot_loader"
   else
     printf 'timeout 1\n' | sudo tee -a "$_boot_loader" >/dev/null && info "systemd-boot timeout: 1s appended to $_boot_loader"
@@ -4108,7 +4253,18 @@ fi
 unset _cur
 # APPLY_THEME is deliberately NOT unset: the SDDM step below reads it as
 # the applied (current on re-run, default on fresh) theme for its background.
-if [ -n "$APPLY_THEME" ]; then
+# Skip the re-apply when the staged theme already matches: theme-set
+# regenerates staged files, and running it on every re-run is how a
+# hand-tweaked staged file (or a theme switch made after install) got
+# stomped. Only re-apply when the theme changed or the staged files
+# are missing/different.
+_theme_skip=0
+if [ "${IS_RERUN:-0}" = "1" ] && [ -n "$APPLY_THEME" ] && [ -f "$HOME/.local/state/hexciri/current/theme.name" ] && [ "$(cat "$HOME/.local/state/hexciri/current/theme.name" 2>/dev/null | tr -d '[:space:]')" = "$APPLY_THEME" ] && cmp -s "$HEXCIRI_PATH/themes/$APPLY_THEME/colors.toml" "$HOME/.local/state/hexciri/current/theme/colors.toml" 2>/dev/null; then
+  _theme_skip=1
+fi
+if [ "$_theme_skip" = "1" ]; then
+  info "Theme already applied: $APPLY_THEME (staged files match, skipping re-apply)"
+elif [ -n "$APPLY_THEME" ]; then
   if [ -x "$HEXCIRI_PATH/bin/hexciri-theme-set" ]; then
     if "$HEXCIRI_PATH/bin/hexciri-theme-set" "$APPLY_THEME"; then
       info "Theme applied: $APPLY_THEME"
@@ -4121,6 +4277,7 @@ if [ -n "$APPLY_THEME" ]; then
 else
   warn "No themes found to apply, skipping theme apply."
 fi
+unset _theme_skip
 
 # --- GTK settings + portal FileChooser (LocalSend file picker, 2026-11-23, fixed 2026-11-24) ---
 # The picker is the xdg-desktop-portal FileChooser dialog, served out of
@@ -4151,15 +4308,27 @@ _gtk_mode="$(HEXCIRI_PATH="$HEXCIRI_PATH" "$HEXCIRI_PATH/bin/hexciri-theme-color
 if [[ "$_gtk_mode" == "light" ]]; then _gtk_dark="false"; _gtk_scheme="prefer-light"; else _gtk_dark="true"; _gtk_scheme="prefer-dark"; fi
 mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
 for _gtk_ver in 3.0 4.0; do
-  cat > "$HOME/.config/gtk-$_gtk_ver/settings.ini" <<GTK_EOF
+  _gtk_file="$HOME/.config/gtk-$_gtk_ver/settings.ini"
+  _gtk_font="Noto Sans 11"; _gtk_theme="Adwaita"; _gtk_icon="Adwaita"
+  if [ -f "$_gtk_file" ]; then
+    _gtk_font="$(grep -m1 '^gtk-font-name=' "$_gtk_file" 2>/dev/null | cut -d= -f2- || true)"; [ -n "$_gtk_font" ] || _gtk_font="Noto Sans 11"
+    _gtk_theme="$(grep -m1 '^gtk-theme-name=' "$_gtk_file" 2>/dev/null | cut -d= -f2- || true)"; [ -n "$_gtk_theme" ] || _gtk_theme="Adwaita"
+    _gtk_icon="$(grep -m1 '^gtk-icon-theme-name=' "$_gtk_file" 2>/dev/null | cut -d= -f2- || true)"; [ -n "$_gtk_icon" ] || _gtk_icon="Adwaita"
+    [ "$_gtk_theme" = "Adwaita-dark" ] && _gtk_theme="Adwaita"
+  fi
+  if [ -f "$_gtk_file" ] && grep -q "^gtk-theme-name=$_gtk_theme$" "$_gtk_file" && grep -q "^gtk-application-prefer-dark-theme=$_gtk_dark$" "$_gtk_file"; then
+    info "GTK settings: already correct in $_gtk_file (kept your font/theme)"
+  else
+    cat > "$_gtk_file" <<GTK_EOF
 [Settings]
-gtk-theme-name=Adwaita
-gtk-icon-theme-name=Adwaita
+gtk-theme-name=$_gtk_theme
+gtk-icon-theme-name=$_gtk_icon
 gtk-application-prefer-dark-theme=$_gtk_dark
-gtk-font-name=Noto Sans 11
+gtk-font-name=$_gtk_font
 GTK_EOF
+  fi
 done
-unset _gtk_ver
+unset _gtk_ver _gtk_file _gtk_font _gtk_theme _gtk_icon
 info "GTK settings: theme=Adwaita (dark=$_gtk_dark) in gtk-3.0/gtk-4.0 settings.ini (Adwaita-dark is not a theme name, dark comes from prefer-dark)"
 _gtk_set() {
   if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
@@ -4177,13 +4346,17 @@ _gtk_set() {
 _gtk_set
 unset -f _gtk_set
 mkdir -p "$HOME/.config/xdg-desktop-portal"
-cat > "$HOME/.config/xdg-desktop-portal/portals.conf" <<PORTAL_EOF
+if [ -f "$HOME/.config/xdg-desktop-portal/portals.conf" ] && grep -q '^org.freedesktop.impl.portal.FileChooser=gtk$' "$HOME/.config/xdg-desktop-portal/portals.conf"; then
+  info "Portal config: already FileChooser=gtk (kept)"
+else
+  cat > "$HOME/.config/xdg-desktop-portal/portals.conf" <<PORTAL_EOF
 [preferred]
 default=hyprland;gtk
 org.freedesktop.impl.portal.FileChooser=gtk
 org.freedesktop.impl.portal.Secret=gnome-keyring
 PORTAL_EOF
-info "Portal config: FileChooser=gtk in ~/.config/xdg-desktop-portal/portals.conf"
+  info "Portal config: FileChooser=gtk in ~/.config/xdg-desktop-portal/portals.conf"
+fi
 systemctl --user restart xdg-desktop-portal.service xdg-desktop-portal-gtk.service 2>/dev/null || systemctl --user try-restart xdg-desktop-portal-gtk.service 2>/dev/null || true
 unset _gtk_mode _gtk_dark _gtk_scheme
 
@@ -4212,7 +4385,8 @@ if command -v eos-update >/dev/null 2>&1; then
     _eos_icon="endeavouros-icon"
   fi
   [ -n "$_eos_icon" ] || _eos_icon="system-software-update"
-  cat > "$HOME/.local/share/applications/eos-update.desktop" <<EOS_EOF
+  _eos_new="$(mktemp)"
+  cat > "$_eos_new" <<EOS_EOF
 [Desktop Entry]
 Type=Application
 Name=EOS Update
@@ -4222,7 +4396,16 @@ Exec=kitty --hold -e eos-update --yay
 Terminal=false
 Categories=System;
 EOS_EOF
-  unset _eos_icon
+  if [ -f "$HOME/.local/share/applications/eos-update.desktop" ] && cmp -s "$_eos_new" "$HOME/.local/share/applications/eos-update.desktop"; then
+    info "EOS update icon: already correct (kept)"
+  elif [ -f "$HOME/.local/share/applications/eos-update.desktop" ] && [ "${IS_RERUN:-0}" = "1" ]; then
+    cp -a "$_eos_new" "$HOME/.local/share/applications/eos-update.desktop.hexciri.new"
+    info "EOS update icon: kept your override (new version saved to eos-update.desktop.hexciri.new)"
+  else
+    cp -a "$_eos_new" "$HOME/.local/share/applications/eos-update.desktop"
+  fi
+  rm -f "$_eos_new"
+  unset _eos_icon _eos_new
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
   info "EOS update icon: override launches kitty --hold -e eos-update --yay"
 else
@@ -4309,7 +4492,9 @@ if [ -n "$SDDM_SRC" ]; then
     fi
   done
   unset _colors
-  if [[ "$SDDM_BG" =~ ^#[0-9a-fA-F]{6}$ ]]; then
+  if [[ "$SDDM_BG" =~ ^#[0-9a-fA-F]{6}$ ]] && [ -f /usr/share/sddm/themes/hexciri/theme.conf ] && grep -q "^Background=$SDDM_BG$" /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null; then
+    info "SDDM theme background already $SDDM_BG (kept)"
+  elif [[ "$SDDM_BG" =~ ^#[0-9a-fA-F]{6}$ ]]; then
     TMP_SDDM_CONF="$(mktemp)"
     printf '[General]\nBackground=%s\n' "$SDDM_BG" > "$TMP_SDDM_CONF"
     # The greeter shows "touch the reader or enter your password" only when
@@ -4515,7 +4700,9 @@ unset _hide_desk
 # Devi did not ask to remove it.
 mkdir -p "$HOME/.local/share/applications"
 if [ -f /usr/share/applications/yad-settings.desktop ]; then
-  cp -a /usr/share/applications/yad-settings.desktop "$HOME/.local/share/applications/yad-settings.desktop"
+  if [ ! -f "$HOME/.local/share/applications/yad-settings.desktop" ]; then
+    cp -a /usr/share/applications/yad-settings.desktop "$HOME/.local/share/applications/yad-settings.desktop"
+  fi
   if ! grep -q '^NoDisplay=' "$HOME/.local/share/applications/yad-settings.desktop"; then
     printf 'NoDisplay=true\n' >> "$HOME/.local/share/applications/yad-settings.desktop"
   fi
@@ -4551,10 +4738,14 @@ fi
 
 step "Post-install health check"
 HC_FAIL=0
+# hc_info: health per-item status. On a fresh install it prints (useful
+# bring-up checklist); on a re-run it is noise -- only warnings and the
+# final "Health check: clean / flagged" line show.
+hc_info() { if [ "${IS_RERUN:-0}" != "1" ]; then info "$1"; fi; }
 if command -v systemctl >/dev/null 2>&1; then
   FAILED_UNITS="$(systemctl --failed --no-legend 2>/dev/null || true)"
   if [ -z "$FAILED_UNITS" ]; then
-    info "  systemd: no failed units"
+    hc_info "  systemd: no failed units"
   else
     warn "  systemd: FAILED units present:"
     printf '%s\n' "$FAILED_UNITS"
@@ -4563,7 +4754,7 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 for _check in "$HEXCIRI_PATH/bin/hexciri-launch-shell" "$HEXCIRI_PATH/bin/hexciri-menu" "$HEXCIRI_PATH/bin/hexciri-shell" "$HEXCIRI_PATH/shell/shell.qml" "$HOME/.config/hypr/hyprland.lua" "$HOME/.config/hexciri/shell.json" /usr/share/wayland-sessions/hexciri.desktop; do
   if [ -e "$_check" ]; then
-    info "  present: $_check"
+    hc_info "  present: $_check"
   else
     warn "  MISSING: $_check"
     HC_FAIL=1
@@ -4572,7 +4763,7 @@ done
 if command -v quickshell >/dev/null 2>&1; then
   if quickshell --version >/dev/null 2>&1; then
     QS_VER="$(quickshell --version 2>/dev/null || true)"
-    info "  quickshell: $QS_VER"
+    hc_info "  quickshell: $QS_VER"
   else
     warn "  quickshell binary exists but --version failed"
     HC_FAIL=1
@@ -4582,62 +4773,62 @@ else
   HC_FAIL=1
 fi
 if systemctl is-enabled --quiet sddm 2>/dev/null; then
-  info "  sddm: enabled"
+  hc_info "  sddm: enabled"
 else
   warn "  sddm: not enabled"
   HC_FAIL=1
 fi
 if [ -f /usr/share/sddm/themes/hexciri/Main.qml ]; then
-  info "  sddm theme: /usr/share/sddm/themes/hexciri (Main.qml present)"
+  hc_info "  sddm theme: /usr/share/sddm/themes/hexciri (Main.qml present)"
 else
   warn "  sddm theme: hexciri theme not installed, SDDM uses its default theme (cosmetic only, login still works)"
 fi
-command -v kitty >/dev/null 2>&1 && info "  terminal: kitty present" || warn "  terminal: kitty NOT installed, terminal binds fall back to xdg-terminal-exec"
-command -v udiskie >/dev/null 2>&1 && info "  udiskie: present" || warn "  udiskie: NOT installed, autostart will pop a Command not found error"
+command -v kitty >/dev/null 2>&1 && hc_info "  terminal: kitty present" || warn "  terminal: kitty NOT installed, terminal binds fall back to xdg-terminal-exec"
+command -v udiskie >/dev/null 2>&1 && hc_info "  udiskie: present" || warn "  udiskie: NOT installed, autostart will pop a Command not found error"
 if command -v brave-origin >/dev/null 2>&1; then
-  info "  browser: Brave Origin present (default: $(xdg-settings get default-web-browser 2>/dev/null || echo unknown))"
+  hc_info "  browser: Brave Origin present (default: $(xdg-settings get default-web-browser 2>/dev/null || echo unknown))"
 else
   warn "  browser: Brave Origin NOT installed, Super+Shift+Return / Super+Shift+B will fail"
 fi
-if command -v zathura >/dev/null 2>&1; then info "  pdf: zathura present"; else warn "  pdf: zathura NOT installed"; fi
-if [ -f /etc/pam.d/hexciri-lock-password ]; then info "  lock PAM: /etc/pam.d/hexciri-lock-password present (System > Lock works)"; else warn "  lock PAM: missing, System > Lock returns missing-pam (run: sudo hexciri-apply-lock)"; fi
-if [ -f /etc/sudoers.d/hexciri-theme-browser ]; then info "  browser policy sudoers: present (theme switch repaints Brave)"; else warn "  browser policy sudoers: missing, theme switch reports hexciri-theme-set-browser failed"; fi
-command -v fprintd >/dev/null 2>&1 && info "  fingerprint: fprintd present (Setup > Security > Fingerprint)" || warn "  fingerprint: fprintd NOT installed, Setup > Security > Fingerprint will fail"
+if command -v zathura >/dev/null 2>&1; then hc_info "  pdf: zathura present"; else warn "  pdf: zathura NOT installed"; fi
+if [ -f /etc/pam.d/hexciri-lock-password ]; then hc_info "  lock PAM: /etc/pam.d/hexciri-lock-password present (System > Lock works)"; else warn "  lock PAM: missing, System > Lock returns missing-pam (run: sudo hexciri-apply-lock)"; fi
+if [ -f /etc/sudoers.d/hexciri-theme-browser ]; then hc_info "  browser policy sudoers: present (theme switch repaints Brave)"; else warn "  browser policy sudoers: missing, theme switch reports hexciri-theme-set-browser failed"; fi
+command -v fprintd >/dev/null 2>&1 && hc_info "  fingerprint: fprintd present (Setup > Security > Fingerprint)" || warn "  fingerprint: fprintd NOT installed, Setup > Security > Fingerprint will fail"
 if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/dev/null | grep -qE '^[[:space:]]*-[[:space:]]*#[0-9]+:'; then
   if grep -q 'pam_unix.so try_first_pass likeauth nullok' /etc/pam.d/sddm 2>/dev/null && grep -q pam_fprintd.so /etc/pam.d/sddm 2>/dev/null; then
-    info "  fingerprint: SDDM login has pam_unix first, then pam_fprintd (password alone logs in)"
+    hc_info "  fingerprint: SDDM login has pam_unix first, then pam_fprintd (password alone logs in)"
   elif grep -q pam_fprintd.so /etc/pam.d/sddm 2>/dev/null; then
     warn "  fingerprint: /etc/pam.d/sddm has pam_fprintd but no pam_unix-first line (old order: fingerprint demanded after password)"
   else
     warn "  fingerprint: enrolled, but /etc/pam.d/sddm has no pam_fprintd, SDDM login stays password-only"
   fi
 fi
-if command -v mpv >/dev/null 2>&1; then info "  video: mpv present"; else warn "  video: mpv NOT installed"; fi
-if command -v gpu-screen-recorder >/dev/null 2>&1; then info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
-if command -v localsend >/dev/null 2>&1; then info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
-if command -v fastfetch >/dev/null 2>&1; then info "  fastfetch: present"; else warn "  fastfetch: NOT installed"; fi
-if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
-grep -q 'hexciri-launch-about --render' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q 'hexciri-launch-or-focus-tui --app-id=org.hexciri.about' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q '_about_fit' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && info "  about: launch-about is the two-mode fastfetch (--render runs inside the terminal, no bash -c quoting trap)" || warn "  about: launch-about is not the two-mode --render script, System > About may open and close at once"
-grep -q 'icon.txt' /etc/fastfetch/config.jsonc 2>/dev/null && info "  about logo: fastfetch config logo points at icon.txt" || warn "  about logo: fastfetch config logo does not point at icon.txt, About may render a blank logo column"
-if grep -q '^gtk-theme-name=Adwaita$' "$HOME/.config/gtk-4.0/settings.ini" 2>/dev/null && ! grep -q 'Adwaita-dark' "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini" 2>/dev/null; then info "  gtk picker: settings.ini theme=Adwaita, no Adwaita-dark (GTK4 dark comes from prefer-dark)"; else warn "  gtk picker: settings.ini still names Adwaita-dark or is missing, file picker will come up light with ghost text"; fi
-if command -v dbus-run-session >/dev/null 2>&1; then _gtk_scheme_now="$(dbus-run-session -- gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || echo unknown)"; if [ "$_gtk_scheme_now" = "'prefer-dark'" ]; then info "  gtk picker: dconf color-scheme=prefer-dark (portal dialog reads dconf on Wayland, not settings.ini)"; else warn "  gtk picker: dconf color-scheme=$_gtk_scheme_now, portal file picker may stay light (expected 'prefer-dark' for a dark theme)"; fi; unset _gtk_scheme_now; fi
-[ -x /usr/lib/hexciri/speedtest ] && info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
-command -v btm >/dev/null 2>&1 && info "  activity monitor: btm present (Super+Shift+T)" || warn "  activity monitor: btm NOT installed, Super+Shift+T will fail (package: bottom, binary: btm)"
-_boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do if [ -f "$_f" ]; then _boot_hc_seen=1; grep -q '^timeout 1$' "$_f" 2>/dev/null || _boot_hc_ok=0; fi; done; if [ "$_boot_hc_seen" -eq 1 ] && [ "$_boot_hc_ok" -eq 1 ]; then info "  boot timeout: every loader.conf says timeout 1"; elif [ "$_boot_hc_seen" -eq 0 ]; then warn "  boot timeout: no loader.conf found (GRUB or other bootloader?)"; else warn "  boot timeout: a loader.conf does not say timeout 1 (grep timeout in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf)"; fi; _boot_hc_efi=""; [ -r /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f ] && _boot_hc_efi="$(tail -c +5 /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')"; if [ "$_boot_hc_efi" = "1" ]; then info "  boot timeout EFI: LoaderConfigTimeout=1"; elif [ -n "$_boot_hc_efi" ]; then warn "  boot timeout EFI: LoaderConfigTimeout=$_boot_hc_efi, overrides loader.conf (run: sudo bootctl set-timeout 1)"; else info "  boot timeout EFI: no LoaderConfigTimeout variable, loader.conf controls it"; fi; unset _boot_hc_ok _boot_hc_seen _boot_hc_efi _f
-command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
-command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
-if command -v spotify >/dev/null 2>&1; then info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
-command -v gnome-calculator >/dev/null 2>&1 && info "  calculator: gnome-calculator present (Super+Shift+Q)" || warn "  calculator: gnome-calculator NOT installed, Super+Shift+Q will fail"
-command -v hexciri >/dev/null 2>&1 && info "  cli: hexciri present" || warn "  cli: hexciri NOT on PATH, hexciri plugin list will fail"
-command -v checkupdates >/dev/null 2>&1 && info "  update check: checkupdates present (update icon)" || warn "  update check: checkupdates NOT installed, update icon never shows"
-command -v eos-update >/dev/null 2>&1 && info "  update engine: eos-update present (repo + AUR, --aur)" || warn "  update engine: eos-update NOT installed, hexciri update falls back to pacman -Syu --noconfirm"
-grep -q '^ILoveCandy' /etc/pacman.conf 2>/dev/null && info "  pacman bars: ILoveCandy on (Pac-Man eating dots)" || warn "  pacman bars: ILoveCandy NOT set in /etc/pacman.conf, pacman shows the plain bar"
-command -v mise >/dev/null 2>&1 && info "  mise: $(mise --version 2>/dev/null || echo present)" || warn "  mise: NOT installed, Omarchy scripts that call mise will fail"
-[ -f /etc/mise/conf.d/hexciri-tools.toml ] && info "  mise tools: /etc/mise/conf.d/hexciri-tools.toml present (node, uv, gh, lazy; no AI agents, no Herdr)" || warn "  mise tools: /etc/mise/conf.d/hexciri-tools.toml missing"
-[ -f "$HOME/.config/kitty/kitty.conf" ] && info "  kitty config: ~/.config/kitty/kitty.conf present (theme include)" || warn "  kitty config: not placed, Kitty will not load theme colours"
-[ -d "$HEXCIRI_PATH/default/themed" ] && info "  theme templates: default/themed present" || warn "  theme templates: default/themed missing, theme-set generates nothing"
-if command -v grim >/dev/null 2>&1 && command -v slurp >/dev/null 2>&1; then info "  screenshot: grim + slurp present (PRINT, hexciri-capture-screenshot)"; else warn "  screenshot: grim/slurp missing, PRINT will fail"; fi
-command -v tesseract >/dev/null 2>&1 && info "  OCR: tesseract present (SUPER+CTRL+PRINT capture-text)" || warn "  OCR: tesseract NOT installed, capture-text will fail"
+if command -v mpv >/dev/null 2>&1; then hc_info "  video: mpv present"; else warn "  video: mpv NOT installed"; fi
+if command -v gpu-screen-recorder >/dev/null 2>&1; then hc_info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
+if command -v localsend >/dev/null 2>&1; then hc_info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
+if command -v fastfetch >/dev/null 2>&1; then hc_info "  fastfetch: present"; else warn "  fastfetch: NOT installed"; fi
+if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then hc_info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
+grep -q 'hexciri-launch-about --render' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q 'hexciri-launch-or-focus-tui --app-id=org.hexciri.about' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q '_about_fit' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && hc_info "  about: launch-about is the two-mode fastfetch (--render runs inside the terminal, no bash -c quoting trap)" || warn "  about: launch-about is not the two-mode --render script, System > About may open and close at once"
+grep -q 'icon.txt' /etc/fastfetch/config.jsonc 2>/dev/null && hc_info "  about logo: fastfetch config logo points at icon.txt" || warn "  about logo: fastfetch config logo does not point at icon.txt, About may render a blank logo column"
+if grep -q '^gtk-theme-name=Adwaita$' "$HOME/.config/gtk-4.0/settings.ini" 2>/dev/null && ! grep -q 'Adwaita-dark' "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini" 2>/dev/null; then hc_info "  gtk picker: settings.ini theme=Adwaita, no Adwaita-dark (GTK4 dark comes from prefer-dark)"; else warn "  gtk picker: settings.ini still names Adwaita-dark or is missing, file picker will come up light with ghost text"; fi
+if command -v dbus-run-session >/dev/null 2>&1; then _gtk_scheme_now="$(dbus-run-session -- gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || echo unknown)"; if [ "$_gtk_scheme_now" = "'prefer-dark'" ]; then hc_info "  gtk picker: dconf color-scheme=prefer-dark (portal dialog reads dconf on Wayland, not settings.ini)"; else warn "  gtk picker: dconf color-scheme=$_gtk_scheme_now, portal file picker may stay light (expected 'prefer-dark' for a dark theme)"; fi; unset _gtk_scheme_now; fi
+[ -x /usr/lib/hexciri/speedtest ] && hc_info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
+command -v btm >/dev/null 2>&1 && hc_info "  activity monitor: btm present (Super+Shift+T)" || warn "  activity monitor: btm NOT installed, Super+Shift+T will fail (package: bottom, binary: btm)"
+_boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do if [ -f "$_f" ]; then _boot_hc_seen=1; grep -q '^timeout 1$' "$_f" 2>/dev/null || _boot_hc_ok=0; fi; done; if [ "$_boot_hc_seen" -eq 1 ] && [ "$_boot_hc_ok" -eq 1 ]; then hc_info "  boot timeout: every loader.conf says timeout 1"; elif [ "$_boot_hc_seen" -eq 0 ]; then warn "  boot timeout: no loader.conf found (GRUB or other bootloader?)"; else warn "  boot timeout: a loader.conf does not say timeout 1 (grep timeout in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf)"; fi; _boot_hc_efi=""; [ -r /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f ] && _boot_hc_efi="$(tail -c +5 /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')"; if [ "$_boot_hc_efi" = "1" ]; then hc_info "  boot timeout EFI: LoaderConfigTimeout=1"; elif [ -n "$_boot_hc_efi" ]; then warn "  boot timeout EFI: LoaderConfigTimeout=$_boot_hc_efi, overrides loader.conf (run: sudo bootctl set-timeout 1)"; else hc_info "  boot timeout EFI: no LoaderConfigTimeout variable, loader.conf controls it"; fi; unset _boot_hc_ok _boot_hc_seen _boot_hc_efi _f
+command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && hc_info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
+command -v xdg-terminal-exec >/dev/null 2>&1 && hc_info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
+if command -v spotify >/dev/null 2>&1; then hc_info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then hc_info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
+command -v gnome-calculator >/dev/null 2>&1 && hc_info "  calculator: gnome-calculator present (Super+Shift+Q)" || warn "  calculator: gnome-calculator NOT installed, Super+Shift+Q will fail"
+command -v hexciri >/dev/null 2>&1 && hc_info "  cli: hexciri present" || warn "  cli: hexciri NOT on PATH, hexciri plugin list will fail"
+command -v checkupdates >/dev/null 2>&1 && hc_info "  update check: checkupdates present (update icon)" || warn "  update check: checkupdates NOT installed, update icon never shows"
+command -v eos-update >/dev/null 2>&1 && hc_info "  update engine: eos-update present (repo + AUR, --aur)" || warn "  update engine: eos-update NOT installed, hexciri update falls back to pacman -Syu --noconfirm"
+grep -q '^ILoveCandy' /etc/pacman.conf 2>/dev/null && hc_info "  pacman bars: ILoveCandy on (Pac-Man eating dots)" || warn "  pacman bars: ILoveCandy NOT set in /etc/pacman.conf, pacman shows the plain bar"
+command -v mise >/dev/null 2>&1 && hc_info "  mise: $(mise --version 2>/dev/null || echo present)" || warn "  mise: NOT installed, Omarchy scripts that call mise will fail"
+[ -f /etc/mise/conf.d/hexciri-tools.toml ] && hc_info "  mise tools: /etc/mise/conf.d/hexciri-tools.toml present (node, uv, gh, lazy; no AI agents, no Herdr)" || warn "  mise tools: /etc/mise/conf.d/hexciri-tools.toml missing"
+[ -f "$HOME/.config/kitty/kitty.conf" ] && hc_info "  kitty config: ~/.config/kitty/kitty.conf present (theme include)" || warn "  kitty config: not placed, Kitty will not load theme colours"
+[ -d "$HEXCIRI_PATH/default/themed" ] && hc_info "  theme templates: default/themed present" || warn "  theme templates: default/themed missing, theme-set generates nothing"
+if command -v grim >/dev/null 2>&1 && command -v slurp >/dev/null 2>&1; then hc_info "  screenshot: grim + slurp present (PRINT, hexciri-capture-screenshot)"; else warn "  screenshot: grim/slurp missing, PRINT will fail"; fi
+command -v tesseract >/dev/null 2>&1 && hc_info "  OCR: tesseract present (SUPER+CTRL+PRINT capture-text)" || warn "  OCR: tesseract NOT installed, capture-text will fail"
 if [ "$HC_FAIL" -eq 0 ]; then
   info "Health check: clean"
 else
@@ -4647,6 +4838,9 @@ unset _check
 
 # --- Final checklist ---
 
+if [ "${IS_RERUN:-0}" = "1" ]; then
+  step "Hexciri re-run done. Settings and theme preserved, no reboot checklist (fresh-install list is in the installer source)."
+else
 step "Hexiri 2.0 single install done. Test after reboot."
 cat <<'EOF'
 Reboot, then check in order:
@@ -4715,6 +4909,7 @@ Phase 2 is NOT installed. Next steps are separate work:
   Hexciri Lua edits, port Hexciri scripts from Noctalia to QS, theme engine merge,
   arch-updates EndeavourOS backend, Nyxiri overlay, THPM install. (hexciri-update rework done 2026-11-24: eos-update --aur + Hexciri self-update + mise.)
 EOF
+fi
 
 # --- Reboot offer, like v1 ---
 # Never auto-reboots unless --reboot was passed. Never hangs: with

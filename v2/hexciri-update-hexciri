@@ -30,6 +30,13 @@
 # straight to the system packages.
 # The git fetch to check that is tiny, so an unchanged update no longer
 # downloads 43 MB first.
+# Light sync (2026-11-24, Devi: v1 just cloned git and left the system
+# alone): if the installer changed but both fork fingerprints match the
+# installed ones, the installed fork is already correct -- the installer
+# is NOT re-run at all. install.sh --light-sync just updates the marker
+# and the two repo bins. A change outside the fork (output wording,
+# package lists, health) changes neither fingerprint, so it light-syncs
+# instead of re-running the installer and touching packages/theme.
 #
 # Output (2026-11-24, Devi): one themed section, like every other update
 # step, then one short status line, then the next section. Screen shows:
@@ -159,6 +166,29 @@ detail "sync method: $SYNC_METHOD"
 SHORT=""
 if [[ $SYNC_METHOD == "git" && $NEW_COMMIT != "none" ]]; then
   SHORT="$NEW_COMMIT"
+fi
+
+# Light sync: installer changed but the fork did not. Compare the
+# fingerprints of the new installer against the installed markers;
+# on a match, --light-sync updates the marker + repo bins and exits,
+# no installer re-run, no pacman, no theme, no settings touched.
+INSTALLED_UP="$(cat /usr/share/hexciri/.upstream-fingerprint 2>/dev/null || true)"
+INSTALLED_PATCH="$(cat /usr/share/hexciri/.patch-fingerprint 2>/dev/null || true)"
+if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA != "$OLD_SHA" && -n $INSTALLED_UP && -n $INSTALLED_PATCH ]]; then
+  _fp_out="$(bash "$SOURCE_ROOT/v2/install.sh" --print-fingerprints 2>/dev/null || true)"
+  _new_up="$(printf '%s\n' "$_fp_out" | grep '^upstream=' | cut -d= -f2)"
+  _new_patch="$(printf '%s\n' "$_fp_out" | grep '^patch=' | cut -d= -f2)"
+  detail "installed fingerprints: upstream=${INSTALLED_UP:0:12} patch=${INSTALLED_PATCH:0:12}"
+  detail "nyx fingerprints: upstream=${_new_up:0:12} patch=${_new_patch:0:12}"
+  if [[ -n $_new_up && -n $_new_patch && $_new_up == "$INSTALLED_UP" && $_new_patch == "$INSTALLED_PATCH" ]]; then
+    detail "fingerprints match, light sync (no installer re-run)"
+    echo "Hexciri is up to date${SHORT:+ ($SHORT)} (light sync, no installer re-run)"
+    if bash "$SOURCE_ROOT/v2/install.sh" --light-sync; then
+      [[ -n ${TARBALL_WORKDIR:-} ]] && rm -rf "$TARBALL_WORKDIR"
+      exit 0
+    fi
+    detail "light sync failed, falling through to a full installer re-run"
+  fi
 fi
 
 # Drift check: a matching sha only proves the marker was written, not
