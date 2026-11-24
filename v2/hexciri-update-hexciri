@@ -179,7 +179,7 @@ else
   echo "Git sync failed, trying tarball download..."
   if ! tarball_sync; then
     if [[ ${HEXCIRI_UPDATE_CONTINUE_ON_SYNC_FAIL:-0} == "1" ]]; then
-      echo "Hexciri sync failed (network/DNS down?), skipping Hexciri self-update this run, system update continues. Details: $DETAIL_LOG"
+      echo "Hexciri sync failed (network/DNS down? check dock Ethernet / Wi-Fi), skipping Hexciri self-update this run, system update continues. Details: $DETAIL_LOG"
       detail "sync failed, continuing with system update (HEXCIRI_UPDATE_CONTINUE_ON_SYNC_FAIL=1)"
       exit 0
     fi
