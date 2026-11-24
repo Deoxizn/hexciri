@@ -2087,9 +2087,18 @@ step "Placing forked tree: /usr/share/hexciri (sudo), ~/.config, ~/.local/state"
 
 sudo rm -rf "$HEXCIRI_PATH"
 sudo mkdir -p "$HEXCIRI_PATH"
-sudo cp -a "$FORK_OUT/shell" "$FORK_OUT/default" "$FORK_OUT/themes" "$FORK_OUT/bin" "$FORK_OUT/install" "$HEXCIRI_PATH/"
+sudo cp -a "$FORK_OUT/shell" "$FORK_OUT/default" "$FORK_OUT/themes" "$FORK_OUT/bin" "$FORK_OUT/install" "$FORK_OUT/icons" "$HEXCIRI_PATH/"
+# icons/ is required (copy_subset dies if upstream lacks it), but
+# logo.txt / icon.txt are optional in copy_subsets (warn only), so
+# copy them only when present: a missing file in the cp line above
+# would fail the whole placement under set -e, while the verification
+# below dies with the clearer "missing: logo.txt / icon.txt" error.
+for _txt in logo.txt icon.txt; do
+  [ -f "$FORK_OUT/$_txt" ] && sudo cp -a "$FORK_OUT/$_txt" "$HEXCIRI_PATH/"
+done
+unset _txt
 sudo chmod +x "$HEXCIRI_PATH"/bin/* 2>/dev/null || true
-info "Installed: $HEXCIRI_PATH/shell, $HEXCIRI_PATH/default, $HEXCIRI_PATH/themes, $HEXCIRI_PATH/bin, $HEXCIRI_PATH/install (browser-policy helpers)"
+info "Installed: $HEXCIRI_PATH/shell, $HEXCIRI_PATH/default, $HEXCIRI_PATH/themes, $HEXCIRI_PATH/bin, $HEXCIRI_PATH/install (browser-policy helpers), $HEXCIRI_PATH/icons, $HEXCIRI_PATH/logo.txt, $HEXCIRI_PATH/icon.txt"
 
 mkdir -p "$HOME/.config/hypr" "$HOME/.config/hexciri" \
   "$HOME/.local/state/hexciri/current" "$HOME/.local/state/hexciri/toggles/hypr" \
@@ -2326,7 +2335,17 @@ if [ -d "$HEXCIRI_PATH" ]; then
       # comments, hexciri-webapp-handler bare is a regex pattern in the
       # menu jsonc (real handlers are -hey/-zoom), hexciri-windows-vm
       # is the Docker/KVM VM manager, out of Phase 1 scope.
+      # Scan false positives, 2026-11-23: the grep token also matches
+      # lock filenames (theme-set-retint.lock), package names in a
+      # comment (themes-intros/loops, Omarchy-repo packages, not Arch),
+      # a runtime dir (theme-sync; the real toggle is
+      # toggle-theme-sync), temp-file suffixes (.hexciri-tmp), a dynamic
+      # concatenation ("hexciri-toggle-" .. toggle in helpers.lua:249),
+      # and a modprobe conf filename (hexciri-toprow.conf; the real
+      # command is device-keyboard-toprow). None is a bin, so there is
+      # nothing to add to is_allowed_bin for them.
       hexciri-weather | hexciri-tzupdate | hexciri-wheel | hexciri-webapp-handler | hexciri-windows-vm) continue ;;
+      hexciri-theme-set-retint | hexciri-themes-intros | hexciri-themes-loops | hexciri-theme-sync | hexciri-tmp | hexciri-toggle- | hexciri-toprow) continue ;;
     esac
     if [ -x "$HEXCIRI_PATH/bin/$_cmd" ] || command -v "$_cmd" >/dev/null 2>&1; then
       info "  forked-tree command present: $_cmd"
