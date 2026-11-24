@@ -1039,7 +1039,7 @@ QVariant Store::list(const QString &name) {
         QVariantList out;
         const QDir dir(m_paths.config + "/hexciri/settings-panes");
         for (const QFileInfo &info : dir.entryInfoList({"*.json"}, QDir::Files, QDir::Name)) {
-            const QJsonObject o = QJsonDocument::fromJson(readFile(info.absoluteFilePath())).object();
+            const QJsonObject o = QJsonDocument::fromJson(readFile(info.absoluteFilePath()).toUtf8()).object();
             if (o.value("id").toString().isEmpty() || o.value("qml").toString().isEmpty())
                 continue;
             out << entry({{"id", o.value("id").toString()},

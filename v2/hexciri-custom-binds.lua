@@ -38,7 +38,10 @@ o.bind("SUPER + CTRL + M", "Messenger webapp", "hexciri-launch-or-focus-webapp m
 -- app, not a shell plugin. Super+Ctrl+S is reclaimed for it in the
 -- installer fork patch: upstream bound it to Share, Share now lives on
 -- Super+Ctrl+Shift+S. Super+Alt+S is scratchpad, not Settings.
-o.bind("SUPER + CTRL + S", "Hexciri Settings", "hexciri-settings")
+-- The bind runs hexciri-launch-settings, not the binary directly:
+-- when the Qt build has not landed yet it notifies with the rebuild
+-- command instead of silently doing nothing (2026-11-24).
+o.bind("SUPER + CTRL + S", "Hexciri Settings", "hexciri-launch-settings")
 
 -- Screen record on Alt+Print. Region/screenshot stay on Omarchy's binds.
 o.bind("ALT + Print", "Screen record", "hexciri-capture-screenrecording")

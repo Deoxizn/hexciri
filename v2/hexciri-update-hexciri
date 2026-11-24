@@ -222,7 +222,7 @@ fi
 # no installer re-run, no pacman, no theme, no settings touched.
 INSTALLED_UP="$(cat /usr/share/hexciri/.upstream-fingerprint 2>/dev/null || true)"
 INSTALLED_PATCH="$(cat /usr/share/hexciri/.patch-fingerprint 2>/dev/null || true)"
-if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA != "$OLD_SHA" && -n $INSTALLED_UP && -n $INSTALLED_PATCH ]] && bootstrap_ok /usr/share/hexciri/default/hypr/bootstrap.lua && hyprlua_ok /usr/share/hexciri/default/hypr/hexciri.lua; then
+if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA != "$OLD_SHA" && -n $INSTALLED_UP && -n $INSTALLED_PATCH ]] && bootstrap_ok /usr/share/hexciri/default/hypr/bootstrap.lua && hyprlua_ok /usr/share/hexciri/default/hypr/hexciri.lua && [ -x "$HOME/.local/bin/hexciri-settings" ]; then
   _fp_out="$(bash "$SOURCE_ROOT/v2/install.sh" --print-fingerprints 2>/dev/null || true)"
   _new_up="$(printf '%s\n' "$_fp_out" | grep '^upstream=' | cut -d= -f2)"
   _new_patch="$(printf '%s\n' "$_fp_out" | grep '^patch=' | cut -d= -f2)"
@@ -240,11 +240,13 @@ if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA != "$OLD_SHA" && -n $INSTALLED_UP 
 fi
 
 # Drift check: a matching sha only proves the marker was written, not
-# that the installed tree is complete. If theme-ansi is missing or the
-# logo is not Devi's art, re-run the installer even on a sha match.
+# that the installed tree is complete. If theme-ansi is missing, the
+# logo is not Devi's art, or the Hexciri Settings binary is missing
+# (a failed Qt build must be retried by the next update, never left
+# for a manual build), re-run the installer even on a sha match.
 if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA == "$OLD_SHA" ]]; then
-  if [[ ! -x /usr/share/hexciri/bin/hexciri-theme-ansi ]] || ! bootstrap_ok /usr/share/hexciri/default/hypr/bootstrap.lua || ! hyprlua_ok /usr/share/hexciri/default/hypr/hexciri.lua || ! head -1 /usr/share/hexciri/logo.txt 2>/dev/null | grep -q '▄███▄'; then
-    detail "sha matches but installed tree is drifting (theme-ansi, bootstrap.lua, hexciri.lua or logo.txt missing/corrupt), re-running installer"
+  if [[ ! -x /usr/share/hexciri/bin/hexciri-theme-ansi ]] || ! bootstrap_ok /usr/share/hexciri/default/hypr/bootstrap.lua || ! hyprlua_ok /usr/share/hexciri/default/hypr/hexciri.lua || ! head -1 /usr/share/hexciri/logo.txt 2>/dev/null | grep -q '▄███▄' || [[ ! -x $HOME/.local/bin/hexciri-settings ]]; then
+    detail "sha matches but installed tree is drifting (theme-ansi, bootstrap.lua, hexciri.lua, logo.txt or hexciri-settings binary missing/corrupt), re-running installer"
     # Self-heal first: if the fork cache still has a good bootstrap.lua,
     # restore just that file now, so the next boot works even if the
     # installer re-run below is interrupted.

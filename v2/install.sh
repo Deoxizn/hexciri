@@ -194,7 +194,7 @@ patch_fingerprint() {
   {
     sed -n '/^# --- Wire the compat alias in, before placement ---/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
     find "$HEXCIRI_REPO_ROOT/v2/hexciri-settings" -type f 2>/dev/null | sort | xargs sha256sum 2>/dev/null || printf 'missing hexciri-settings\n'
-    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs"; do
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
@@ -402,7 +402,7 @@ current_theme_name() {
 # no fork, no theme re-apply, no settings touched at all.
 if [ "${LIGHT_SYNC:-0}" = "1" ]; then
   _ls_sha="$(sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1)"
-  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link hexciri-web-search hexciri-settings-tabs; do
+  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link hexciri-web-search hexciri-settings-tabs hexciri-launch-settings; do
     if [ -f "$HEXCIRI_REPO_ROOT/v2/$_ls_f" ] && [ -d /usr/share/hexciri/bin ]; then
       if ! cmp -s "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" 2>/dev/null; then
         sudo install -Dm755 "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" && info "Light sync: updated /usr/share/hexciri/bin/$_ls_f"
@@ -2619,7 +2619,7 @@ for _line in _mlines:
         _lean_removed += 1
         continue
     _kept2.append(_line)
-_settings_row = '  "settings": {"icon":"","label":"Settings","action":"hexciri-settings"},'
+_settings_row = '  "settings": {"icon":"","label":"Settings","action":"hexciri-launch-settings"},'
 if not any(_row_key(_l) == "settings" for _l in _kept2):
     for _i, _l in enumerate(_kept2):
         if _row_key(_l) == "system":
@@ -3227,6 +3227,17 @@ if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" ]; then
   info "  settings tabs: hexciri-settings-tabs installed (extra panes: Nyxiri tab hook)"
 else
   die "v2/hexciri-settings-tabs not in the installer tree, Hexciri Settings extra panes cannot be registered"
+fi
+# hexciri-launch-settings (repo file v2/hexciri-launch-settings):
+# Super+Ctrl+S / menu Settings launcher. Opens hexciri-settings
+# when built; when the binary is missing it notifies with the
+# rebuild command instead of silently doing nothing (2026-11-24).
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings" "$FORK_OUT/bin/hexciri-launch-settings"
+  chmod +x "$FORK_OUT/bin/hexciri-launch-settings"
+  info "  settings launcher: hexciri-launch-settings installed (Super+Ctrl+S, notifies when the app is not built yet)"
+else
+  die "v2/hexciri-launch-settings not in the installer tree, Super+Ctrl+S Settings will fail silently"
 fi
 # Hexciri custom Lua, 2026-11-24 (Devi: Hexciri Lua, custom parts only).
 # v1 binds.lua / windowrules.lua mostly mimic Omarchy, so only the
@@ -5433,14 +5444,22 @@ if [ -d "$HEXCIRI_REPO_ROOT/v2/hexciri-settings" ]; then
   mkdir -p "$HOME/.local/opt"
   rm -rf "$SETTINGS_SRC"
   cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-settings" "$SETTINGS_SRC" && info "  settings source copied: $SETTINGS_SRC (fork of ipkalid/omarchy-settings ad54288)" || warn "  could not copy Hexciri Settings source, app will not be installed"
-  if [ -x "$SETTINGS_SRC/install" ]; then
-    if "$SETTINGS_SRC/install" --quiet; then
+  # GitHub push-files does not preserve exec bits (AGENTS.md): every
+  # file in the vendored tree lands 644, so after cp -a the install
+  # script is NOT executable and `[ -x ... ]` is false, so the build
+  # silently never ran on 2026-11-24 (no binary, no desktop entry, no
+  # build.log). chmod the scripts AND invoke via bash, never direct
+  # exec; repo modes cannot be trusted. This step rm -rf's + recopies
+  # the source, so the next update repairs existing installs too.
+  chmod +x "$SETTINGS_SRC/install" "$SETTINGS_SRC/uninstall" "$SETTINGS_SRC/bin/build" "$SETTINGS_SRC/bin/install" "$SETTINGS_SRC/bin/test" 2>/dev/null || true
+  if [ -f "$SETTINGS_SRC/install" ]; then
+    if bash "$SETTINGS_SRC/install" --quiet; then
       info "  settings installed: hexciri-settings $(hexciri-settings --version 2>/dev/null || echo present) (Super+Ctrl+S, launcher: Hexciri Settings)"
     else
-      warn "  Hexciri Settings build failed (log: ~/.cache/hexciri-settings-build/build.log, status: $SETTINGS_SRC/install --status), app missing until rebuilt by hand: $SETTINGS_SRC/install"
+      warn "  Hexciri Settings build failed (log: ~/.cache/hexciri-settings-build/build.log); the next hexciri update retries the build automatically"
     fi
   else
-    warn "  Hexciri Settings install script missing, app not built"
+    warn "  Hexciri Settings install script missing from the copied source, app not built"
   fi
 else
   warn "  v2/hexciri-settings not in the installer tree, Hexciri Settings not installed"
@@ -5817,7 +5836,8 @@ if grep -q '^gtk-theme-name=Adwaita$' "$HOME/.config/gtk-4.0/settings.ini" 2>/de
 if command -v dbus-run-session >/dev/null 2>&1; then _gtk_scheme_now="$(dbus-run-session -- gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || echo unknown)"; if [ "$_gtk_scheme_now" = "'prefer-dark'" ]; then hc_info "  gtk picker: dconf color-scheme=prefer-dark (portal dialog reads dconf on Wayland, not settings.ini)"; else warn "  gtk picker: dconf color-scheme=$_gtk_scheme_now, portal file picker may stay light (expected 'prefer-dark' for a dark theme)"; fi; unset _gtk_scheme_now; fi
 [ -x /usr/lib/hexciri/speedtest ] && hc_info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
 command -v btm >/dev/null 2>&1 && hc_info "  activity monitor: btm present (Super+Shift+T)" || warn "  activity monitor: btm NOT installed, Super+Shift+T will fail (package: bottom, binary: btm)"
-command -v hexciri-settings >/dev/null 2>&1 && hc_info "  settings: hexciri-settings present (Super+Ctrl+S, launcher: Hexciri Settings)" || warn "  settings: hexciri-settings NOT installed, Super+Ctrl+S will fail (rebuild: ~/.local/opt/hexciri-settings/install)"
+if command -v hexciri-settings >/dev/null 2>&1; then hc_info "  settings: hexciri-settings present (Super+Ctrl+S, launcher: Hexciri Settings)"; else warn "  settings: hexciri-settings NOT installed, Super+Ctrl+S will notify instead of opening (the next hexciri update retries the build automatically, log: ~/.cache/hexciri-settings-build/build.log)"; fi
+[ -x "$HEXCIRI_PATH/bin/hexciri-launch-settings" ] && hc_info "  settings launcher: hexciri-launch-settings present (Super+Ctrl+S notifies when the app is missing)" || warn "  settings launcher: hexciri-launch-settings missing from $HEXCIRI_PATH/bin, Super+Ctrl+S will fail silently"
 command -v opencode >/dev/null 2>&1 && hc_info "  agent: opencode present ($(opencode --version 2>/dev/null | head -1), free models need no account)" || warn "  agent: opencode NOT installed, hexciri-agent / default agent opencode will fail (pacman -S opencode)"
 _boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do if [ -f "$_f" ]; then _boot_hc_seen=1; grep -q '^timeout 1$' "$_f" 2>/dev/null || _boot_hc_ok=0; fi; done; if [ "$_boot_hc_seen" -eq 1 ] && [ "$_boot_hc_ok" -eq 1 ]; then hc_info "  boot timeout: every loader.conf says timeout 1"; elif [ "$_boot_hc_seen" -eq 0 ]; then _boot_hc_noconf=1; else warn "  boot timeout: a loader.conf does not say timeout 1 (grep timeout in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf)"; fi; _boot_hc_efi=""; [ -r /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f ] && _boot_hc_efi="$(tail -c +5 /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')"; if [ "$_boot_hc_efi" = "1" ]; then hc_info "  boot timeout EFI: LoaderConfigTimeout=1"; elif [ -n "$_boot_hc_efi" ]; then warn "  boot timeout EFI: LoaderConfigTimeout=$_boot_hc_efi, overrides loader.conf (run: sudo bootctl set-timeout 1)"; else hc_info "  boot timeout EFI: no LoaderConfigTimeout variable, loader.conf controls it"; fi; if [ "${_boot_hc_noconf:-0}" = "1" ] && [ "$_boot_hc_efi" != "1" ]; then warn "  boot timeout: no loader.conf found and LoaderConfigTimeout is not 1 (GRUB or other bootloader?)"; elif [ "${_boot_hc_noconf:-0}" = "1" ]; then hc_info "  boot timeout: no loader.conf on this ESP layout, EFI LoaderConfigTimeout=1 controls it"; fi; unset _boot_hc_ok _boot_hc_seen _boot_hc_efi _boot_hc_noconf _f
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && hc_info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"

@@ -1,0 +1,24 @@
+#!/bin/bash
+#
+# hexciri-launch-settings: Super+Ctrl+S / menu Settings launcher.
+# Opens Hexciri Settings when the Qt app is built; when the binary is
+# missing it notifies instead of silently doing nothing. That silent
+# nothing is what Devi saw 2026-11-24: Super+Ctrl+S did nothing
+# because the build had never run (install script 644, then a Qt 6.12
+# compile error), and Share had already moved off that chord.
+#
+#   hexciri-launch-settings            open Settings, or notify + exit 1
+set -euo pipefail
+
+if command -v hexciri-settings >/dev/null 2>&1; then
+  exec hexciri-settings "$@"
+fi
+
+_msg="The next hexciri update retries the build automatically (log: ~/.cache/hexciri-settings-build/build.log)"
+if command -v hexciri-notification-send >/dev/null 2>&1; then
+  hexciri-notification-send "Hexciri Settings not installed" "$_msg" 2>/dev/null || true
+elif command -v notify-send >/dev/null 2>&1; then
+  notify-send "Hexciri Settings not installed" "$_msg" 2>/dev/null || true
+fi
+echo "hexciri-settings not installed; the next hexciri update retries the build automatically (log: ~/.cache/hexciri-settings-build/build.log)" >&2
+exit 1

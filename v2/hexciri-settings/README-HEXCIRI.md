@@ -48,10 +48,16 @@ installer / `./install` copies it to
 No code change, no rebuild of the binary needed (the icon is a file,
 not compiled in).
 
-## Rebuild by hand
+## Build — automatic, no manual command
+
+`hexciri update` builds and installs this app itself (the installer
+copies this source to `~/.local/opt/hexciri-settings`, chmods the
+install script — GitHub strips exec bits — and runs it). If a build
+fails, the next update retries it automatically; a missing binary
+is a drift trigger, so it is never left for a manual build. The
+build log is `~/.cache/hexciri-settings-build/build.log`.
 
 ```bash
-~/.local/opt/hexciri-settings/install   # rebuild + reinstall, user only
 hexciri-settings open appearance        # open a pane: hexciri-settings open <pane>
 ```
 
