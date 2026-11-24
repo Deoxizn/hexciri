@@ -54,7 +54,6 @@ fd
 fzf
 eza
 bat
-btop
 starship
 zoxide
 fastfetch
@@ -84,12 +83,12 @@ terminus-font
 # Arch substitutes for Omarchy-repo-only apps (2026-11-23, v2/install.sh
 # patch step). Do NOT install the Omarchy-repo-only ones, they have no
 # Arch or AUR package: omasnap -> grim + slurp (above), omacalc ->
-# gnome-calculator, cliamp -> ncspot, omawrite -> apostrophe, herdr bind
+# gnome-calculator, cliamp -> ncspot, omawrite -> ghostwriter, herdr bind
 # removed (AI agent, out of v2 scope), omaview -> imv.
 # Spotify is AUR, not pacman: yay -S spotify (fallback: pacman
 # spotify-launcher, plus a spotify wrapper in /usr/share/hexciri/bin/).
 # spicetify-cli is AUR too: yay -S spicetify-cli.
 gnome-calculator
 ncspot
-apostrophe
+ghostwriter
 tesseract

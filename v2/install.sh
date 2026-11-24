@@ -205,7 +205,7 @@ CORE_PKGS=(
   xdg-user-dirs xdg-utils xorg-xwayland
   qt6-base qt6-declarative qt6-wayland qt6-svg qt6-5compat qt6-multimedia qt6-imageformats
   polkit rtkit gnome-keyring libsecret
-  pamixer brightnessctl jq bc curl wget git base-devel
+  pamixer brightnessctl jq bc curl wget git base-devel pacman-contrib # checkupdates, for hexciri-update-available (update icon)
   imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip
   ripgrep fd fzf eza bat starship zoxide fastfetch
   # NOTE 2026-11-23: no btop here, v1 removes it, bottom (in APP_PKGS below)
@@ -228,19 +228,15 @@ CORE_PKGS=(
 
 sudo pacman -S --needed --noconfirm "${CORE_PKGS[@]}"
 
-# xdg-terminal-exec is NOT in stable extra (extra-testing 0.14.4-1 / AUR),
-# so it must never go in the pacman CORE_PKGS call above: a missing target
-# aborts the whole transaction. Install it best-effort via yay instead.
+# xdg-terminal-exec is NOT in stable extra and NOT in the AUR (only
+# extra-testing 0.14.4-1), so it must never go in the pacman CORE_PKGS call
+# above, and yay -S xdg-terminal-exec can never succeed: do not try it.
 # launch-terminal's fast path (xdg-terminals.list, kitty first) works
-# without it, but floating/presentation terminals and the menu trigger's
-# right-click call the binary directly, and its absence showed as
-# "App failure, Command not found: xdg-terminal-exec".
+# without it, and the binary is usually already present on EndeavourOS.
+# If it is missing, enable extra-testing and install it from there; until
+# then floating/presentation terminals fall back to the fast path.
 if ! command -v xdg-terminal-exec >/dev/null 2>&1; then
-  if yay -S --needed --noconfirm xdg-terminal-exec 2>/dev/null; then
-    info "xdg-terminal-exec installed via yay"
-  else
-    warn "xdg-terminal-exec not installed (yay failed or AUR unreachable), terminal launches use the xdg-terminals.list fast path only. Install later: yay -S xdg-terminal-exec"
-  fi
+  warn "xdg-terminal-exec not installed (only in Arch extra-testing, not AUR), terminal launches use the xdg-terminals.list fast path only. Install later from extra-testing if a floating terminal needs it."
 fi
 
 step "Updating user directories"
@@ -268,7 +264,7 @@ xdg-user-dirs-update || warn "xdg-user-dirs-update failed, not fatal."
 #     them (capture-text and capture-qr already used grim/slurp directly).
 #   omacalc (SUPER+SHIFT+Q, XF86Calculator) -> gnome-calculator.
 #   cliamp (Music TUI, SUPER+SHIFT+ALT+M) -> ncspot (Spotify TUI).
-#   omawrite (SUPER+SHIFT+W) -> apostrophe (writing app).
+#   omawrite (SUPER+SHIFT+W) -> ghostwriter (writing app, Qt6, no Haskell).
 #   herdr (SUPER+CTRL+RETURN, Omarchy AI-agent terminal) -> bind removed,
 #     herdr is an AI agent and AI agents are out of v2 scope; tmux is
 #     already on Super+Alt+Return. omaview -> imv (already the v1 image
@@ -285,7 +281,7 @@ APP_PKGS=(
   # Bind/menu-called: neovim (Super+Shift+N, launch-editor falls back to
   # nvim), tmux (Super+Alt+Return), obsidian (Super+Shift+O),
   # gpu-screen-recorder + wf-recorder fallback (menu Capture > Screenrecord),
-  # zbar (capture-qr decodes with zbarimg), localsend (menu Share > Receive),
+  # zbar (capture-qr decodes with zbarimg), localsend is AUR localsend-bin (own step below, menu Share > Receive),
   # mpv (v1 default video player), zathura + plugins (v1 PDF pick),
   # imv (v1 image viewer pick), zed (v1 editor pick), playerctl (v1 layer
   # need, media keys), bottom (v1 pick, replaces btop), seahorse (keyring
@@ -300,17 +296,17 @@ APP_PKGS=(
   # Omarchy apps can just substitute with Arch defaults/alternatives, do
   # NOT try to install the Omarchy-repo-only ones): gnome-calculator for
   # omacalc (SUPER+SHIFT+Q, XF86Calculator), ncspot for cliamp (Music TUI,
-  # SUPER+SHIFT+ALT+M, a Spotify TUI, Arch extra), apostrophe for omawrite
+  # SUPER+SHIFT+ALT+M, a Spotify TUI, Arch extra), ghostwriter for omawrite
   # (SUPER+SHIFT+W, a writing app, Arch extra). Screenshot (omasnap) is
   # substituted in the fork patch step below: hexciri-capture-screenshot is
   # rewritten to grim + slurp, both already in CORE_PKGS. Spotify is NOT
   # here, it is AUR (yay -S spotify) in its own step below.
-  neovim tmux obsidian localsend gpu-screen-recorder wf-recorder
+  neovim tmux obsidian gpu-screen-recorder wf-recorder
   mpv zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb
   zed playerctl bottom seahorse fwupd adw-gtk-theme tesseract tesseract-data-eng
   cliphist libqalculate libreoffice-fresh pinta gnome-disk-utility
   lazygit yt-dlp gvfs zbar qrencode imv eject
-  gnome-calculator ncspot apostrophe
+  gnome-calculator ncspot ghostwriter
 )
 if ! sudo pacman -S --needed --noconfirm "${APP_PKGS[@]}"; then
   warn "Bulk default-apps install failed, retrying per package (best-effort)."
@@ -322,6 +318,21 @@ if ! sudo pacman -S --needed --noconfirm "${APP_PKGS[@]}"; then
     fi
   done
   unset _pkg
+fi
+
+# --- LocalSend (menu Share > Receive), AUR, best-effort ---
+# localsend is NOT in the Arch repos, so it must never go in the pacman
+# APP_PKGS call above: a missing target aborts the whole bulk transaction
+# and the per-package retry just warns. The AUR package is localsend-bin
+# (1.18.2-2, more popular than the source localsend build). Devi 2026-11-23:
+# yay -S localsend-bin for that one.
+step "Installing LocalSend (AUR localsend-bin, best-effort)"
+if command -v localsend >/dev/null 2>&1; then
+  info "LocalSend already present"
+elif yay -S --needed --noconfirm localsend-bin 2>/dev/null; then
+  info "LocalSend installed via yay (AUR localsend-bin)"
+else
+  warn "LocalSend install failed (yay/AUR unreachable), menu Share > Receive will fail until it is installed. Install by hand: yay -S localsend-bin"
 fi
 
 # --- Brave Origin (default browser), AUR, best-effort ---
@@ -679,7 +690,7 @@ copy_optional_path() {
 is_allowed_bin() {
   local name="$1"
   case "$name" in
-    launch-shell | theme-set | theme-set-templates | plugin-add | plugin-catalog | plugin-clone | plugin-disable | plugin-enable | plugin-list | plugin-remove | plugin-update | plugin-validate | bar | bar-text-color | shell | shell-config | migrate | migrate-notify | hook | hook-install | \
+    launch-shell | omarchy | done | restart-* | theme-set | theme-set-templates | plugin-add | plugin-catalog | plugin-clone | plugin-disable | plugin-enable | plugin-list | plugin-remove | plugin-update | plugin-validate | bar | bar-text-color | shell | shell-config | migrate | migrate-notify | hook | hook-install | \
       refresh-hyprland | hyprland-reload-guard | notification-send | menu | menu-clipboard | menu-emoji | menu-emoji-insert | menu-file | menu-herdr-keybindings | menu-images | menu-input | menu-keybindings | menu-plugin | menu-region-formats | menu-select | menu-share | menu-timezone | menu-tmux-keybindings | \
       provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | launch-* | \
       cmd-* | default-terminal | action | i18n | notification-wait | software-rendering | toggle-enabled | hyprland-toggle-enabled | hyprland-software-rendering | hw-software-rendering | powerprofiles-init | powerprofiles-set | powerprofiles-floor | powerprofiles-list | hyprland-monitor-watch | hyprland-monitor-clamshell | hyprland-monitor-modeless | hyprland-monitor-external-active | hyprland-monitor-identity | hyprland-monitor-internal | hyprland-monitor-internal-mirror | hyprland-monitor-laptop | hyprland-workspace-layout-current | hyprland-workspace-layout-toggle | hyprland-workspace-layout-default | hw-laptop | hw-clamshell | hw-external-monitors | system-lid-inhibit | restart-hyprctl | \
@@ -763,6 +774,15 @@ copy_subsets() {
   # every lookup returns the literal key, so the clock panel showed
   # "clock.monthYear" / "clock.weekShortSUN" instead of real dates.
   copy_subset "$OMARCHY_SRC/default/i18n" "$FORK_OUT/default/i18n" "default/i18n/"
+
+  # Theme templates: theme-set-templates renders default/themed/*.tpl into
+  # the staged theme (kitty.conf, tmux, obsidian, ghostty, ...). This copy
+  # was missing, so theme-set generated NOTHING and no app got themed.
+  copy_subset "$OMARCHY_SRC/default/themed" "$FORK_OUT/default/themed" "default/themed/"
+
+  # Kitty config: upstream config/kitty/kitty.conf includes the staged theme
+  # kitty.conf. Without this file Kitty never loads the theme colours.
+  copy_subset "$OMARCHY_SRC/config/kitty" "$FORK_OUT/config/kitty" "config/kitty/"
 
   # Terminal preference list: launch-terminal's fast path reads
   # xdg-terminals.list (kitty.desktop after the rename map) instead of
@@ -916,6 +936,7 @@ replacements = [
     # renaming one side would break every global shortcut. It is an
     # internal namespace, not a file, path, or CLI name.
     (b"omarchy-menu", b"hexciri-menu"),
+    (b"omarchy ", b"hexciri "),
     (b"omarchy.lua", b"hexciri.lua"),
     # Root cause of the Hyprland emergency mode on the first live boot:
     # config/hypr/hyprland.lua:17 does require("default.hypr.omarchy"), and
@@ -939,6 +960,11 @@ replacements = [
     (b"omarchy)", b"hexciri)"),
     (b"Name=Omarchy", b"Name=Hexciri"),
     (b"Author=Omarchy", b"Author=Hexciri"),
+    # Capital Omarchy in user-facing strings only (tooltip "Pending Omarchy
+    # Updates", manifest name/description, CLI help). Code identifiers use
+    # lowercase omarchy and are handled by the rules above; the deliberate
+    # non-renames ("omarchy:" prefix, value.omarchy) are lowercase too.
+    (b"Omarchy", b"Hexciri"),
     (b"omarchy/", b"hexciri/"),
     (b'"omarchy"', b'"hexciri"'),
     (b"'omarchy'", b"'hexciri'"),
@@ -984,6 +1010,40 @@ for dirpath, dirnames, filenames in os.walk(root):
             with open(path, "wb") as f:
                 f.write(new_data)
             changed_files += 1
+# Repair pass, runs after the generic rules above:
+# manifest.json files carry an "omarchy" metadata key (capabilities,
+# clonedFrom). The generic '"omarchy"' rule renamed that key to "hexciri"
+# in the JSON, while the QML reads (manifest.omarchy) were only
+# half-renamed (manifest.omarchy -> manifest.hexciri only where a ")"
+# followed), so trustedCapabilities() always got null and lock/polkit
+# lost their capabilities, and listPlugins lost its metadata. The
+# "omarchy" key is an internal API key, like the "omarchy:" global
+# shortcut prefix: restore it on both sides, JSON and QML.
+repaired = 0
+for dirpath, dirnames, filenames in os.walk(root):
+    for name in filenames:
+        path = os.path.join(dirpath, name)
+        if name == "manifest.json":
+            with open(path, "rb") as f:
+                data = f.read()
+            new_data = data.replace(b'"hexciri": {', b'"omarchy": {')
+            if new_data != data:
+                with open(path, "wb") as f:
+                    f.write(new_data)
+                repaired += 1
+        elif name.endswith((".qml", ".js")):
+            with open(path, "rb") as f:
+                data = f.read()
+            if b"\x00" in data:
+                continue
+            new_data = data.replace(b"manifest.hexciri", b"manifest.omarchy")
+            new_data = new_data.replace(b"candidateManifest.hexciri", b"candidateManifest.omarchy")
+            new_data = new_data.replace(b"plugins[id].hexciri", b"plugins[id].omarchy")
+            if new_data != data:
+                with open(path, "wb") as f:
+                    f.write(new_data)
+                repaired += 1
+print("Manifest repair pass: %d files repaired" % repaired)
 print("Content rewrite: %d files scanned, %d files changed" % (total_files, changed_files))
 PY
   info "Content rewrite complete"
@@ -1278,10 +1338,14 @@ fi
 # --- Patch Hexciri binds and substitute Omarchy-repo-only apps ---
 # Two things, both on the fork output (user-owned temp dir), before placement:
 # 1. Super+Shift+M = Spotify, Devi's own bind. Upstream has no such bind.
+# 0. Super+Space = apps, Super+Alt+Space = menu, Devi 2026-11-23.
+#    Upstream has them reversed (Super+Space = menu root,
+#    Super+Alt+Space = dock apps); swap the two chords in
+#    utilities.lua, keeping each bind's target with its line.
 # 2. Omarchy-repo-only apps are substituted with Arch defaults, per Devi
 #    2026-11-23 ("most omarchy apps we can just substitute with arch
 #    defaults/alternatives"), instead of leaving dead binds:
-#      omacalc -> gnome-calculator, cliamp -> ncspot, omawrite -> apostrophe,
+#      omacalc -> gnome-calculator, cliamp -> ncspot, omawrite -> ghostwriter,
 #      herdr bind removed (AI agent, out of v2 scope; tmux is on
 #      Super+Alt+Return), omasnap -> grim + slurp in the capture script.
 # This is a small dead-bind fix, not the Phase 2 Hexciri Lua merge: no
@@ -1322,12 +1386,12 @@ if '{ tui = "cliamp", focus = true }' in s:
     s = s.replace('{ tui = "cliamp", focus = true }', '{ tui = "ncspot", focus = true }')
     changed.append("cliamp -> ncspot (Super+Shift+Alt+M Music TUI)")
 
-# 4. Writing app: omawrite (Omarchy-repo-only) -> apostrophe (Arch extra).
+# 4. Writing app: omawrite (Omarchy-repo-only) -> ghostwriter (Arch extra, Qt6, no pandoc/Haskell).
 old_write = 'o.bind("SUPER + SHIFT + W", "Omawrite", { launch = "omawrite" })'
-new_write = 'o.bind("SUPER + SHIFT + W", "Writing (Apostrophe)", { launch = "apostrophe", focus = "^apostrophe$" })'
+new_write = 'o.bind("SUPER + SHIFT + W", "Writing (Ghostwriter)", { launch = "ghostwriter", focus = "^ghostwriter$" })'
 if old_write in s:
     s = s.replace(old_write, new_write)
-    changed.append("omawrite -> apostrophe (Super+Shift+W)")
+    changed.append("omawrite -> ghostwriter (Super+Shift+W)")
 
 # 5. Herdr: Omarchy AI-agent terminal, not installed in v2 (AI agents are
 # out of scope). Remove the bind instead of leaving a terminal that errors
@@ -1336,6 +1400,44 @@ old_herdr = '  o.bind("SUPER + CTRL + RETURN", "Herdr", { omarchy = "terminal-he
 if old_herdr in s:
     s = s.replace(old_herdr, '  -- Hexciri: Herdr bind removed, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.')
     changed.append("Herdr bind removed (AI agent, out of v2 scope)")
+
+# 5b. Activity TUI: btop (removed, v1 stock removal, never installed) ->
+# bottom (Arch extra, the Hexciri monitor). The old bind opened a terminal
+# that errored with "btop: command not found".
+utils = root + "/default/hypr/bindings/utilities.lua"
+with open(utils) as f:
+    u = f.read()
+u_orig = u
+if '{ tui = "btop" }' in u:
+    u = u.replace('{ tui = "btop" }', '{ tui = "bottom" }')
+    changed.append("btop -> bottom (Super+Shift+T Activity TUI)")
+# 5c. Super+Space / Super+Alt+Space swap, Devi 2026-11-23: Super+Space is
+# apps, Super+Alt+Space is the menu. Upstream Omarchy has them reversed
+# (Super+Space = menu root, Super+Alt+Space = dock apps), and the earlier
+# Hexciri reports repeated that reversed mapping. Swap only the chords,
+# keeping each bind's description/target with its own line. After the
+# rename map the lines read "Hexciri menu" / "hexciri.dock.apps"; accept
+# the unrenamed "Omarchy menu" / "omarchy.dock.apps" too. Both routes
+# ("menu root" and "ipc hexciri.dock.apps") are already in the shortcuts
+# file, so both binds still dispatch via Hyprland global shortcuts.
+# Idempotent: if Super+Space already opens apps, skip.
+_menu_desc = "Hexciri menu" if '"Hexciri menu"' in u else "Omarchy menu"
+_apps_ipc = "hexciri.dock.apps" if "hexciri.dock.apps" in u else "omarchy.dock.apps"
+_menu_line = 'o.bind("SUPER + SPACE", "%s", { menu = "root" })' % _menu_desc
+_apps_line = 'o.bind("SUPER + ALT + SPACE", "Apps", { ipc = "%s" })' % _apps_ipc
+if _menu_line in u and _apps_line in u:
+    _ph = "o.bind(\"__HEXCIRI_SWAP_MENU__\", \"%s\", { menu = \"root\" })" % _menu_desc
+    u = u.replace(_menu_line, _ph, 1)
+    u = u.replace(_apps_line, 'o.bind("SUPER + SPACE", "Apps", { ipc = "%s" })' % _apps_ipc, 1)
+    u = u.replace(_ph, 'o.bind("SUPER + ALT + SPACE", "%s", { menu = "root" })' % _menu_desc, 1)
+    changed.append("Super+Space -> apps (dock apps), Super+Alt+Space -> menu (root)")
+elif 'o.bind("SUPER + SPACE", "Apps"' in u and 'o.bind("SUPER + ALT + SPACE", "%s"' % _menu_desc in u:
+    print("Super+Space / Super+Alt+Space already swapped, skipping")
+else:
+    print("WARN: Super+Space / Super+Alt+Space bind lines not found in utilities.lua, swap NOT applied")
+if u != u_orig:
+    with open(utils, "w") as f:
+        f.write(u)
 
 if s != orig:
     with open(apps, "w") as f:
@@ -1446,8 +1548,13 @@ elif command -v luac >/dev/null 2>&1; then
 else
   warn "No luac5.1/luac binary found, skipping Lua syntax check on patched applications.lua (the patch mirrors the existing Obsidian bind line for line)."
 fi
+if command -v luac5.1 >/dev/null 2>&1; then
+  luac5.1 -p "$FORK_OUT/default/hypr/bindings/utilities.lua" && info "utilities.lua patch OK (luac5.1 syntax OK)" || warn "luac5.1 syntax check failed on patched utilities.lua, Hyprland will report the real error at boot if this is broken."
+elif command -v luac >/dev/null 2>&1; then
+  luac -p "$FORK_OUT/default/hypr/bindings/utilities.lua" && info "utilities.lua patch OK (luac syntax OK)" || warn "luac syntax check failed on patched utilities.lua, Hyprland will report the real error at boot if this is broken."
+fi
 bash -n "$FORK_OUT/bin/hexciri-capture-screenshot" || die "bash -n failed on rewritten $FORK_OUT/bin/hexciri-capture-screenshot"
-info "Bind patch done: Super+Shift+M Spotify, gnome-calculator, ncspot, apostrophe, Herdr removed, screenshot via grim+slurp"
+info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, ncspot, ghostwriter, bottom, Herdr removed, screenshot via grim+slurp"
 
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
@@ -1502,6 +1609,27 @@ for bin_file in "$HEXCIRI_PATH"/bin/hexciri-*; do
 done
 info "Linked: $HEXCIRI_PATH/bin/hexciri-* into ~/.local/bin/"
 
+# hexciri CLI on PATH everywhere, not just login shells: /usr/local/bin is
+# on the default PATH for login and non-login shells alike, and Kitty runs
+# bash non-login, so profile.d alone left `hexciri plugin list` as
+# "command not found" in a terminal. Also append ~/.local/bin and
+# /usr/share/hexciri/bin to the interactive shell rc files, so the
+# hexciri-* symlinks work there too.
+if [ -x "$HEXCIRI_PATH/bin/hexciri" ]; then
+  sudo ln -sf "$HEXCIRI_PATH/bin/hexciri" /usr/local/bin/hexciri 2>/dev/null && info "Linked: /usr/local/bin/hexciri" || warn "could not link /usr/local/bin/hexciri, hexciri CLI needs ~/.local/bin on PATH"
+fi
+if [ -f "$HOME/.bashrc" ] && ! grep -q 'hexciri/bin' "$HOME/.bashrc" 2>/dev/null; then
+  printf '\n# Hexciri 2.0: hexciri CLI and helpers on PATH for interactive shells\ncase ":$PATH:" in\n  *:/usr/share/hexciri/bin:*) ;;\n  *) export PATH="/usr/share/hexciri/bin:$HOME/.local/bin:$PATH" ;;\nesac\n' >> "$HOME/.bashrc"
+  info "Appended Hexciri PATH to ~/.bashrc"
+fi
+if [ -d "$HOME/.config/fish" ]; then
+  mkdir -p "$HOME/.config/fish/conf.d"
+  if ! grep -q 'hexciri/bin' "$HOME/.config/fish/conf.d/hexciri.fish" 2>/dev/null; then
+    printf '# Hexciri 2.0: hexciri CLI and helpers on PATH\nif not contains /usr/share/hexciri/bin $PATH\n  set -gx PATH /usr/share/hexciri/bin $HOME/.local/bin $PATH\nend\n' > "$HOME/.config/fish/conf.d/hexciri.fish"
+    info "Wrote: ~/.config/fish/conf.d/hexciri.fish (Hexciri PATH)"
+  fi
+fi
+
 # Terminal preference list: launch-terminal's fast path reads
 # ~/.config/xdg-terminals.list (and hyprland-xdg-terminals.list) first and
 # opens kitty.desktop from it, instead of calling xdg-terminal-exec.
@@ -1513,6 +1641,23 @@ if [ -f "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" ];
   info "Placed: ~/.config/xdg-terminals.list and ~/.config/xdg-terminal-exec/hyprland-xdg-terminals.list (kitty.desktop)"
 else
   warn "xdg-terminals.list not found in fork, terminal launches fall back to xdg-terminal-exec."
+fi
+
+# Kitty config: upstream config/kitty/kitty.conf includes the staged theme
+# kitty.conf (~/.local/state/hexciri/current/theme/kitty.conf). It was never
+# placed, so Kitty loaded no theme at all. Place it, set the font to the
+# Nerd Font the installer ships (the upstream line is commented out, which
+# left fastfetch reading the fc-match fallback Noto Sans).
+if [ -f "$FORK_OUT/config/kitty/kitty.conf" ]; then
+  place_user_file "$FORK_OUT/config/kitty/kitty.conf" "$HOME/.config/kitty/kitty.conf"
+  if grep -q '^# font_family' "$HOME/.config/kitty/kitty.conf"; then
+    sed -i 's/^# font_family .*/font_family JetBrainsMono Nerd Font/' "$HOME/.config/kitty/kitty.conf"
+  elif ! grep -q '^font_family' "$HOME/.config/kitty/kitty.conf"; then
+    printf 'font_family JetBrainsMono Nerd Font\n' >> "$HOME/.config/kitty/kitty.conf"
+  fi
+  info "Placed: ~/.config/kitty/kitty.conf (includes the staged theme kitty.conf, font JetBrainsMono Nerd Font)"
+else
+  warn "config/kitty/kitty.conf not found in fork, Kitty will not load the theme colours."
 fi
 
 # Env files: HEXCIRI_PATH and PATH, for logins and uwsm sessions (sudo steps)
@@ -1537,7 +1682,7 @@ rm -f "$TMP_PROFILE"
 info "Installed: /etc/profile.d/hexciri.sh"
 
 # PATH for the uwsm session itself: /etc/profile.d is only sourced by login
-# shells, and Hyprland exec (Super+Space menu, Super+Alt+Space dock) runs
+# shells, and Hyprland exec (Super+Space apps, Super+Alt+Space menu) runs
 # with the compositor's environment. Bake the install-time PATH in literally
 # so hexciri-* is findable there even when profile.d is not sourced.
 TMP_UWSM="$(mktemp)"
@@ -1628,20 +1773,34 @@ if [ -d "$HEXCIRI_PATH" ]; then
 fi
 # Hyprland global shortcuts: without this file every menu/panel bind falls
 # back to a spawned command, which is how Super+Space died on the first boot.
-[ -f "$HEXCIRI_PATH/default/hexciri/shortcuts" ] || warn "MISSING: default/hexciri/shortcuts, menu/panel binds fall back to commands (Super+Space may need PATH to work)"
+[ -f "$HEXCIRI_PATH/default/hexciri/shortcuts" ] || die "missing: default/hexciri/shortcuts, every menu/panel bind is dead without it"
+[ -f "$HEXCIRI_PATH/default/i18n/en/shell.json" ] || die "missing: default/i18n/en/shell.json, clock popup shows literal keys"
+[ -d "$HEXCIRI_PATH/default/themed" ] || die "missing: default/themed, theme-set-templates generates nothing"
+# Super+Space (apps) and Super+Alt+Space (menu) go through the shortcuts file twice: the shell QML reads it
+# to register Hyprland global shortcuts, and helpers.lua reads it to decide
+# whether a bind dispatches globally or spawns a command. If either reader
+# points at a path that does not exist, every menu/panel bind is silently
+# dead. Fail the install here instead of at first keypress.
+for _reader in "$HEXCIRI_PATH/shell/shell.qml" "$HEXCIRI_PATH/default/hypr/helpers.lua"; do
+  _spath="$(grep -o '/default/[^"]*shortcuts' "$_reader" 2>/dev/null | head -1 || true)"
+  if [ -n "$_spath" ] && [ ! -f "$HEXCIRI_PATH$_spath" ]; then
+    die "shortcuts path in $_reader does not exist: $HEXCIRI_PATH$_spath"
+  fi
+done
+unset _reader _spath
 
 # Menu / dock / terminal / file manager essentials: Super+Space, Super+Alt+Space,
 # Super+Return and Super+Shift+F all go through these.
-for _bin in hexciri-menu hexciri-shell hexciri-launch-terminal hexciri-launch-files hexciri-launch-files-cwd; do
-  [ -x "$HEXCIRI_PATH/bin/$_bin" ] || warn "MISSING bin (menu/terminal/file manager will fail): $_bin"
+for _bin in hexciri hexciri-menu hexciri-shell hexciri-launch-terminal hexciri-launch-files hexciri-launch-files-cwd hexciri-done hexciri-restart-terminal hexciri-update-available; do
+  [ -x "$HEXCIRI_PATH/bin/$_bin" ] || die "missing bin (Super+Space apps / Super+Alt+Space menu / update will fail): $_bin"
 done
 unset _bin
-[ -f "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" ] || warn "MISSING: default/hexciri/hexciri-menu.jsonc, Super+Space menu has no routes"
+[ -f "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" ] || die "missing: default/hexciri/hexciri-menu.jsonc, Super+Alt+Space menu has no routes"
 if ! grep -rl 'hexciri.menu' "$HEXCIRI_PATH/shell/plugins" --include='manifest.json' >/dev/null 2>&1; then
-  warn "no plugin manifest registers hexciri.menu, Super+Space will do nothing"
+  warn "no plugin manifest registers hexciri.menu, Super+Alt+Space menu will do nothing"
 fi
 if ! grep -rl 'hexciri.dock' "$HEXCIRI_PATH/shell/plugins" --include='manifest.json' >/dev/null 2>&1; then
-  warn "no plugin manifest registers hexciri.dock, Super+Alt+Space will do nothing"
+  warn "no plugin manifest registers hexciri.dock, Super+Space apps will do nothing"
 fi
 info "PASS: placement verified"
 
@@ -1802,6 +1961,74 @@ else
   warn "Spotify not installed, Super+Shift+M will fail until it is. Install by hand: yay -S spotify"
 fi
 
+# --- Trim bloat, and keep it trimmed on updates ---
+# Devi 2026-11-23: 1322 packages is a bit much. The Haskell tree came from
+# apostrophe -> python-pypandoc -> pandoc-cli -> ghc-libs + ~200 haskell-*
+# packages; apostrophe is replaced by ghostwriter (Qt6, no pandoc), so the
+# tree is removed here and never installed again (apostrophe is out of
+# APP_PKGS, ghostwriter is in). foot and btop were never installed by this
+# installer (Kitty over Foot, bottom over btop) but were left over from the
+# EndeavourOS base / an earlier install, so they are removed here too.
+# Reinstall is prevented three ways: the packages are out of every list
+# (CORE_PKGS / APP_PKGS here, v2/hexciri-base.packages), this step removes
+# them if present, and a post-update hook (below) re-runs the trim on every
+# hexciri-update, so a future -Syu that would pull one back as a dependency
+# gets it removed again right after. pacman -Syu itself never installs new
+# packages, so the hook is the backstop, not the mechanism.
+step "Trimming bloat: foot, btop, apostrophe, pandoc-cli / Haskell"
+cat > "$HOME/.local/bin/hexciri-trim-bloat" <<'TRIM_EOF'
+#!/bin/bash
+# Hexciri 2.0: remove packages Devi does not want, best-effort, idempotent.
+# Runs at install time and from the post-update hook, so an update can never
+# leave them installed again. pacman -Rns refuses if something still depends
+# on a package, so a removal here is always safe. sudo -n never prompts.
+for _pkg in foot btop apostrophe pandoc-cli; do
+  if pacman -Q "$_pkg" >/dev/null 2>&1; then
+    if sudo -n pacman -Rns --noconfirm "$_pkg" 2>/dev/null; then
+      echo "trim-bloat: removed $_pkg"
+    else
+      echo "trim-bloat: kept $_pkg (removal refused, something depends on it)" >&2
+    fi
+  fi
+done
+unset _pkg
+# Haskell orphans left behind by pandoc-cli: only remove packages that are
+# actually orphaned (nothing depends on them), never a blanket purge.
+_orphans="$(pacman -Qtdq 2>/dev/null || true)"
+if [ -n "$_orphans" ]; then
+  _hs="$(printf '%s\n' "$_orphans" | grep -E '^(ghc-libs|haskell-|hslua-cli|pandoc-cli)' || true)"
+  if [ -n "$_hs" ]; then
+    # shellcheck disable=SC2086
+    sudo -n pacman -Rns --noconfirm $_hs 2>/dev/null && echo "trim-bloat: removed orphaned Haskell packages" || echo "trim-bloat: Haskell orphan removal refused" >&2
+  fi
+  unset _hs
+fi
+unset _orphans
+TRIM_EOF
+chmod +x "$HOME/.local/bin/hexciri-trim-bloat"
+sudo ln -sf "$HOME/.local/bin/hexciri-trim-bloat" "$HEXCIRI_PATH/bin/hexciri-trim-bloat" 2>/dev/null || warn "could not link hexciri-trim-bloat into $HEXCIRI_PATH/bin"
+"$HOME/.local/bin/hexciri-trim-bloat" || warn "trim-bloat run failed, not fatal"
+# Post-update hook: hexciri-update runs `hexciri-hook post-update` at the end
+# of every update, and the hook runner executes every script in
+# ~/.config/hexciri/hooks/post-update.d/. This one re-runs the trim, so the
+# removed packages can never come back through an update.
+mkdir -p "$HOME/.config/hexciri/hooks/post-update.d"
+cat > "$HOME/.config/hexciri/hooks/post-update.d/10-hexciri-trim-bloat" <<'HOOK_EOF'
+#!/bin/bash
+# Hexciri post-update hook: re-run the bloat trim after every hexciri-update.
+# Best-effort, never fails the update: the hook runner already tolerates a
+# non-zero exit, and trim-bloat itself never exits non-zero on a refusal.
+hexciri-trim-bloat 2>/dev/null || "$HOME/.local/bin/hexciri-trim-bloat" 2>/dev/null || true
+HOOK_EOF
+chmod +x "$HOME/.config/hexciri/hooks/post-update.d/10-hexciri-trim-bloat"
+info "Installed: hexciri-trim-bloat + post-update hook (foot/btop/apostrophe/pandoc-cli stay removed)"
+# First-update marker: the install itself is the first update, so mark it.
+# Without this, hexciri-update-available counts every pending pacman update
+# on first boot and the update icon never clears.
+if [ -x "$HEXCIRI_PATH/bin/hexciri-done" ]; then
+  "$HEXCIRI_PATH/bin/hexciri-done" mark first-update 2>/dev/null && info "Marked: first-update done (update icon will not count pending Arch updates)" || warn "could not mark first-update, update icon may show until the first hexciri-update"
+fi
+
 # --- Health check, like v1 ---
 # Post-install sanity before the reboot offer, so a broken bring-up is
 # caught here, not at the login screen. Best-effort reads only.
@@ -1860,7 +2087,7 @@ if command -v zathura >/dev/null 2>&1; then info "  pdf: zathura present"; else 
 if command -v obsidian >/dev/null 2>&1; then info "  notes: obsidian present"; else warn "  notes: obsidian NOT installed, Super+Shift+O will fail"; fi
 if command -v mpv >/dev/null 2>&1; then info "  video: mpv present"; else warn "  video: mpv NOT installed"; fi
 if command -v gpu-screen-recorder >/dev/null 2>&1; then info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
-if command -v localsend >/dev/null 2>&1; then info "  share: localsend present"; else warn "  share: localsend NOT installed, menu Share > Receive will fail"; fi
+if command -v localsend >/dev/null 2>&1; then info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
 if command -v fastfetch >/dev/null 2>&1; then info "  fastfetch: present"; else warn "  fastfetch: NOT installed"; fi
 if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
@@ -1868,7 +2095,11 @@ command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: prese
 if command -v spotify >/dev/null 2>&1; then info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
 command -v gnome-calculator >/dev/null 2>&1 && info "  calculator: gnome-calculator present (Super+Shift+Q)" || warn "  calculator: gnome-calculator NOT installed, Super+Shift+Q will fail"
 command -v ncspot >/dev/null 2>&1 && info "  music TUI: ncspot present (Super+Shift+Alt+M)" || warn "  music TUI: ncspot NOT installed, Super+Shift+Alt+M will fail"
-command -v apostrophe >/dev/null 2>&1 && info "  writing: apostrophe present (Super+Shift+W)" || warn "  writing: apostrophe NOT installed, Super+Shift+W will fail"
+command -v ghostwriter >/dev/null 2>&1 && info "  writing: ghostwriter present (Super+Shift+W)" || warn "  writing: ghostwriter NOT installed, Super+Shift+W will fail"
+command -v hexciri >/dev/null 2>&1 && info "  cli: hexciri present" || warn "  cli: hexciri NOT on PATH, hexciri plugin list will fail"
+command -v checkupdates >/dev/null 2>&1 && info "  update check: checkupdates present (update icon)" || warn "  update check: checkupdates NOT installed, update icon never shows"
+[ -f "$HOME/.config/kitty/kitty.conf" ] && info "  kitty config: ~/.config/kitty/kitty.conf present (theme include)" || warn "  kitty config: not placed, Kitty will not load theme colours"
+[ -d "$HEXCIRI_PATH/default/themed" ] && info "  theme templates: default/themed present" || warn "  theme templates: default/themed missing, theme-set generates nothing"
 if command -v grim >/dev/null 2>&1 && command -v slurp >/dev/null 2>&1; then info "  screenshot: grim + slurp present (PRINT, hexciri-capture-screenshot)"; else warn "  screenshot: grim/slurp missing, PRINT will fail"; fi
 command -v tesseract >/dev/null 2>&1 && info "  OCR: tesseract present (SUPER+CTRL+PRINT capture-text)" || warn "  OCR: tesseract NOT installed, capture-text will fail"
 if [ "$HC_FAIL" -eq 0 ]; then
@@ -1892,16 +2123,20 @@ Reboot, then check in order:
   7. Bluetooth works if needed: `bluetoothctl devices`
   8. Theme: `hexciri-theme-set` with a stock theme, check bar and menu recolor
   9. Plugin: install a stock plugin, check it loads, check the alias resolves omarchy.bar to hexciri.bar
-  10. Menu: Super+Space opens the menu (Arch logo at the bar's left end), Super+Alt+Space opens the dock apps. These now go through Hyprland global shortcuts (default/hexciri/shortcuts), not spawned commands, so they should work even if PATH is off.
+  10. Apps / menu: Super+Space opens the apps (dock apps), Super+Alt+Space opens the menu (Arch logo at the bar's left end). These now go through Hyprland global shortcuts (default/hexciri/shortcuts), not spawned commands, so they should work even if PATH is off.
   11. File manager: Super+Shift+F opens Strata, terminal opens Kitty
   12. Clock popup shows the real month and weekday names, not clock.monthYear / clock.weekShort
   13. Workspace 1 shows 1 / its mode glyph, and SDDM shows the Hexciri emblem, not Omarchy logos
   14. Default apps: Super+Shift+Return opens Brave Origin (default browser), Super+Shift+N opens Zed, Super+Shift+O opens Obsidian, Super+Alt+Return opens tmux in Kitty, menu Capture > Screenrecord records (gpu-screen-recorder), menu Share > Receive opens LocalSend
-  15. fastfetch: run `fastfetch` in Kitty, Hexciri logo + layout, not stock
-  16. Spotify + Arch substitutes: Super+Shift+M opens Spotify, Super+Shift+Q opens the calculator (gnome-calculator), PRINT takes a screenshot (grim + slurp, saved to ~/Pictures/Screenshots), Super+Shift+Alt+M opens the music TUI (ncspot), Super+Shift+W opens the writing app (Apostrophe). Super+Ctrl+Return (Herdr) is deliberately unbound, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.
+  15. fastfetch: run `fastfetch` in Kitty, Hexciri logo + layout, not stock, WM shows Hyprland | Quickshell, not Niri | Noctalia
+  16. Spotify + Arch substitutes: Super+Shift+M opens Spotify, Super+Shift+Q opens the calculator (gnome-calculator), PRINT takes a screenshot (grim + slurp, saved to ~/Pictures/Screenshots), Super+Shift+Alt+M opens the music TUI (ncspot), Super+Shift+W opens the writing app (Ghostwriter). Super+Ctrl+Return (Herdr) is deliberately unbound, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.
 
-If Super+Space still does nothing after reboot, run this in a terminal and report what it prints:
+  17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update. foot, btop, apostrophe and the Haskell tree are removed and stay removed (post-update hook re-trims on every update).
+
+If Super+Alt+Space (menu) still does nothing after reboot, run this in a terminal and report what it prints:
   hexciri-menu toggle root
+If Super+Space (apps) still does nothing, run this instead:
+  hexciri-shell "hexciri.dock" "apps"
 That tells whether the menu command is missing (PATH), the shell IPC is unreachable, or the menu plugin did not load.
 
 Installed locations:

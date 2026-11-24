@@ -130,7 +130,7 @@ CORE_PKGS=(
   polkit rtkit gnome-keyring libsecret
   pamixer brightnessctl jq bc curl wget git base-devel
   imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip
-  ripgrep fd fzf eza bat btop starship zoxide fastfetch
+  ripgrep fd fzf eza bat starship zoxide fastfetch
   python python-gobject lua51 luarocks
   kitty
   udiskie
