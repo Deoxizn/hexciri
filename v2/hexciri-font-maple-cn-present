@@ -1,0 +1,11 @@
+#!/bin/bash
+# Hexciri: true (exit 0) if any Maple Mono NF CN package is installed,
+# under either AUR name (maplemono-nf-cn from the maplemono split base,
+# or maple-mono-nf-cn, its own pkgbase). Used as the disabled check for
+# Install > Style > Font > Maple Mono CN, so the row is greyed out when
+# Devi already has the CN variant, whichever package name he used
+# (reinstall fix 2026-11-24).
+for pkg in maplemono-nf-cn maple-mono-nf-cn maplemono-nf-cn-unhinted maple-mono-nf-cn-unhinted; do
+  pacman -Q -- "$pkg" &>/dev/null && exit 0
+done
+exit 1

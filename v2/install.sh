@@ -213,7 +213,7 @@ patch_fingerprint() {
   {
     sed -n '/^# --- Wire the compat alias in, before placement ---/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
     sed -n '/^# --- Hexciri Settings, Hexciri shell plugin/,/^step "Installing Hexciri theme hooks/p' "$INSTALLER_DIR/install.sh" | sha256sum | cut -d' ' -f1
-    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings"; do
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings" "$HEXCIRI_REPO_ROOT/v2/hexciri-font-maple-cn-present"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
@@ -460,7 +460,7 @@ current_theme_name() {
 # no fork, no theme re-apply, no settings touched at all.
 if [ "${LIGHT_SYNC:-0}" = "1" ]; then
   _ls_sha="$(sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1)"
-  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link hexciri-theme-sync hexciri-web-search hexciri-settings-tabs hexciri-launch-settings; do
+  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link hexciri-web-search hexciri-settings-tabs hexciri-launch-settings hexciri-font-maple-cn-present; do
     if [ -f "$HEXCIRI_REPO_ROOT/v2/$_ls_f" ] && [ -d /usr/share/hexciri/bin ]; then
       if ! cmp -s "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" 2>/dev/null; then
         sudo install -Dm755 "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" && info "Light sync: updated /usr/share/hexciri/bin/$_ls_f"
@@ -832,8 +832,20 @@ fi
 # here: 16 TTFs, 320 MiB (PR #16025's reason, and Devi already has it). It
 # is one click away in Install > Style > Font > Maple Mono CN instead.
 step "Installing Maple Mono NF (AUR maplemono-nf, best-effort)"
-if fc-list 2>/dev/null | grep -Fqi "Maple Mono NF"; then
-  info "Maple Mono NF already installed"
+# 2026-11-24 reinstall fix (Devi: update re-installed Maple Mono NF CN
+# when he already had it via AUR): the old guard was fc-list only, a
+# family-name/fontconfig-cache check, never a pacman check. And
+# maplemono-nf / maplemono-nf-cn are split packages of ONE pkgbase
+# (maplemono, AUR 7.9-1): makepkg downloads ALL 11 source zips whatever
+# split you ask for, including MapleMono-NF-CN.zip (320 MiB), so running
+# yay here at all re-fetches CN. Guard on pacman first, over every known
+# Maple NF package name (both AUR namings, plain + CN + unhinted): any
+# one installed means the font is already there, skip, no yay, no
+# download. fc-list stays as second guard for hand-installed fonts.
+if pacman -Q maplemono-nf maplemono-nf-cn maplemono-nf-unhinted maplemono-nf-cn-unhinted maple-mono-nf-cn maple-mono-nf-cn-unhinted 2>/dev/null | grep -q .; then
+  info "Maple Mono NF already installed (pacman: $(pacman -Q maplemono-nf maplemono-nf-cn maplemono-nf-unhinted maplemono-nf-cn-unhinted maple-mono-nf-cn maple-mono-nf-cn-unhinted 2>/dev/null | tr '\n' ' ' | sed 's/ *$//'))"
+elif fc-list 2>/dev/null | grep -Fqi "Maple Mono NF"; then
+  info "Maple Mono NF already installed (fontconfig)"
 elif yay -S --needed --noconfirm maplemono-nf 2>/dev/null; then
   info "Maple Mono NF installed via yay (AUR maplemono-nf)"
 else
@@ -3109,7 +3121,7 @@ if fs_s != fs_orig:
 # the audit's write above, so the audit never drops it; the action token
 # hexciri-install-font already exists in the fork bin, so the audit's
 # token check and the post-placement invariant check both pass.
-_maple_row = "  \"install.style.font.maple\": {\"icon\":\"\ue659\",\"label\":\"Maple Mono CN\",\"disabled\":\"hexciri-pkg-present maplemono-nf-cn\",\"action\":\"hexciri-launch-floating-terminal-with-presentation 'yay -S --needed --noconfirm maplemono-nf-cn && sleep 2 && hexciri-font-set \"Maple Mono NF CN\"'\"},"
+_maple_row = "  \"install.style.font.maple\": {\"icon\":\"\ue659\",\"label\":\"Maple Mono CN\",\"disabled\":\"hexciri-font-maple-cn-present\",\"action\":\"hexciri-launch-floating-terminal-with-presentation 'yay -S --needed --noconfirm maplemono-nf-cn && sleep 2 && hexciri-font-set \"Maple Mono NF CN\"'\"},"
 with open(menu) as f:
     _m_lines = f.read().splitlines()
 if any('"install.style.font.maple"' in _l for _l in _m_lines):
@@ -3804,6 +3816,18 @@ if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" ]; then
   info "  web search: hexciri-web-search installed (Super+Shift+S, QS prompt, Brave Origin)"
 else
   die "v2/hexciri-web-search not in the installer tree, Super+Shift+S web search will not exist"
+fi
+# hexciri-font-maple-cn-present (repo file v2/hexciri-font-maple-cn-present):
+# exit 0 if any Maple Mono NF CN package is installed (either AUR name).
+# Disabled check for Install > Style > Font > Maple Mono CN, so the row
+# is greyed out when the CN variant is already there, whichever package
+# name it was installed under (reinstall fix 2026-11-24).
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-font-maple-cn-present" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-font-maple-cn-present" "$FORK_OUT/bin/hexciri-font-maple-cn-present"
+  chmod +x "$FORK_OUT/bin/hexciri-font-maple-cn-present"
+  info "  font: hexciri-font-maple-cn-present installed (Maple Mono CN disabled check)"
+else
+  die "v2/hexciri-font-maple-cn-present not in the installer tree, Maple Mono CN menu row cannot be disabled when installed"
 fi
 # hexciri-settings-tabs (repo file v2/hexciri-settings-tabs): extra-pane
 # registry for Hexciri Settings (Nyxiri tab hook). Dispatcher bin, so
@@ -5711,7 +5735,7 @@ unset _bin
 # text-size feed the display panel's scale, network-* feeds the network
 # panel, apply-lock writes the lock PAM file, setup-* are the Setup
 # wizards, pkg-add/pkg-missing are their pacman primitives.
-for _bin in hexciri-system hexciri-dock hexciri-dns hexciri-state hexciri-setup-git hexciri-setup-hostname hexciri-setup-keyboard hexciri-setup-input hexciri-setup-security-fingerprint hexciri-setup-security-fido2 hexciri-setup-security-sshd hexciri-setup-security-ssh-agent hexciri-sudo-passwordless hexciri-security-functions hexciri-apply-lock hexciri-pkg-add hexciri-pkg-missing hexciri-monitor-state hexciri-display-text-size hexciri-network-status hexciri-network-band hexciri-network-wifi-connected hexciri-network-captive-portal hexciri-network-password hexciri-network-qr hexciri-network-speedtest hexciri-region hexciri-font-list hexciri-font-current hexciri-font-set hexciri-show-logo hexciri-show-done hexciri-file-select hexciri-input-method hexciri-git-url-check hexciri-disk-speedtest hexciri-kernel hexciri-language hexciri-locale-session hexciri-locale-generate hexciri-refresh-shell hexciri-refresh-tmux hexciri-refresh-hyprsunset hexciri-refresh-applications hexciri-refresh-config hexciri-device-touchpad hexciri-device-touchscreen hexciri-theme-set-browser-policy hexciri-toggle hexciri-dictation hexciri-default-dictation hexciri-theme-ansi; do
+for _bin in hexciri-system hexciri-dock hexciri-dns hexciri-state hexciri-setup-git hexciri-setup-hostname hexciri-setup-keyboard hexciri-setup-input hexciri-setup-security-fingerprint hexciri-setup-security-fido2 hexciri-setup-security-sshd hexciri-setup-security-ssh-agent hexciri-sudo-passwordless hexciri-security-functions hexciri-apply-lock hexciri-pkg-add hexciri-pkg-missing hexciri-monitor-state hexciri-display-text-size hexciri-network-status hexciri-network-band hexciri-network-wifi-connected hexciri-network-captive-portal hexciri-network-password hexciri-network-qr hexciri-network-speedtest hexciri-region hexciri-font-list hexciri-font-current hexciri-font-set hexciri-font-maple-cn-present hexciri-show-logo hexciri-show-done hexciri-file-select hexciri-input-method hexciri-git-url-check hexciri-disk-speedtest hexciri-kernel hexciri-language hexciri-locale-session hexciri-locale-generate hexciri-refresh-shell hexciri-refresh-tmux hexciri-refresh-hyprsunset hexciri-refresh-applications hexciri-refresh-config hexciri-device-touchpad hexciri-device-touchscreen hexciri-theme-set-browser-policy hexciri-toggle hexciri-dictation hexciri-default-dictation hexciri-theme-ansi; do
   [ -x "$HEXCIRI_PATH/bin/$_bin" ] || die "missing bin (menu audit 2026-11-23, a kept menu row or panel calls it): $_bin"
 done
 unset _bin
@@ -5857,6 +5881,7 @@ bash -lc 'command -v hexciri' >/dev/null 2>&1 || warn "hexciri not on PATH in a 
 grep -q '"update.hexciri"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu Update > Hexciri row missing (Phase 2 update)"
 grep -q '"settings".*hexciri-launch-settings' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" && die "menu Settings row still present in hexciri-menu.jsonc (removed 2026-11-24, Settings opens via Super+Ctrl+S / launcher only)"
 grep -q '"install.style.font.maple"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu Install > Style > Font > Maple Mono CN row missing (2026-11-24)"
+grep -q 'hexciri-font-maple-cn-present' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu Maple Mono CN row does not use hexciri-font-maple-cn-present as its disabled check (reinstall fix 2026-11-24)"
 grep -q '<string>JetBrainsMono Nerd Font</string>' "$HEXCIRI_PATH/bin/hexciri-font-set" || die "hexciri-font-set missing the system-default second match block (Maple Mono NF fix 2026-11-24)"
 grep -q 'fc-list :spacing=90' "$HEXCIRI_PATH/bin/hexciri-font-list" || die "hexciri-font-list missing the dual-width (spacing 90) query (PR #16025)"
 grep '"update.hexciri"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" | grep -q 'hexciri-update' || die "menu Update > Hexciri row does not call hexciri-update"
