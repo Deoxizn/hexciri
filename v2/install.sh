@@ -820,14 +820,26 @@ else:
         f.write(line + "\n" + content)
     print("hexciri.lua: inserted compat require as first line")
 PY
-  if command -v lua5.1 >/dev/null 2>&1; then
-    lua5.1 -e 'assert(loadfile(arg[1]))' "$HEXCIRI_LUA" || die "Lua syntax check failed on wired $HEXCIRI_LUA"
-    info "Wired: hexciri-compat.lua required from default/hypr/hexciri.lua (lua5.1 syntax OK)"
-  elif command -v luac5.1 >/dev/null 2>&1; then
+  # Syntax-only check: parse the file, never execute it. luac -p is the
+  # correct tool for that. The old check used
+  #   lua5.1 -e 'assert(loadfile(arg[1]))' file
+  # which is a false failure: with -e, lua sets global arg to nil, so
+  # arg[1] errors with "attempt to index global 'arg' (a nil value)"
+  # on every file, even a syntactically valid one. It also made the
+  # luac branch unreachable, since lua5.1 is installed whenever luac is.
+  if command -v luac5.1 >/dev/null 2>&1; then
     luac5.1 -p "$HEXCIRI_LUA" || die "Lua syntax check failed on wired $HEXCIRI_LUA"
     info "Wired: hexciri-compat.lua required from default/hypr/hexciri.lua (luac5.1 syntax OK)"
+  elif command -v luac >/dev/null 2>&1; then
+    luac -p "$HEXCIRI_LUA" || die "Lua syntax check failed on wired $HEXCIRI_LUA"
+    info "Wired: hexciri-compat.lua required from default/hypr/hexciri.lua (luac syntax OK)"
+  elif command -v lua5.1 >/dev/null 2>&1; then
+    # No luac: loadfile() parses without executing. Pass the path via an
+    # env var, not arg[1], because arg is nil under lua -e.
+    HEXCIRI_LUA_CHECK="$HEXCIRI_LUA" lua5.1 -e 'assert(loadfile(os.getenv("HEXCIRI_LUA_CHECK")))' || die "Lua syntax check failed on wired $HEXCIRI_LUA"
+    info "Wired: hexciri-compat.lua required from default/hypr/hexciri.lua (lua5.1 syntax OK)"
   else
-    warn "No lua5.1/luac5.1 binary found, skipping Lua syntax check on wired hexciri.lua."
+    warn "No luac5.1/luac/lua5.1 binary found, skipping Lua syntax check on wired hexciri.lua."
   fi
 else
   die "default/hypr/hexciri.lua not found in fork output, cannot wire compat require."
