@@ -3121,7 +3121,7 @@ if fs_s != fs_orig:
 # the audit's write above, so the audit never drops it; the action token
 # hexciri-install-font already exists in the fork bin, so the audit's
 # token check and the post-placement invariant check both pass.
-_maple_row = "  \"install.style.font.maple\": {\"icon\":\"\ue659\",\"label\":\"Maple Mono CN\",\"disabled\":\"hexciri-font-maple-cn-present\",\"action\":\"hexciri-launch-floating-terminal-with-presentation 'yay -S --needed --noconfirm maplemono-nf-cn && sleep 2 && hexciri-font-set \"Maple Mono NF CN\"'\"},"
+_maple_row = "  \"install.style.font.maple\": {\"icon\":\"\ue659\",\"label\":\"Maple Mono CN\",\"disabled\":\"hexciri-font-maple-cn-present\",\"action\":\"hexciri-launch-floating-terminal-with-presentation 'yay -S --needed --noconfirm maplemono-nf-cn && sleep 2 && hexciri-font-set \\\"Maple Mono NF CN\\\"'\"},"
 with open(menu) as f:
     _m_lines = f.read().splitlines()
 if any('"install.style.font.maple"' in _l for _l in _m_lines):
@@ -3194,6 +3194,31 @@ else:
             with open(_i18n, "w") as f:
                 f.write(chr(10).join(_i_lines) + chr(10))
             changed.append("i18n: Maple Mono CN label added (PR #16025)")
+
+# 9. The forked menu jsonc must still parse exactly like the shell parses
+# it (2026-11-24, Devi: whole Super+Alt+Space menu empty after update).
+# MenuModel.js stripJsonc drops full-line // comments and trailing
+# commas, then JSON.parse; ONE bad row makes the WHOLE file unparseable,
+# readMenuJsonc returns null, and a fresh shell has no previous rows, so
+# the menu opens on nothingHere. The cf3bb1a maple row did exactly this:
+# its action held bare "Maple Mono NF CN" quotes (Python \" in the row
+# literal collapses to a bare quote; JSON needs \"). Grep checks for row
+# presence cannot see this. Parse here, in the fork, so a broken menu
+# dies before placement, never live.
+import json
+_menu_raw = open(menu).read()
+_menu_stripped = re.sub(r'^\s*//[^\n]*(\n|$)', '', _menu_raw, flags=re.M)
+_menu_stripped = re.sub(r',(\s*[}\]])', r'\1', _menu_stripped)
+try:
+    _menu_parsed = json.loads(_menu_stripped)
+except Exception as _e:
+    raise SystemExit("menu jsonc does not parse, shell would show an empty menu: %s" % _e)
+for _r in ('apps', 'appearance', 'trigger', 'setup', 'install', 'remove', 'update', 'learn', 'system'):
+    if _r not in _menu_parsed:
+        raise SystemExit("menu jsonc missing root entry %s, shell would show an empty menu" % _r)
+if 'hexciri-font-set "Maple Mono NF CN"' not in _menu_parsed.get('install.style.font.maple', {}).get('action', ''):
+    raise SystemExit("menu maple row action lost its quoted font name")
+changed.append("menu jsonc parses (%d entries, 9 root entries)" % len(_menu_parsed))
 
 for c in changed:
     print("menu audit: " + c)
@@ -5979,6 +6004,28 @@ done
 unset _dead_pin
 info "PASS: dock pinned list checked (Strata, Spotify, Brave Origin, Zed, Kitty)"
 [ -f "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" ] || die "missing: default/hexciri/hexciri-menu.jsonc, Super+Alt+Space menu has no routes"
+# The menu jsonc must PARSE, not just exist (2026-11-24, Devi: whole
+# menu empty after update): the cf3bb1a maple row had bare double quotes
+# inside its action string, so MenuModel.js JSON.parse failed on the whole
+# file and a fresh shell showed nothingHere. Grep row checks cannot see
+# this; parse it exactly like the shell does (full-line // comments +
+# trailing commas stripped) and require the 9 root entries.
+python3 - "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" <<'PYEOF' || die "hexciri-menu.jsonc does not parse, Super+Alt+Space menu would be empty (see above)"
+import json, re, sys
+raw = open(sys.argv[1]).read()
+stripped = re.sub(r'^\s*//[^\n]*(\n|$)', '', raw, flags=re.M)
+stripped = re.sub(r',(\s*[}\]])', r'\1', stripped)
+try:
+    d = json.loads(stripped)
+except Exception as e:
+    print("menu jsonc parse error: %s" % e)
+    sys.exit(1)
+for r in ('apps', 'appearance', 'trigger', 'setup', 'install', 'remove', 'update', 'learn', 'system'):
+    if r not in d:
+        print("menu jsonc missing root entry: %s" % r)
+        sys.exit(1)
+print("menu jsonc parses: %d entries" % len(d))
+PYEOF
 if ! grep -rl 'hexciri.menu' "$HEXCIRI_PATH/shell/plugins" --include='manifest.json' >/dev/null 2>&1; then
   warn "no plugin manifest registers hexciri.menu, Super+Alt+Space menu will do nothing"
 fi
@@ -7473,7 +7520,7 @@ Reboot, then check in order:
   19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are NOT removed (ex-vi-compat / openconnect depend on them, the trim stopped trying them 2026-11-24 after the first full update printed the refusal on every run), their entries are hidden with NoDisplay instead; the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
   20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now, fitted to the rendered content at launch (two-mode launch-about, --render measures logo + modules and resizes the window, no fixed 920x480); systemd-boot timeout 1s in every loader.conf AND the LoaderConfigTimeout EFI variable (bootctl set-timeout 1, the variable overrides loader.conf); Super+Shift+T runs btm (bottom package binary); LocalSend file picker is dark (theme name Adwaita in gtk-3.0/gtk-4.0 settings.ini, dconf color-scheme prefer-dark via dbus-run-session, FileChooser=gtk portal; Adwaita-dark is not a theme name); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
 
-  21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back in FULL (Package, AUR, Web App, TUI, Style, Gaming, Browser, Terminal, Editor, Service, Development, Dictation and their Remove counterparts, kept only where the backing script exists in the fork; Herdr, Windows, preinstalls, Docker rows, factory reset and Emacs stay out, see item 18; Foot and the AI rows are back (2026-11-24 correction). Every restored bin was combed for hard defaults: no folio or nautilus calls in any restored row or bin (folio only ever lived in theme-bg-install, fixed 748c59a; nautilus-dropbox appears only as a package removal), the chromium flags file's extension paths resolve to /usr/share/hexciri/default/chromium/ (copied whole), and the Tailscale Taildrop unit is installed by its install bin (ExecStart fixed to /usr/share/hexciri/bin). The restored AI bins were combed too: no folio/nautilus/herdr/docker calls in any of them; install-terminal foot copies config/foot + applications/foot.desktop. Install > Terminal is four rows now (Alacritty, Kitty, Ghostty, Foot, Kitty stays default): the 81356136 Foot verification checked $HEXCIRI_PATH/applications/foot.desktop but placement never copied applications/ there, so every update since died at verification and the shell never restarted; applications/ joins the placement copy (same as config/ in the tmux fix, curated to the three desktop files only), and placement now checks all four terminal rows plus the four desktop_id arms in install-terminal.
+  21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back in FULL (Package, AUR, Web App, TUI, Style, Gaming, Browser, Terminal, Editor, Service, Development, Dictation and their Remove counterparts, kept only where the backing script exists in the fork; Herdr, Windows, preinstalls, Docker rows, factory reset and Emacs stay out, see item 18; Foot and the AI rows are back (2026-11-24 correction). Every restored bin was combed for hard defaults: no folio or nautilus calls in any restored row or bin (folio only ever lived in theme-bg-install, fixed 748c59a; nautilus-dropbox appears only as a package removal), the chromium flags file's extension paths resolve to /usr/share/hexciri/default/chromium/ (copied whole), and the Tailscale Taildrop unit is installed by its install bin (ExecStart fixed to /usr/share/hexciri/bin). The restored AI bins were combed too: no folio/nautilus/herdr/docker calls in any of them; install-terminal foot copies config/foot + applications/foot.desktop. Install > Terminal is four rows now (Alacritty, Kitty, Ghostty, Foot, Kitty stays default): the 81356136 Foot verification checked $HEXCIRI_PATH/applications/foot.desktop but placement never copied applications/ there, so every update since died at verification and the shell never restarted; applications/ joins the placement copy (same as config/ in the tmux fix, curated to the three desktop files only), and placement now checks all four terminal rows plus the four desktop_id arms in install-terminal. Menu jsonc now parses (2026-11-24, Devi: whole Super+Alt+Space menu empty after update): the cf3bb1a maple row had bare double quotes inside its action string, so the shell JSON.parse failed on the whole file and a fresh shell showed nothingHere; the row now emits escaped quotes, the fork patch parses the menu before placement, and placement verification parses it again.
 
   22. Keyring auto-unlock 2026-11-24: Brave Origin asked for the keyring password on every launch because gnome-keyring was installed but nothing unlocked it at login. SDDM PAM now has pam_gnome_keyring.so (auth at the end of the auth section, session auto_start at the end of the session section, placed after the fingerprint block so the pam_unix success=2 skip still lands on the gate + pam_fprintd), plus password sync in /etc/pam.d/passwd so a future login-password change updates the keyring password. Brave keeps using gnome-libsecret, no --password-store flag, no plaintext storage. Two limits: a fingerprint login carries no password so the keyring stays locked that session, log in with the password to unlock it; and the Login keyring password must match the login password, if it does not, change it in Seahorse (right-click Login, Change Password), do NOT delete login.keyring, that destroys the stored secrets including Brave's Safe Storage key.
 
