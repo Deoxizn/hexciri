@@ -4938,7 +4938,14 @@ hypr_guard_pause
 
 sudo rm -rf "$HEXCIRI_PATH"
 sudo mkdir -p "$HEXCIRI_PATH"
-sudo cp -a "$FORK_OUT/shell" "$FORK_OUT/default" "$FORK_OUT/themes" "$FORK_OUT/bin" "$FORK_OUT/install" "$FORK_OUT/icons" "$HEXCIRI_PATH/"
+sudo cp -a "$FORK_OUT/shell" "$FORK_OUT/default" "$FORK_OUT/themes" "$FORK_OUT/bin" "$FORK_OUT/install" "$FORK_OUT/icons" "$FORK_OUT/config" "$HEXCIRI_PATH/"
+# config/ was missing from the placement copy (2026-11-24): the Learn
+# fix copied config/tmux into the fork and verified
+# $HEXCIRI_PATH/config/tmux/tmux.conf, but placement never copied
+# config/ at all, so that check died on every update. Same for
+# chromium-flags.conf / alacritty / ghostty, checked right after it.
+# FORK_OUT/config is already curated (copy_subsets only), no
+# omarchy-named files, no foot/herdr/obsidian clutter.
 # icons/ is required (copy_subset dies if upstream lacks it), but
 # logo.txt / icon.txt are optional in copy_subsets (warn only), so
 # copy them only when present: a missing file in the cp line above
@@ -4957,7 +4964,7 @@ sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1 | sudo tee "$H
 [ -n "${PATCH_FP:-}" ] && printf '%s\n' "$PATCH_FP" | sudo tee "$HEXCIRI_PATH/.patch-fingerprint" >/dev/null || true
 printf '%s\n' "$(provision_fingerprint)" | sudo tee "$HEXCIRI_PATH/.provision-fingerprint" >/dev/null || true
 printf '%s\n' "$(system_fingerprint)" | sudo tee "$HEXCIRI_PATH/.system-fingerprint" >/dev/null || true
-info "Installed: $HEXCIRI_PATH/shell, $HEXCIRI_PATH/default, $HEXCIRI_PATH/themes, $HEXCIRI_PATH/bin, $HEXCIRI_PATH/install (browser-policy helpers), $HEXCIRI_PATH/icons, $HEXCIRI_PATH/logo.txt, $HEXCIRI_PATH/icon.txt"
+info "Installed: $HEXCIRI_PATH/shell, $HEXCIRI_PATH/default, $HEXCIRI_PATH/themes, $HEXCIRI_PATH/bin, $HEXCIRI_PATH/install (browser-policy helpers), $HEXCIRI_PATH/icons, $HEXCIRI_PATH/config, $HEXCIRI_PATH/logo.txt, $HEXCIRI_PATH/icon.txt"
 
 mkdir -p "$HOME/.config/hypr" "$HOME/.config/hexciri" \
   "$HOME/.local/state/hexciri/current" "$HOME/.local/state/hexciri/toggles/hypr" \
@@ -5117,6 +5124,18 @@ if [ -f "$FORK_OUT/config/kitty/kitty.conf" ]; then
   info "Placed: ~/.config/kitty/kitty.conf (includes the staged theme kitty.conf, font JetBrainsMono Nerd Font)"
 else
   warn "config/kitty/kitty.conf not found in fork, Kitty will not load the theme colours."
+fi
+
+# Tmux config: upstream config/tmux/tmux.conf is the fallback
+# hexciri-menu-tmux-keybindings reads, but tmux itself only loads
+# ~/.config/tmux/tmux.conf on start. Place it like kitty.conf above,
+# so Super+Alt+Return actually runs with the Hexciri config, not
+# tmux defaults. place_user_file keeps the user's file on a re-run.
+if [ -f "$FORK_OUT/config/tmux/tmux.conf" ]; then
+  place_user_file "$FORK_OUT/config/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf"
+  info "Placed: ~/.config/tmux/tmux.conf (Hexciri tmux config)"
+else
+  warn "config/tmux/tmux.conf not found in fork, tmux will run with defaults and Learn > Tmux falls back to nothing."
 fi
 
 # Env files: HEXCIRI_PATH and PATH, for logins and uwsm sessions (sudo steps)
