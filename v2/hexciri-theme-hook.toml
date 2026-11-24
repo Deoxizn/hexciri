@@ -1,0 +1,26 @@
+# Hexciri theme-hook config (2026-11-24, Devi: modified better Omarchy
+# theme hook). Read by hooks/lib/theme-env.sh (THPM port) on every theme
+# switch. Seed-once: the installer writes this file only when it is
+# missing, your edits are never overwritten on a re-run / update.
+#
+# [gtk] adapta: signaldirective/Adapta GTK theme (11-hexciri-adapta).
+#   false (default): the flat gtk.css sheet from 10-hexciri-gtk owns GTK.
+#   true: retint ~/.themes/Adapta from the active palette instead.
+#   Adapta is NOT auto-cloned: clone it first, then flip this on:
+#     git clone https://github.com/signaldirective/Adapta.git ~/.themes/Adapta
+#   If the checkout is missing the hook warns once and the flat sheet
+#   from 10-hexciri-gtk still runs, so GTK never ends up unthemed.
+[gtk]
+adapta = false
+
+# [steam] is handled by THPM, not this file: `thpm enable steam` when
+# Steam is installed and ~/.local/share/steam-adwaita exists (the
+# installer clones that checkout). THPM then themes Steam on every
+# switch through hook 20-hexciri-thpm / 90-thpm. No setting here.
+
+# [notifications] restart: theme hooks that need an app restart tell you
+# once per app per 5 minutes. Defaults are on; uncomment to change.
+# [notifications.restart]
+# enabled = true
+# only_when_running = true
+# cooldown_seconds = 300

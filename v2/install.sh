@@ -47,9 +47,13 @@
 # hexciri-shell, OMARCHY_PATH is a runtime alias set to HEXCIRI_PATH.
 #
 # TODO Phase 2 only, not in this script:
-#   Hexciri Lua edits (binds, windowrules, workspaces, opacity, Steam rules)
 #   Port Hexciri scripts from Noctalia calls to QS calls
-#   Theme engine merge, arch-updates EndeavourOS backend
+#   arch-updates EndeavourOS backend, Nyxiri overlay
+#   (Hexciri Lua custom-only, THPM + theme hook done 2026-11-24:
+#   v2/hexciri-custom-binds.lua + hexciri-custom-apps.lua in the fork,
+#   v2/hexciri-theme-hook-*.sh + theme-env.sh in theme-set.d, THPM
+#   from GitHub source. Theme support itself needs no separate
+#   fork/re-add: the forked Omarchy shell/code already provides it.)
 #   (hexciri-update rework done 2026-11-24: eos-update --aur + Hexciri
 #   self-update + mise, see the fork-time update patch below)
 #   Nyxiri overlay, THPM install
@@ -147,7 +151,7 @@ upstream_fingerprint() {
 patch_fingerprint() {
   {
     sed -n '/^# --- Wire the compat alias in, before placement ---/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
-    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi"; do
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
@@ -2822,6 +2826,27 @@ if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" ]; then
 else
   die "v2/hexciri-theme-ansi not in the installer tree, update output falls back to stock green"
 fi
+# Hexciri custom Lua, 2026-11-24 (Devi: Hexciri Lua, custom parts only).
+# v1 binds.lua / windowrules.lua mostly mimic Omarchy, so only the
+# Hexciri-only binds/rules live here; everything Omarchy already
+# has is NOT duplicated, or binds would double-register. Copied into
+# the fork as default/hypr/bindings/hexciri.lua (monocle stack cycle
+# Super+[ / ], Brave incognito Super+Ctrl+B, Messenger Super+Ctrl+M,
+# screen record Alt+Print) and default/hypr/apps/hexciri.lua
+# (TUI.float 1000x720, app.hexciri.ff 1210x720, mpv float + 1.0
+# override opacity with PiP excluded, imv 1.0 override opacity).
+for _lua in "hexciri-custom-binds.lua:default/hypr/bindings/hexciri.lua" "hexciri-custom-apps.lua:default/hypr/apps/hexciri.lua"; do
+  _lua_src="${_lua%%:*}"; _lua_dst="${_lua##*:}"
+  if [ -f "$HEXCIRI_REPO_ROOT/v2/$_lua_src" ]; then
+    mkdir -p "$FORK_OUT/$(dirname "$_lua_dst")"
+    cp -a "$HEXCIRI_REPO_ROOT/v2/$_lua_src" "$FORK_OUT/$_lua_dst"
+    if command -v luac5.1 >/dev/null 2>&1; then luac5.1 -p "$FORK_OUT/$_lua_dst" || die "Lua syntax check failed on $_lua_dst"; elif command -v luac >/dev/null 2>&1; then luac -p "$FORK_OUT/$_lua_dst" || die "Lua syntax check failed on $_lua_dst"; fi
+    info "  hexciri lua: $_lua_src -> $_lua_dst (custom-only, auto-loaded by require_all.files)"
+  else
+    die "v2/$_lua_src not in the installer tree, Hexciri custom Lua ($_lua_dst) cannot be installed"
+  fi
+done
+unset _lua _lua_src _lua_dst
 python3 - "$FORK_OUT" <<'PY'
 import sys
 fork = sys.argv[1]
@@ -3506,6 +3531,92 @@ else
   warn "  mise not installed, Omarchy scripts that call mise will fail (pacman: mise)"
 fi
 
+# --- THPM + steam-adwaita (Phase 2, 2026-11-24, Devi: THPM in the theme hook) ---
+# THPM (Theme Hook Plugin Manager, OldJobobo/thpm) was kicked off AUR:
+# install from a GitHub source checkout, NOT yay/pacman. Source install
+# is a private user install: python venv at ~/.local/share/thpm/runtime,
+# launcher ~/.local/bin/thpm, `thpm install --no-ui` registers its hook
+# at ~/.config/omarchy/hooks/theme-set.d/90-thpm. Hexciri's hexciri-hook
+# reads ~/.config/hexciri/hooks/theme-set.d/ instead, so this step
+# bridges that hook file across (hook 20-hexciri-thpm runs
+# `thpm hook-run theme-set` directly as a fallback). THPM reads the
+# active theme from ~/.local/state/omarchy/current/theme, which the
+# Strata theme hook symlinks to Hexciri's live theme files on every
+# switch, before 90-thpm runs (10- before 90-). Integrations are all
+# disabled by default in THPM; only steam is enabled here, and only
+# when Steam is actually installed.
+# Best-effort, never dies: a THPM failure must not break the install,
+# the theme hook skips quietly when thpm is absent.
+step "Installing THPM (GitHub source, not AUR) + steam-adwaita checkout"
+export PATH="$HOME/.local/bin:$PATH"
+# Compat alias for THPM (sim7, 2026-11-24: thpm install fails without
+# it). THPM hardcodes the `omarchy` CLI (src/thpm/omarchy.py:
+# run(["omarchy", ...]) + capabilities() via `omarchy commands
+# --json`, REQUIRED_ROUTES "omarchy hook", "omarchy hook install",
+# "omarchy theme refresh", "omarchy shell", "omarchy plugin",
+# "omarchy menu"). Hexciri renamed the CLI to hexciri, so THPM's
+# capability check fails and install.sh rolls the runtime back.
+# This shim is the same class of accepted exception as the
+# GlobalShortcut appid staying "omarchy" and the helpers.lua
+# "omarchy:" dispatch prefix: third-party code that names omarchy,
+# bridged at runtime. It lives in /usr/local/bin (default PATH
+# everywhere, including the theme-set hook environment), NOT in
+# /usr/share/hexciri/bin, where the placement scan dies on any file
+# named omarchy. `commands --json` translates route names back to
+# omarchy so THPM's six required routes match (verified: the fork's
+# `hexciri commands --json` lists all six as hexciri routes).
+if [ ! -x /usr/local/bin/omarchy ]; then
+  sudo tee /usr/local/bin/omarchy >/dev/null <<'OMARCHY_SHIM_EOF'
+#!/bin/bash
+# Hexciri compat alias for THPM: THPM hardcodes the omarchy CLI.
+# Forwards to hexciri, translating route names in commands --json.
+if [ "${1:-}" = "commands" ] && [ "${2:-}" = "--json" ]; then
+  hexciri commands --json | sed 's/"hexciri /"omarchy /g'
+  exit "${PIPESTATUS[0]}"
+fi
+exec hexciri "$@"
+OMARCHY_SHIM_EOF
+  sudo chmod +x /usr/local/bin/omarchy 2>/dev/null && info "  THPM compat alias installed: /usr/local/bin/omarchy -> hexciri (THPM hardcodes the omarchy CLI)" || warn "  could not install /usr/local/bin/omarchy, thpm install will fail its capability check"
+fi
+THPM_SRC="$HOME/.local/opt/thpm"
+THPM_NEED_INSTALL=0
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$THPM_SRC/.git" ]; then
+    git -C "$THPM_SRC" fetch --quiet origin 2>/dev/null && git -C "$THPM_SRC" pull --ff-only --quiet 2>/dev/null && info "  THPM source updated: $THPM_SRC" || warn "  THPM source pull failed, keeping existing checkout at $THPM_SRC"
+  else
+    git clone --quiet https://github.com/OldJobobo/thpm.git "$THPM_SRC" 2>/dev/null && info "  THPM source cloned: $THPM_SRC" || warn "  THPM source clone failed, THPM will not be installed (theme hook skips it)"
+  fi
+else
+  warn "  git not found, THPM source install skipped"
+fi
+if [ -x "$THPM_SRC/install.sh" ]; then
+  if ! command -v thpm >/dev/null 2>&1; then THPM_NEED_INSTALL=1; fi
+  if [ "$THPM_NEED_INSTALL" = "1" ]; then
+    (cd "$THPM_SRC" && ./install.sh --no-ui >/tmp/hexciri-thpm-install.log 2>&1) && info "  THPM installed: $(thpm --version 2>/dev/null || echo thpm) (source, --no-ui, launcher ~/.local/bin/thpm)" || warn "  THPM source install failed (see /tmp/hexciri-thpm-install.log), theme hook will skip THPM"
+  else
+    info "  THPM already installed: $(thpm --version 2>/dev/null || echo thpm), skipping source reinstall"
+  fi
+fi
+# steam-adwaita checkout: THPM's steam integration (and v1's 40-steam.sh)
+# install the active palette through it. Clone once, pull on re-run.
+STEAM_ADWAITA="$HOME/.local/share/steam-adwaita"
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$STEAM_ADWAITA/.git" ]; then
+    git -C "$STEAM_ADWAITA" pull --ff-only --quiet 2>/dev/null || true
+  elif [ ! -d "$STEAM_ADWAITA" ]; then
+    git clone --quiet https://github.com/tkashkin/Adwaita-for-Steam "$STEAM_ADWAITA" 2>/dev/null && info "  steam-adwaita checkout cloned: $STEAM_ADWAITA" || warn "  steam-adwaita clone failed, THPM steam integration stays unavailable (thpm report steam)"
+  fi
+fi
+# Bridge THPM's own hook into Hexciri's hook dir, and enable steam.
+if command -v thpm >/dev/null 2>&1; then
+  if [ -f "$HOME/.config/omarchy/hooks/theme-set.d/90-thpm" ]; then
+    mkdir -p "$HOME/.config/hexciri/hooks/theme-set.d"
+    ln -sfn "$HOME/.config/omarchy/hooks/theme-set.d/90-thpm" "$HOME/.config/hexciri/hooks/theme-set.d/90-thpm" && info "  THPM hook bridged: ~/.config/hexciri/hooks/theme-set.d/90-thpm -> omarchy hook dir" || warn "  could not bridge THPM 90-thpm hook, hook 20-hexciri-thpm still runs thpm on theme switch"
+  fi
+  info "  THPM steam integration is enabled after the theme is applied (theme-hook step below), not here: no theme is staged yet"
+fi
+unset THPM_SRC THPM_NEED_INSTALL STEAM_ADWAITA
+
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
 # runs as the normal user.
@@ -3742,6 +3853,8 @@ step "Verifying placement"
 [ -f "$HEXCIRI_PATH/default/hypr/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/hexciri.lua"
 [ -f "$HEXCIRI_PATH/default/hypr/hexciri-compat.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/hexciri-compat.lua"
 [ -f "$HEXCIRI_PATH/default/hypr/bootstrap.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/bootstrap.lua (Hyprland dofiles it first; without it Hyprland trips emergency mode with no binds)"
+[ -f "$HEXCIRI_PATH/default/hypr/bindings/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/bindings/hexciri.lua (Hexciri custom binds, monocle cycle / Brave incognito / Messenger / screen record)"
+[ -f "$HEXCIRI_PATH/default/hypr/apps/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/apps/hexciri.lua (Hexciri custom window rules, TUI float / mpv+imv opacity)"
 [ -f "$HEXCIRI_PATH/bin/hexciri-compat.sh" ] || die "missing: $HEXCIRI_PATH/bin/hexciri-compat.sh"
 [ -f "$HOME/.config/hypr/hyprland.lua" ] || die "missing: $HOME/.config/hypr/hyprland.lua"
 if grep -q 'default\.hypr\.omarchy' "$HOME/.config/hypr/hyprland.lua"; then
@@ -4610,6 +4723,64 @@ STRATA_HOOK_EOF
 chmod +x "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-strata-theme"
 bash "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-strata-theme" 2>/dev/null && info "Installed: Strata Follow-Omarchy theme symlinks (theme-set.d hook + applied now)" || warn "Strata theme symlink hook failed, Strata will not follow live theme changes"
 
+# --- Hexciri theme hooks (2026-11-24, Devi: modified better Omarchy theme hook) ---
+# Omarchy's theme-set already calls hexciri-hook theme-set at the end of
+# every switch, which runs every file in
+# ~/.config/hexciri/hooks/theme-set.d/ in glob order. These are the
+# Hexciri hooks, in run order:
+#   10-hexciri-strata-theme (above): Strata Follow-Omarchy symlinks.
+#   10-hexciri-gtk: flat GTK override sheet from the active palette.
+#   11-hexciri-adapta: signaldirective/Adapta GTK, opt-in only.
+#   20-hexciri-thpm: THPM hook-run theme-set (enabled integrations).
+#   90-thpm: THPM's own hook, bridged from the omarchy hook dir.
+# theme-env.sh is the shared THPM-port runtime every hook sources.
+# No extra apps: GTK/Adapta/THPM/steam are theming only, the apps they
+# theme (Steam, Nautilus, Adapta) are used only when already installed.
+step "Installing Hexciri theme hooks (~/.config/hexciri/hooks/theme-set.d)"
+mkdir -p "$HOME/.config/hexciri/hooks/theme-set.d" "$HOME/.config/hexciri/hooks/lib"
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HOME/.config/hexciri/hooks/lib/theme-env.sh"
+  info "  theme hook: hooks/lib/theme-env.sh installed (THPM-port runtime, colors + config reader)"
+else
+  die "v2/hexciri-theme-env.sh not in the installer tree, theme hooks cannot read the active palette"
+fi
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-nautilus.fragment.css" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-nautilus.fragment.css" "$HOME/.config/hexciri/hooks/lib/nautilus-gtk4.fragment.css"
+fi
+for _hook in "hexciri-theme-hook-gtk.sh:10-hexciri-gtk" "hexciri-theme-hook-adapta.sh:11-hexciri-adapta" "hexciri-theme-hook-thpm.sh:20-hexciri-thpm"; do
+  _hook_src="${_hook%%:*}"; _hook_dst="${_hook##*:}"
+  if [ -f "$HEXCIRI_REPO_ROOT/v2/$_hook_src" ]; then
+    cp -a "$HEXCIRI_REPO_ROOT/v2/$_hook_src" "$HOME/.config/hexciri/hooks/theme-set.d/$_hook_dst"
+    chmod +x "$HOME/.config/hexciri/hooks/theme-set.d/$_hook_dst"
+    info "  theme hook: theme-set.d/$_hook_dst installed"
+  else
+    die "v2/$_hook_src not in the installer tree, theme hook $_hook_dst cannot be installed"
+  fi
+done
+unset _hook _hook_src _hook_dst
+# theme-hook.toml is a USER setting: seed once, never overwrite on a
+# re-run. Adapta stays off by default; flip [gtk] adapta=true after
+# cloning signaldirective/Adapta to ~/.themes/Adapta.
+if [ ! -f "$HOME/.config/hexciri/theme-hook.toml" ]; then
+  if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" ]; then
+    cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HOME/.config/hexciri/theme-hook.toml"
+    info "  theme hook config seeded: ~/.config/hexciri/theme-hook.toml ([gtk] adapta=false)"
+  else
+    warn "  v2/hexciri-theme-hook.toml not in the installer tree, theme hooks use their built-in defaults"
+  fi
+else
+  info "  theme hook config kept: ~/.config/hexciri/theme-hook.toml (re-run, your settings preserved)"
+fi
+# Enable THPM steam here, not in the THPM step: the theme is applied
+# by now, so THPM can generate the Steam palette from the staged
+# colors.toml. Only when Steam is installed and the steam-adwaita
+# checkout exists; otherwise it stays disabled for `thpm enable steam`.
+if command -v thpm >/dev/null 2>&1 && command -v steam >/dev/null 2>&1 && [ -d "$HOME/.local/share/steam-adwaita" ]; then
+  thpm enable steam >/tmp/hexciri-thpm-steam.log 2>&1 && info "  THPM steam integration enabled (Steam + steam-adwaita present)" || warn "  thpm enable steam failed (see /tmp/hexciri-thpm-steam.log), Steam theming stays off until: thpm doctor steam"
+elif command -v thpm >/dev/null 2>&1; then
+  info "  THPM steam integration left disabled (enable with: thpm enable steam, once Steam is installed)"
+fi
+
 # --- Spotify fallback wrapper (post-placement) ---
 # The Super+Shift+M bind calls `spotify`. The AUR `spotify` package
 # provides that binary directly, but if only the Arch extra
@@ -4857,6 +5028,11 @@ command -v mise >/dev/null 2>&1 && hc_info "  mise: $(mise --version 2>/dev/null
 [ -f /etc/mise/conf.d/hexciri-tools.toml ] && hc_info "  mise tools: /etc/mise/conf.d/hexciri-tools.toml present (node, uv, gh, lazy; no AI agents, no Herdr)" || warn "  mise tools: /etc/mise/conf.d/hexciri-tools.toml missing"
 [ -f "$HOME/.config/kitty/kitty.conf" ] && hc_info "  kitty config: ~/.config/kitty/kitty.conf present (theme include)" || warn "  kitty config: not placed, Kitty will not load theme colours"
 [ -d "$HEXCIRI_PATH/default/themed" ] && hc_info "  theme templates: default/themed present" || warn "  theme templates: default/themed missing, theme-set generates nothing"
+[ -f "$HEXCIRI_PATH/default/hypr/bindings/hexciri.lua" ] && [ -f "$HEXCIRI_PATH/default/hypr/apps/hexciri.lua" ] && hc_info "  hexciri lua: bindings/hexciri.lua + apps/hexciri.lua present (custom binds/rules only, Omarchy binds not duplicated)" || warn "  hexciri lua: custom binds/apps Lua missing, monocle cycle / TUI float / mpv+imv opacity will not load"
+[ -x "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-gtk" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/11-hexciri-adapta" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/20-hexciri-thpm" ] && [ -f "$HOME/.config/hexciri/hooks/lib/theme-env.sh" ] && hc_info "  theme hooks: 10-gtk + 11-adapta + 20-thpm + theme-env.sh present (theme-set.d)" || warn "  theme hooks: a Hexciri theme hook is missing from ~/.config/hexciri/hooks/theme-set.d/, theme switch will skip GTK/Adapta/THPM"
+command -v thpm >/dev/null 2>&1 && hc_info "  thpm: $(thpm --version 2>/dev/null || echo present) (source install, not AUR)" || warn "  thpm: NOT installed, theme switch skips THPM integrations (install: git clone OldJobobo/thpm, ./install.sh --no-ui)"
+[ -x /usr/local/bin/omarchy ] && hc_info "  thpm compat: /usr/local/bin/omarchy -> hexciri (THPM hardcodes the omarchy CLI)" || warn "  thpm compat: /usr/local/bin/omarchy missing, thpm install/doctor will fail its capability check"
+[ -d "$HOME/.local/share/steam-adwaita" ] && hc_info "  steam-adwaita: checkout present (THPM steam target)" || warn "  steam-adwaita: checkout missing at ~/.local/share/steam-adwaita, THPM steam integration stays unavailable (thpm report steam)"
 if command -v grim >/dev/null 2>&1 && command -v slurp >/dev/null 2>&1; then hc_info "  screenshot: grim + slurp present (PRINT, hexciri-capture-screenshot)"; else warn "  screenshot: grim/slurp missing, PRINT will fail"; fi
 command -v tesseract >/dev/null 2>&1 && hc_info "  OCR: tesseract present (SUPER+CTRL+PRINT capture-text)" || warn "  OCR: tesseract NOT installed, capture-text will fail"
 if [ "$HC_FAIL" -eq 0 ]; then
@@ -4937,7 +5113,7 @@ If Quickshell fails to start:
 
 Phase 2 is NOT installed. Next steps are separate work:
   Hexciri Lua edits, port Hexciri scripts from Noctalia to QS, theme engine merge,
-  arch-updates EndeavourOS backend, Nyxiri overlay, THPM install. (hexciri-update rework done 2026-11-24: eos-update --aur + Hexciri self-update + mise.)
+  arch-updates EndeavourOS backend, Nyxiri overlay. (hexciri-update rework done 2026-11-24: eos-update --aur + Hexciri self-update + mise. THPM + theme hook done 2026-11-24.)
 EOF
 fi
 
