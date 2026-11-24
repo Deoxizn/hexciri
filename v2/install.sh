@@ -1985,6 +1985,48 @@ fi
 bash -n "$FORK_OUT/bin/hexciri-capture-screenshot" || die "bash -n failed on rewritten $FORK_OUT/bin/hexciri-capture-screenshot"
 info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, bottom, Herdr removed, cliamp/omawrite/Obsidian binds removed (ncspot/ghostwriter/obsidian not wanted), screenshot via grim+slurp, touchpad bottom-right = right click"
 
+# --- Patch dock pinned list (Devi 2026-11-23 20:59 / 21:00 MST) ---
+# Upstream config/omarchy/shell.json pins folio, omarchy-browser,
+# omarchy-terminal, omacalc, omawrite, hype, monologue, cliamp. After the
+# rename only the two wrappers resolve (hexciri-browser, hexciri-terminal);
+# the other six are dead Omarchy app names and the dock filters them out,
+# so the dock showed two pins and six empty slots. Devi picked the pins:
+# Strata, Spotify, Brave Origin, Zed, and Kitty.
+# Desktop-entry ids, verified, not guessed:
+#   Strata: io.github.lgse.Strata.desktop (Strata step installs it to
+#     ~/.local/share/applications/io.github.lgse.Strata.desktop)
+#   Spotify: spotify.desktop (AUR spotify, /usr/bin/spotify + spotify.desktop)
+#   Brave Origin: brave-origin.desktop (AUR brave-origin-bin)
+#   Zed: dev.zed.Zed.desktop (Arch extra zed, Exec=zeditor)
+#   Kitty: kitty.desktop (Arch extra kitty, also the xdg-terminals.list pick)
+# hexciri-browser and hexciri-terminal are deliberately NOT pinned: the
+# browser wrapper launches the default browser (Brave Origin) and the
+# terminal wrapper launches the default terminal (Kitty), so pinning them
+# as well would show two Browser icons and two Terminal icons. DockModel
+# stand-ins only claim a window when its own app is not pinned, and both
+# Brave Origin and Kitty are pinned directly here, so their windows claim
+# themselves. Idempotent: the patch rewrites dock.pinned to exactly this
+# list, whatever the forked file held before.
+step "Patching dock pinned list: Strata, Spotify, Brave Origin, Zed, Kitty"
+python3 - "$FORK_OUT" <<'PY'
+import json
+import sys
+
+root = sys.argv[1]
+pins = ['io.github.lgse.Strata', 'spotify', 'brave-origin', 'dev.zed.Zed', 'kitty']
+path = root + '/config/shell.json'
+with open(path) as f:
+    cfg = json.load(f)
+if cfg.get('dock', {}).get('pinned') == pins:
+    print('dock pinned list already set, skipping')
+else:
+    cfg.setdefault('dock', {})['pinned'] = pins
+    with open(path, 'w') as f:
+        json.dump(cfg, f, indent=2)
+        f.write('\n')
+    print('dock pinned list set: ' + ', '.join(pins))
+PY
+
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
 # runs as the normal user.
@@ -2040,12 +2082,13 @@ info "Linked: $HEXCIRI_PATH/bin/hexciri-* into ~/.local/bin/"
 
 # Browser + terminal desktop entries: upstream applications/ ships
 # omarchy-browser.desktop and omarchy-terminal.desktop, renamed to
-# hexciri-*.desktop by the fork. The dock filters its pinned list by
-# DesktopEntries.byId(id), so without these files in
-# ~/.local/share/applications the Browser and Terminal pins resolve to
-# nothing and the dock shows no pinned apps at all. Only these two are
-# placed: the other applications/*.desktop files are Omarchy web apps
-# (ChatGPT, Herdr, Discord, ...) and AI/out-of-scope entries.
+# hexciri-*.desktop by the fork. They are the default-browser / default-
+# terminal launchers (and the dock's stand-ins for WebBrowser /
+# TerminalEmulator windows), so they are placed even though they are NOT
+# dock pins: the pinned list is brave-origin / kitty directly, and pinning
+# these wrappers too would duplicate both. Only these two are placed: the
+# other applications/*.desktop files are Omarchy web apps (ChatGPT, Herdr,
+# Discord, ...) and AI/out-of-scope entries.
 mkdir -p "$HOME/.local/share/applications"
 for desk_file in "$FORK_OUT"/applications/*.desktop; do
   [ -e "$desk_file" ] || continue
@@ -2281,6 +2324,20 @@ for _dead in '"install.' '"remove.' '"update.channel' '"update.hexciri"' '"updat
 done
 unset _dead
 info "PASS: menu audit verified (dead rows gone, audit bins present, shell IPC paths absolute)"
+# Dock pinned list (Devi 2026-11-23): Strata, Spotify, Brave Origin, Zed,
+# Kitty. hexciri-browser / hexciri-terminal are deliberately NOT pinned,
+# they are wrappers for Brave Origin / Kitty and would duplicate them.
+for _pin in io.github.lgse.Strata spotify brave-origin dev.zed.Zed kitty; do
+  grep -q "\"$_pin\"" "$HOME/.config/hexciri/shell.json" || die "dock pinned list missing $_pin in ~/.config/hexciri/shell.json"
+done
+unset _pin
+for _dead_pin in folio omacalc omawrite hype monologue cliamp hexciri-browser hexciri-terminal; do
+  if grep -q "\"$_dead_pin\"" "$HOME/.config/hexciri/shell.json"; then
+    die "dock pinned list still contains dead/duplicate pin $_dead_pin"
+  fi
+done
+unset _dead_pin
+info "PASS: dock pinned list verified (Strata, Spotify, Brave Origin, Zed, Kitty)"
 [ -f "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" ] || die "missing: default/hexciri/hexciri-menu.jsonc, Super+Alt+Space menu has no routes"
 if ! grep -rl 'hexciri.menu' "$HEXCIRI_PATH/shell/plugins" --include='manifest.json' >/dev/null 2>&1; then
   warn "no plugin manifest registers hexciri.menu, Super+Alt+Space menu will do nothing"
@@ -2731,7 +2788,7 @@ Reboot, then check in order:
 
   17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta, xterm, stoken and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). YAD settings is hidden, yad itself stays (EOS tools depend on it).
 
-  18. Menu audit 2026-11-23: the whole Install and Remove subtrees are gone (install-*/remove-* were never in the fork), Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock Browser/Terminal pins resolve now (their desktop entries are placed in ~/.local/share/applications); the other pinned ids (folio, omacalc, omawrite, hype, monologue, cliamp) are dead Omarchy app names and stay filtered out until Devi picks replacements.
+  18. Menu audit 2026-11-23: the whole Install and Remove subtrees are gone (install-*/remove-* were never in the fork), Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
 
 If Super+Alt+Space (menu) still does nothing after reboot, run this in a terminal and report what it prints:
   hexciri-shell shell toggle hexciri.menu '{"menu":"root"}'
