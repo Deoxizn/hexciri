@@ -459,7 +459,24 @@ is_allowed_bin() {
     launch-shell | theme-set | theme-set-templates | plugin-add | plugin-catalog | plugin-clone | plugin-disable | plugin-enable | plugin-list | plugin-remove | plugin-update | plugin-validate | bar | bar-text-color | shell | shell-config | migrate | migrate-notify | hook | hook-install | \
       refresh-hyprland | hyprland-reload-guard | notification-send | menu | menu-clipboard | menu-emoji | menu-emoji-insert | menu-file | menu-herdr-keybindings | menu-images | menu-input | menu-keybindings | menu-plugin | menu-region-formats | menu-select | menu-share | menu-timezone | menu-tmux-keybindings | \
       provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | launch-* | \
-      cmd-* | default-terminal | action | i18n | notification-wait | software-rendering | toggle-enabled | hyprland-toggle-enabled | hyprland-software-rendering | hw-software-rendering | powerprofiles-init | powerprofiles-set | powerprofiles-floor | powerprofiles-list | hyprland-monitor-watch | hyprland-monitor-clamshell | hyprland-monitor-modeless | hyprland-monitor-external-active | hyprland-monitor-identity | hyprland-monitor-internal | hyprland-monitor-internal-mirror | hyprland-monitor-laptop | hyprland-workspace-layout-current | hyprland-workspace-layout-toggle | hyprland-workspace-layout-default | hw-laptop | hw-clamshell | hw-external-monitors | system-lid-inhibit | restart-hyprctl)
+      cmd-* | default-terminal | action | i18n | notification-wait | software-rendering | toggle-enabled | hyprland-toggle-enabled | hyprland-software-rendering | hw-software-rendering | powerprofiles-init | powerprofiles-set | powerprofiles-floor | powerprofiles-list | hyprland-monitor-watch | hyprland-monitor-clamshell | hyprland-monitor-modeless | hyprland-monitor-external-active | hyprland-monitor-identity | hyprland-monitor-internal | hyprland-monitor-internal-mirror | hyprland-monitor-laptop | hyprland-workspace-layout-current | hyprland-workspace-layout-toggle | hyprland-workspace-layout-default | hw-laptop | hw-clamshell | hw-external-monitors | system-lid-inhibit | restart-hyprctl | \
+      capture-* | system-* | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | cmd-present | reminder | transcode | osd)
+      # Dinner audit 2026-11-23: the families above were missing, so binds and
+      # menu rows that call them failed with Command not found, exactly like
+      # monitor-watch did. capture-* (screenshot/screenrecording/text/region),
+      # system-* (lock/logout/reboot/shutdown, lid-close), hyprland-* (window
+      # gaps/transparency/corners, monitor toggles), notification-* (send is
+      # already listed, plus time/battery/weather), toggle-* (bar, animations,
+      # transparency), icons-*, hw-*, region-*, hibernation-*, sleep-*,
+      # audio-*, battery-*, bluetooth-*, brightness-*, clipboard-*, branding-*,
+      # default-* (editor/browser/terminal), theme-*, agent / agent-* (shell
+      # AI-agent helpers, not apps), pkg-present / cmd-present (menu when/
+      # disabled checks), reminder, transcode, osd. Deliberately still NOT
+      # included: install-*, remove-*, channel-*, mirror-*, keyring-*,
+      # upgrade-* (app installers and Omarchy repo machinery, out of the
+      # shell-only Phase 1 scope). Menu install/remove rows will fail if
+      # clicked, that is intended; their when/disabled checks use
+      # pkg-present, which IS included, so they still read as not installed.
       return 0
       ;;
     *)
@@ -498,6 +515,21 @@ copy_subsets() {
     if ! copy_optional_file "$OMARCHY_SRC/default/launcher.hides" "$FORK_OUT/default/hexciri/launcher.hides" "default/launcher.hides"; then
       copy_optional_file "$OMARCHY_SRC/launcher.hides" "$FORK_OUT/default/hexciri/launcher.hides" "launcher.hides" || warn "launcher.hides not found in source, continuing without it"
     fi
+  fi
+  # Hyprland global shortcuts list: the shell registers one Hyprland global
+  # shortcut per line (menu root/apps/theme, panels, audio, brightness, media
+  # and notification IPC), and helpers.lua turns { menu = ... } / { panel = ... }
+  # binds into hl.dsp.global("omarchy:<kind>.<target>") instead of spawning a
+  # process per keypress. This file was NOT copied before, so every menu/panel
+  # bind fell back to a command (hexciri-menu toggle root, hexciri-shell ...)
+  # run by Hyprland exec, which does not reliably have /usr/share/hexciri/bin
+  # on PATH. That is the most likely reason Super+Space and Super+Alt+Space
+  # did nothing on the first live boot. Copying it makes those binds go
+  # straight to the running shell with no process and no PATH involved.
+  # The "omarchy:" global-shortcut prefix itself is deliberately NOT renamed:
+  # helpers.lua and the shell QML both use it, so both sides still agree.
+  if ! copy_optional_file "$OMARCHY_SRC/default/omarchy/shortcuts" "$FORK_OUT/default/hexciri/shortcuts" "default/omarchy/shortcuts"; then
+    copy_optional_file "$OMARCHY_SRC/default/shortcuts" "$FORK_OUT/default/hexciri/shortcuts" "default/shortcuts" || warn "shortcuts not found in source, menu/panel binds fall back to commands (Super+Space may need PATH to work)."
   fi
 
   # All themes, colors.toml + shell.toml, verbatim except path renames applied later. 23 themes at pinned commit.
@@ -643,7 +675,23 @@ replacements = [
     # omarchy-font glyphs are U+E901+ brand marks for menu entries), so this
     # replacement touches the logo and nothing else.
     (b"\\ue900", b"\\uf303"),
+    # Literal U+E900 glyph: the menu jsonc stores the branding icon as an
+    # actual UTF-8 U+E900 character, not the "\ue900" escape the QML uses,
+    # so the escape rule above never matched it and the Branding row kept a
+    # blank icon. Replace the literal bytes (EE A4 80) with the literal
+    # Arch logo bytes (EF 8C 83, U+F303) too.
+    (b"\xee\xa4\x80", b"\xef\x8c\x83"),
     (b'fontFamily: "omarchy"', b'fontFamily: "JetBrainsMono Nerd Font"'),
+    # iconFont in the menu jsonc: same problem as fontFamily, for menu rows
+    # (appearance.branding and the install/remove AI rows). Point it at the
+    # Nerd Font too, so the row at least renders in a font that is installed.
+    (b'"iconFont":"omarchy"', b'"iconFont":"JetBrainsMono Nerd Font"'),
+    (b'"iconFont": "omarchy"', b'"iconFont": "JetBrainsMono Nerd Font"'),
+    # Deliberately NOT renamed: the "omarchy:" Hyprland global-shortcut
+    # prefix (hl.dsp.global("omarchy:menu.root") in helpers.lua, and the
+    # shell QML that registers the same names). Both sides use it, so
+    # renaming one side would break every global shortcut. It is an
+    # internal namespace, not a file, path, or CLI name.
     (b"omarchy-menu", b"hexciri-menu"),
     (b"omarchy.lua", b"hexciri.lua"),
     # Root cause of the Hyprland emergency mode on the first live boot:
@@ -1080,6 +1128,12 @@ case ":$PATH:" in
   *:/usr/share/hexciri/bin:*) ;;
   *) export PATH="/usr/share/hexciri/bin:$PATH" ;;
 esac
+# ~/.local/bin holds Strata (bin/hexciri-strata-install puts it there) and
+# the ~/.local/bin/hexciri-* symlinks, so it belongs on PATH too.
+case ":$PATH:" in
+  *:"$HOME"/.local/bin:*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
 EOF
 sudo install -Dm644 "$TMP_PROFILE" /etc/profile.d/hexciri.sh
 rm -f "$TMP_PROFILE"
@@ -1093,7 +1147,7 @@ TMP_UWSM="$(mktemp)"
 {
   printf 'HEXCIRI_PATH=/usr/share/hexciri\n'
   printf 'OMARCHY_PATH=/usr/share/hexciri\n'
-  printf 'PATH=/usr/share/hexciri/bin:%s\n' "$PATH"
+  printf 'PATH=/usr/share/hexciri/bin:%s/.local/bin:%s\n' "$HOME" "$PATH"
 } > "$TMP_UWSM"
 sudo install -Dm644 "$TMP_UWSM" /usr/share/uwsm/env.d/10-hexciri
 rm -f "$TMP_UWSM"
@@ -1140,29 +1194,44 @@ info "PASS: no file or dir named omarchy under $HEXCIRI_PATH or ~/.config/hexcir
 # first live boot showed autostart calling omarchy-hyprland-monitor-watch
 # after the rename, because no rule matched omarchy-*. Warn, do not die:
 # a comment mentioning an omarchy-* command is harmless, a real call is not.
-LEFTOVER_OMARCHY_CMDS="$(grep -rInE 'omarchy-[a-z0-9]+' "$HEXCIRI_PATH/default/hypr" "$HOME/.config/hypr" 2>/dev/null || true)"
+# Dinner audit: scan QML and the menu jsonc too, not just Lua. The QML
+# menu trigger and menu rows call hexciri-* commands the same way.
+LEFTOVER_OMARCHY_CMDS="$(grep -rInE 'omarchy-[a-z0-9]+' "$HEXCIRI_PATH/default/hypr" "$HOME/.config/hypr" "$HEXCIRI_PATH/shell" "$HEXCIRI_PATH/default/hexciri" 2>/dev/null | grep -v 'omarchy:' || true)"
 if [ -n "$LEFTOVER_OMARCHY_CMDS" ]; then
-  warn "omarchy-* references remain in placed Hyprland Lua (check whether they are real commands or just comments):"
+  warn "omarchy-* references remain in placed Hyprland Lua / shell / menu (check whether they are real commands or just comments):"
   printf '%s\n' "$LEFTOVER_OMARCHY_CMDS"
 else
-  info "PASS: no omarchy-* command references in placed Hyprland Lua"
+  info "PASS: no omarchy-* command references in placed Hyprland Lua / shell / menu"
 fi
 unset LEFTOVER_OMARCHY_CMDS
 
-# Every hexciri-* command autostart tries to run must exist in the installed
-# bin/ or on PATH, or login shows "App failure, Command not found" popups
-# from uwsm-app. herdr is deliberately excluded: autostart starts it via
-# systemd-run and a missing herdr fails silently, it is out of Phase 1 scope.
-if [ -f "$HEXCIRI_PATH/default/hypr/autostart.lua" ]; then
-  for _cmd in $(grep -oE 'hexciri-[a-z0-9-]+' "$HEXCIRI_PATH/default/hypr/autostart.lua" 2>/dev/null | sort -u); do
+# Every hexciri-* command the forked tree tries to run must exist in the
+# installed bin/ or on PATH, or login shows "App failure, Command not found"
+# popups from uwsm-app. Dinner audit: this used to scan autostart.lua only,
+# which is how the capture-*, system-*, hyprland-window-* and menu helper
+# gaps survived. Scan every placed Lua, QML and jsonc file now, so a missing
+# bin script is caught here at install time instead of as a popup at login.
+# herdr is deliberately excluded: autostart starts it via systemd-run and a
+# missing herdr fails silently, it is out of Phase 1 scope. install-* /
+# remove-* are also excluded: those menu rows are out of the shell-only
+# scope and are expected to fail if clicked.
+if [ -d "$HEXCIRI_PATH" ]; then
+  for _cmd in $(grep -rIhoE 'hexciri-[a-z0-9-]+' "$HEXCIRI_PATH/default" "$HEXCIRI_PATH/shell" "$HEXCIRI_PATH/bin" "$HOME/.config/hypr" 2>/dev/null | sort -u); do
+    case "$_cmd" in
+      hexciri-install-* | hexciri-remove-* | hexciri-channel-* | hexciri-mirror-* | hexciri-keyring-* | hexciri-upgrade-*) continue ;;
+      hexciri-compat) continue ;;
+    esac
     if [ -x "$HEXCIRI_PATH/bin/$_cmd" ] || command -v "$_cmd" >/dev/null 2>&1; then
-      info "  autostart command present: $_cmd"
+      info "  forked-tree command present: $_cmd"
     else
-      warn "  autostart calls $_cmd but it is not installed, expect a Command not found popup at login"
+      warn "  forked tree calls $_cmd but it is not installed, expect a Command not found popup / dead bind"
     fi
   done
   unset _cmd
 fi
+# Hyprland global shortcuts: without this file every menu/panel bind falls
+# back to a spawned command, which is how Super+Space died on the first boot.
+[ -f "$HEXCIRI_PATH/default/hexciri/shortcuts" ] || warn "MISSING: default/hexciri/shortcuts, menu/panel binds fall back to commands (Super+Space may need PATH to work)"
 
 # Menu / dock / terminal / file manager essentials: Super+Space, Super+Alt+Space,
 # Super+Return and Super+Shift+F all go through these.
@@ -1302,6 +1371,15 @@ if [ -x "$HEXCIRI_REPO_ROOT/bin/hexciri-strata-install" ]; then
 else
   warn "bin/hexciri-strata-install not found in the installer tree, Strata not installed. Install by hand later if needed."
 fi
+# Strata lands in ~/.local/bin/strata, which Hyprland exec / uwsm-app does
+# not reliably have on PATH, so Super+Shift+F still errored after a
+# successful Strata install. Symlink it into /usr/share/hexciri/bin/, which
+# IS on the uwsm PATH, so launch-files finds it either way.
+if [ -x "$HOME/.local/bin/strata" ]; then
+  sudo ln -sf "$HOME/.local/bin/strata" "$HEXCIRI_PATH/bin/strata" 2>/dev/null && info "Strata linked into hexciri bin PATH: $HEXCIRI_PATH/bin/strata" || warn "could not link strata into $HEXCIRI_PATH/bin, Super+Shift+F relies on ~/.local/bin being on PATH"
+else
+  warn "strata binary not found at ~/.local/bin/strata after install step, Super+Shift+F will error until it is installed"
+fi
 
 # --- Health check, like v1 ---
 # Post-install sanity before the reboot offer, so a broken bring-up is
@@ -1352,7 +1430,7 @@ else
 fi
 command -v kitty >/dev/null 2>&1 && info "  terminal: kitty present" || warn "  terminal: kitty NOT installed, terminal binds fall back to xdg-terminal-exec"
 command -v udiskie >/dev/null 2>&1 && info "  udiskie: present" || warn "  udiskie: NOT installed, autostart will pop a Command not found error"
-command -v strata >/dev/null 2>&1 && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
+command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
 command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
 if [ "$HC_FAIL" -eq 0 ]; then
   info "Health check: clean"
@@ -1375,7 +1453,7 @@ Reboot, then check in order:
   7. Bluetooth works if needed: `bluetoothctl devices`
   8. Theme: `hexciri-theme-set` with a stock theme, check bar and menu recolor
   9. Plugin: install a stock plugin, check it loads, check the alias resolves omarchy.bar to hexciri.bar
-  10. Menu: Super+Space opens the menu (Arch logo at the bar's left end), Super+Alt+Space opens the dock apps
+  10. Menu: Super+Space opens the menu (Arch logo at the bar's left end), Super+Alt+Space opens the dock apps. These now go through Hyprland global shortcuts (default/hexciri/shortcuts), not spawned commands, so they should work even if PATH is off.
   11. File manager: Super+Shift+F opens Strata, terminal opens Kitty
   12. Clock popup shows the real month and weekday names, not clock.monthYear / clock.weekShort
   13. Workspace 1 shows 1 / its mode glyph, and SDDM shows the Hexciri emblem, not Omarchy logos
