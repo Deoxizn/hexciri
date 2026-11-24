@@ -120,6 +120,8 @@ NO_REBOOT=0
 REFORK=0
 LIGHT_SYNC=0
 PRINT_FP=0
+WITH_CATS=0
+WITH_NYXIRI=0
 for _a in "$@"; do
   case "$_a" in
     --yes|-y) UPDATE_YES="--yes" ;;
@@ -128,8 +130,10 @@ for _a in "$@"; do
     --refork|--force) REFORK=1 ;;
     --light-sync) LIGHT_SYNC=1 ;;
     --print-fingerprints) PRINT_FP=1 ;;
-    -h|--help) echo "usage: install.sh [--yes] [--reboot] [--no-reboot] [--refork] [--light-sync] [--print-fingerprints]"; exit 0 ;;
-    *) printf 'install.sh: unknown arg: %s (usage: install.sh [--yes] [--reboot] [--no-reboot])\n' "$_a" >&2; exit 1 ;;
+    --with-cats) WITH_CATS=1 ;;
+    --with-nyxiri) WITH_NYXIRI=1 ;;
+    -h|--help) echo "usage: install.sh [--yes] [--reboot] [--no-reboot] [--refork] [--light-sync] [--print-fingerprints] [--with-cats] [--with-nyxiri]"; exit 0 ;;
+    *) printf 'install.sh: unknown arg: %s (usage: install.sh [--yes] [--reboot] [--no-reboot] [--with-cats] [--with-nyxiri])\n' "$_a" >&2; exit 1 ;;
   esac
 done
 unset _a
@@ -4164,6 +4168,50 @@ else
   warn "  opencode: agents Panel.qml not in fork output, panel patch skipped"
 fi
 
+# --- hexciri-plugin-update pulls the checked-out branch (2026-11-24, Nyxiri nyx step) ---
+# Upstream update_one() runs `git fetch origin HEAD`, i.e. the remote
+# DEFAULT branch (main), then merges FETCH_HEAD. A plugin installed
+# from nyx would merge main into its nyx checkout, or fail to
+# fast-forward once they diverge, and never pull nyx. `git remote
+# set-head origin nyx` does NOT fix it: fetch resolves HEAD on the
+# REMOTE side, the local origin/HEAD symref is ignored (verified in a
+# local bare-repo sim: after set-head, fetch origin HEAD still landed
+# the main tip). So patch the fetch to the checked-out branch; detached
+# HEAD falls back to origin HEAD. This is what makes
+# `hexciri plugin update pizza.dirty.nyxiri` pull nyx after the Nyxiri
+# step installs it, and it also fixes the Settings plugin (master) the
+# same way. Idempotent: anchor is the single upstream fetch line.
+PLUGIN_UPDATE_BIN="$FORK_OUT/bin/hexciri-plugin-update"
+if [ -f "$PLUGIN_UPDATE_BIN" ]; then
+  python3 - "$PLUGIN_UPDATE_BIN" <<'PY' >>"$_patch_log"
+import sys
+path = sys.argv[1]
+with open(path) as f:
+    s = f.read()
+old = '  if ! git -C "$dir" fetch --quiet origin HEAD; then'
+new = """  # Hexciri: fetch the CHECKED-OUT branch, not origin HEAD. Upstream
+  # fetches origin HEAD (the remote DEFAULT branch, main), so a plugin
+  # installed from nyx would merge main into its nyx checkout, or fail
+  # to fast-forward once they diverge, and never pull nyx. Detached
+  # HEAD falls back to origin HEAD. (2026-11-24, Nyxiri nyx step.)
+  _upd_branch="$(git -C "$dir" branch --show-current 2>/dev/null || echo "")"
+  if [ -n "$_upd_branch" ]; then _upd_fetch="$_upd_branch"; else _upd_fetch="HEAD"; fi
+  if ! git -C "$dir" fetch --quiet origin "$_upd_fetch"; then"""
+if 'fetch --quiet origin "$_upd_fetch"' in s:
+    print("plugin-update: checked-out-branch fetch already present, skipping")
+else:
+    assert s.count(old) == 1, "plugin-update fetch anchor not found exactly once"
+    s = s.replace(old, new, 1)
+    with open(path, "w") as f:
+        f.write(s)
+    print("plugin-update: fetch origin HEAD -> fetch checked-out branch (nyx-safe)")
+PY
+  bash -n "$PLUGIN_UPDATE_BIN" || die "bash -n failed on patched $PLUGIN_UPDATE_BIN"
+  info "  plugin-update: pulls the checked-out branch, not origin HEAD (Nyxiri nyx plugins update from nyx)"
+else
+  warn "  plugin-update: bin/hexciri-plugin-update not in fork output, Nyxiri plugins will update from main until it is patched"
+fi
+
 # Save the fully patched fork for the next re-run (fork cache,
 # 2026-11-24). Only when patches actually ran (SKIP_PATCHES=0) and
 # the fingerprints were computed (a real install, not sim7, which
@@ -5593,6 +5641,191 @@ else
 fi
 unset SETTINGS_PLUGIN_ID SETTINGS_PLUGIN_DIR SETTINGS_PLUGIN_URL _HEXCIRI_CLI _HEXCIRI_VALIDATE
 
+# --- Nyxiri plugins, nyx branch (2026-11-24, Devi) ---
+# Nyxiri is Devi's live Omarchy bar/menu/workspaces suite, forked to
+# Deoxizn/* with plugin ids pizza.dirty.*. Hexciri needs the nyx branch
+# of each, not main: nyx is the Hexciri port (omarchy -> hexciri paths,
+# hexciri-shell IPC), main is the Omarchy build. hexciri-settings is
+# NOT here: its main (master) IS Hexciri already, no nyx branch exists,
+# and the Settings step above already installs it from main.
+# OPT-IN, NOT base install (Devi 2026-11-24): Nyxiri and wallcraft are
+# Devi's own setup, user choice, never a default. This step installs
+# NOTHING on a machine that has none of them: it only re-adds / updates
+# plugins that are ALREADY installed (from main or anywhere) to nyx,
+# preserving settings. A fresh add happens only with --with-nyxiri
+# (core seven: bar, menu, workspaces, clock, weather, arch-updates,
+# wallcraft) or --with-cats (cpurr + bongocat, same as Nyxiri's
+# installer). Once installed they stay installed: a later run without
+# the flag still updates them, it just does not newly add them.
+# How the branch gets in (checked against the forked plugin CLI,
+# upstream omacom/omarchy 94a8c3c):
+#   * `hexciri plugin add` has NO --branch flag (unknown options fail)
+#     and it clones the repo's DEFAULT branch, refusing when the id is
+#     already installed. So nyx installs go through git clone
+#     --branch nyx + hexciri-plugin-validate + hexciri plugin enable,
+#     the same tty3 fallback the Settings step uses.
+#   * `hexciri plugin update <id>` pulls the CHECKED-OUT branch, not
+#     origin HEAD: the fork patch below (bin/hexciri-plugin-update)
+#     changed the fetch from `origin HEAD` (remote DEFAULT branch,
+#     main) to the checked-out branch. Before that patch, update
+#     merged main into a nyx checkout, or failed to fast-forward once
+#     they diverged, and never pulled nyx; `git remote set-head origin
+#     nyx` does NOT fix it, fetch resolves HEAD on the remote side
+#     (verified in a local bare-repo sim). A plugin installed any
+#     other way (e.g. plugin add from main) is still re-added from nyx
+#     here, never trusted to update itself across branches.
+#   * `hexciri plugin remove` only rm -rf's the plugin dir (+ shell IPC
+#     disable). shell.json and plugin config dirs (~/.config/pizza.dirty.*,
+#     e.g. the clock's calendars.json) are never touched by either the
+#     remove or the re-clone, so settings survive a re-add.
+#   * wallcraft nyx == main at 1f635bb, NO port yet (blocked pending
+#     Devi's go-ahead on execution risk). When opted in / already
+#     installed, it is re-added from nyx so the branch is right when
+#     the port lands, but it still carries omarchy paths until then;
+#     NOT claimed ported anywhere here.
+# Best-effort, never dies: a failed clone/update warns, the rest of the
+# install still lands, and the next hexciri update retries it.
+step "Nyxiri plugins (opt-in, nyx branch: re-add if installed, install only with --with-nyxiri)"
+_NYX_CLI="/usr/share/hexciri/bin/hexciri"
+[ -x "$_NYX_CLI" ] || _NYX_CLI="hexciri"
+_NYX_VALIDATE="/usr/share/hexciri/bin/hexciri-plugin-validate"
+[ -x "$_NYX_VALIDATE" ] || _NYX_VALIDATE="hexciri-plugin-validate"
+# Bar choice before the step, so a re-run can never flip it: bar use
+# writes .bar.id in shell.json, and the enabled plugins live in the
+# .plugins array there. Both are read straight from the file, no shell
+# IPC needed, so this works from tty3 too.
+_NYX_BAR_BEFORE=""
+_NYX_PLUGINS_BEFORE=""
+if [ -f "$HOME/.config/hexciri/shell.json" ] && command -v jq >/dev/null 2>&1; then
+  _NYX_BAR_BEFORE="$(jq -r '.bar.id // empty' "$HOME/.config/hexciri/shell.json" 2>/dev/null || echo "")"
+  _NYX_PLUGINS_BEFORE="$(jq -r '.plugins // [] | join(" ")' "$HOME/.config/hexciri/shell.json" 2>/dev/null || echo "")"
+fi
+# _nyxiri_plugin <id> <url> [cats-only]: install or update one plugin
+# from its nyx branch. Always returns 0; failures warn only.
+_NYX_BAR_NEW=0
+_nyxiri_plugin() {
+  local _id="$1" _url="$2" _cats_only="${3:-0}" _dir="" _branch="" _was_enabled=0
+  _dir="$HOME/.config/hexciri/plugins/$_id"
+  # Already on nyx: update in place, touch nothing else (no re-enable,
+  # no bar switch, enable state and bar choice stay exactly as they are).
+  if [ -d "$_dir/.git" ]; then
+    _branch="$(git -C "$_dir" branch --show-current 2>/dev/null || echo "")"
+    if [ "$_branch" = "nyx" ]; then
+      if "$_NYX_CLI" plugin update "$_id" --yes >/dev/null 2>&1; then
+        info "  nyxiri plugin updated: $_id (nyx)"
+      else
+        warn "  nyxiri plugin update failed, keeping installed checkout: $_id"
+      fi
+      return 0
+    fi
+    info "  nyxiri plugin on branch '${_branch:-unknown}', re-adding from nyx: $_id"
+    # Was it enabled before removal? shell.json .plugins array is the
+    # record (read above, no shell needed). No readable record means
+    # assume enabled: a previous installer run enabled everything it
+    # installed, and a plugin the user disabled is the rarer case.
+    if [ -z "$_NYX_PLUGINS_BEFORE" ]; then
+      _was_enabled=1
+    else
+      case " $_NYX_PLUGINS_BEFORE " in
+        *" $_id "*) _was_enabled=1 ;;
+        *) _was_enabled=0 ;;
+      esac
+    fi
+    if ! "$_NYX_CLI" plugin remove "$_id" --yes >/dev/null 2>&1; then
+      # Shell not running (tty3 bootstrap): plugin remove needs shell
+      # IPC to disable + rescan, so it dies before rm. The dir is a
+      # plain git checkout, remove it directly; shell.json and plugin
+      # config dirs are never touched by either path.
+      rm -rf "$_dir"
+    fi
+  else
+    # Not installed: fresh add only on explicit opt-in, never by
+    # default (Nyxiri is user choice, not base install). _NYX_BAR_NEW
+    # records a fresh Nyxiri bar install, so the bar switch below only
+    # fires for a real opt-in, never for a re-add on a machine whose
+    # bar choice is already made.
+    if [ "$_cats_only" = "1" ]; then
+      if [ "${WITH_CATS:-0}" != "1" ]; then
+        info "  nyxiri plugin skipped (not installed, cats are opt-in, --with-cats): $_id"
+        return 0
+      fi
+    elif [ "${WITH_NYXIRI:-0}" != "1" ]; then
+      info "  nyxiri plugin skipped (not installed, Nyxiri is opt-in, --with-nyxiri): $_id"
+      return 0
+    fi
+    _was_enabled=1
+    [ "$_id" = "pizza.dirty.nyxiri" ] && _NYX_BAR_NEW=1
+  fi
+  mkdir -p "$HOME/.config/hexciri/plugins"
+  if git clone --branch nyx -- "$_url" "$_dir" 2>/dev/null && "$_NYX_VALIDATE" "$_dir" >/dev/null 2>&1; then
+    info "  nyxiri plugin cloned from nyx: $_id"
+  else
+    rm -rf "$_dir"
+    warn "  nyxiri plugin could not be installed from nyx (network or git): $_id, the next hexciri update retries it"
+    return 0
+  fi
+  if [ "$_was_enabled" = "1" ]; then
+    if "$_NYX_CLI" plugin enable "$_id" >/dev/null 2>&1; then
+      info "  nyxiri plugin enabled: $_id"
+    else
+      warn "  nyxiri plugin cloned but not enabled (shell not running, enable happens on first shell start): $_id"
+    fi
+  else
+    info "  nyxiri plugin cloned, left disabled (was disabled before re-add): $_id"
+  fi
+  return 0
+}
+# Nothing installed and no opt-in: one line, no per-plugin noise.
+_NYX_ANY_INSTALLED=0
+for _nyx_id in pizza.dirty.nyxiri pizza.dirty.nyxiri-menu pizza.dirty.nyxiri-workspaces pizza.dirty.clock pizza.dirty.weather pizza.dirty.arch-updates pizza.dirty.cpurr pizza.dirty.bongocat pizza.dirty.wallcraft; do
+  [ -d "$HOME/.config/hexciri/plugins/$_nyx_id/.git" ] && _NYX_ANY_INSTALLED=1
+done
+if [ "$_NYX_ANY_INSTALLED" = "0" ] && [ "${WITH_NYXIRI:-0}" != "1" ] && [ "${WITH_CATS:-0}" != "1" ]; then
+  info "  Nyxiri not installed, nothing to do (opt-in: install.sh --with-nyxiri, cats: --with-cats)"
+else
+_nyxiri_plugin "pizza.dirty.nyxiri" "https://github.com/Deoxizn/nyxiri.git"
+_nyxiri_plugin "pizza.dirty.nyxiri-menu" "https://github.com/Deoxizn/nyxiri-menu.git"
+_nyxiri_plugin "pizza.dirty.nyxiri-workspaces" "https://github.com/Deoxizn/nyxiri-workspaces.git"
+_nyxiri_plugin "pizza.dirty.clock" "https://github.com/Deoxizn/omarchy-clock.git"
+_nyxiri_plugin "pizza.dirty.weather" "https://github.com/Deoxizn/omarchy-weather.git"
+_nyxiri_plugin "pizza.dirty.arch-updates" "https://github.com/Deoxizn/Arch-Updates.git"
+_nyxiri_plugin "pizza.dirty.cpurr" "https://github.com/Deoxizn/omarchy-cpurr.git" 1
+_nyxiri_plugin "pizza.dirty.bongocat" "https://github.com/Deoxizn/omarchy-bongocat.git" 1
+_nyxiri_plugin "pizza.dirty.wallcraft" "https://github.com/Deoxizn/wallcraft.git"
+fi
+unset _nyx_id _NYX_ANY_INSTALLED
+unset -f _nyxiri_plugin
+# Stock workspaces off when Nyxiri workspaces is active: disable, never
+# remove (it is a first-party plugin, there is nothing to remove).
+if [ -d "$HOME/.config/hexciri/plugins/pizza.dirty.nyxiri-workspaces/.git" ]; then
+  if "$_NYX_CLI" plugin disable hexciri.workspaces >/dev/null 2>&1; then
+    info "  stock workspaces disabled (Nyxiri workspaces active): hexciri.workspaces"
+  else
+    warn "  stock workspaces could not be disabled (shell not running, disable it with: hexciri plugin disable hexciri.workspaces)"
+  fi
+fi
+# Bar: switch to Nyxiri only when the user opted in and the bar plugin
+# is newly installed this run. A re-add never switches it: if a re-add's
+# enable flipped the bar away from the recorded choice, put it back.
+# bar use edits shell.json directly (no shell IPC), so it works from
+# tty3 too.
+if [ "${_NYX_BAR_NEW:-0}" = "1" ]; then
+  if "$_NYX_CLI" bar use pizza.dirty.nyxiri >/dev/null 2>&1; then
+    info "  bar set to Nyxiri: pizza.dirty.nyxiri (opt-in install)"
+  else
+    warn "  Nyxiri bar could not be set (run after first login: hexciri bar use pizza.dirty.nyxiri)"
+  fi
+elif [ "${IS_RERUN:-0}" = "1" ]; then
+  if [ -n "$_NYX_BAR_BEFORE" ] && [ "$_NYX_BAR_BEFORE" != "pizza.dirty.nyxiri" ]; then
+    _nyx_bar_now="$(jq -r '.bar.id // empty' "$HOME/.config/hexciri/shell.json" 2>/dev/null || echo "")"
+    if [ "$_nyx_bar_now" != "$_NYX_BAR_BEFORE" ]; then
+      "$_NYX_CLI" bar use "$_NYX_BAR_BEFORE" >/dev/null 2>&1 && info "  bar choice kept: $_NYX_BAR_BEFORE (re-run, Nyxiri re-add did not switch it)" || warn "  bar choice changed to ${_nyx_bar_now:-stock} by the Nyxiri re-add, restore it with: hexciri bar use $_NYX_BAR_BEFORE"
+    fi
+    unset _nyx_bar_now
+  fi
+fi
+unset _NYX_CLI _NYX_VALIDATE _NYX_BAR_BEFORE _NYX_PLUGINS_BEFORE _NYX_BAR_NEW
+
 step "Installing Hexciri theme hooks (~/.config/hexciri/hooks/theme-set.d)"
 mkdir -p "$HOME/.config/hexciri/hooks/theme-set.d" "$HOME/.config/hexciri/hooks/lib"
 if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" ]; then
@@ -5967,6 +6200,36 @@ if command -v dbus-run-session >/dev/null 2>&1; then _gtk_scheme_now="$(dbus-run
 command -v btm >/dev/null 2>&1 && hc_info "  activity monitor: btm present (Super+Shift+T)" || warn "  activity monitor: btm NOT installed, Super+Shift+T will fail (package: bottom, binary: btm)"
 if command -v hexciri-settings >/dev/null 2>&1; then hc_info "  settings: hexciri-settings present (Super+Ctrl+S, launcher: Hexciri Settings)"; else warn "  settings: hexciri-settings NOT installed, Super+Ctrl+S will notify instead of opening (the next hexciri update retries the build automatically, log: ~/.cache/hexciri-settings-build/build.log)"; fi
 [ -x "$HEXCIRI_PATH/bin/hexciri-launch-settings" ] && hc_info "  settings launcher: hexciri-launch-settings present (Super+Ctrl+S notifies when the app is missing)" || warn "  settings launcher: hexciri-launch-settings missing from $HEXCIRI_PATH/bin, Super+Ctrl+S will fail silently"
+# Nyxiri plugins (2026-11-24): each INSTALLED one must sit on nyx, or
+# the next `hexciri plugin update` pulls main. Absent is fine, Nyxiri
+# is opt-in, not base install.
+for _nyx_id in pizza.dirty.nyxiri pizza.dirty.nyxiri-menu pizza.dirty.nyxiri-workspaces pizza.dirty.clock pizza.dirty.weather pizza.dirty.arch-updates pizza.dirty.wallcraft; do
+  if [ -d "$HOME/.config/hexciri/plugins/$_nyx_id/.git" ]; then
+    _nyx_br="$(git -C "$HOME/.config/hexciri/plugins/$_nyx_id" branch --show-current 2>/dev/null || echo unknown)"
+    if [ "$_nyx_br" = "nyx" ]; then
+      hc_info "  nyx plugin: $_nyx_id on nyx"
+    else
+      warn "  nyx plugin: $_nyx_id on branch '${_nyx_br:-unknown}', expected nyx (repair: hexciri update)"
+      HC_FAIL=1
+    fi
+  else
+    hc_info "  nyx plugin: $_nyx_id not installed (optional, --with-nyxiri)"
+  fi
+done
+for _nyx_id in pizza.dirty.cpurr pizza.dirty.bongocat; do
+  if [ -d "$HOME/.config/hexciri/plugins/$_nyx_id/.git" ]; then
+    _nyx_br="$(git -C "$HOME/.config/hexciri/plugins/$_nyx_id" branch --show-current 2>/dev/null || echo unknown)"
+    if [ "$_nyx_br" = "nyx" ]; then
+      hc_info "  nyx plugin: $_nyx_id on nyx (cats)"
+    else
+      warn "  nyx plugin: $_nyx_id on branch '${_nyx_br:-unknown}', expected nyx (repair: hexciri update)"
+      HC_FAIL=1
+    fi
+  else
+    hc_info "  nyx plugin: $_nyx_id not installed (cats are opt-in, --with-cats)"
+  fi
+done
+unset _nyx_id _nyx_br
 command -v opencode >/dev/null 2>&1 && hc_info "  agent: opencode present ($(opencode --version 2>/dev/null | head -1), free models need no account)" || warn "  agent: opencode NOT installed, hexciri-agent / default agent opencode will fail (pacman -S opencode)"
 _boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do if [ -f "$_f" ]; then _boot_hc_seen=1; grep -q '^timeout 1$' "$_f" 2>/dev/null || _boot_hc_ok=0; fi; done; if [ "$_boot_hc_seen" -eq 1 ] && [ "$_boot_hc_ok" -eq 1 ]; then hc_info "  boot timeout: every loader.conf says timeout 1"; elif [ "$_boot_hc_seen" -eq 0 ]; then _boot_hc_noconf=1; else warn "  boot timeout: a loader.conf does not say timeout 1 (grep timeout in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf)"; fi; _boot_hc_efi=""; [ -r /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f ] && _boot_hc_efi="$(tail -c +5 /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')"; if [ "$_boot_hc_efi" = "1" ]; then hc_info "  boot timeout EFI: LoaderConfigTimeout=1"; elif [ -n "$_boot_hc_efi" ]; then warn "  boot timeout EFI: LoaderConfigTimeout=$_boot_hc_efi, overrides loader.conf (run: sudo bootctl set-timeout 1)"; else hc_info "  boot timeout EFI: no LoaderConfigTimeout variable, loader.conf controls it"; fi; if [ "${_boot_hc_noconf:-0}" = "1" ] && [ "$_boot_hc_efi" != "1" ]; then warn "  boot timeout: no loader.conf found and LoaderConfigTimeout is not 1 (GRUB or other bootloader?)"; elif [ "${_boot_hc_noconf:-0}" = "1" ]; then hc_info "  boot timeout: no loader.conf on this ESP layout, EFI LoaderConfigTimeout=1 controls it"; fi; unset _boot_hc_ok _boot_hc_seen _boot_hc_efi _boot_hc_noconf _f
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && hc_info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
