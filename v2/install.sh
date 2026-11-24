@@ -46,6 +46,25 @@
 # Install it manually later if wanted: yay -S ghostty
 
 set -euo pipefail
+# Never exit silently again: if any command fails, print where it failed.
+# (2026-11-23: the bootstrap died silently after "Validation passed"
+# with exit 141, from a tar | head pipe under pipefail. Same fix below.)
+trap 'printf "ERROR: [hexciri] failed at line %s, exit %s, command: %s\n" "$LINENO" "$?" "$BASH_COMMAND" >&2' ERR
+
+# Args, like v1: --yes answers prompts with yes, --reboot reboots at the
+# end without asking, otherwise the reboot offer still asks (never
+# auto-reboots). Forwarded by v2/bootstrap.sh.
+UPDATE_YES=""
+AUTO_REBOOT=0
+for _a in "$@"; do
+  case "$_a" in
+    --yes|-y) UPDATE_YES="--yes" ;;
+    --reboot) AUTO_REBOOT=1 ;;
+    -h|--help) echo "usage: install.sh [--yes] [--reboot]"; exit 0 ;;
+    *) printf 'install.sh: unknown arg: %s (usage: install.sh [--yes] [--reboot])\n' "$_a" >&2; exit 1 ;;
+  esac
+done
+unset _a
 
 # No git credential prompts anywhere in this script. The Omarchy source is
 # fetched as a public codeload tarball with curl, never with git clone.
@@ -320,17 +339,30 @@ for cmd in curl python3 tar grep find cp mkdir rm; do
   command -v "$cmd" >/dev/null 2>&1 || die "missing required command: $cmd"
 done
 OMARCHY_TARBALL="$TMP_WORK/omarchy.tar.gz"
-curl -fsSL --max-time 300 -o "$OMARCHY_TARBALL" "$OMARCHY_TARBALL_URL" || die "curl download of omacom/omarchy tarball failed. Fix networking, then rerun."
+info "Omarchy tarball is about 94 MB, this can take a minute on a slow connection"
+curl --progress-bar -fSL --max-time 300 -o "$OMARCHY_TARBALL" "$OMARCHY_TARBALL_URL" || die "curl download of omacom/omarchy tarball failed. Fix networking, then rerun."
 [ -s "$OMARCHY_TARBALL" ] || die "Downloaded Omarchy tarball is empty: $OMARCHY_TARBALL"
+OMARCHY_SIZE="$(wc -c < "$OMARCHY_TARBALL" | tr -d ' ')"
+info "Downloaded: $OMARCHY_SIZE bytes (~$((OMARCHY_SIZE / 1024 / 1024)) MB): $OMARCHY_TARBALL"
 # Validate it is really a gzip tarball, not an HTML error page.
-tar -tzf "$OMARCHY_TARBALL" >/dev/null || die "Downloaded file is not a valid gzip tarball: $OMARCHY_TARBALL. Check the URL and networking, then rerun."
+# Write the listing to a file first. The old code did
+#   TOP_DIR="$(tar -tzf "$OMARCHY_TARBALL" | head -1 | cut -d/ -f1)"
+# which is the same silent-exit-141 bug the bootstrap had: head exits
+# after the first line, tar gets SIGPIPE under pipefail, set -e exits
+# with no error. A file listing cannot do that.
+tar -tzf "$OMARCHY_TARBALL" > "$TMP_WORK/omarchy-list.txt" || die "Downloaded file is not a valid gzip tarball: $OMARCHY_TARBALL. Check the URL and networking, then rerun."
+info "Validation passed: valid gzip tarball"
 # Codeload names the top dir omarchy-<full commit SHA>. That is the SHA check:
 # a tarball for any other commit has a different top dir name and fails here.
-TOP_DIR="$(tar -tzf "$OMARCHY_TARBALL" | head -1 | cut -d/ -f1)"
+TOP_DIR="$(head -1 "$TMP_WORK/omarchy-list.txt" | cut -d/ -f1)"
+[ -n "$TOP_DIR" ] || die "Could not read a top dir from the Omarchy tarball listing: $TMP_WORK/omarchy-list.txt"
 if [ "$TOP_DIR" != "omarchy-$PINNED_SHA" ]; then
   die "commit mismatch: tarball top dir is '$TOP_DIR', expected 'omarchy-$PINNED_SHA'. Refusing to continue."
 fi
+info "Top dir: $TOP_DIR"
+info "Extracting Omarchy tarball (this can take a minute, no output while tar runs)..."
 tar -xzf "$OMARCHY_TARBALL" -C "$TMP_WORK" || die "Failed to extract Omarchy tarball."
+info "Extraction done."
 OMARCHY_SRC="$TMP_WORK/$TOP_DIR"
 [ -d "$OMARCHY_SRC" ] || die "Extracted Omarchy tree not found: $OMARCHY_SRC"
 # Marker files from the pinned tree, a wrong or truncated tarball fails here.
@@ -906,6 +938,79 @@ fi
 info "PASS: no file or dir named omarchy under $HEXCIRI_PATH or ~/.config/hexciri"
 info "PASS: placement verified"
 
+# --- Apply a default theme, like v1 does its theme sync ---
+# v1 finishes with a theme applied, not just themes installed. Pick the
+# first theme dir, so no theme name is guessed. Best-effort, never fatal:
+# if theme-set cannot run before a login, the stock bar still starts and
+# the user can set a theme after reboot.
+
+step "Applying a default theme"
+THEME_DIRS=("$HEXCIRI_PATH"/themes/*/)
+if [ "${#THEME_DIRS[@]}" -ge 1 ] && [ -d "${THEME_DIRS[0]}" ]; then
+  DEFAULT_THEME="$(basename "${THEME_DIRS[0]}")"
+  info "Default theme: $DEFAULT_THEME"
+  if [ -x "$HEXCIRI_PATH/bin/hexciri-theme-set" ]; then
+    if "$HEXCIRI_PATH/bin/hexciri-theme-set" "$DEFAULT_THEME"; then
+      info "Theme applied: $DEFAULT_THEME"
+    else
+      warn "hexciri-theme-set $DEFAULT_THEME failed, not fatal. Set a theme after reboot: hexciri-theme-set <theme>"
+    fi
+  else
+    warn "hexciri-theme-set not found, skipping theme apply. Set a theme after reboot."
+  fi
+else
+  warn "No themes found to apply, skipping theme apply."
+fi
+
+# --- Health check, like v1 ---
+# Post-install sanity before the reboot offer, so a broken bring-up is
+# caught here, not at the login screen. Best-effort reads only.
+
+step "Post-install health check"
+HC_FAIL=0
+if command -v systemctl >/dev/null 2>&1; then
+  FAILED_UNITS="$(systemctl --failed --no-legend 2>/dev/null || true)"
+  if [ -z "$FAILED_UNITS" ]; then
+    info "  systemd: no failed units"
+  else
+    warn "  systemd: FAILED units present:"
+    printf '%s\n' "$FAILED_UNITS"
+    HC_FAIL=1
+  fi
+fi
+for _check in "$HEXCIRI_PATH/bin/hexciri-launch-shell" "$HEXCIRI_PATH/shell/shell.qml" "$HOME/.config/hypr/hyprland.lua" "$HOME/.config/hexciri/shell.json" /usr/share/wayland-sessions/hexciri.desktop; do
+  if [ -e "$_check" ]; then
+    info "  present: $_check"
+  else
+    warn "  MISSING: $_check"
+    HC_FAIL=1
+  fi
+done
+if command -v quickshell >/dev/null 2>&1; then
+  if quickshell --version >/dev/null 2>&1; then
+    QS_VER="$(quickshell --version 2>/dev/null || true)"
+    info "  quickshell: $QS_VER"
+  else
+    warn "  quickshell binary exists but --version failed"
+    HC_FAIL=1
+  fi
+else
+  warn "  quickshell binary not found"
+  HC_FAIL=1
+fi
+if systemctl is-enabled --quiet sddm 2>/dev/null; then
+  info "  sddm: enabled"
+else
+  warn "  sddm: not enabled"
+  HC_FAIL=1
+fi
+if [ "$HC_FAIL" -eq 0 ]; then
+  info "Health check: clean"
+else
+  warn "Health check: flagged issues above, see the warnings. Reboot may still work, check the logs if it does not."
+fi
+unset _check
+
 # --- Final checklist ---
 
 step "Hexiri 2.0 single install done. Test after reboot."
@@ -942,3 +1047,34 @@ Phase 2 is NOT installed. Next steps are separate work:
   Hexciri Lua edits, port Hexciri scripts from Noctalia to QS, theme engine merge,
   arch-updates EndeavourOS backend, hexciri-update rework, Nyxiri overlay, THPM install.
 EOF
+
+# --- Reboot offer, like v1 ---
+# Never auto-reboots unless --reboot was passed. Never hangs: with
+# --reboot it reboots outright, with a TTY it asks (default No),
+# otherwise it just notes a relogin is needed.
+# This is the end of the install: v1 does everything up to this point,
+# then you just reboot and it is all setup.
+
+step "Reboot?"
+if [ "$AUTO_REBOOT" -eq 1 ]; then
+  info "rebooting now (--reboot)"
+  sudo reboot || info "reboot manually: sudo reboot"
+elif [ -t 0 ]; then
+  if [ "$HC_FAIL" -eq 1 ]; then
+    info "health check flagged issues above, a reboot clears session-level ones"
+  fi
+  REBOOT_ANSWER=""
+  read -r -p "Reboot now? [y/N] " REBOOT_ANSWER || REBOOT_ANSWER=""
+  case "$REBOOT_ANSWER" in
+    y|Y|yes|YES)
+      info "rebooting..."
+      sudo reboot || info "reboot manually: sudo reboot"
+      ;;
+    *)
+      info "no reboot, at minimum relogin (new session, drivers and keybinds need a fresh session)"
+      ;;
+  esac
+else
+  info "no reboot, at minimum relogin (no TTY to ask on)"
+fi
+info "done, Hexiri 2.0 is installed. Pick Hexiri at SDDM after reboot, then pick a theme with hexciri-theme-set if you want a different one."
