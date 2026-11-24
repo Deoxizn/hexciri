@@ -260,11 +260,21 @@ xdg-user-dirs-update || warn "xdg-user-dirs-update failed, not fatal."
 # omawrite / omaview / herdr / cliamp / omasnap (Omarchy-repo-only, no Arch
 # or AUR package exists for them), docker, AI agents (opencode,
 # pi-coding-agent), fuzzel / noctalia (v2 shell is Quickshell, not
-# fuzzel/Noctalia). Screenshot still needs omasnap (Omarchy-repo-only), so
-# the screenshot bind stays broken until that is ported; grim + slurp are
-# already in CORE_PKGS above. Calculator (omacalc), Omawrite and the music
-# TUI (cliamp) are Omarchy-repo-only too, so Super+Shift+Q / Super+Shift+W /
-# Super+Shift+Alt+M have no app yet; libqalculate below at least ships qalc.
+# fuzzel/Noctalia). They are SUBSTITUTED with Arch defaults instead, so
+# their binds work (2026-11-23, Devi: most Omarchy apps can just
+# substitute with Arch defaults/alternatives):
+#   omasnap (screenshot, PRINT / SUPER+CTRL+ALT+C) -> grim + slurp, the
+#     fork patch step below rewrites hexciri-capture-screenshot to use
+#     them (capture-text and capture-qr already used grim/slurp directly).
+#   omacalc (SUPER+SHIFT+Q, XF86Calculator) -> gnome-calculator.
+#   cliamp (Music TUI, SUPER+SHIFT+ALT+M) -> ncspot (Spotify TUI).
+#   omawrite (SUPER+SHIFT+W) -> apostrophe (writing app).
+#   herdr (SUPER+CTRL+RETURN, Omarchy AI-agent terminal) -> bind removed,
+#     herdr is an AI agent and AI agents are out of v2 scope; tmux is
+#     already on Super+Alt+Return. omaview -> imv (already the v1 image
+#     viewer pick). Editor is zed already, no substitute needed.
+# Spotify is the one exception: it IS installed (its own step below),
+# not substituted, because Devi's bind is Spotify specifically.
 # Pacman step: one bulk call first, per-package best-effort retry if it
 # fails, so one wrong/stale name never aborts the install. AUR/GitHub apps
 # are best-effort, never fatal, same rule as Strata below.
@@ -280,16 +290,27 @@ APP_PKGS=(
   # imv (v1 image viewer pick), zed (v1 editor pick), playerctl (v1 layer
   # need, media keys), bottom (v1 pick, replaces btop), seahorse (keyring
   # GUI), fwupd (menu Update > Firmware), adw-gtk-theme (v1 layer need, GTK
-  # apps unthemed without it), tesseract-data-eng (OCR data, tesseract
-  # itself is already in CORE_PKGS), cliphist (v1 want), libqalculate
+  # apps unthemed without it), tesseract-data-eng (OCR data) + tesseract
+  # itself (capture-text OCR, SUPER+CTRL+PRINT, needs the binary, it was
+  # NOT in CORE_PKGS despite an old comment saying so), cliphist (v1 want), libqalculate
   # (v1 want, ships the qalc CLI), libreoffice-fresh + pinta +
   # gnome-disk-utility (Omarchy default apps), lazygit, yt-dlp, gvfs
   # (file-manager trash/network backends), qrencode, eject (XF86Eject bind).
+  # Arch substitutes for Omarchy-repo-only apps (2026-11-23, Devi: most
+  # Omarchy apps can just substitute with Arch defaults/alternatives, do
+  # NOT try to install the Omarchy-repo-only ones): gnome-calculator for
+  # omacalc (SUPER+SHIFT+Q, XF86Calculator), ncspot for cliamp (Music TUI,
+  # SUPER+SHIFT+ALT+M, a Spotify TUI, Arch extra), apostrophe for omawrite
+  # (SUPER+SHIFT+W, a writing app, Arch extra). Screenshot (omasnap) is
+  # substituted in the fork patch step below: hexciri-capture-screenshot is
+  # rewritten to grim + slurp, both already in CORE_PKGS. Spotify is NOT
+  # here, it is AUR (yay -S spotify) in its own step below.
   neovim tmux obsidian localsend gpu-screen-recorder wf-recorder
   mpv zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb
-  zed playerctl bottom seahorse fwupd adw-gtk-theme tesseract-data-eng
+  zed playerctl bottom seahorse fwupd adw-gtk-theme tesseract tesseract-data-eng
   cliphist libqalculate libreoffice-fresh pinta gnome-disk-utility
   lazygit yt-dlp gvfs zbar qrencode imv eject
+  gnome-calculator ncspot apostrophe
 )
 if ! sudo pacman -S --needed --noconfirm "${APP_PKGS[@]}"; then
   warn "Bulk default-apps install failed, retrying per package (best-effort)."
@@ -328,6 +349,45 @@ if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&
     info "Removed brave-bin stand-in (Brave Origin is present)"
   else
     warn "kept brave-bin (removal failed)"
+  fi
+fi
+
+# --- Spotify (Super+Shift+M), AUR, best-effort ---
+# Devi 2026-11-23: "shift + super m is usually spotify." Upstream Omarchy
+# has NO Super+Shift+M bind at all: its only music bind is
+# Super+Shift+Alt+M = cliamp (Music TUI, Omarchy-repo-only), which the fork
+# patch step below repoints at ncspot. Super+Shift+M = Spotify is Devi's
+# own bind, added by that same patch step.
+# Install method: v1 main install.sh installs no Spotify itself, but v1's
+# bin/hexciri-setup spotify subcommand expects a Spotify bundle at
+# /opt/spotify or /usr/share/spotify ("install spotify first"), which is
+# exactly where the AUR `spotify` package puts it (verified AUR
+# 1:1.3.8.620-1, /usr/bin/spotify + /opt/spotify + spotify.desktop).
+# Arch extra's spotify-launcher (0.6.7) is only the fallback: it downloads
+# the client to ~/.local/share/spotify-launcher, puts no bundle at
+# /opt/spotify (so v1's spicetify setup would not find it), and its binary
+# is spotify-launcher, not spotify, so the bind would miss it. The
+# post-placement step below writes a `spotify` wrapper into
+# /usr/share/hexciri/bin/ when only spotify-launcher is present.
+# spicetify-cli (verified AUR 2.46.7-1) is installed best-effort too, for
+# v1's Spicetify theming later; the hexciri-spotify-setup one-shot is NOT
+# run here, it needs Spotify to have launched once first. Run it by hand
+# after the first Spotify launch: hexciri-spotify-setup
+step "Installing Spotify (Super+Shift+M, AUR, best-effort)"
+if command -v spotify >/dev/null 2>&1; then
+  info "Spotify already present"
+elif yay -S --needed --noconfirm spotify 2>/dev/null; then
+  info "Spotify installed via yay (AUR spotify)"
+elif sudo pacman -S --needed --noconfirm spotify-launcher 2>/dev/null; then
+  info "Spotify installed via pacman fallback (Arch extra spotify-launcher), a spotify wrapper is added after placement"
+else
+  warn "Spotify install failed (yay/AUR and pacman both failed), Super+Shift+M will fail until it is installed. Install by hand: yay -S spotify"
+fi
+if ! command -v spicetify >/dev/null 2>&1; then
+  if yay -S --needed --noconfirm spicetify-cli 2>/dev/null; then
+    info "spicetify-cli installed via yay (for Hexciri Spotify theming later)"
+  else
+    warn "spicetify-cli not installed (yay failed or AUR unreachable), Spotify theming via hexciri-spotify-setup will wait until it is. Install later: yay -S spicetify-cli"
   fi
 fi
 
@@ -1215,6 +1275,180 @@ else
   warn "default/hypr/bootstrap.lua not found in fork output, skipping legacy module preload alias. The rewrite fix above is still the primary fix."
 fi
 
+# --- Patch Hexciri binds and substitute Omarchy-repo-only apps ---
+# Two things, both on the fork output (user-owned temp dir), before placement:
+# 1. Super+Shift+M = Spotify, Devi's own bind. Upstream has no such bind.
+# 2. Omarchy-repo-only apps are substituted with Arch defaults, per Devi
+#    2026-11-23 ("most omarchy apps we can just substitute with arch
+#    defaults/alternatives"), instead of leaving dead binds:
+#      omacalc -> gnome-calculator, cliamp -> ncspot, omawrite -> apostrophe,
+#      herdr bind removed (AI agent, out of v2 scope; tmux is on
+#      Super+Alt+Return), omasnap -> grim + slurp in the capture script.
+# This is a small dead-bind fix, not the Phase 2 Hexciri Lua merge: no
+# windowrules, workspaces, or opacity edits live here.
+# Idempotent: every replacement checks it is not already applied, so a
+# rerun does not double-insert the Spotify bind.
+step "Patching Hexciri binds: Super+Shift+M Spotify, Arch substitutes for Omarchy-only apps"
+python3 - "$FORK_OUT" <<'PY'
+import sys
+
+root = sys.argv[1]
+apps = root + "/default/hypr/bindings/applications.lua"
+changed = []
+
+with open(apps) as f:
+    s = f.read()
+orig = s
+
+# 1. Spotify bind, after the Obsidian bind (same launch+focus shape).
+spotify_bind = '  o.bind("SUPER + SHIFT + M", "Spotify", { launch = "spotify", focus = "^spotify$" })'
+if "SUPER + SHIFT + M" not in s:
+    anchor = '  o.bind("SUPER + SHIFT + O", "Obsidian", { launch = "obsidian", focus = "^obsidian$" })'
+    if anchor in s:
+        s = s.replace(anchor, anchor + "\n" + spotify_bind, 1)
+        changed.append("Super+Shift+M Spotify bind added")
+    else:
+        print("WARN: Obsidian bind anchor not found in applications.lua, Spotify bind NOT added")
+else:
+    print("Spotify bind already present, skipping")
+
+# 2. Calculator: omacalc (Omarchy-repo-only) -> gnome-calculator (Arch extra).
+if '"omacalc"' in s:
+    s = s.replace('"omacalc"', '"gnome-calculator"')
+    changed.append("omacalc -> gnome-calculator (Super+Shift+Q, XF86Calculator)")
+
+# 3. Music TUI: cliamp (Omarchy-repo-only) -> ncspot (Arch extra, Spotify TUI).
+if '{ tui = "cliamp", focus = true }' in s:
+    s = s.replace('{ tui = "cliamp", focus = true }', '{ tui = "ncspot", focus = true }')
+    changed.append("cliamp -> ncspot (Super+Shift+Alt+M Music TUI)")
+
+# 4. Writing app: omawrite (Omarchy-repo-only) -> apostrophe (Arch extra).
+old_write = 'o.bind("SUPER + SHIFT + W", "Omawrite", { launch = "omawrite" })'
+new_write = 'o.bind("SUPER + SHIFT + W", "Writing (Apostrophe)", { launch = "apostrophe", focus = "^apostrophe$" })'
+if old_write in s:
+    s = s.replace(old_write, new_write)
+    changed.append("omawrite -> apostrophe (Super+Shift+W)")
+
+# 5. Herdr: Omarchy AI-agent terminal, not installed in v2 (AI agents are
+# out of scope). Remove the bind instead of leaving a terminal that errors
+# with "herdr: command not found". Tmux is already on Super+Alt+Return.
+old_herdr = '  o.bind("SUPER + CTRL + RETURN", "Herdr", { omarchy = "terminal-herdr" })'
+if old_herdr in s:
+    s = s.replace(old_herdr, '  -- Hexciri: Herdr bind removed, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.')
+    changed.append("Herdr bind removed (AI agent, out of v2 scope)")
+
+if s != orig:
+    with open(apps, "w") as f:
+        f.write(s)
+for c in changed:
+    print("applications.lua: " + c)
+if not changed:
+    print("applications.lua: no bind changes needed")
+
+# 6. Screenshot: hexciri-capture-screenshot execs omasnap (Omarchy-repo-only).
+# Rewrite it to grim + slurp (both in CORE_PKGS), wl-copy, and
+# hexciri-notification-send. Same CLI the binds and menu use:
+#   [smart|region|windows|fullscreen|scroll] [copy|save]
+# No args (menu Capture > Screenshot, PRINT) behaves like smart: a slurp
+# region pick, saved to ~/Pictures/Screenshots. copy puts the PNG on the
+# clipboard only. scroll is not supported by grim, it falls back to
+# fullscreen. capture-text and capture-qr already used grim/slurp directly.
+cap = root + "/bin/hexciri-capture-screenshot"
+with open(cap) as f:
+    cap_old = f.read()
+if "omasnap" in cap_old:
+    new_cap = '''#!/bin/bash
+
+# omarchy:summary=Take a screenshot
+# omarchy:group=capture
+# omarchy:args=[smart|region|windows|fullscreen|scroll] [copy|save]
+# omarchy:examples=omarchy screenshot | omarchy capture screenshot region
+# omarchy:aliases=omarchy screenshot
+#
+# NOTE: the omarchy: metadata headers above are kept as-is, like every
+# other copied bin script in the fork: the rename map deliberately does
+# not touch the "omarchy:" prefix, and the menu/help metadata parser
+# reads these lines in that shape.
+#
+# Hexciri substitute for Omarchy's omasnap (Omarchy-repo-only, no Arch or
+# AUR package): grim + slurp, both in CORE_PKGS. Same CLI the binds
+# (PRINT, SUPER+CTRL+ALT+C) and the menu (Capture > Screenshot) already
+# call, so neither needs to change. capture-text and capture-qr already
+# used grim/slurp directly, this brings screenshot in line with them.
+
+[[ -f ~/.config/user-dirs.dirs ]] && source ~/.config/user-dirs.dirs
+SHOT_DIR="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
+mkdir -p "$SHOT_DIR" 2>/dev/null || SHOT_DIR="$HOME/Pictures/Screenshots"
+mkdir -p "$SHOT_DIR" 2>/dev/null || SHOT_DIR="$HOME"
+SHOT_FILE="$SHOT_DIR/Screenshot-$(date +%Y-%m-%d_%H-%M-%S).png"
+
+MODE="smart"
+DO_COPY=0
+DO_SAVE=1
+for arg in "$@"; do
+  case "$arg" in
+    smart|region|windows|fullscreen|scroll) MODE="$arg" ;;
+    copy) DO_COPY=1; DO_SAVE=0 ;;
+    save) DO_SAVE=1; DO_COPY=0 ;;
+    slurp) ;; # passthrough arg from the old omasnap CLI, ignored
+    *) ;; # unknown arg, ignored
+  esac
+done
+
+# Geometry: fullscreen needs no picker, scroll is not supported by grim
+# and falls back to fullscreen, everything else picks with slurp
+# (windows snaps via hexciri-capture-region when it exists).
+GEOM=""
+case "$MODE" in
+  fullscreen|scroll)
+    [ "$MODE" = "scroll" ] && hexciri-notification-send -u low "Screenshot" "Scroll capture is not supported, took a fullscreen shot instead" 2>/dev/null || true
+    ;;
+  windows)
+    if command -v hexciri-capture-region >/dev/null 2>&1; then
+      GEOM="$(hexciri-capture-region windows 2>/dev/null || true)"
+    fi
+    [ -n "$GEOM" ] || GEOM="$(slurp 2>/dev/null || true)"
+    ;;
+  *)
+    GEOM="$(slurp 2>/dev/null || true)"
+    ;;
+esac
+[ -n "$GEOM" ] || [ "$MODE" = "fullscreen" ] || [ "$MODE" = "scroll" ] || exit 0
+
+if [ "$DO_COPY" -eq 1 ]; then
+  if [ -n "$GEOM" ]; then
+    grim -g "$GEOM" - | wl-copy || exit 1
+  else
+    grim - | wl-copy || exit 1
+  fi
+  hexciri-notification-send "Screenshot" "Screenshot copied to clipboard" 2>/dev/null || true
+else
+  if [ -n "$GEOM" ]; then
+    grim -g "$GEOM" "$SHOT_FILE" || exit 1
+  else
+    grim "$SHOT_FILE" || exit 1
+  fi
+  hexciri-notification-send "Screenshot" "Screenshot saved to $SHOT_FILE" 2>/dev/null || true
+fi
+'''
+    with open(cap, "w") as f:
+        f.write(new_cap)
+    print("bin/hexciri-capture-screenshot: rewritten to grim + slurp (omasnap substitute)")
+else:
+    print("bin/hexciri-capture-screenshot: already rewritten, skipping")
+PY
+# Syntax-check the patched Lua at install time, like the hexciri.lua check
+# above: a bad bind would otherwise only surface as a Hyprland error at boot.
+if command -v luac5.1 >/dev/null 2>&1; then
+  luac5.1 -p "$FORK_OUT/default/hypr/bindings/applications.lua" && info "applications.lua patch OK (luac5.1 syntax OK)" || warn "luac5.1 syntax check failed on patched applications.lua, Hyprland will report the real error at boot if this is broken."
+elif command -v luac >/dev/null 2>&1; then
+  luac -p "$FORK_OUT/default/hypr/bindings/applications.lua" && info "applications.lua patch OK (luac syntax OK)" || warn "luac syntax check failed on patched applications.lua, Hyprland will report the real error at boot if this is broken."
+else
+  warn "No luac5.1/luac binary found, skipping Lua syntax check on patched applications.lua (the patch mirrors the existing Obsidian bind line for line)."
+fi
+bash -n "$FORK_OUT/bin/hexciri-capture-screenshot" || die "bash -n failed on rewritten $FORK_OUT/bin/hexciri-capture-screenshot"
+info "Bind patch done: Super+Shift+M Spotify, gnome-calculator, ncspot, apostrophe, Herdr removed, screenshot via grim+slurp"
+
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
 # runs as the normal user.
@@ -1551,6 +1785,23 @@ else
   warn "strata binary not found at ~/.local/bin/strata after install step, Super+Shift+F will error until it is installed"
 fi
 
+# --- Spotify fallback wrapper (post-placement) ---
+# The Super+Shift+M bind calls `spotify`. The AUR `spotify` package
+# provides that binary directly, but if only the Arch extra
+# spotify-launcher fallback installed, its binary is spotify-launcher
+# and the bind would miss. In that case write a tiny `spotify` wrapper
+# into /usr/share/hexciri/bin/ (on the uwsm PATH, like the Strata link
+# above), so the bind works either way. Never overwrites a real spotify.
+if ! command -v spotify >/dev/null 2>&1 && command -v spotify-launcher >/dev/null 2>&1; then
+  printf '#!/bin/sh\nexec spotify-launcher "$@"\n' | sudo tee "$HEXCIRI_PATH/bin/spotify" >/dev/null
+  sudo chmod +x "$HEXCIRI_PATH/bin/spotify" 2>/dev/null || true
+  info "Spotify wrapper installed: $HEXCIRI_PATH/bin/spotify -> spotify-launcher (AUR spotify was not installed)"
+elif command -v spotify >/dev/null 2>&1; then
+  info "Spotify present (spotify command)"
+else
+  warn "Spotify not installed, Super+Shift+M will fail until it is. Install by hand: yay -S spotify"
+fi
+
 # --- Health check, like v1 ---
 # Post-install sanity before the reboot offer, so a broken bring-up is
 # caught here, not at the login screen. Best-effort reads only.
@@ -1614,6 +1865,12 @@ if command -v fastfetch >/dev/null 2>&1; then info "  fastfetch: present"; else 
 if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
 command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
+if command -v spotify >/dev/null 2>&1; then info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
+command -v gnome-calculator >/dev/null 2>&1 && info "  calculator: gnome-calculator present (Super+Shift+Q)" || warn "  calculator: gnome-calculator NOT installed, Super+Shift+Q will fail"
+command -v ncspot >/dev/null 2>&1 && info "  music TUI: ncspot present (Super+Shift+Alt+M)" || warn "  music TUI: ncspot NOT installed, Super+Shift+Alt+M will fail"
+command -v apostrophe >/dev/null 2>&1 && info "  writing: apostrophe present (Super+Shift+W)" || warn "  writing: apostrophe NOT installed, Super+Shift+W will fail"
+if command -v grim >/dev/null 2>&1 && command -v slurp >/dev/null 2>&1; then info "  screenshot: grim + slurp present (PRINT, hexciri-capture-screenshot)"; else warn "  screenshot: grim/slurp missing, PRINT will fail"; fi
+command -v tesseract >/dev/null 2>&1 && info "  OCR: tesseract present (SUPER+CTRL+PRINT capture-text)" || warn "  OCR: tesseract NOT installed, capture-text will fail"
 if [ "$HC_FAIL" -eq 0 ]; then
   info "Health check: clean"
 else
@@ -1641,6 +1898,7 @@ Reboot, then check in order:
   13. Workspace 1 shows 1 / its mode glyph, and SDDM shows the Hexciri emblem, not Omarchy logos
   14. Default apps: Super+Shift+Return opens Brave Origin (default browser), Super+Shift+N opens Zed, Super+Shift+O opens Obsidian, Super+Alt+Return opens tmux in Kitty, menu Capture > Screenrecord records (gpu-screen-recorder), menu Share > Receive opens LocalSend
   15. fastfetch: run `fastfetch` in Kitty, Hexciri logo + layout, not stock
+  16. Spotify + Arch substitutes: Super+Shift+M opens Spotify, Super+Shift+Q opens the calculator (gnome-calculator), PRINT takes a screenshot (grim + slurp, saved to ~/Pictures/Screenshots), Super+Shift+Alt+M opens the music TUI (ncspot), Super+Shift+W opens the writing app (Apostrophe). Super+Ctrl+Return (Herdr) is deliberately unbound, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.
 
 If Super+Space still does nothing after reboot, run this in a terminal and report what it prints:
   hexciri-menu toggle root
