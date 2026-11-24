@@ -1,0 +1,22 @@
+# Managed by Hexciri. Override individual tools in ~/.config/mise/config.toml.
+# Trimmed from upstream Omarchy's /etc/mise/conf.d/omarchy-tools.toml:
+# the AI agent CLIs (claude, codex, copilot, opencode, ...) and the Herdr
+# postinstall hook are NOT declared here. AI agents are out of scope and
+# Herdr is removed; declaring them would install agent shims on first use.
+# What is declared is the non-agent toolchain other Hexciri scripts use:
+# node, uv, gh. All lazy: nothing downloads until first use, and
+# `mise up` (hexciri-update-mise) only upgrades what is already installed.
+# A user who wants an agent CLI adds it in ~/.config/mise/config.toml.
+
+[settings]
+locked_scopes = ["project", "global"]
+system_installs_dir = "~/.local/share/mise/installs"
+system_shims_dir = "~/.local/share/mise/shims"
+# Upgrades must not delete the version a running process is executing from:
+# mise up would prune the old install dir out from under a live session.
+upgrade.auto_prune = false
+
+[tools]
+node = { version = "latest", lazy = true, minimum_release_age = "0s" }
+uv = { version = "latest", lazy = true, minimum_release_age = "0s" }
+gh = { version = "latest", lazy = true, minimum_release_age = "0s" }

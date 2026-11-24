@@ -43,7 +43,9 @@
 # TODO Phase 2 only, not in this script:
 #   Hexciri Lua edits (binds, windowrules, workspaces, opacity, Steam rules)
 #   Port Hexciri scripts from Noctalia calls to QS calls
-#   Theme engine merge, arch-updates EndeavourOS backend, hexciri-update rework
+#   Theme engine merge, arch-updates EndeavourOS backend
+#   (hexciri-update rework done 2026-11-24: eos-update --aur + Hexciri
+#   self-update + mise, see the fork-time update patch below)
 #   Nyxiri overlay, THPM install
 #
 # Run as your normal user, not as root, on a fresh EndeavourOS no-DE install:
@@ -62,12 +64,14 @@ trap 'printf "ERROR: [hexciri] failed at line %s, exit %s, command: %s\n" "$LINE
 # auto-reboots). Forwarded by v2/bootstrap.sh.
 UPDATE_YES=""
 AUTO_REBOOT=0
+NO_REBOOT=0
 for _a in "$@"; do
   case "$_a" in
     --yes|-y) UPDATE_YES="--yes" ;;
     --reboot) AUTO_REBOOT=1 ;;
-    -h|--help) echo "usage: install.sh [--yes] [--reboot]"; exit 0 ;;
-    *) printf 'install.sh: unknown arg: %s (usage: install.sh [--yes] [--reboot])\n' "$_a" >&2; exit 1 ;;
+    --no-reboot) NO_REBOOT=1 ;;
+    -h|--help) echo "usage: install.sh [--yes] [--reboot] [--no-reboot]"; exit 0 ;;
+    *) printf 'install.sh: unknown arg: %s (usage: install.sh [--yes] [--reboot] [--no-reboot])\n' "$_a" >&2; exit 1 ;;
   esac
 done
 unset _a
@@ -213,6 +217,7 @@ CORE_PKGS=(
   # is the Hexciri system monitor instead. fastfetch's Hexciri config is
   # placed in the default apps step below (config/fastfetch/config.jsonc).
   python python-gobject lua51 luarocks
+  mise # Phase 2 2026-11-24: reinstall mise so the rest of the Omarchy scripts work (mise up, lazy tools from /etc/mise/conf.d/hexciri-tools.toml)
   kitty
   udiskie
   noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-jetbrains-mono-nerd woff2-font-awesome terminus-font
@@ -707,7 +712,7 @@ is_allowed_bin() {
   case "$name" in
     launch-shell | omarchy | done | toggle | dictation | default-dictation | dictation-* | restart-* | theme-set | theme-set-templates | plugin-add | plugin-catalog | plugin-clone | plugin-disable | plugin-enable | plugin-list | plugin-remove | plugin-update | plugin-validate | bar | bar-text-color | shell | shell-config | migrate | migrate-notify | hook | hook-install | \
       refresh-hyprland | hyprland-reload-guard | notification-send | menu | menu-clipboard | menu-emoji | menu-emoji-insert | menu-file | menu-herdr-keybindings | menu-images | menu-input | menu-keybindings | menu-plugin | menu-region-formats | menu-select | menu-share | menu-timezone | menu-tmux-keybindings | \
-      provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | launch-* | \
+      provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | mise-install | mise-default-tools | launch-* | \
       cmd-* | default-terminal | action | i18n | notification-wait | software-rendering | toggle-enabled | hyprland-toggle-enabled | hyprland-software-rendering | hw-software-rendering | powerprofiles-init | powerprofiles-set | powerprofiles-floor | powerprofiles-list | hyprland-monitor-watch | hyprland-monitor-clamshell | hyprland-monitor-modeless | hyprland-monitor-external-active | hyprland-monitor-identity | hyprland-monitor-internal | hyprland-monitor-internal-mirror | hyprland-monitor-laptop | hyprland-workspace-layout-current | hyprland-workspace-layout-toggle | hyprland-workspace-layout-default | hw-laptop | hw-clamshell | hw-external-monitors | system-lid-inhibit | restart-hyprctl | \
       capture-* | system-* | system | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | pkg-add | pkg-missing | pkg-install | pkg-aur-install | pkg-remove | pkg-drop | sudo-keepalive | cmd-present | reminder | transcode | transcode-* | tray-* | weather-* | tui-* | webapp-* | osd | \
       dock | dns | state | show-* | setup-* | device-* | apply-lock | sudo-passwordless | security-functions | display-* | monitor-* | network-* | font-* | disk-speedtest | file-select | input-method | git-url-check | kernel | language | locale-session | locale-generate | refresh-shell | refresh-tmux | refresh-hyprsunset | refresh-applications | refresh-config | install-font | install-app | install-and-launch | install-editor-zed | install-gaming-steam | install-gaming-heroic | install-gaming-lutris | install-gaming-retroarch | install-gaming-battlenet | install-gaming-geforce-now | install-gaming-gpu-lib32 | remove-browser | remove-security-fingerprint | remove-gaming-steam | remove-gaming-retroarch | remove-gaming-minecraft | remove-gaming-geforce-now)
@@ -1831,10 +1836,11 @@ PY
 #     guard naming a missing command only hides or mis-guards the row, it
 #     never runs, so only the action decides. Header rows (no action) stay
 #     only while at least one child row under them stays. Still deleted:
-#     Update > Channel (Hexciri has no channels), Update > Hexciri
-#     (hexciri-update is Phase 2, not done), Update > Games / Password
-#     (games-*/drive-* out of scope), Update > Config > Plymouth (plymouth
-#     out), System > Screensaver (no screensaver binary ships in v2),
+#     Update > Channel (Hexciri has no channels), Update > Games /
+#     Password (games-*/drive-* out of scope), Update > Config > Plymouth
+#     (plymouth out), System > Screensaver (no screensaver binary ships
+#     in v2). Update > Hexciri is BACK: hexciri-update is Phase 2, done
+#     2026-11-24 (eos-update --aur + Hexciri self-update + mise).
 #     Appearance > Unlock (plymouth), Learn > Herdr keybindings (Herdr out),
 #     Setup > Default Editor > Neovim (neovim removed), Setup > Security >
 #     Sudoless Docker (Docker out). The upstream jsonc is untouched.
@@ -1877,7 +1883,7 @@ def _action_tokens(line):
     return re.findall(r'hexciri-[a-z0-9-]+', m.group(1)) if m else []
 dead = re.compile(
     r'^\s*"(update\.channel(\..*)?|'
-    r'update\.(hexciri|omarchy)|update\.games|update\.password|'
+    r'update\.omarchy|update\.games|update\.password|'
     r'update\.config\.plymouth|system\.screensaver|'
     r'learn\.herdr-keybindings|setup\.default\.editor\.neovim|'
     r'setup\.security\.sudoless-docker|appearance\.unlock)"\s*:'
@@ -1942,7 +1948,7 @@ while True:
 if removed:
     with open(menu, "w") as f:
         f.write("\n".join(kept) + "\n")
-    changed.append("menu: removed %d dead rows (kept install/remove rows whose backing bin exists, dropped the rest + update channels, update.hexciri, screensaver, unlock, herdr keys, neovim editor, sudoless-docker)" % len(removed))
+    changed.append("menu: removed %d dead rows (kept install/remove rows whose backing bin exists, dropped the rest + update channels, screensaver, unlock, herdr keys, neovim editor, sudoless-docker)" % len(removed))
     for r in removed[:8]:
         print("  menu removed: " + r)
     if len(removed) > 8:
@@ -2449,6 +2455,319 @@ else:
     print("theme-set-gnome already patched, skipping")
 PY
 
+# --- Fork-time patch: hexciri-update for EndeavourOS (Phase 2, 2026-11-24) ---
+# Rework upstream omarchy-update into the Hexciri update pipeline. Do NOT
+# call eos-update directly and do NOT build a new updater: the forked
+# hexciri-update stays the orchestrator (lock, transcript, confirm, sudo
+# keepalive, stay-awake, status refresh, restart prompt, shell restart),
+# only its steps are swapped for EndeavourOS:
+#   * No snapshot. Devi 2026-11-24: systemd-boot + ext4, no GRUB/btrfs, so
+#     snapshots are not a thing; eos-update --aur + Hexciri sync is enough.
+#   * System packages: eos-update --aur (repo pacman -Syu, then yay -Sua,
+#     plus keyring refresh, db lock handling, disk space check, .pacnew
+#     check). eos-update has NO --noconfirm flag, so under
+#     HEXCIRI_UPDATE_UNATTENDED=1 the pacman path below runs instead,
+#     keeping -y non-interactive.
+#   * Hexciri self-update: the dev-checkout step is a no-op on an installed
+#     machine (HEXCIRI_PATH is /usr/share/hexciri, not a checkout), so
+#     hexciri-update-hexciri (repo file v2/hexciri-update-hexciri) pulls the
+#     nyx tarball like bootstrap and re-runs this installer when the
+#     installer sha changed, judged by /usr/share/hexciri/.installer-sha.
+#     The installer re-places /usr/share/hexciri/bin while hexciri-update
+#     is running, so if hexciri-update itself changed it re-execs the new
+#     copy (same PID, so the sudo keepalive and the update lock survive).
+#   * Keyring: Arch + EndeavourOS keyrings only. There is no Hexciri
+#     keyring package, no WKD key, no pkgs@hexciri.org, no Omarchy repo.
+#   * Boot: no lifecycle-dispatch package is registered (it is a no-op on
+#     x86 and is deliberately not copied), so boot verification runs
+#     bootctl status directly instead of failing with 127.
+#   * Available: the upstream check only counted the omarchy package, which
+#     Hexciri does not ship, so it always reported up to date. Now any
+#     pending checkupdates entry counts.
+#   * Analyze-logs: dracut failure strings added (EndeavourOS default,
+#     not mkinitcpio).
+#   * Pacman guard: replaced by a no-op. The guard as shipped blocks any
+#     direct pacman call, which is exactly what eos-update and yay do.
+#   * mise: hexciri-mise-install / hexciri-mise-default-tools are now
+#     copied (allowlist above), /etc/mise/conf.d/hexciri-tools.toml is
+#     installed below, shims are on PATH in profile.d and uwsm env.
+step "Patching hexciri-update for EndeavourOS (eos-update --aur, no snapshot, Hexciri self-update, mise)"
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$FORK_OUT/bin/hexciri-update-hexciri"
+  chmod +x "$FORK_OUT/bin/hexciri-update-hexciri"
+  info "  update: hexciri-update-hexciri installed (nyx tarball self-update, re-runs installer when it changed)"
+else
+  die "v2/hexciri-update-hexciri not in the installer tree, hexciri update cannot pull Hexciri updates"
+fi
+python3 - "$FORK_OUT" <<'PY'
+import sys
+fork = sys.argv[1]
+
+def read(p):
+    with open(p) as f:
+        return f.read()
+
+def write(p, text):
+    with open(p, "w") as f:
+        f.write(text)
+
+def must_replace(path, old, new, what):
+    text = read(path)
+    assert text.count(old) == 1, "%s: anchor not unique in %s (count %d)" % (what, path, text.count(old))
+    write(path, text.replace(old, new, 1))
+    print("  update: %s" % what)
+
+upd = fork + "/bin/hexciri-update"
+
+# 1. Drop the snapshot step. The cache prune call sits ABOVE the snapshot
+# comment, so only the comment + create call + 127 fallback echo go.
+lines = read(upd).splitlines(keepends=True)
+start = next(i for i, l in enumerate(lines) if "Before the snapshot:" in l)
+end = next(i for i, l in enumerate(lines) if "update.noSnapshot" in l)
+assert end > start, "snapshot block bounds wrong"
+lines[start:end + 1] = [
+    "  # No snapshot: Devi 2026-11-24, systemd-boot + ext4, no GRUB/btrfs,\n",
+    "  # so snapshots are not a thing. eos-update --aur + Hexciri sync is\n",
+    "  # enough. The cache prune above stays: it runs before any update.\n",
+]
+write(upd, "".join(lines))
+print("  update: snapshot step dropped from hexciri-update")
+
+# 2. Hexciri self-update before update-dev, with a re-exec guard: the
+# installer re-places /usr/share/hexciri/bin while this script runs.
+must_replace(upd, "  hexciri-update-dev\n", "\n".join([
+    "  # Hexciri self-update first: pull nyx and re-run the installer when it",
+    "  # changed. On an installed machine update-dev is a no-op (HEXCIRI_PATH is",
+    "  # /usr/share/hexciri, not a checkout), so it cannot pull Hexciri updates.",
+    "  if [[ ${HEXCIRI_UPDATE_SELF_DONE:-0} != \"1\" ]]; then",
+    "    _hexciri_update_self_before=\"$(sha256sum \"$0\" 2>/dev/null || true)\"",
+    "    _hexciri_update_self_before=\"${_hexciri_update_self_before%% *}\"",
+    "    hexciri-update-hexciri",
+    "    _hexciri_update_self_after=\"$(sha256sum \"$0\" 2>/dev/null || true)\"",
+    "    _hexciri_update_self_after=\"${_hexciri_update_self_after%% *}\"",
+    "    # If this script itself changed, re-exec the new copy so the rest of",
+    "    # the pipeline runs new code. Same PID after exec, so the sudo",
+    "    # keepalive and the update lock survive.",
+    "    if [[ -n \"$_hexciri_update_self_before\" && -n \"$_hexciri_update_self_after\" && \"$_hexciri_update_self_before\" != \"$_hexciri_update_self_after\" ]]; then",
+    "      exec env HEXCIRI_UPDATE_REEXECED=1 HEXCIRI_UPDATE_SELF_DONE=1 \"$0\" \"$@\"",
+    "    fi",
+    "    export HEXCIRI_UPDATE_SELF_DONE=1",
+    "  fi",
+    "",
+    "  hexciri-update-dev",
+]) + "\n", "hexciri-update calls hexciri-update-hexciri before update-dev")
+
+# 3. Marker path for this run only: system-pkgs sets it when eos-update --aur
+# already updated the AUR, so the aur-pkgs step skips its duplicate yay run.
+must_replace(upd, "  authorize_update\n",
+    "  authorize_update\n  # Marker file for this run only (underscores, not hyphens, so the\n  # fork scan does not read it as a hexciri-* command name).\n  export HEXCIRI_UPDATE_EOS_MARKER=\"/tmp/hexciri_update_eos_aur_$$.marker\"\n",
+    "hexciri-update exports the eos-update AUR marker path")
+
+# 4. Cleanup removes the marker (cleanup_update calls end_update_authorization;
+# the same call also appears in the main flow after boot verification, so
+# anchor on the cleanup_update function header, not on the call alone).
+must_replace(upd, "cleanup_update() {\n  local status=$?\n  trap - EXIT HUP INT TERM\n  end_update_authorization\n",
+    "cleanup_update() {\n  local status=$?\n  trap - EXIT HUP INT TERM\n  end_update_authorization\n  rm -f \"${HEXCIRI_UPDATE_EOS_MARKER:-}\" 2>/dev/null || true\n",
+    "hexciri-update cleanup removes the eos-update AUR marker")
+
+# 5. aur-pkgs: skip when eos-update --aur already did the AUR this run.
+# (This file has no set -e; anchor on its unset line, before the pacman check.)
+must_replace(fork + "/bin/hexciri-update-aur-pkgs", "unset GOROOT GOBIN\n",
+    "unset GOROOT GOBIN\n\n# eos-update --aur already updated the AUR in the system-pkgs step; the\n# marker file is set by hexciri-update for this run only.\nif [[ -n ${HEXCIRI_UPDATE_EOS_MARKER:-} && -f $HEXCIRI_UPDATE_EOS_MARKER ]]; then\n  echo \"AUR packages already updated by eos-update --aur, skipping\"\n  exit 0\nfi\n",
+    "hexciri-update-aur-pkgs skips when eos-update already did the AUR")
+
+# 6. boot: verify systemd-boot directly when lifecycle-dispatch is absent.
+must_replace(fork + "/bin/hexciri-update-boot", "set -e\n",
+    "set -e\n\n# x86 / systemd-boot: no lifecycle-dispatch package is registered (it is a\n# no-op on x86 and is deliberately not copied), so verify the boot chain\n# directly instead of failing with 127 on a missing command.\nif ! command -v hexciri-lifecycle-dispatch >/dev/null 2>&1; then\n  if bootctl status >/dev/null 2>&1 || sudo bootctl status >/dev/null 2>&1; then\n    exit 0\n  fi\n  echo \"Warning: bootctl status failed, boot chain not verified\" >&2\n  exit 1\nfi\n",
+    "hexciri-update-boot verifies systemd-boot directly when lifecycle-dispatch is absent")
+
+# 7. confirm: the whats-new link pointed at omacom/hexciri, which is not a repo.
+must_replace(fork + "/bin/hexciri-update-confirm",
+    "https://github.com/omacom/hexciri/releases/latest",
+    "https://github.com/Deoxizn/hexciri/releases/latest",
+    "hexciri-update-confirm points at Deoxizn/hexciri releases")
+PY
+
+# Whole-file rewrites: keyring, system-pkgs, pacman guard, available.
+# The keyring file: Arch + EndeavourOS keyrings only. No Hexciri keyring
+# package, no WKD key, no pkgs@hexciri.org, no Omarchy repo. ARM handling
+# dropped: Hexciri machines are x86_64.
+cat > "$FORK_OUT/bin/hexciri-update-keyring" <<'KEYRING_EOF'
+#!/bin/bash
+# Hexciri: refresh Arch + EndeavourOS keyrings only. There is no Hexciri
+# keyring package, no WKD key, no pkgs@hexciri.org, no Omarchy repo, so the
+# upstream keyring step (which tries to install a Hexciri keyring package
+# from the Omarchy repo) cannot work here. ARM keyring handling is dropped
+# too: Hexciri machines are x86_64.
+set -euo pipefail
+
+keyrings=(archlinux-keyring)
+if pacman -Qq endeavouros-keyring >/dev/null 2>&1; then
+  keyrings+=(endeavouros-keyring)
+fi
+
+echo -e "\e[32m\n$(hexciri-i18n update.signingKeys)\e[0m"
+sudo pacman-key --populate archlinux endeavouros 2>/dev/null || sudo pacman-key --populate archlinux || true
+sudo pacman -Sy --needed --noconfirm "${keyrings[@]}"
+echo "$(hexciri-i18n update.keysCorrect)"
+KEYRING_EOF
+chmod +x "$FORK_OUT/bin/hexciri-update-keyring"
+
+# The system-pkgs file: eos-update --aur is the package engine. The conflict
+# handler below is unchanged: it takes over on a failed pacman run.
+cat > "$FORK_OUT/bin/hexciri-update-system-pkgs" <<'SYSPKGS_EOF'
+#!/bin/bash
+# omarchy:summary=Update system packages with pacman
+# omarchy:requires-sudo=true
+# Hexciri (2026-11-24): eos-update --aur is the package engine on
+# EndeavourOS (repo pacman -Syu, then yay -Sua, plus keyring refresh, db
+# lock handling, disk space check, .pacnew check). eos-update has NO
+# --noconfirm flag, so under HEXCIRI_UPDATE_UNATTENDED=1 the pacman path
+# below runs instead, keeping -y non-interactive.
+set -e
+
+# The conflict handler's last resort: pacman puts its questions to the person
+# running the update instead of answering them itself. Nothing here may capture
+# a stream, because an upgrade without --noconfirm prompts on stderr. The
+# handler has already said why, so no heading here either.
+if [[ ${HEXCIRI_UPDATE_CONFLICT:-} == 1 && ${HEXCIRI_UPDATE_INTERACTIVE:-} == 1 ]]; then
+  exec hexciri-update-pacman -Syu --overwrite '/usr/share/hexciri/*'
+fi
+
+# EndeavourOS package engine: eos-update --aur. It prompts on conflicts
+# itself, so it only runs in interactive mode. On failure, fall through to
+# the pacman path below instead of stopping the whole update.
+if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} != "1" ]] && command -v eos-update >/dev/null 2>&1; then
+  echo -e "\e[32m\n$(hexciri-i18n update.systemPackages) (eos-update --aur)\e[0m"
+  if eos-update --aur; then
+    # Tell the aur-pkgs step the AUR is already done, for this run only.
+    [[ -n ${HEXCIRI_UPDATE_EOS_MARKER:-} ]] && : > "$HEXCIRI_UPDATE_EOS_MARKER"
+    exit 0
+  fi
+  echo "eos-update --aur failed, falling back to pacman -Syu --noconfirm (review /tmp/hexciri-update.log for details)." >&2
+fi
+
+echo -e "\e[32m\n$(hexciri-i18n update.systemPackages)\e[0m"
+
+errors=$(mktemp)
+trap 'rm -f "$errors"' EXIT
+
+# /usr/share/hexciri is wholly Hexciri's; files can land there unowned and would
+# otherwise abort the upgrade. Packaged content wins there.
+#
+# Progress bars stay on stdout. Errors are on stderr, kept for the conflict
+# handler below; LC_ALL=C is what keeps them parseable in any locale.
+if LC_ALL=C hexciri-update-pacman -Syu --noconfirm \
+  --overwrite '/usr/share/hexciri/*' 2>"$errors"; then
+  cat "$errors" >&2
+  exit 0
+fi
+cat "$errors" >&2
+
+# The handler takes it from here: it clears files pacman doesn't own yet and
+# runs this again, and puts a package conflict to whoever started the update.
+# Anything else, including a second failure, is for a human.
+[[ ${HEXCIRI_UPDATE_RETRY:-} != 1 ]] || exit 1
+# exec, so the EXIT trap above does not fire and the handler can still read the
+# report. It takes over deleting it.
+exec env HEXCIRI_UPDATE_CONFLICT=1 hexciri-update-system-pkgs-when-conflicted "$errors"
+SYSPKGS_EOF
+chmod +x "$FORK_OUT/bin/hexciri-update-system-pkgs"
+
+# The pacman guard file: no-op. The guard as shipped blocks any direct
+# pacman call, which is exactly what eos-update and yay do, so it would
+# break every update. There is no Hexciri repo to protect, no
+# linux-omarchy kernel, no keyring pinning to defend.
+cat > "$FORK_OUT/bin/hexciri-update-pacman-guard" <<'GUARD_EOF'
+#!/bin/bash
+# hexciri-update-pacman-guard: no-op in Hexciri. The guard as shipped blocks
+# any direct pacman call, which is exactly what eos-update and yay do, so
+# it would break every update. There is no Hexciri repo to protect, no
+# linux-omarchy kernel, no keyring pinning to defend.
+exit 0
+GUARD_EOF
+chmod +x "$FORK_OUT/bin/hexciri-update-pacman-guard"
+
+# The available file: upstream only counted the omarchy package after
+# first-update, which Hexciri does not ship, so it always reported up to
+# date. Now any pending checkupdates entry counts, plus a git checkout
+# behind count when a dev checkout exists at ~/.local/opt/hexciri (v1 dev
+# path; an installed machine has no checkout, tarball install, so the
+# installer sha check lives in hexciri-update-hexciri, not here).
+cat > "$FORK_OUT/bin/hexciri-update-available" <<'AVAIL_EOF'
+#!/bin/bash
+# hexciri-update-available: check whether Hexciri / system updates are available.
+# Exit 0 when updates exist (and list them), exit 1 when up to date.
+# Used by the bar update indicator and by hexciri-update-status.
+set -euo pipefail
+
+updates=()
+if [[ -d $HOME/.local/opt/hexciri/.git ]]; then
+  upstream="$(git -C "$HOME/.local/opt/hexciri" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+  if [[ -n $upstream ]]; then
+    behind="$(git -C "$HOME/.local/opt/hexciri" rev-list --count "HEAD..$upstream" 2>/dev/null || echo 0)"
+    if (( behind > 0 )); then
+      commit_label=commits
+      (( behind == 1 )) && commit_label=commit
+      updates+=("hexciri-dev-checkout $behind new $commit_label on $upstream")
+    fi
+  fi
+fi
+
+mapfile -t _pending < <(checkupdates --nocolor 2>/dev/null || true)
+updates+=("${_pending[@]}")
+
+if (( ${#updates[@]} > 0 )); then
+  printf '%s\n' "${updates[@]}"
+  exit 0
+else
+  echo "Hexciri is up to date"
+  exit 1
+fi
+AVAIL_EOF
+chmod +x "$FORK_OUT/bin/hexciri-update-available"
+
+# Analyze-logs: dracut (EndeavourOS default, not mkinitcpio) plus a failed
+# transaction, in the same plain-echo style as the existing checks.
+cat >> "$FORK_OUT/bin/hexciri-update-analyze-logs" <<'ANALYZE_EOF'
+
+# dracut (EndeavourOS default, not mkinitcpio): a failed initramfs rebuild
+# shows as dracut errors in the log. Also surface a failed transaction.
+if grep -qiE "dracut: (failed|error)|dracut:.*failed" "$update_log"; then
+  echo -e '\e[31mError: dracut reported errors during the update. Review logs before restart.\e[0m'
+  echo
+fi
+if grep -q "error: failed to commit transaction" "$update_log"; then
+  echo -e '\e[31mError: pacman transaction failed. Review /tmp/hexciri-update.log before retrying.\e[0m'
+  echo
+fi
+ANALYZE_EOF
+
+# Every patched update script must still parse.
+for _f in hexciri-update hexciri-update-system-pkgs hexciri-update-keyring hexciri-update-aur-pkgs hexciri-update-mise hexciri-update-available hexciri-update-boot hexciri-update-analyze-logs hexciri-update-hexciri hexciri-update-pacman-guard hexciri-update-confirm; do
+  bash -n "$FORK_OUT/bin/$_f" || die "bash -n failed on patched $_f"
+done
+unset _f
+info "  update: hexciri-update patched (eos-update --aur, no snapshot, Hexciri self-update, mise, dracut log scan)"
+
+# --- mise + Hexciri tools config (Phase 2, 2026-11-24) ---
+# mise was out of scope in the Phase 1 base; reinstall it so the rest of the
+# Omarchy scripts work. /etc/mise/conf.d/hexciri-tools.toml is the trimmed
+# upstream tools config: node, uv, gh, lazy, no AI agent CLIs, no Herdr.
+step "Installing mise + Hexciri tools config (/etc/mise/conf.d/hexciri-tools.toml)"
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-tools.toml" ]; then
+  sudo install -Dm644 "$HEXCIRI_REPO_ROOT/v2/hexciri-tools.toml" /etc/mise/conf.d/hexciri-tools.toml && info "  mise tools config installed: /etc/mise/conf.d/hexciri-tools.toml (node, uv, gh, lazy; no AI agents, no Herdr)" || warn "  could not install /etc/mise/conf.d/hexciri-tools.toml, mise tools config missing"
+else
+  warn "  v2/hexciri-tools.toml not in the installer tree, mise tools config not installed"
+fi
+if command -v mise >/dev/null 2>&1; then
+  MISE_OFFLINE=true MISE_LOG_LEVEL=error mise reshim --system 2>/dev/null || warn "  mise reshim --system failed, lazy shims may be stale"
+  MISE_OFFLINE=true MISE_LOG_LEVEL=error mise reshim 2>/dev/null || warn "  mise reshim failed"
+  info "  mise: $(mise --version 2>/dev/null || echo present)"
+else
+  warn "  mise not installed, Omarchy scripts that call mise will fail (pacman: mise)"
+fi
+
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
 # runs as the normal user.
@@ -2468,6 +2787,9 @@ for _txt in logo.txt icon.txt; do
 done
 unset _txt
 sudo chmod +x "$HEXCIRI_PATH"/bin/* 2>/dev/null || true
+# Installer sha marker for hexciri-update-hexciri: it re-runs this installer
+# only when the installer itself changed.
+sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1 | sudo tee "$HEXCIRI_PATH/.installer-sha" >/dev/null && info "Wrote installer sha marker /usr/share/hexciri/.installer-sha (hexciri update re-runs the installer only when this changes)" || warn "could not write installer sha marker, hexciri update will re-run the installer every time"
 info "Installed: $HEXCIRI_PATH/shell, $HEXCIRI_PATH/default, $HEXCIRI_PATH/themes, $HEXCIRI_PATH/bin, $HEXCIRI_PATH/install (browser-policy helpers), $HEXCIRI_PATH/icons, $HEXCIRI_PATH/logo.txt, $HEXCIRI_PATH/icon.txt"
 
 mkdir -p "$HOME/.config/hypr" "$HOME/.config/hexciri" \
@@ -2613,6 +2935,12 @@ case ":$PATH:" in
   *:"$HOME"/.local/bin:*) ;;
   *) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
+# mise lazy shims live here (upstream env-bootstrap already adds this dir to
+# the interactive PATH; profile.d adds it for logins and uwsm sessions too).
+case ":$PATH:" in
+  *:"$HOME"/.local/share/mise/shims:*) ;;
+  *) export PATH="$HOME/.local/share/mise/shims:$PATH" ;;
+esac
 EOF
 sudo install -Dm644 "$TMP_PROFILE" /etc/profile.d/hexciri.sh
 rm -f "$TMP_PROFILE"
@@ -2626,7 +2954,7 @@ TMP_UWSM="$(mktemp)"
 {
   printf 'HEXCIRI_PATH=/usr/share/hexciri\n'
   printf 'OMARCHY_PATH=/usr/share/hexciri\n'
-  printf 'PATH=/usr/share/hexciri/bin:%s/.local/bin:%s\n' "$HOME" "$PATH"
+  printf 'PATH=/usr/share/hexciri/bin:%s/.local/bin:%s/.local/share/mise/shims:%s\n' "$HOME" "$HOME" "$PATH"
 } > "$TMP_UWSM"
 sudo install -Dm644 "$TMP_UWSM" /usr/share/uwsm/env.d/10-hexciri
 rm -f "$TMP_UWSM"
@@ -2722,8 +3050,11 @@ if [ -d "$HEXCIRI_PATH" ]; then
       hexciri-lifecycle-dispatch) continue ;;
       # More filename false positives, 2026-11-24: a log filename
       # (/tmp/hexciri-battlenet-installer.log) and a browser policy JSON
-      # filename (hexciri-extensions.json), neither is a command.
-      hexciri-battlenet-installer | hexciri-extensions) continue ;;
+      # filename (hexciri-extensions.json), neither is a command. Phase 2
+      # adds two more: hexciri-tools is the mise config filename
+      # (/etc/mise/conf.d/hexciri-tools.toml), hexciri-nyx is the GitHub
+      # codeload tarball top dir, neither is a command.
+      hexciri-battlenet-installer | hexciri-extensions | hexciri-tools | hexciri-nyx) continue ;;
     esac
     if [ -x "$HEXCIRI_PATH/bin/$_cmd" ] || command -v "$_cmd" >/dev/null 2>&1; then
       info "  forked-tree command present: $_cmd"
@@ -2762,7 +3093,7 @@ info "PASS: GlobalShortcut appid omarchy agrees with helpers.lua omarchy: dispat
 
 # Menu / dock / terminal / file manager essentials: Super+Space, Super+Alt+Space,
 # Super+Return and Super+Shift+F all go through these.
-for _bin in hexciri hexciri-menu hexciri-shell hexciri-launch-terminal hexciri-launch-files hexciri-launch-files-cwd hexciri-done hexciri-restart-terminal hexciri-update-available; do
+for _bin in hexciri hexciri-menu hexciri-shell hexciri-launch-terminal hexciri-launch-files hexciri-launch-files-cwd hexciri-done hexciri-restart-terminal hexciri-update hexciri-update-hexciri hexciri-update-system-pkgs hexciri-update-mise hexciri-mise-install hexciri-mise-default-tools hexciri-update-available; do
   [ -x "$HEXCIRI_PATH/bin/$_bin" ] || die "missing bin (Super+Space apps / Super+Alt+Space menu / update will fail): $_bin"
 done
 unset _bin
@@ -2796,7 +3127,7 @@ grep -q '/usr/share/hexciri/bin/hexciri-shell hexciri.dock apps' "$HEXCIRI_PATH/
 # factory-reset, fido2, sshd, sudoless-docker). Non-Zed editors are
 # dropped by the menu patch too, but are covered by the action-token
 # check below, not by a grep pattern (there is no grep for "not zed").
-for _dead in '"install.ai.' '"install.service.' '"install.development.' '"install.terminal.' '"install.browser.' '"install.dictation.' '"install.windows"' '"install.preinstalls"' '"remove.ai.' '"remove.service.' '"remove.development.' '"remove.dictation.' '"remove.windows"' '"remove.preinstalls"' '"remove.factory-reset"' '"remove.security.fido2"' '"remove.security.sshd"' '"remove.security.sudoless-docker"' '"update.channel' '"update.hexciri"' '"update.omarchy"' '"system.screensaver"' '"learn.herdr-keybindings"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
+for _dead in '"install.ai.' '"install.service.' '"install.development.' '"install.terminal.' '"install.browser.' '"install.dictation.' '"install.windows"' '"install.preinstalls"' '"remove.ai.' '"remove.service.' '"remove.development.' '"remove.dictation.' '"remove.windows"' '"remove.preinstalls"' '"remove.factory-reset"' '"remove.security.fido2"' '"remove.security.sshd"' '"remove.security.sudoless-docker"' '"update.channel' '"update.omarchy"' '"system.screensaver"' '"learn.herdr-keybindings"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
   if grep -q "$_dead" "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc"; then
     die "dead menu row still present in hexciri-menu.jsonc: $_dead"
   fi
@@ -2865,7 +3196,16 @@ grep -q 'foot.desktop) echo "foot"' "$HEXCIRI_PATH/bin/hexciri-default-terminal"
 grep -q 'kitty.desktop) echo "kitty"' "$HEXCIRI_PATH/bin/hexciri-default-terminal" || die "hexciri-default-terminal getter has no kitty arm"
 [ -L "$HOME/.local/bin/hexciri" ] || die "missing symlink ~/.local/bin/hexciri, hexciri will be command not found in terminals"
 bash -lc 'command -v hexciri' >/dev/null 2>&1 || warn "hexciri not on PATH in a fresh login shell, check ~/.bashrc / fish conf.d PATH lines"
+grep -q '"update.hexciri"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu Update > Hexciri row missing (Phase 2 update)"
+grep '"update.hexciri"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" | grep -q 'hexciri-update' || die "menu Update > Hexciri row does not call hexciri-update"
+grep -q 'eos-update --aur' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs does not call eos-update --aur"
+grep -q 'hexciri-update-hexciri' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not call hexciri-update-hexciri"
+grep -q 'hexciri-snapshot create' "$HEXCIRI_PATH/bin/hexciri-update" && die "hexciri-update still calls the snapshot step (dropped 2026-11-24)"
+grep -q 'dracut' "$HEXCIRI_PATH/bin/hexciri-update-analyze-logs" || die "hexciri-update-analyze-logs has no dracut scan"
+[ -f "$HEXCIRI_PATH/.installer-sha" ] || die "installer sha marker missing, hexciri-update-hexciri cannot tell if the installer changed"
+[ -f /etc/mise/conf.d/hexciri-tools.toml ] || warn "  mise tools config missing at /etc/mise/conf.d/hexciri-tools.toml (node/uv/gh lazy declarations)"
 info "PASS: menu audit verified (dead rows gone, audit bins present, shell IPC paths absolute)"
+info "PASS: update pipeline verified (Update > Hexciri row live, eos-update --aur engine, no snapshot, Hexciri self-update wired, mise tools config present)"
 # Dock pinned list (Devi 2026-11-23): Strata, Spotify, Brave Origin, Zed,
 # Kitty. hexciri-browser / hexciri-terminal are deliberately NOT pinned,
 # they are wrappers for Brave Origin / Kitty and would duplicate them.
@@ -3623,6 +3963,9 @@ if command -v spotify >/dev/null 2>&1; then info "  music: spotify present (Supe
 command -v gnome-calculator >/dev/null 2>&1 && info "  calculator: gnome-calculator present (Super+Shift+Q)" || warn "  calculator: gnome-calculator NOT installed, Super+Shift+Q will fail"
 command -v hexciri >/dev/null 2>&1 && info "  cli: hexciri present" || warn "  cli: hexciri NOT on PATH, hexciri plugin list will fail"
 command -v checkupdates >/dev/null 2>&1 && info "  update check: checkupdates present (update icon)" || warn "  update check: checkupdates NOT installed, update icon never shows"
+command -v eos-update >/dev/null 2>&1 && info "  update engine: eos-update present (repo + AUR, --aur)" || warn "  update engine: eos-update NOT installed, hexciri update falls back to pacman -Syu --noconfirm"
+command -v mise >/dev/null 2>&1 && info "  mise: $(mise --version 2>/dev/null || echo present)" || warn "  mise: NOT installed, Omarchy scripts that call mise will fail"
+[ -f /etc/mise/conf.d/hexciri-tools.toml ] && info "  mise tools: /etc/mise/conf.d/hexciri-tools.toml present (node, uv, gh, lazy; no AI agents, no Herdr)" || warn "  mise tools: /etc/mise/conf.d/hexciri-tools.toml missing"
 [ -f "$HOME/.config/kitty/kitty.conf" ] && info "  kitty config: ~/.config/kitty/kitty.conf present (theme include)" || warn "  kitty config: not placed, Kitty will not load theme colours"
 [ -d "$HEXCIRI_PATH/default/themed" ] && info "  theme templates: default/themed present" || warn "  theme templates: default/themed missing, theme-set generates nothing"
 if command -v grim >/dev/null 2>&1 && command -v slurp >/dev/null 2>&1; then info "  screenshot: grim + slurp present (PRINT, hexciri-capture-screenshot)"; else warn "  screenshot: grim/slurp missing, PRINT will fail"; fi
@@ -3656,9 +3999,9 @@ Reboot, then check in order:
   15. fastfetch: run `fastfetch` in Kitty, Hexciri logo + layout, not stock, WM shows Hyprland | Quickshell, not Niri | Noctalia
   16. Spotify + Arch substitutes: Super+Shift+M opens Spotify, Super+Shift+Q opens the calculator (gnome-calculator), PRINT takes a screenshot (grim + slurp, saved to ~/Pictures/Screenshots). Super+Ctrl+Return (Herdr) is deliberately unbound, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.
 
-  17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta, xterm, stoken and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). YAD settings is hidden, yad itself stays (EOS tools depend on it).
+  17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update (eos-update --aur for repo + AUR, Hexciri self-update pulls nyx and re-runs the installer when it changed, mise up for mise tools). `hexciri-update` is the same script, and `hexciri update hexciri` re-runs just the Hexciri self-update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta, xterm, stoken and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). YAD settings is hidden, yad itself stays (EOS tools depend on it).
 
-  18. Menu audit 2026-11-23: Install and Remove subtrees were deleted then (install-*/remove-* were never in the fork), restored 2026-11-24 where a backing script exists (see item 21). Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
+  18. Menu audit 2026-11-23: Install and Remove subtrees were deleted then (install-*/remove-* were never in the fork), restored 2026-11-24 where a backing script exists (see item 21). Update > Channel is gone (Hexciri has no channels), Update > Hexciri is back (Phase 2, 2026-11-24, runs hexciri-update in a floating terminal), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (AI agents are out of scope, Herdr stays removed; mise itself is back in, Phase 2 2026-11-24, for the non-agent tools node, uv, gh). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
 
   19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are removed for real this time (trim used sudo -n, which silently failed once the sudo timestamp expired); the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
   20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now, fitted to the rendered content at launch (two-mode launch-about, --render measures logo + modules and resizes the window, no fixed 920x480); systemd-boot timeout 1s in every loader.conf AND the LoaderConfigTimeout EFI variable (bootctl set-timeout 1, the variable overrides loader.conf); Super+Shift+T runs btm (bottom package binary); LocalSend file picker is dark (theme name Adwaita in gtk-3.0/gtk-4.0 settings.ini, dconf color-scheme prefer-dark via dbus-run-session, FileChooser=gtk portal; Adwaita-dark is not a theme name); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
@@ -3702,7 +4045,7 @@ If Quickshell fails to start:
 
 Phase 2 is NOT installed. Next steps are separate work:
   Hexciri Lua edits, port Hexciri scripts from Noctalia to QS, theme engine merge,
-  arch-updates EndeavourOS backend, hexciri-update rework, Nyxiri overlay, THPM install.
+  arch-updates EndeavourOS backend, Nyxiri overlay, THPM install. (hexciri-update rework done 2026-11-24: eos-update --aur + Hexciri self-update + mise.)
 EOF
 
 # --- Reboot offer, like v1 ---
@@ -3713,7 +4056,9 @@ EOF
 # then you just reboot and it is all setup.
 
 step "Reboot?"
-if [ "$AUTO_REBOOT" -eq 1 ]; then
+if [ "${NO_REBOOT:-0}" -eq 1 ]; then
+  info "no reboot (--no-reboot, the caller handles the reboot offer)"
+elif [ "$AUTO_REBOOT" -eq 1 ]; then
   info "rebooting now (--reboot)"
   sudo reboot || info "reboot manually: sudo reboot"
 elif [ -t 0 ]; then

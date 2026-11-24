@@ -1,0 +1,67 @@
+#!/bin/bash
+# hexciri-update-hexciri: pull Hexciri nyx and re-run the installer when it changed.
+# Called by hexciri-update (the dev-checkout step is a no-op on an installed
+# machine: HEXCIRI_PATH is /usr/share/hexciri, not a git checkout, so it can
+# never pull Hexciri updates). Also runnable standalone: hexciri update hexciri
+#
+# Tarball model, like bootstrap: no git, no auth. No snapshot, no GRUB/btrfs.
+# The installer is idempotent, so re-running it is the Hexciri sync: it
+# re-forks Omarchy at the pinned commit, re-places the tree, re-applies the
+# theme and the post-placement fixes, and re-runs the trim. It only runs
+# when the installer itself changed, judged by a sha marker the installer
+# writes at /usr/share/hexciri/.installer-sha on every install.
+#
+# Usage: hexciri-update-hexciri [--force]
+#   --force re-runs the installer even when the sha marker matches.
+
+set -euo pipefail
+
+HEXCIRI_NYX_TARBALL_URL="https://codeload.github.com/Deoxizn/hexciri/tar.gz/refs/heads/nyx"
+EXPECTED_TOP_DIR="hexciri-nyx"
+MARKER="/usr/share/hexciri/.installer-sha"
+FORCE=0
+if [[ ${1:-} == "--force" ]]; then
+  FORCE=1
+fi
+
+die() { printf 'ERROR: %s\n' "$1" >&2; exit 1; }
+
+WORKDIR="$(mktemp -d /tmp/hexciri-update-hexciri.XXXXXX)"
+trap 'rm -rf "$WORKDIR"' EXIT
+
+for cmd in curl tar sha256sum; do
+  command -v "$cmd" >/dev/null 2>&1 || die "missing required command: $cmd"
+done
+
+TARBALL="$WORKDIR/hexciri-nyx.tar.gz"
+echo "Downloading Hexciri nyx (no git, no auth)..."
+curl --progress-bar -fSL --max-time 300 -o "$TARBALL" "$HEXCIRI_NYX_TARBALL_URL" || die "curl download of Hexciri nyx tarball failed. Fix networking, then rerun hexciri update."
+[ -s "$TARBALL" ] || die "Downloaded Hexciri tarball is empty: $TARBALL"
+
+# Write the listing to a file first: tar -tzf | head -1 under set -o pipefail
+# dies with SIGPIPE (exit 141) on any tarball whose listing is bigger than
+# the pipe buffer. Same trap the bootstrap hit on 2026-11-23.
+tar -tzf "$TARBALL" > "$WORKDIR/tar-list.txt" || die "Downloaded file is not a valid gzip tarball: $TARBALL."
+TOP_DIR="$(head -1 "$WORKDIR/tar-list.txt" | cut -d/ -f1)"
+[ "$TOP_DIR" = "$EXPECTED_TOP_DIR" ] || die "tarball top dir is '$TOP_DIR', expected '$EXPECTED_TOP_DIR'."
+
+tar -xzf "$TARBALL" -C "$WORKDIR" || die "Failed to extract Hexciri tarball."
+EXTRACTED="$WORKDIR/$TOP_DIR"
+[ -f "$EXTRACTED/v2/install.sh" ] || die "Extracted Hexciri tree is missing v2/install.sh: $EXTRACTED"
+
+NEW_SHA="$(sha256sum "$EXTRACTED/v2/install.sh" | cut -d' ' -f1)"
+OLD_SHA="$(cat "$MARKER" 2>/dev/null || true)"
+if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA == "$OLD_SHA" ]]; then
+  echo "Hexciri installer unchanged ($NEW_SHA), skipping re-install."
+  exit 0
+fi
+
+echo "Hexciri installer changed, re-running the installer (this is the Hexciri sync)..."
+bash "$EXTRACTED/v2/install.sh" --yes --no-reboot
+
+# The installer writes the new marker itself; verify it landed.
+NEW_MARKER="$(cat "$MARKER" 2>/dev/null || true)"
+if [[ $NEW_MARKER != "$NEW_SHA" ]]; then
+  echo "Warning: installer sha marker was not updated (got '${NEW_MARKER:-none}', expected $NEW_SHA), the next hexciri update will re-run the installer again." >&2
+fi
+echo "Hexciri installer re-run done."

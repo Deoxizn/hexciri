@@ -58,6 +58,7 @@ ripgrep
 fd
 fzf
 gum
+mise # Phase 2 2026-11-24: reinstall mise (lazy tools from /etc/mise/conf.d/hexciri-tools.toml)
 eza
 bat
 starship
