@@ -837,7 +837,7 @@ is_allowed_bin() {
       refresh-hyprland | hyprland-reload-guard | notification-send | menu | menu-clipboard | menu-emoji | menu-emoji-insert | menu-file | menu-herdr-keybindings | menu-images | menu-input | menu-keybindings | menu-plugin | menu-region-formats | menu-select | menu-share | menu-timezone | menu-tmux-keybindings | \
       provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | mise-install | mise-default-tools | launch-* | \
       cmd-* | default-terminal | action | i18n | notification-wait | software-rendering | toggle-enabled | hyprland-toggle-enabled | hyprland-software-rendering | hw-software-rendering | powerprofiles-init | powerprofiles-set | powerprofiles-floor | powerprofiles-list | hyprland-monitor-watch | hyprland-monitor-clamshell | hyprland-monitor-modeless | hyprland-monitor-external-active | hyprland-monitor-identity | hyprland-monitor-internal | hyprland-monitor-internal-mirror | hyprland-monitor-laptop | hyprland-workspace-layout-current | hyprland-workspace-layout-toggle | hyprland-workspace-layout-default | hw-laptop | hw-clamshell | hw-external-monitors | system-lid-inhibit | restart-hyprctl | \
-      capture-* | system-* | system | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | pkg-add | pkg-missing | pkg-install | pkg-aur-install | pkg-remove | pkg-drop | sudo-keepalive | cmd-present | reminder | transcode | transcode-* | tray-* | weather-* | tui-* | webapp-* | osd | \
+      capture-* | system-* | system | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | pkg-add | pkg-missing | pkg-install | pkg-aur-install | pkg-aur-accessible | pkg-remove | pkg-drop | sudo-keepalive | cmd-present | reminder | transcode | transcode-* | tray-* | weather-* | tui-* | webapp-* | osd | \
       dock | dns | state | show-* | setup-* | device-* | apply-lock | sudo-passwordless | security-functions | display-* | monitor-* | network-* | font-* | disk-speedtest | file-select | input-method | git-url-check | kernel | language | locale-session | locale-generate | refresh-shell | refresh-tmux | refresh-hyprsunset | refresh-applications | refresh-config | install-font | install-app | install-and-launch | install-editor-zed | install-gaming-steam | install-gaming-heroic | install-gaming-lutris | install-gaming-retroarch | install-gaming-battlenet | install-gaming-geforce-now | install-gaming-gpu-lib32 | remove-browser | remove-security-fingerprint | remove-gaming-steam | remove-gaming-retroarch | remove-gaming-minecraft | remove-gaming-geforce-now)
       # Dinner audit 2026-11-23: the families above were missing, so binds and
       # menu rows that call them failed with Command not found, exactly like
@@ -2724,6 +2724,22 @@ must_replace(upd, "  hexciri-update-dev\n", "\n".join([
     "  hexciri-update-dev",
 ]) + "\n", "hexciri-update calls hexciri-update-hexciri before update-dev")
 
+# 2b. No second Ready box after a self-update re-exec (2026-11-24, Devi:
+# the confirm box showed again after "Hexciri updated to ..."). When the
+# installer re-placed hexciri-update, it re-execs the new copy with
+# HEXCIRI_UPDATE_REEXECED=1 (same PID, sudo keepalive and lock survive).
+# The first pass already confirmed and authorized, so the re-exec must
+# skip the confirm box. authorize_update itself is made a no-op on a
+# re-exec (next must_replace) instead of nesting the call: the marker /
+# UNATTENDED exports inserted after the call still have to run on the
+# re-exec pass.
+must_replace(upd, "if [[ ${1:-} == \"-y\" ]] || hexciri-update-confirm; then\n  authorize_update\n",
+    "if [[ ${1:-} == \"-y\" || ${HEXCIRI_UPDATE_REEXECED:-0} == \"1\" ]] || hexciri-update-confirm; then\n  authorize_update\n",
+    "hexciri-update skips the second confirm on a self-update re-exec")
+must_replace(upd, "authorize_update() {\n  sudo true || return 1\n",
+    "authorize_update() {\n  # Re-exec after self-update: the first pass already authorized\n  # and its sudo keepalive is still running (same PID after exec).\n  # Do not start a second keepalive the cleanup never kills.\n  if [[ ${HEXCIRI_UPDATE_REEXECED:-0} == \"1\" ]]; then\n    return 0\n  fi\n  sudo true || return 1\n",
+    "authorize_update is a no-op on a self-update re-exec")
+
 # 3. Marker path for this run only: system-pkgs sets it when eos-update --aur
 # already updated the AUR, so the aur-pkgs step skips its duplicate yay run.
 must_replace(upd, "  authorize_update\n",
@@ -2778,8 +2794,24 @@ if [[ -n ${HEXCIRI_UPDATE_EOS_MARKER:-} && -f $HEXCIRI_UPDATE_EOS_MARKER ]]; the
 fi
 
 if pacman -Qem >/dev/null; then
-  if hexciri-pkg-aur-accessible; then
-    echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.aur)\e[0m"
+  # Header FIRST, before the accessibility check (2026-11-24, Devi: the
+  # AUR error appeared right under "Update mise tools" with no AUR header
+  # at all, so it read as a mise error). mise never calls the AUR helper;
+  # the next step after mise is this one, and its old else branch only
+  # printed the red "AUR is unavailable" line, never the step header.
+  echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.aur)\e[0m"
+  # Is the AUR reachable? Prefer the helper, but do NOT fail with
+  # "command not found" if it is missing from the fork (2026-11-24: it
+  # was not in the bin allowlist, so the fork never copied it and every
+  # update reported "AUR is unavailable"). Fall back to the same curl
+  # check the helper does, inline.
+  _aur_accessible=0
+  if command -v hexciri-pkg-aur-accessible >/dev/null 2>&1; then
+    hexciri-pkg-aur-accessible && _aur_accessible=1 || _aur_accessible=0
+  elif curl -sf --connect-timeout 30 --retry 3 --retry-delay 3 -A "hexciri-update" "https://aur.archlinux.org/rpc/?v=5&type=info&arg=base" >/dev/null 2>&1; then
+    _aur_accessible=1
+  fi
+  if [[ "$_aur_accessible" == "1" ]]; then
     # Quiet on purpose (2026-11-24, Devi): yay prints "Searching AUR for
     # updates... there is nothing to do" and build logs. Capture it, show
     # one status line instead. Real failures print the captured output.
@@ -2800,7 +2832,7 @@ if pacman -Qem >/dev/null; then
     fi
     echo
   else
-    echo -e "$(hexciri-theme-ansi red)\n$(hexciri-i18n update.aurUnavailable)\e[0m"
+    echo "AUR is unavailable, skipping AUR updates (aur.archlinux.org not reachable)"
     echo
   fi
 fi
@@ -2923,8 +2955,12 @@ rm -f "$_keyring_log"
 KEYRING_EOF
 chmod +x "$FORK_OUT/bin/hexciri-update-keyring"
 
-# The system-pkgs file: eos-update --aur is the package engine. The conflict
-# handler below is unchanged: it takes over on a failed pacman run.
+# The system-pkgs file: pacman directly is the package engine (2026-11-24:
+# eos-update --aur is kept only for a standalone interactive run, it has
+# no --noconfirm and its yay prompts [Y/n]). pacman -Sy/-Su sync and
+# upgrade every repo in /etc/pacman.conf, including [endeavouros], so EOS
+# packages update here like any other repo package. The conflict handler
+# below is unchanged: it takes over on a failed pacman run.
 cat > "$FORK_OUT/bin/hexciri-update-system-pkgs" <<'SYSPKGS_EOF'
 #!/bin/bash
 # omarchy:summary=Update system packages with pacman
@@ -2976,13 +3012,19 @@ fi
 rm -f "$_sync_log"
 
 # Nothing pending: one line, no upgrade run, no "there is nothing to do".
-# checkupdates reads the just-synced db. If it cannot run at all, assume
-# there is something to do and let pacman -Su below decide.
+# checkupdates reads the just-synced db. Its exit codes (pacman-contrib):
+# 0 = up to date, 2 = updates available, 1 = error. The old code treated
+# ANY non-zero exit as "assume 1 pending", so an exit-2 run was reported
+# as 1, and an exit-1 error run was reported as 1 even when pacman then
+# found nothing to do ("System packages updated (1 package(s))" after
+# "there is nothing to do", 2026-11-24). Count the lines whatever the
+# exit code is; only on a real error fall back to pacman -Qu.
 _pending_file="$(mktemp /tmp/hexciri-syspkgs-pending.XXXXXX)"
-if checkupdates >"$_pending_file" 2>/dev/null; then
-  _pending="$(wc -l < "$_pending_file" | tr -d ' ')"
-else
-  _pending=1
+_checkupdates_status=0
+checkupdates >"$_pending_file" 2>/dev/null || _checkupdates_status=$?
+_pending="$(wc -l < "$_pending_file" | tr -d ' ')"
+if [[ "$_checkupdates_status" == "1" ]]; then
+  _pending="$(pacman -Qu 2>/dev/null | wc -l | tr -d ' ')"
 fi
 rm -f "$_pending_file"
 if [[ "$_pending" == "0" ]]; then
@@ -2993,22 +3035,50 @@ fi
 errors=$(mktemp)
 trap 'rm -f "$errors"' EXIT
 
+# EOS packages (2026-11-24, Devi: does dropping eos-update skip EOS
+# pkgs?): no. pacman -Sy / -Su sync and upgrade EVERY repo in
+# /etc/pacman.conf, and on EndeavourOS that includes [endeavouros]
+# (eos-update, eos-hooks, endeavouros-keyring, welcome, ...). checkupdates
+# counts those entries too, so an EOS package update is a pending update
+# like any other. eos-update's other steps are covered elsewhere in this
+# pipeline: keyring refresh (hexciri-update-keyring), free-space check
+# (hexciri-update-requires-free-space), .pacnew check (below), AUR
+# (hexciri-update-aur-pkgs). If the EOS repo is ever missing from
+# pacman.conf, say so instead of silently skipping EOS pkgs.
+if ! pacman -Sl endeavouros >/dev/null 2>&1; then
+  echo "Warning: endeavouros repo not found in pacman config, EOS packages will not update" >&2
+fi
+
 # /usr/share/hexciri is wholly Hexciri's; files can land there unowned and would
 # otherwise abort the upgrade. Packaged content wins there.
 #
 # Progress bars stay on stdout (ILoveCandy Pac-Man bar). Errors are on stderr,
 # kept for the conflict handler below; LC_ALL=C is what keeps them parseable
-# in any locale.
-if LC_ALL=C hexciri-update-pacman -Su --noconfirm \
-  --overwrite '/usr/share/hexciri/*' 2>"$errors"; then
+# in any locale. stdout is tee'd to a log so the real upgrade count can be
+# read back: _pending is only a pre-flight count, and pacman can still find
+# nothing to do (db race, IgnorePkg, a package checkupdates counted but
+# pacman skips). Never claim "updated (1)" when nothing was upgraded.
+_su_log="$(mktemp /tmp/hexciri-syspkgs-su.XXXXXX)"
+LC_ALL=C hexciri-update-pacman -Su --noconfirm \
+  --overwrite '/usr/share/hexciri/*' 2>"$errors" | tee "$_su_log"
+_su_status="${PIPESTATUS[0]}"
+if [[ "$_su_status" == "0" ]]; then
   cat "$errors" >&2
+  _upgraded="$(grep -cE '^\([0-9]+/[0-9]+\) upgrading ' "$_su_log" 2>/dev/null || true)"
+  _upgraded="$(echo "$_upgraded" | tr -d ' ')"
+  rm -f "$_su_log"
   _pacnew="$(find /etc -name '*.pacnew' 2>/dev/null | wc -l | tr -d ' ')"
   if [[ "$_pacnew" != "0" ]]; then
     echo "Note: $_pacnew .pacnew file(s) in /etc need review (run pacdiff)" >&2
   fi
-  echo "System packages updated ($_pending package(s))"
+  if [[ "$_upgraded" == "0" ]]; then
+    echo "System packages are up to date"
+  else
+    echo "System packages updated ($_upgraded package(s))"
+  fi
   exit 0
 fi
+rm -f "$_su_log"
 cat "$errors" >&2
 
 # The handler takes it from here: it clears files pacman doesn't own yet and
@@ -3597,6 +3667,10 @@ grep -q 'HEXCIRI_UPDATE_UNATTENDED=1' "$HEXCIRI_PATH/bin/hexciri-update" || die 
 grep -q 'System packages are up to date' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs has no quiet up-to-date status line"
 grep -q 'AUR packages are up to date' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" || die "hexciri-update-aur-pkgs has no quiet up-to-date status line"
 grep -q 'already updated by eos-update --aur, skipping' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" && die "hexciri-update-aur-pkgs still prints the noisy skipping line"
+[ -x "$HEXCIRI_PATH/bin/hexciri-pkg-aur-accessible" ] || die "hexciri-pkg-aur-accessible missing from fork (hexciri-update-aur-pkgs calls it, 2026-11-24 live log: command not found)"
+grep -q 'HEXCIRI_UPDATE_REEXECED' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not skip the second confirm on a self-update re-exec"
+grep -q '_upgraded' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs does not count real upgrades (it claimed updated (1) after nothing to do)"
+grep -q 'endeavouros repo not found' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs has no endeavouros-repo check (EOS pkgs must still update via pacman)"
 [ -f "$HEXCIRI_PATH/.fork-fingerprint" ] || die "fork fingerprint missing, hexciri update cannot tell if the fork changed"
 grep -q 'fork_fingerprint' "$INSTALLER_DIR/install.sh" || die "installer has no fork cache (fork_fingerprint missing)"
 grep -q 'hexciri-snapshot create' "$HEXCIRI_PATH/bin/hexciri-update" && die "hexciri-update still calls the snapshot step (dropped 2026-11-24)"
@@ -4498,7 +4572,15 @@ EOF
 # otherwise it just notes a relogin is needed.
 # This is the end of the install: v1 does everything up to this point,
 # then you just reboot and it is all setup.
-
+# Re-run from hexciri-update (IS_RERUN=1 and --no-reboot, 2026-11-24,
+# Devi: "Reboot?" + "done, Hexiri 2.0 is installed. Pick Hexiri at SDDM
+# ... pick a theme" leaked into an update re-run): the update already
+# has its own reboot offer at the end, and this is not a fresh install.
+# Skip the step and the fresh-install wording entirely; say only that
+# Hexciri was re-applied and settings were preserved.
+if [ "${IS_RERUN:-0}" = "1" ] && [ "${NO_REBOOT:-0}" -eq 1 ]; then
+  info "Hexciri re-applied, user settings and theme preserved (the update handles the reboot offer)"
+else
 step "Reboot?"
 if [ "${NO_REBOOT:-0}" -eq 1 ]; then
   info "no reboot (--no-reboot, the caller handles the reboot offer)"
@@ -4523,4 +4605,9 @@ elif [ -t 0 ]; then
 else
   info "no reboot, at minimum relogin (no TTY to ask on)"
 fi
-info "done, Hexiri 2.0 is installed. Pick Hexiri at SDDM after reboot, then pick a theme with hexciri-theme-set if you want a different one."
+if [ "${IS_RERUN:-0}" = "1" ]; then
+  info "done, Hexciri re-applied, user settings and theme preserved."
+else
+  info "done, Hexiri 2.0 is installed. Pick Hexiri at SDDM after reboot, then pick a theme with hexciri-theme-set if you want a different one."
+fi
+fi
