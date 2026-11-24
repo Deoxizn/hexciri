@@ -2686,8 +2686,16 @@ def must_replace(path, old, new, what):
 
 upd = fork + "/bin/hexciri-update"
 
-# 1. Drop the snapshot step. The cache prune call sits ABOVE the snapshot
-# comment, so only the comment + create call + 127 fallback echo go.
+# 1. Drop the snapshot step. BUG (2026-11-24, Devi: Prune package cache
+# missing): upstream called hexciri-update-pkg-prune BEFORE the snapshot,
+# with the "Before the snapshot:" comment above it, so the prune CALL was
+# inside the deleted lines[start:end+1] range and got dropped with the
+# snapshot. The replacement comment then claimed "the cache prune above
+# stays", which was false: nothing called pkg-prune any more (sim6out
+# had the call, sim7out has zero). Restore the call here, in the same
+# place upstream had it: after authorize, before stay-awake / self-update
+# / system-pkgs. No snapshot on Hexciri (systemd-boot + ext4), so there
+# is no snapshot for the prune to precede; it just runs before any update.
 lines = read(upd).splitlines(keepends=True)
 start = next(i for i, l in enumerate(lines) if "Before the snapshot:" in l)
 end = next(i for i, l in enumerate(lines) if "update.noSnapshot" in l)
@@ -2695,7 +2703,8 @@ assert end > start, "snapshot block bounds wrong"
 lines[start:end + 1] = [
     "  # No snapshot: Devi 2026-11-24, systemd-boot + ext4, no GRUB/btrfs,\n",
     "  # so snapshots are not a thing. eos-update --aur + Hexciri sync is\n",
-    "  # enough. The cache prune above stays: it runs before any update.\n",
+    "  # enough. No snapshot, so the prune runs here, before any update.\n",
+    "  hexciri-update-pkg-prune\n",
 ]
 write(upd, "".join(lines))
 print("  update: snapshot step dropped from hexciri-update")
@@ -2817,17 +2826,30 @@ if pacman -Qem >/dev/null; then
     # one status line instead. Real failures print the captured output.
     _aur_log="$(mktemp /tmp/hexciri-aur.XXXXXX)"
     if yay -Sua --noconfirm --cleanafter --ignore gcc14,gcc14-libs >"$_aur_log" 2>&1; then
-      if grep -q "there is nothing to do" "$_aur_log"; then
-        echo "AUR packages are up to date"
-      else
-        echo "AUR packages updated"
-        grep -E "upgrading" "$_aur_log" | sed 's/^/  /' || true
-      fi
-      rm -f "$_aur_log"
+      _aur_ok=1
+    else
+      _aur_ok=0
+    fi
+    # thpm (2026-11-24, Devi): kicked off AUR, installed via GitHub
+    # (OldJobobo/thpm) source script, not yay/pacman, so yay's
+    # "Packages not in AUR: thpm" warning is expected noise. Strip it
+    # from the log before judging success, and never report AUR as
+    # failing / unavailable because of thpm alone: if the filtered log
+    # says "there is nothing to do", it is up to date even if yay
+    # exited non-zero over thpm. Failure output shows the filtered
+    # log, never the thpm line.
+    grep -v "Packages not in AUR: thpm" "$_aur_log" >"$_aur_log.filtered" 2>/dev/null || true
+    if grep -q "there is nothing to do" "$_aur_log.filtered"; then
+      echo "AUR packages are up to date"
+      rm -f "$_aur_log" "$_aur_log.filtered"
+    elif [[ "$_aur_ok" == "1" ]]; then
+      echo "AUR packages updated"
+      grep -E "upgrading" "$_aur_log.filtered" | sed 's/^/  /' || true
+      rm -f "$_aur_log" "$_aur_log.filtered"
     else
       echo "ERROR: AUR update failed, output:" >&2
-      cat "$_aur_log" >&2
-      rm -f "$_aur_log"
+      cat "$_aur_log.filtered" >&2
+      rm -f "$_aur_log" "$_aur_log.filtered"
       exit 1
     fi
     echo
@@ -2911,6 +2933,129 @@ _t = _t.replace(_old, _new, 1)
 write(_p, _t)
 print("  update: analyze-logs initramfs line uses double quotes (no more literal)")
 PYEOF8B
+
+# 9. pkg-prune: whole-file rewrite (2026-11-24, Devi: Prune package
+# cache was missing from hexciri update, see Fix 1 above). Upstream bin
+# printed the themed header then ran `sudo paccache -rk2` live, whose
+# output is the Omarchy line Devi quoted:
+#   Prune package cache
+#   ==> finished: 3 packages removed (disk space saved: 83.23 MiB)
+# Quiet version: capture paccache, show ONE status line only (the
+# finished line, or "Package cache is clean" when it finds no
+# candidates). paccache -rk2 keeps 2 versions, the only offline
+# downgrade path, and is non-interactive, so no Y/n prompt. A paccache
+# failure prints the pruneFailed warning and the update continues.
+cat > "$FORK_OUT/bin/hexciri-update-pkg-prune" <<'PRUNE_EOF'
+#!/bin/bash
+
+# omarchy:summary=Prune superseded versions from the pacman package cache
+# omarchy:requires-sudo=true
+
+set -e
+
+# The cache is the only offline downgrade path, so keep two. Run before the
+# packages update and the installed version survives with a spare. paccache
+# retains by version order, never by what is installed.
+echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.pruneCache)\e[0m"
+_prune_log="$(mktemp /tmp/hexciri-pkg-prune.XXXXXX)"
+if sudo paccache -rk2 >"$_prune_log" 2>&1; then
+  _finished="$(grep -E 'finished:' "$_prune_log" | tail -1 || true)"
+  if [[ -n "$_finished" ]]; then
+    # "==> finished: 3 packages removed (disk space saved: 83.23 MiB)"
+    echo "${_finished#==> }"
+  elif grep -qi 'no candidate' "$_prune_log"; then
+    echo "Package cache is clean"
+  else
+    echo "Package cache pruned"
+  fi
+else
+  echo -e "\e[33m$(hexciri-i18n update.pruneFailed)\e[0m" >&2
+  cat "$_prune_log" >&2 || true
+fi
+rm -f "$_prune_log"
+echo
+PRUNE_EOF
+info "  update: hexciri-update-pkg-prune rewritten (quiet: one status line, paccache -rk2)"
+
+# 10. Section consistency (2026-11-24, Devi: Omarchy style, every step
+# its own little section with themed header + one-line status).
+#   a. orphan-pkgs: was silent when no orphans existed, so the step had
+#      no section at all. Now always prints the themed header, then
+#      "No orphaned packages" when none. Removal behaviour unchanged:
+#      called with -y by hexciri-update, so orphans are removed without
+#      a gum prompt; standalone non-tty use still reports and exits.
+#   b. mise: ran `mise up` live. Now captured, one status line only.
+cat > "$FORK_OUT/bin/hexciri-update-orphan-pkgs" <<'ORPHAN_EOF'
+#!/bin/bash
+
+# omarchy:summary=Review and optionally remove orphaned system packages after updates
+# omarchy:args=[-y]
+# omarchy:examples=hexciri update orphan-pkgs | hexciri update orphan-pkgs -y
+# omarchy:requires-sudo=true
+
+set -e
+
+echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.orphans)\e[0m"
+mapfile -t orphans < <(pacman -Qtdq 2>/dev/null || true)
+if (( ${#orphans[@]} == 0 )); then
+  echo "No orphaned packages"
+  echo
+  exit 0
+fi
+printf '  %s\n' "${orphans[@]}"
+echo
+
+if [[ ${1:-} != "-y" && ( ! -t 0 || ! -t 1 ) ]]; then
+  echo "$(hexciri-i18n --count "${#orphans[@]}" update.orphansFound "${#orphans[@]}" hexciri-update-orphan-pkgs)"
+  echo
+  exit 0
+fi
+
+if [[ ${1:-} != "-y" ]] && ! gum confirm --default=false --affirmative "$(hexciri-i18n common.yes)" --negative "$(hexciri-i18n common.no)" "$(hexciri-i18n --count "${#orphans[@]}" update.removeOrphans "${#orphans[@]}")"; then
+  echo "$(hexciri-i18n update.keepingOrphans)"
+  echo
+  exit 0
+fi
+
+echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.removingOrphans)\e[0m"
+hexciri-pkg-drop "${orphans[@]}"
+echo
+ORPHAN_EOF
+info "  update: hexciri-update-orphan-pkgs rewritten (always a section, one line when none)"
+
+cat > "$FORK_OUT/bin/hexciri-update-mise" <<'MISE_EOF'
+#!/bin/bash
+
+# omarchy:summary=Update mise-managed tools
+
+if hexciri-cmd-present mise; then
+  echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.mise)\e[0m"
+
+  # mise withholds releases younger than its cooldown, so tools stay behind for
+  # days after they ship. Running hexciri update is the user asking for current
+  # versions now, which is the same call the mup alias makes by hand.
+  # Quiet (2026-11-24, Devi): capture `mise up`, show one status line only,
+  # like the other sections. Failure still exits non-zero so hexciri-update
+  # sets mise_updated=0 and prints the retry hint at the end.
+  _mise_log="$(mktemp /tmp/hexciri-mise.XXXXXX)"
+  if MISE_MINIMUM_RELEASE_AGE=0 mise up >"$_mise_log" 2>&1; then
+    if grep -qi "up to date" "$_mise_log"; then
+      echo "All tools are up to date"
+    else
+      echo "Mise tools updated"
+      grep -iE "updated|installed" "$_mise_log" | sed 's/^/  /' || true
+    fi
+    rm -f "$_mise_log"
+  else
+    echo "ERROR: mise update failed, output:" >&2
+    cat "$_mise_log" >&2
+    rm -f "$_mise_log"
+    exit 1
+  fi
+  echo
+fi
+MISE_EOF
+info "  update: hexciri-update-mise rewritten (quiet: one status line)"
 
 # Whole-file rewrites: keyring, system-pkgs, pacman guard, available.
 # The keyring file: Arch + EndeavourOS keyrings only. No Hexciri keyring
@@ -3659,6 +3804,11 @@ grep -q '"update.hexciri"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" ||
 grep '"update.hexciri"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" | grep -q 'hexciri-update' || die "menu Update > Hexciri row does not call hexciri-update"
 grep -q 'eos-update --aur' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs does not call eos-update --aur"
 grep -q 'hexciri-update-hexciri' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not call hexciri-update-hexciri"
+grep -q 'hexciri-update-pkg-prune' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not call hexciri-update-pkg-prune (Prune package cache, dropped with the snapshot step 2026-11-24)"
+grep -q 'paccache -rk2' "$HEXCIRI_PATH/bin/hexciri-update-pkg-prune" || die "hexciri-update-pkg-prune does not run paccache -rk2"
+grep -q 'No orphaned packages' "$HEXCIRI_PATH/bin/hexciri-update-orphan-pkgs" || die "hexciri-update-orphan-pkgs has no section when there are no orphans"
+grep -q 'All tools are up to date' "$HEXCIRI_PATH/bin/hexciri-update-mise" || die "hexciri-update-mise has no quiet one-line status"
+grep -q 'Packages not in AUR: thpm' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" || die "hexciri-update-aur-pkgs does not suppress the thpm AUR warning"
 grep -q 'Updating Hexciri' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" || die "hexciri-update-hexciri has no themed Updating Hexciri header"
 grep -q 'Hexciri installer sha: installed' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" && die "hexciri-update-hexciri still prints full installer shas on screen"
 grep -q 'Hexciri nyx synced with git' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" && die "hexciri-update-hexciri still prints the noisy git sync line"
