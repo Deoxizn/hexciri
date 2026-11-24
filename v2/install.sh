@@ -12,7 +12,11 @@
 #      verify SHA from the tarball top dir, then fork and rename the shell inline
 #   4. Place the forked tree to /usr/share/hexciri, ~/.config/hexciri,
 #      ~/.local/state/hexciri, and ~/.config/hypr, and wire the compat alias in
-#   5. Verify placement, then reboot test checklist
+#   5. Apply a default theme, theme SDDM with that theme, health check,
+#      then reboot test checklist
+#   Lua module rename: config/hypr/hyprland.lua requires
+#   default.hypr.hexciri (not default.hypr.omarchy), and bootstrap.lua
+#   preloads the old name as an alias, or Hyprland trips emergency mode.
 #
 # The old two scripts are kept as reference, do not delete them yet:
 #   v2/install-2.0.sh  (packages and session, now step 1 and 5 below)
@@ -469,6 +473,14 @@ copy_subsets() {
   # All themes, colors.toml + shell.toml, verbatim except path renames applied later. 23 themes at pinned commit.
   copy_subset "$OMARCHY_SRC/themes" "$FORK_OUT/themes" "themes/"
 
+  # SDDM greeter theme and greeter Hyprland config, renamed omarchy -> hexciri
+  # by the rename step below (default/sddm/omarchy -> default/sddm/hexciri).
+  # Optional: if upstream moves it, the SDDM theming step later warns and
+  # continues with the EndeavourOS default theme instead of dying here.
+  if ! copy_optional_path "$OMARCHY_SRC/default/sddm" "$FORK_OUT/default/sddm" "default/sddm/"; then
+    warn "default/sddm/ not found in source, SDDM will keep the EndeavourOS default theme."
+  fi
+
   # Bash env bootstrap and envs, renamed by the rename step below
   if ! copy_optional_path "$OMARCHY_SRC/default/bash/env-bootstrap" "$FORK_OUT/default/bash/env-bootstrap" "default/bash/env-bootstrap"; then
     warn "default/bash/env-bootstrap not found in source, continuing without it"
@@ -560,6 +572,28 @@ replacements = [
     (b"omarchy-launch-", b"hexciri-launch-"),
     (b"omarchy-menu", b"hexciri-menu"),
     (b"omarchy.lua", b"hexciri.lua"),
+    # Root cause of the Hyprland emergency mode on the first live boot:
+    # config/hypr/hyprland.lua:17 does require("default.hypr.omarchy"), and
+    # that trailing "omarchy" (before a closing quote, paren, or newline)
+    # matched NONE of the rules above: "omarchy/" needs a slash, "omarchy."
+    # needs a trailing dot, '"omarchy"' needs a quote before it. So the
+    # require survived the rename while default/hypr/omarchy.lua had been
+    # renamed to hexciri.lua, and Hyprland tripped emergency mode with
+    # "module 'default.hypr.omarchy' not found". The "(28 more...)" in that
+    # error is Hyprland truncating its package.path search list, not 28
+    # more errors. These rules fix module names only, as string literals.
+    # Deliberately NOT a blind omarchy -> hexciri catch-all: Lua globals
+    # like _G.omarchy_default_bindings and table keys like value.omarchy
+    # are user-facing API that the shipped config and helpers both still
+    # use under the omarchy name, and renaming only one side of them
+    # would break bindings. Module names are the only thing renamed here.
+    (b"default.hypr.omarchy", b"default.hypr.hexciri"),
+    (b"omarchy.current.theme", b"hexciri.current.theme"),
+    (b'omarchy"', b'hexciri"'),
+    (b"omarchy'", b"hexciri'"),
+    (b"omarchy)", b"hexciri)"),
+    (b"Name=Omarchy", b"Name=Hexciri"),
+    (b"Author=Omarchy", b"Author=Hexciri"),
     (b"omarchy/", b"hexciri/"),
     (b'"omarchy"', b'"hexciri"'),
     (b"'omarchy'", b"'hexciri'"),
@@ -742,12 +776,24 @@ verify_no_omarchy_paths() {
   info "PASS: no /usr/share/omarchy, ~/.config/omarchy, ~/.local/state/omarchy, or ~/.local/share/omarchy paths remain outside alias comments"
 }
 
+verify_no_omarchy_lua_modules() {
+  step "Verifying no Lua file still requires the renamed default.hypr.omarchy module"
+  local bad_mods
+  bad_mods="$(grep -R -n -I -e 'default\.hypr\.omarchy' -e 'hypr\.omarchy["'"'"')]' "$FORK_OUT" --include='*.lua' || true)"
+  if [ -n "$bad_mods" ]; then
+    printf 'ERROR: Lua files still require the renamed omarchy module (this tripped Hyprland emergency mode on the first live boot):\n%s\n' "$bad_mods" >&2
+    exit 1
+  fi
+  info "PASS: no Lua file requires default.hypr.omarchy"
+}
+
 copy_subsets
 rename_files
 rewrite_contents
 generate_compat
 verify_no_omarchy_files
 verify_no_omarchy_paths
+verify_no_omarchy_lua_modules
 
 step "Fork summary"
 info "Fork output: $FORK_OUT"
@@ -845,6 +891,45 @@ else
   die "default/hypr/hexciri.lua not found in fork output, cannot wire compat require."
 fi
 
+# Defence in depth for the emergency-mode bug: bootstrap.lua is dofile'd by
+# config/hypr/hyprland.lua BEFORE it requires default.hypr.omarchy, so a
+# package.preload alias there catches any require of the old module name
+# that the rewrite above missed, e.g. in a user config or a third-party
+# module, and resolves it to default.hypr.hexciri. No file named omarchy
+# is created. This runs from tty with no GUI, like the rest of the installer.
+BOOTSTRAP_LUA="$FORK_OUT/default/hypr/bootstrap.lua"
+if [ -f "$BOOTSTRAP_LUA" ]; then
+  python3 - "$BOOTSTRAP_LUA" <<'PY'
+import sys
+path = sys.argv[1]
+alias = (
+    '\n-- Hexiri compat: legacy module name default.hypr.omarchy resolves to\n'
+    '-- default.hypr.hexciri. This is the defence in depth for the Hyprland\n'
+    '-- emergency mode on the first live boot, when hyprland.lua still\n'
+    '-- required the old name after the file had been renamed.\n'
+    'package.preload["default.hypr.omarchy"] = function() return require("default.hypr.hexciri") end\n'
+    'package.preload["omarchy.current.theme.hyprland"] = function() return require("hexciri.current.theme.hyprland") end\n'
+)
+with open(path) as f:
+    content = f.read()
+if 'package.preload["default.hypr.omarchy"]' in content:
+    print("bootstrap.lua: legacy module preload alias already present, skipping")
+else:
+    with open(path, "w") as f:
+        f.write(content.rstrip("\n") + "\n" + alias)
+    print("bootstrap.lua: added legacy module preload alias for default.hypr.omarchy")
+PY
+  if command -v luac5.1 >/dev/null 2>&1; then
+    luac5.1 -p "$BOOTSTRAP_LUA" && info "bootstrap.lua preload alias added (luac5.1 syntax OK)" || warn "luac5.1 syntax check failed on wired bootstrap.lua, continuing anyway, Hyprland will report the real error at boot if this is broken."
+  elif command -v luac >/dev/null 2>&1; then
+    luac -p "$BOOTSTRAP_LUA" && info "bootstrap.lua preload alias added (luac syntax OK)" || warn "luac syntax check failed on wired bootstrap.lua, continuing anyway."
+  else
+    info "bootstrap.lua preload alias added, no luac binary to syntax-check it with."
+  fi
+else
+  warn "default/hypr/bootstrap.lua not found in fork output, skipping legacy module preload alias. The rewrite fix above is still the primary fix."
+fi
+
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
 # runs as the normal user.
@@ -931,6 +1016,12 @@ step "Verifying placement"
 [ -f "$HEXCIRI_PATH/default/hypr/hexciri-compat.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/hexciri-compat.lua"
 [ -f "$HEXCIRI_PATH/bin/hexciri-compat.sh" ] || die "missing: $HEXCIRI_PATH/bin/hexciri-compat.sh"
 [ -f "$HOME/.config/hypr/hyprland.lua" ] || die "missing: $HOME/.config/hypr/hyprland.lua"
+if grep -q 'default\.hypr\.omarchy' "$HOME/.config/hypr/hyprland.lua"; then
+  printf 'ERROR: placed ~/.config/hypr/hyprland.lua still requires default.hypr.omarchy, this trips Hyprland emergency mode at boot\n' >&2
+  exit 1
+fi
+grep -q 'default\.hypr\.hexciri' "$HOME/.config/hypr/hyprland.lua" || die "placed ~/.config/hypr/hyprland.lua does not require default.hypr.hexciri"
+info "Verified: placed hyprland.lua requires default.hypr.hexciri, not default.hypr.omarchy"
 [ -f "$HOME/.config/hexciri/shell.json" ] || die "missing: $HOME/.config/hexciri/shell.json"
 [ -d "$HEXCIRI_PATH/themes" ] || die "missing: $HEXCIRI_PATH/themes"
 THEME_COUNT="$(find "$HEXCIRI_PATH/themes" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
@@ -978,6 +1069,69 @@ else
   warn "No themes found to apply, skipping theme apply."
 fi
 
+# --- Theme SDDM with the currently applied theme ---
+# The EndeavourOS default SDDM theme is ugly as all hell, and the installer
+# previously never touched SDDM theming at all: it only enabled the service.
+# Omarchy ships its own minimal terminal-style SDDM theme in
+# default/sddm/omarchy/ (Main.qml, logo/lock/entry/bullet images,
+# metadata.desktop), renamed here to hexciri. Install that theme, select
+# it, and recolor its solid background to the currently applied Hexiri
+# theme's background colour, read from the theme's colors.toml, never a
+# guessed theme name: DEFAULT_THEME above is the first theme dir, and
+# theme-set will already have staged it at ~/.local/state/hexciri/current.
+# Best-effort, never fatal: if the SDDM theme source is missing, SDDM
+# keeps the EndeavourOS default and login still works. Runs from tty,
+# no GUI needed. DisplayServer is deliberately NOT forced to Wayland
+# here: SDDM already logs Devi in, and the theme works under either
+# greeter compositor.
+
+step "Theming SDDM with the current theme"
+if [ -d "$HEXCIRI_PATH/default/sddm/hexciri" ]; then
+  sudo mkdir -p /usr/share/sddm/themes || warn "could not create /usr/share/sddm/themes, SDDM theming skipped."
+  if [ -d /usr/share/sddm/themes ]; then
+    sudo rm -rf /usr/share/sddm/themes/hexciri
+    if sudo cp -a "$HEXCIRI_PATH/default/sddm/hexciri" /usr/share/sddm/themes/hexciri; then
+      info "Installed SDDM theme: /usr/share/sddm/themes/hexciri"
+    else
+      warn "could not copy SDDM theme to /usr/share/sddm/themes/hexciri, keeping the EndeavourOS default theme."
+    fi
+  fi
+  if [ -f "$HEXCIRI_PATH/default/sddm/hyprland.lua" ]; then
+    if [ -f /usr/share/sddm/hyprland.lua ] && ! cmp -s "$HEXCIRI_PATH/default/sddm/hyprland.lua" /usr/share/sddm/hyprland.lua; then
+      sudo cp -a /usr/share/sddm/hyprland.lua /usr/share/sddm/hyprland.lua.hexciri.bak 2>/dev/null || true
+      info "Backed up existing /usr/share/sddm/hyprland.lua to /usr/share/sddm/hyprland.lua.hexciri.bak"
+    fi
+    sudo cp -a "$HEXCIRI_PATH/default/sddm/hyprland.lua" /usr/share/sddm/hyprland.lua 2>/dev/null && info "Installed SDDM greeter Hyprland config: /usr/share/sddm/hyprland.lua" || warn "could not install /usr/share/sddm/hyprland.lua, SDDM greeter keeps its existing config."
+  fi
+  TMP_SDDM_THEME="$(mktemp)"
+  printf '[Theme]\nCurrent=hexciri\n' > "$TMP_SDDM_THEME"
+  sudo install -Dm644 "$TMP_SDDM_THEME" /etc/sddm.conf.d/20-hexciri-theme.conf 2>/dev/null && info "SDDM theme selected: Current=hexciri (/etc/sddm.conf.d/20-hexciri-theme.conf)" || warn "could not write /etc/sddm.conf.d/20-hexciri-theme.conf, SDDM keeps its current theme."
+  rm -f "$TMP_SDDM_THEME"
+  # Recolor the greeter background from the applied theme's colors.toml.
+  SDDM_BG=""
+  for _colors in "$HOME/.local/state/hexciri/current/theme/colors.toml" "$HEXCIRI_PATH/themes/${DEFAULT_THEME:-}/colors.toml"; do
+    if [ -f "$_colors" ]; then
+      SDDM_BG="$(grep -m1 -E '^[[:space:]]*background[[:space:]]*=' "$_colors" 2>/dev/null | sed -E 's/.*"([^"]+)".*/\1/' || true)"
+      [ -n "$SDDM_BG" ] && break
+    fi
+  done
+  unset _colors
+  if [[ "$SDDM_BG" =~ ^#[0-9a-fA-F]{6}$ ]]; then
+    if [ -f /usr/share/sddm/themes/hexciri/Main.qml ]; then
+      if sudo sed -i -E "s/color: \"#[0-9a-fA-F]{6}\"/color: \"$SDDM_BG\"/" /usr/share/sddm/themes/hexciri/Main.qml 2>/dev/null; then
+        info "SDDM background recolored to the ${DEFAULT_THEME:-current} theme background: $SDDM_BG"
+      else
+        warn "could not recolor SDDM Main.qml, it keeps its packaged background colour."
+      fi
+    fi
+  else
+    warn "could not read a background colour from the applied theme colors.toml, SDDM keeps its packaged background colour."
+  fi
+  unset SDDM_BG
+else
+  warn "SDDM theme source not found at $HEXCIRI_PATH/default/sddm/hexciri, keeping the EndeavourOS default SDDM theme."
+fi
+
 # --- Health check, like v1 ---
 # Post-install sanity before the reboot offer, so a broken bring-up is
 # caught here, not at the login screen. Best-effort reads only.
@@ -1019,6 +1173,11 @@ if systemctl is-enabled --quiet sddm 2>/dev/null; then
 else
   warn "  sddm: not enabled"
   HC_FAIL=1
+fi
+if [ -f /usr/share/sddm/themes/hexciri/Main.qml ]; then
+  info "  sddm theme: /usr/share/sddm/themes/hexciri (Main.qml present)"
+else
+  warn "  sddm theme: hexciri theme not installed, SDDM uses its default theme (cosmetic only, login still works)"
 fi
 if [ "$HC_FAIL" -eq 0 ]; then
   info "Health check: clean"
