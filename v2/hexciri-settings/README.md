@@ -84,7 +84,7 @@ build tool is missing, a notification offers to add it in a terminal.
 
 ### Requirements
 
-Hexciri with shell plugins (Quattro). Building needs `gcc`, `make`, and Qt 6
+Hexciri with shell plugins. Building needs `gcc`, `make`, and Qt 6
 (`qt6-base`, `qt6-declarative`, `qt6-wayland`, `qt6-imageformats`); Hexciri
 has them already, and the plugin offers to add any that are missing. Panes
 use the tools Hexciri ships for them and say so when one is missing:

@@ -178,8 +178,9 @@ FORK_FP=""
 #     upstream fork itself changes.
 #   patch_fingerprint(): compat wiring + all fork patches (compat marker
 #     -> placement marker) + repo files copied into the fork
-#     (hexciri-update-hexciri, hexciri-theme-ansi). Changes when a
-#     patched bin/script changes.
+#     (hexciri-update-hexciri, hexciri-theme-ansi) + the Hexciri
+#     Settings plugin step below. Changes when a patched bin/script
+#     or the Settings step changes.
 #   fork_fingerprint(): combined, kept for legacy checks.
 # A change to anything else (packages, SDDM, trim, theme re-apply,
 # health check, output wording) changes NEITHER fingerprint: the
@@ -193,7 +194,7 @@ upstream_fingerprint() {
 patch_fingerprint() {
   {
     sed -n '/^# --- Wire the compat alias in, before placement ---/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
-    find "$HEXCIRI_REPO_ROOT/v2/hexciri-settings" -type f 2>/dev/null | sort | xargs sha256sum 2>/dev/null || printf 'missing hexciri-settings\n'
+    sed -n '/^# --- Hexciri Settings, Hexciri shell plugin/,/^step "Installing Hexciri theme hooks/p' "$INSTALLER_DIR/install.sh" | sha256sum | cut -d' ' -f1
     for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
@@ -3378,7 +3379,7 @@ with open(_aur, "w") as f:
 
 # omarchy:summary=Update AUR packages if any are installed
 
-# mise exports GOROOT and GOBIN for its own Go. hexciri-upgrade-to-quattro runs
+# mise exports GOROOT and GOBIN for its own Go. hexciri update runs
 # this with the system PATH but the caller's environment, so /usr/bin/go would
 # compile with mise's toolchain and every Go PKGBUILD fails with
 # "compile: version ... does not match go tool version". With both unset,
@@ -5426,45 +5427,66 @@ bash "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-strata-theme" 2>/dev/nu
 # theme-env.sh is the shared THPM-port runtime every hook sources.
 # No extra apps: GTK/Adapta/THPM/steam are theming only, the apps they
 # theme (Steam, Nautilus, Adapta) are used only when already installed.
-# --- Hexciri Settings, forked omarchy-settings as an app (2026-11-24) ---
-# Fork of ipkalid/omarchy-settings master ad54288, renamed hexciri,
-# converted plugin -> app (no shell plugin, no Service.qml auto-build).
-# Source is vendored in v2/hexciri-settings; this step copies it to
-# ~/.local/opt/hexciri-settings and runs its install script, which
-# builds the Qt app (qmake6 + make, gcc/make/qt6 in CORE_PKGS) and
-# installs ~/.local/bin/hexciri-settings + desktop entry + icon.
-# Super+Ctrl+S opens it (bind in hexciri-custom-binds.lua). Icon is a
-# placeholder (upstream gear): Devi supplies the exact icon later by
-# swapping v2/hexciri-settings/pkgbuild/hexciri-settings.svg, one file.
-# Best-effort, never dies: a failed build warns, the rest of the
-# install still lands, and the app rebuilds by hand from its source dir.
-step "Installing Hexciri Settings (forked omarchy-settings, app, Super+Ctrl+S)"
-SETTINGS_SRC="$HOME/.local/opt/hexciri-settings"
-if [ -d "$HEXCIRI_REPO_ROOT/v2/hexciri-settings" ]; then
-  mkdir -p "$HOME/.local/opt"
-  rm -rf "$SETTINGS_SRC"
-  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-settings" "$SETTINGS_SRC" && info "  settings source copied: $SETTINGS_SRC (fork of ipkalid/omarchy-settings ad54288)" || warn "  could not copy Hexciri Settings source, app will not be installed"
-  # GitHub push-files does not preserve exec bits (AGENTS.md): every
-  # file in the vendored tree lands 644, so after cp -a the install
-  # script is NOT executable and `[ -x ... ]` is false, so the build
-  # silently never ran on 2026-11-24 (no binary, no desktop entry, no
-  # build.log). chmod the scripts AND invoke via bash, never direct
-  # exec; repo modes cannot be trusted. This step rm -rf's + recopies
-  # the source, so the next update repairs existing installs too.
-  chmod +x "$SETTINGS_SRC/install" "$SETTINGS_SRC/uninstall" "$SETTINGS_SRC/bin/build" "$SETTINGS_SRC/bin/install" "$SETTINGS_SRC/bin/test" 2>/dev/null || true
-  if [ -f "$SETTINGS_SRC/install" ]; then
-    if bash "$SETTINGS_SRC/install" --quiet; then
-      info "  settings installed: hexciri-settings $(hexciri-settings --version 2>/dev/null || echo present) (Super+Ctrl+S, launcher: Hexciri Settings)"
-    else
-      warn "  Hexciri Settings build failed (log: ~/.cache/hexciri-settings-build/build.log); the next hexciri update retries the build automatically"
-    fi
+# --- Hexciri Settings, Hexciri shell plugin (2026-11-24) ---
+# Fork of ipkalid/omarchy-settings master ad54288, kept as a PLUGIN, the
+# way Omarchy does plugins for system stuff (service kind, no bar
+# widget): Deoxizn/hexciri-settings, plugin id pizza.dirty.settings.
+# Enabling builds the Qt app (qmake6 + make, gcc/make/qt6 in CORE_PKGS)
+# and installs ~/.local/bin/hexciri-settings + desktop entry + icon
+# (Devi's serversettings icon). Super+Ctrl+S opens it (bind in
+# hexciri-custom-binds.lua, launcher via hexciri-launch-settings).
+# This step installs + enables the plugin and builds the app
+# synchronously, so hexciri update leaves a working binary behind with
+# no manual build command. Updates after that come through
+# `hexciri plugin update pizza.dirty.settings`; the plugin's Service.qml
+# rebuilds on update. Best-effort, never dies: a failed build warns,
+# the rest of the install still lands, and the next hexciri update
+# retries the build automatically (missing binary blocks light-sync).
+step "Installing Hexciri Settings (Hexciri shell plugin, Super+Ctrl+S)"
+SETTINGS_PLUGIN_ID="pizza.dirty.settings"
+SETTINGS_PLUGIN_DIR="$HOME/.config/hexciri/plugins/$SETTINGS_PLUGIN_ID"
+SETTINGS_PLUGIN_URL="https://github.com/Deoxizn/hexciri-settings.git"
+_HEXCIRI_CLI="/usr/share/hexciri/bin/hexciri"
+[ -x "$_HEXCIRI_CLI" ] || _HEXCIRI_CLI="hexciri"
+_HEXCIRI_VALIDATE="/usr/share/hexciri/bin/hexciri-plugin-validate"
+[ -x "$_HEXCIRI_VALIDATE" ] || _HEXCIRI_VALIDATE="hexciri-plugin-validate"
+# Already installed: pull the latest plugin commit first, so the build
+# below is of the current plugin, not the checkout from last time.
+if [ -d "$SETTINGS_PLUGIN_DIR/.git" ]; then
+  if "$_HEXCIRI_CLI" plugin update "$SETTINGS_PLUGIN_ID" --yes >/dev/null 2>&1; then
+    info "  settings plugin updated: $SETTINGS_PLUGIN_ID"
   else
-    warn "  Hexciri Settings install script missing from the copied source, app not built"
+    warn "  settings plugin update failed, building the installed checkout as-is"
+  fi
+elif ! "$_HEXCIRI_CLI" plugin add "$SETTINGS_PLUGIN_URL" --enable --yes >/dev/null 2>&1; then
+  # No shell running (bootstrap from tty3): plugin add needs the shell
+  # for rescan/enable, so clone + validate directly and let the first
+  # shell start load Service.qml. Never die the install over this.
+  mkdir -p "$HOME/.config/hexciri/plugins"
+  if git clone -- "$SETTINGS_PLUGIN_URL" "$SETTINGS_PLUGIN_DIR" 2>/dev/null && "$_HEXCIRI_VALIDATE" "$SETTINGS_PLUGIN_DIR" >/dev/null 2>&1; then
+    info "  settings plugin cloned (shell not running, enable happens on first shell start): $SETTINGS_PLUGIN_DIR"
+  else
+    rm -rf "$SETTINGS_PLUGIN_DIR"
+    warn "  Hexciri Settings plugin could not be installed (network or git), app not built; the next hexciri update retries it"
   fi
 else
-  warn "  v2/hexciri-settings not in the installer tree, Hexciri Settings not installed"
+  info "  settings plugin installed + enabled: $SETTINGS_PLUGIN_ID"
 fi
-unset SETTINGS_SRC
+# Synchronous build: the plugin's Service.qml would build in the
+# background on shell enable, but hexciri update must leave the binary
+# behind now, not "in a minute". git clones preserve exec bits, but
+# belt and braces: chmod + bash invoke, never direct exec.
+if [ -f "$SETTINGS_PLUGIN_DIR/plugin/install" ]; then
+  chmod +x "$SETTINGS_PLUGIN_DIR/plugin/install" "$SETTINGS_PLUGIN_DIR/plugin/uninstall" "$SETTINGS_PLUGIN_DIR/bin/build" "$SETTINGS_PLUGIN_DIR/bin/install" "$SETTINGS_PLUGIN_DIR/bin/test" 2>/dev/null || true
+  if bash "$SETTINGS_PLUGIN_DIR/plugin/install" --quiet; then
+    info "  settings installed: hexciri-settings $(hexciri-settings --version 2>/dev/null || echo present) (Super+Ctrl+S, launcher: Hexciri Settings)"
+  else
+    warn "  Hexciri Settings build failed (log: ~/.cache/hexciri-settings-build/build.log); the next hexciri update retries the build automatically"
+  fi
+else
+  warn "  Hexciri Settings plugin install script missing, app not built"
+fi
+unset SETTINGS_PLUGIN_ID SETTINGS_PLUGIN_DIR SETTINGS_PLUGIN_URL _HEXCIRI_CLI _HEXCIRI_VALIDATE
 
 step "Installing Hexciri theme hooks (~/.config/hexciri/hooks/theme-set.d)"
 mkdir -p "$HOME/.config/hexciri/hooks/theme-set.d" "$HOME/.config/hexciri/hooks/lib"
