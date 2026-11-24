@@ -459,33 +459,30 @@ fi
 # fastfetch itself is already in CORE_PKGS above (Arch extra). Its config
 # lives in v1 at config/fastfetch/config.jsonc, and its logo at
 # branding/hexciri-nb.png, both present on nyx. The config goes to
-# /etc/fastfetch/config.jsonc, NOT ~/.config/fastfetch/: hexciri-launch-about
-# treats any config under ~/.config/fastfetch as a user custom config and
-# skips ALL window fitting (custom_fastfetch_config returns true), so About
-# opened at the 920x480 float-rule size no matter what, and the remembered
-# about.fit was never even read. /etc/fastfetch is the location launch-about
-# treats as Hexciri-owned, so the fit path runs and About sizes itself to
-# the logo + modules. A user config left behind is moved aside first,
-# otherwise it still wins and fitting stays skipped. Terminal fastfetch
-# still finds the config: it searches /etc/fastfetch after the user dir.
+# /etc/fastfetch/config.jsonc, NOT ~/.config/fastfetch/: the Hexciri config
+# is the one About runs (hexciri-launch-about passes --config
+# /etc/fastfetch/config.jsonc). A user config left behind is moved aside
+# first, otherwise plain `fastfetch` in a terminal picks it up instead.
+# Terminal fastfetch still finds the config: it searches /etc/fastfetch
+# after the user dir.
 # Best-effort, never fatal: a missing config still leaves a working
 # fastfetch.
 mkdir -p "$HOME/.config/fastfetch"
 if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then
   mv "$HOME/.config/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc.hexciri.bak"
-  info "Moved existing ~/.config/fastfetch/config.jsonc aside to config.jsonc.hexciri.bak (it disables About fitting)"
+  info "Moved existing ~/.config/fastfetch/config.jsonc aside to config.jsonc.hexciri.bak (About would use it instead of the Hexciri config)"
 fi
 if [ -f "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" ]; then
   if sudo install -Dm644 "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" /etc/fastfetch/config.jsonc; then
-    info "Placed: /etc/fastfetch/config.jsonc (Hexciri fastfetch config, About fitting works from here)"
+    info "Placed: /etc/fastfetch/config.jsonc (Hexciri fastfetch config, About runs it from here)"
   else
-    warn "could not install /etc/fastfetch/config.jsonc, fastfetch keeps its stock config and About fitting stays skipped"
+    warn "could not install /etc/fastfetch/config.jsonc, fastfetch keeps its stock config and About falls back to the stock layout"
   fi
 else
   warn "config/fastfetch/config.jsonc not found in the installer tree, fastfetch keeps its stock config."
 fi
 [ -f /etc/fastfetch/config.jsonc ] || warn "no /etc/fastfetch/config.jsonc, About will use the stock fastfetch layout"
-[ ! -f "$HOME/.config/fastfetch/config.jsonc" ] || warn "a user fastfetch config is still present, About fitting stays skipped until it is moved aside"
+[ ! -f "$HOME/.config/fastfetch/config.jsonc" ] || warn "a user fastfetch config is still present, About falls back to it until it is moved aside"
 if [ -f "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" ]; then
   cp -a "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" "$HOME/.config/fastfetch/hexciri-nb.png"
   info "Placed: ~/.config/fastfetch/hexciri-nb.png (fastfetch logo)"
@@ -1650,15 +1647,21 @@ elif old_herdr_hex in s:
     changed.append("Herdr bind removed (AI agent, out of v2 scope)")
 
 # 5b. Activity TUI: btop (removed, v1 stock removal, never installed) ->
-# bottom (Arch extra, the Hexciri monitor). The old bind opened a terminal
-# that errored with "btop: command not found".
+# btm (Arch extra package `bottom`, the Hexciri monitor). The package is
+# `bottom` but its binary is `btm`: the old bind opened a terminal that
+# errored with "btop: command not found", and the 2026-11-23 fix that
+# changed it to tui = "bottom" errored with "no file or dir" because no
+# such binary exists.
 utils = root + "/default/hypr/bindings/utilities.lua"
 with open(utils) as f:
     u = f.read()
 u_orig = u
 if '{ tui = "btop" }' in u:
-    u = u.replace('{ tui = "btop" }', '{ tui = "bottom" }')
-    changed.append("btop -> bottom (Super+Shift+T Activity TUI)")
+    u = u.replace('{ tui = "btop" }', '{ tui = "btm" }')
+    changed.append("btop -> btm (Super+Shift+T Activity TUI)")
+elif '{ tui = "bottom" }' in u:
+    u = u.replace('{ tui = "bottom" }', '{ tui = "btm" }')
+    changed.append("bottom -> btm (Super+Shift+T Activity TUI, package bottom ships binary btm)")
 # 5c. Super+Space / Super+Alt+Space swap, Devi 2026-11-23: Super+Space is
 # apps, Super+Alt+Space is the menu. Upstream Omarchy has them reversed
 # (Super+Space = menu root, Super+Alt+Space = dock apps), and the earlier
@@ -2108,7 +2111,7 @@ elif command -v luac >/dev/null 2>&1; then
   luac -p "$FORK_OUT/default/hypr/bindings/utilities.lua" && info "utilities.lua patch OK (luac syntax OK)" || warn "luac syntax check failed on patched utilities.lua, Hyprland will report the real error at boot if this is broken."
 fi
 bash -n "$FORK_OUT/bin/hexciri-capture-screenshot" || die "bash -n failed on rewritten $FORK_OUT/bin/hexciri-capture-screenshot"
-info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, bottom, Herdr removed, cliamp/omawrite/Obsidian binds removed (ncspot/ghostwriter/obsidian not wanted), screenshot via grim+slurp, touchpad bottom-right = right click"
+info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, btm (bottom package), Herdr removed, cliamp/omawrite/Obsidian binds removed (ncspot/ghostwriter/obsidian not wanted), screenshot via grim+slurp, touchpad bottom-right = right click"
 
 # --- Patch dock pinned list (Devi 2026-11-23 20:59 / 21:00 MST) ---
 # Upstream config/omarchy/shell.json pins folio, omarchy-browser,
@@ -2152,7 +2155,7 @@ else:
     print('dock pinned list set: ' + ', '.join(pins))
 PY
 
-# --- Fork-time patches: SDDM fingerprint in setup script, About locale ---
+# --- Fork-time patches: SDDM fingerprint in setup script, About replacement ---
 # 1. hexciri-setup-security-fingerprint: upstream setup_pam_config only
 # configures sudo, polkit and the lock screen, so fingerprint worked for
 # sudo but SDDM always asked for a password. Prepend pam_unix first, then
@@ -2162,9 +2165,10 @@ PY
 # Setup > Security > Fingerprint run (e.g. enrolling another finger) keeps
 # SDDM working. The installer step above does the same thing at install
 # time; this keeps the setup script consistent afterwards.
-# 2. hexciri-launch-about: resolve a real UTF-8 locale instead of assuming
-# C.UTF-8. With no UTF-8 locale generated, the wc/awk measurements warn
-# "Invalid multibyte data detected" on the ghost rows and measure wrong.
+# 2. hexciri-launch-about: replaced wholesale (2026-11-24) with a floating
+# fastfetch window. No about.txt, no fit measurement, no awk locale sizing.
+# The menu row system.about still calls it; the Hyprland rule in
+# default/hypr/apps/system.lua floats org.hexciri.about at 920x480.
 python3 - "$FORK_OUT" <<'PY'
 import os
 import re
@@ -2191,61 +2195,38 @@ if s != s_orig:
     with open(fp, "w") as f:
         f.write(s)
 
+# 2. hexciri-launch-about: replace wholesale with a floating fastfetch
+#    (2026-11-24). The old script measured the logo with wc/awk, remembered
+#    the size in about.fit, and kept breaking (multibyte width, stale fit,
+#    blank logo). About is now just a floating Kitty running fastfetch with
+#    the Hexciri config at /etc/fastfetch/config.jsonc; the Hyprland rule
+#    in default/hypr/apps/system.lua floats org.hexciri.about at 920x480.
+#    Also fix that rule's stale comment, which still describes the fit.
 la = root + "/bin/hexciri-launch-about"
-with open(la) as f:
-    a = f.read()
-a_orig = a
-_anchor = "LOGO_PAD_RIGHT=6"
-_locale = "LOGO_PAD_RIGHT=6\n# UTF-8 locale for the wc/awk measurements below (2026-11-23): C.UTF-8 is\n# built into glibc on Arch, but a session whose locale was never generated\n# falls back to C and awk warns \"Invalid multibyte data detected\" on the\n# ghost rows. Prefer a generated UTF-8 locale when one exists.\nHEX_ABOUT_LOCALE=\"$(locale -a 2>/dev/null | grep -i -m1 -E '^(C\\.utf-?8|en_US\\.utf-?8)$' || echo C.UTF-8)\""
-if "HEX_ABOUT_LOCALE=" in a:
-    print("launch-about locale resolution already present, skipping")
-elif a.count(_anchor) == 1:
-    a = a.replace(_anchor, _locale, 1)
-    changed.append("launch-about: HEX_ABOUT_LOCALE resolution after LOGO_PAD_RIGHT")
+_about_lines = [
+    "#!/bin/bash",
+    "# hexciri-launch-about (2026-11-24): System > About is a floating fastfetch.",
+    "# No about.txt, no fit measurement, no awk locale sizing. Menu row",
+    "# system.about calls this script; it opens a floating terminal running",
+    "# fastfetch with the Hexciri config at /etc/fastfetch/config.jsonc.",
+    "# Window size comes from the Hyprland rule for org.hexciri.about (920x480).",
+    "exec hexciri-launch-or-focus-tui --app-id=org.hexciri.about bash -c 'export LC_ALL=C.UTF-8 LANG=C.UTF-8; if [ -f /etc/fastfetch/config.jsonc ]; then fastfetch --config /etc/fastfetch/config.jsonc; else fastfetch; fi; echo; read -n1 -s -r -p \"Press any key to close...\"'",
+]
+with open(la, "w") as f:
+    f.write("\n".join(_about_lines) + "\n")
+os.chmod(la, 0o755)
+changed.append("launch-about: replaced with floating fastfetch (no about.txt / fit)")
+sl = root + "/default/hypr/apps/system.lua"
+with open(sl) as f:
+    _sl = f.read()
+_sl_orig = _sl
+_sl = _sl.replace("-- The About fastfetch layout needs more columns than the standard float provides.\n-- This size only covers the first launch: hexciri-launch-about measures the\n-- rendered content, remembers the size that hugs it, and applies that as its own\n-- rule before every later launch.", "-- About is a floating fastfetch (hexciri-launch-about): this fixed\n-- 920x480 float is the whole sizing, no fit measurement.")
+if _sl != _sl_orig:
+    with open(sl, "w") as f:
+        f.write(_sl)
+    changed.append("system.lua: About float comment updated (no fit measurement)")
 else:
-    print("WARN: LOGO_PAD_RIGHT anchor not found (%d), locale fix NOT applied" % a.count(_anchor))
-if a.count("LC_ALL=C.UTF-8") == 3:
-    a = a.replace("LC_ALL=C.UTF-8", "LC_ALL=$HEX_ABOUT_LOCALE")
-    changed.append("launch-about: LC_ALL=C.UTF-8 -> LC_ALL=$HEX_ABOUT_LOCALE (3 sites)")
-elif "LC_ALL=$HEX_ABOUT_LOCALE" in a:
-    print("launch-about LC_ALL already resolved, skipping")
-else:
-    print("WARN: LC_ALL=C.UTF-8 found %d times (expected 3), locale fix NOT applied" % a.count("LC_ALL=C.UTF-8"))
-if a != a_orig:
-    with open(la, "w") as f:
-        f.write(a)
-
-# 3. launch-about: export the resolved locale for the whole About process
-#    (2026-11-24). The three LC_ALL= sites only cover the wc/awk
-#    measurements; fastfetch's own command modules run under the session
-#    locale, and a C-locale session warns "Invalid multibyte data detected"
-#    and measures the layout narrower than it renders (wc -L counts
-#    multibyte glyphs as zero width). C.UTF-8 is built into glibc, so it
-#    works even when locale -a does not list it; a name locale -a cannot
-#    confirm is not trusted. Line-based insert, so no quote escaping.
-with open(la) as f:
-    a = f.read()
-a_orig = a
-if 'export LC_ALL="$HEX_ABOUT_LOCALE"' in a:
-    print("launch-about locale export already present, skipping")
-else:
-    _la_lines = a.splitlines()
-    for _i, _ln in enumerate(_la_lines):
-        if _ln.startswith('HEX_ABOUT_LOCALE="'):
-            _la_lines[_i+1:_i+1] = [
-                '# C.UTF-8 is built into glibc, so it works even when locale -a does not',
-                '# list it; a name locale -a cannot confirm is not trusted.',
-                'if ! locale -a 2>/dev/null | grep -qi "^$HEX_ABOUT_LOCALE$"; then HEX_ABOUT_LOCALE="C.UTF-8"; fi',
-                'export LC_ALL="$HEX_ABOUT_LOCALE" LANG="$HEX_ABOUT_LOCALE"',
-            ]
-            a = "\n".join(_la_lines) + "\n"
-            changed.append("launch-about: export LC_ALL/LANG for the whole About process")
-            break
-    else:
-        print("WARN: HEX_ABOUT_LOCALE assignment not found, locale export NOT applied")
-if a != a_orig:
-    with open(la, "w") as f:
-        f.write(a)
+    print("WARN: system.lua About comment not found, comment NOT updated")
 
 # 4. hexciri-install-editor-zed: `omazed` is an Omarchy-repo package that does
 #    not exist on Arch, so `pkg-add zed omazed` fails and the Zed row is dead.
@@ -2853,17 +2834,15 @@ else
   info "No fingers enrolled, /etc/pam.d/sddm left alone (enroll one, then re-run the installer or Setup > Security > Fingerprint)"
 fi
 # --- UTF-8 locale (System > About awk warning, 2026-11-23) ---
-# launch-about measures the logo with LC_ALL=C.UTF-8 wc/awk, and the
-# fastfetch ghost rows are multibyte: with no UTF-8 locale on the system
-# awk warns "Invalid multibyte data detected" and measures wrong, so the
-# About window is sized for a narrower layout than it renders. EOS no-DE
+# fastfetch renders multibyte glyphs: with no UTF-8 locale on the system
+# the About output can warn "Invalid multibyte data detected". EOS no-DE
 # does not guarantee en_US.UTF-8 is generated, so generate it if no
-# UTF-8 locale exists at all. Best-effort: a missing locale only breaks
-# About fitting, never the install.
+# UTF-8 locale exists at all. Best-effort: a missing locale only affects
+# About rendering, never the install.
 if ! locale -a 2>/dev/null | grep -qi '\.utf-8$\|\.utf8$'; then
   if grep -q '^#en_US.UTF-8' /etc/locale.gen 2>/dev/null; then
     if sudo sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && sudo locale-gen en_US.UTF-8 2>/dev/null; then
-      info "Generated locale: en_US.UTF-8 (About fitting needs a UTF-8 locale)"
+      info "Generated locale: en_US.UTF-8 (fastfetch / About needs a UTF-8 locale)"
     else
       warn "locale-gen en_US.UTF-8 failed, About may warn about multibyte data"
     fi
@@ -2879,63 +2858,46 @@ if ! locale -a 2>/dev/null | grep -qi '\.utf-8$\|\.utf8$'; then
     warn "no UTF-8 locale and /etc/locale.gen has no en_US.UTF-8 line to enable, About fitting may warn about multibyte data"
   fi
 fi
-# System > About measured its floating size against the old fastfetch
-# config/logo once and remembered it in about.fit; the Hexciri config and
-# logo changed since, so the remembered size is wrong. Delete it and the
-# next About launch re-measures.
-rm -f "$HOME/.local/state/hexciri/windows/about.fit" 2>/dev/null || true
-# System > About logo, 2026-11-23: launch-about measures its window from
-# ~/.config/hexciri/branding/about.txt, which nothing ever created (the
-# fork never copied icon.txt, and branding-about only writes it on an
-# explicit image/text/reset action), so logo_dimensions failed and the
-# fit never ran even after about.fit was deleted. Transcode Hexciri's own
-# logo image to ASCII if one is in the installer tree, else fall back to
-# the fork's icon.txt (upstream ASCII art, works as a logo until a
-# Hexciri ASCII logo is authored).
-mkdir -p "$HOME/.config/hexciri/branding"
-# Regenerate on EVERY install (2026-11-23): the old guard skipped this
-# when about.txt already existed, so a stale/empty file from an earlier
-# broken transcode persisted forever and About rendered with a blank logo
-# column and a wrong fit. Transcode at 65x35, the fastfetch config logo
-# block (config/fastfetch/config.jsonc: width 65, height 35), so the
-# window launch-about fits from about.txt matches what fastfetch renders.
-rm -f "$HOME/.config/hexciri/branding/about.txt"
-if true; then
-  _logo_img=""
-  for _cand in "$HEXCIRI_REPO_ROOT/branding/sddm/logo.png" "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" "$HEXCIRI_REPO_ROOT/branding/sddm/logo.svg"; do
-    if [ -f "$_cand" ]; then _logo_img="$_cand"; break; fi
-  done
-  if [ -n "$_logo_img" ] && [ -x "$HEXCIRI_PATH/bin/hexciri-transcode-ascii" ]; then
-    if "$HEXCIRI_PATH/bin/hexciri-transcode-ascii" "$_logo_img" "$HOME/.config/hexciri/branding/about.txt" --width 65 --height 35 2>/dev/null; then
-      info "About logo: transcoded $_logo_img to branding/about.txt"
-    elif [ -f "$HEXCIRI_PATH/icon.txt" ]; then
-      cp -a "$HEXCIRI_PATH/icon.txt" "$HOME/.config/hexciri/branding/about.txt" && info "About logo: branding/about.txt from fork icon.txt (transcode failed)"
-    else
-      warn "could not create branding/about.txt, About fit will be skipped"
-    fi
-  elif [ -f "$HEXCIRI_PATH/icon.txt" ]; then
-    cp -a "$HEXCIRI_PATH/icon.txt" "$HOME/.config/hexciri/branding/about.txt" && info "About logo: branding/about.txt from fork icon.txt"
+# System > About is a floating fastfetch now (2026-11-24): the old
+# launch-about measured the logo with wc/awk, remembered the size in
+# about.fit, and kept breaking, so the fit logic is gone. Delete the stale
+# fit and the old about.txt logo, and repoint the installed fastfetch
+# config's logo at the fork's icon.txt (upstream ASCII art, already placed
+# at /usr/share/hexciri/icon.txt), since the config's logo source was
+# ~/.config/hexciri/branding/about.txt and nothing creates that any more.
+rm -f "$HOME/.local/state/hexciri/windows/about.fit" "$HOME/.config/hexciri/branding/about.txt" 2>/dev/null || true
+if [ -f /etc/fastfetch/config.jsonc ] && grep -q 'config/hexciri/branding/about.txt' /etc/fastfetch/config.jsonc 2>/dev/null; then
+  if sudo sed -i 's|~/.config/hexciri/branding/about.txt|/usr/share/hexciri/icon.txt|' /etc/fastfetch/config.jsonc; then
+    info "About logo: fastfetch config logo repointed to /usr/share/hexciri/icon.txt (about.txt is gone)"
   else
-    warn "no Hexciri logo image and no fork icon.txt, branding/about.txt not created, About fit will be skipped"
+    warn "could not repoint the fastfetch logo, About may render with a blank logo column"
   fi
-  unset _logo_img _cand
-fi
-# Verify the logo the fit measures against: it must exist, be non-empty, and
-# fit the fastfetch logo block (65 columns wide). A wider or empty file
-# measures wrong and About renders clipped, which is the live symptom.
-# wc -L counts display columns only in a UTF-8 locale, so force C.UTF-8
-# here: under a C locale the braille glyphs count as zero width.
-if [ -s "$HOME/.config/hexciri/branding/about.txt" ]; then
-  _about_w="$(LC_ALL=C.UTF-8 wc -L < "$HOME/.config/hexciri/branding/about.txt" 2>/dev/null | tr -d ' ' || echo 0)"
-  if (( _about_w > 0 && _about_w <= 65 )); then
-    info "About logo verified: branding/about.txt ${_about_w} columns wide (fastfetch logo block is 65)"
-  else
-    warn "About logo is ${_about_w} columns wide (fastfetch logo block is 65), falling back to fork icon.txt"
-    cp -a "$HEXCIRI_PATH/icon.txt" "$HOME/.config/hexciri/branding/about.txt" 2>/dev/null || true
-  fi
-  unset _about_w
+elif [ -f /etc/fastfetch/config.jsonc ]; then
+  info "About logo: fastfetch config already points at /usr/share/hexciri/icon.txt"
 else
-  warn "branding/about.txt is missing or empty after the logo step, About fit will be skipped"
+  warn "no /etc/fastfetch/config.jsonc, About logo repoint skipped"
+fi
+
+# --- systemd-boot menu timeout: 1s (2026-11-24) ---
+# EOS no-DE installs systemd-boot; its loader.conf defaults to a 2-3s menu
+# pause and Devi wants 1s. The ESP is /efi on EOS (fallbacks /boot and
+# /boot/efi). Best-effort, never fatal: a GRUB machine has no loader.conf
+# and its timeout is untouched.
+step "Setting systemd-boot menu timeout to 1s"
+_boot_loader=""
+for _cand in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do
+  if [ -f "$_cand" ]; then _boot_loader="$_cand"; break; fi
+done
+if [ -n "$_boot_loader" ]; then
+  if grep -q '^timeout' "$_boot_loader" 2>/dev/null; then
+    sudo sed -i 's/^timeout.*/timeout 1/' "$_boot_loader" && info "systemd-boot timeout: 1s in $_boot_loader"
+  else
+    printf 'timeout 1\n' | sudo tee -a "$_boot_loader" >/dev/null && info "systemd-boot timeout: 1s appended to $_boot_loader"
+  fi
+  grep -q '^timeout 1$' "$_boot_loader" 2>/dev/null && info "systemd-boot timeout verified: $(grep '^timeout' "$_boot_loader" | head -1)" || warn "systemd-boot timeout is not 1s in $_boot_loader"
+  unset _boot_loader _cand
+else
+  warn "no systemd-boot loader.conf found (/efi, /boot, /boot/efi), boot timeout unchanged (GRUB or other bootloader?)"
 fi
 
 # --- Apply a default theme, like v1 does its theme sync ---
@@ -3426,9 +3388,11 @@ if command -v gpu-screen-recorder >/dev/null 2>&1; then info "  screenrecord: gp
 if command -v localsend >/dev/null 2>&1; then info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
 if command -v fastfetch >/dev/null 2>&1; then info "  fastfetch: present"; else warn "  fastfetch: NOT installed"; fi
 if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
-if [ -s "$HOME/.config/hexciri/branding/about.txt" ]; then info "  about logo: branding/about.txt present, $(LC_ALL=C.UTF-8 wc -L < "$HOME/.config/hexciri/branding/about.txt" | tr -d ' ') columns wide (fastfetch logo block is 65)"; else warn "  about logo: branding/about.txt missing or empty, About fit will be skipped"; fi
+grep -q 'hexciri-launch-or-focus-tui --app-id=org.hexciri.about' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && info "  about: launch-about is the floating fastfetch (no about.txt fit)" || warn "  about: launch-about is not the floating fastfetch, System > About may still use the old fit path"
+grep -q 'icon.txt' /etc/fastfetch/config.jsonc 2>/dev/null && info "  about logo: fastfetch config logo points at icon.txt" || warn "  about logo: fastfetch config logo does not point at icon.txt, About may render a blank logo column"
 [ -x /usr/lib/hexciri/speedtest ] && info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
-grep -q 'export LC_ALL="$HEX_ABOUT_LOCALE"' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && info "  about locale: launch-about exports a UTF-8 locale" || warn "  about locale: launch-about has no UTF-8 locale export, About may warn about multibyte data"
+command -v btm >/dev/null 2>&1 && info "  activity monitor: btm present (Super+Shift+T)" || warn "  activity monitor: btm NOT installed, Super+Shift+T will fail (package: bottom, binary: btm)"
+grep -q '^timeout 1$' /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf 2>/dev/null && info "  boot timeout: systemd-boot timeout is 1s" || warn "  boot timeout: systemd-boot loader.conf has no timeout 1 (check /efi/loader/loader.conf)"
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
 command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
 if command -v spotify >/dev/null 2>&1; then info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
@@ -3473,7 +3437,7 @@ Reboot, then check in order:
   18. Menu audit 2026-11-23: Install and Remove subtrees were deleted then (install-*/remove-* were never in the fork), restored 2026-11-24 where a backing script exists (see item 21). Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
 
   19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are removed for real this time (trim used sudo -n, which silently failed once the sudo timestamp expired); the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
-  20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About fits again (about.txt regenerated every install at the fastfetch logo size 65x35, UTF-8 locale generated when none exists); LocalSend file picker is themed (GTK settings.ini + FileChooser=gtk portal, zenity installed); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
+  20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now (no about.txt / fit logic, logo from /usr/share/hexciri/icon.txt); systemd-boot timeout 1s; Super+Shift+T runs btm (bottom package binary); LocalSend file picker is themed (GTK settings.ini + FileChooser=gtk portal, zenity installed); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
 
   21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back (Package, AUR, Web App, TUI, Style, Gaming and their Remove counterparts, kept only where the backing script exists in the fork; AI, services, terminals, Windows, preinstalls and dictation stay out, and install-browser stays out because its helper tree is not copied).
 
