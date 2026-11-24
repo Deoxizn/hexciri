@@ -29,6 +29,10 @@
 # the Hexciri v1 checkout, do not clobber it with the v2.0 test branch.
 
 set -euo pipefail
+# Never exit silently again: if any command fails, print where it failed.
+# (2026-11-23: the script used to die silently after "Validation passed"
+# with exit 141 and no error, see the top-dir fix below.)
+trap 'printf "ERROR: [hexciri-bootstrap] failed at line %s, exit %s, command: %s\n" "$LINENO" "$?" "$BASH_COMMAND" >&2' ERR
 
 # No git credential prompts anywhere in this chain. This script never
 # invokes git at all. GIT_TERMINAL_PROMPT=0 is set as a belt-and-braces
@@ -62,17 +66,26 @@ SIZE_BYTES="$(wc -c < "$TARBALL" | tr -d ' ')"
 info "Downloaded: $SIZE_BYTES bytes (~$((SIZE_BYTES / 1024 / 1024)) MB): $TARBALL"
 info "Validating tarball (gzip, top dir $EXPECTED_TOP_DIR)..."
 # Validate it is really a gzip tarball, not an HTML error page.
-tar -tzf "$TARBALL" >/dev/null || die "Downloaded file is not a valid gzip tarball: $TARBALL. Check the URL and networking, then rerun."
+# Write the listing to a file first: the old code did
+#   TOP_DIR="$(tar -tzf "$TARBALL" | head -1 | cut -d/ -f1)"
+# With set -euo pipefail, head exits after the first line, tar then gets
+# SIGPIPE (exit 141) on any tarball whose listing is bigger than the pipe
+# buffer, and the script exits silently right after "Validation passed",
+# back to the prompt, no error. That was the 2026-11-23 stall.
+# A file listing has no pipe to close early, so this cannot happen again.
+tar -tzf "$TARBALL" > "$WORKDIR/tar-list.txt" || die "Downloaded file is not a valid gzip tarball: $TARBALL. Check the URL and networking, then rerun."
 info "Validation passed: valid gzip tarball"
-
-TOP_DIR="$(tar -tzf "$TARBALL" | head -1 | cut -d/ -f1)"
+info "Reading tarball top dir from the saved listing..."
+TOP_DIR="$(head -1 "$WORKDIR/tar-list.txt" | cut -d/ -f1)"
+[ -n "$TOP_DIR" ] || die "Could not read a top dir from the tarball listing: $WORKDIR/tar-list.txt"
 if [ "$TOP_DIR" != "$EXPECTED_TOP_DIR" ]; then
   die "tarball top dir is '$TOP_DIR', expected '$EXPECTED_TOP_DIR'. Refusing to continue."
 fi
 info "Top dir: $TOP_DIR"
 
-info "Extracting tarball..."
+info "Extracting tarball (this can take a minute, no output while tar runs)..."
 tar -xzf "$TARBALL" -C "$WORKDIR" || die "Failed to extract Hexiri tarball."
+info "Extraction done."
 EXTRACTED="$WORKDIR/$TOP_DIR"
 [ -d "$EXTRACTED" ] || die "Extracted Hexiri tree not found: $EXTRACTED"
 [ -f "$EXTRACTED/v2/install.sh" ] || die "Extracted Hexiri tree is missing v2/install.sh: $EXTRACTED"
