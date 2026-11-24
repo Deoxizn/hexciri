@@ -2847,6 +2847,51 @@ info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift
 # Brave Origin and Kitty are pinned directly here, so their windows claim
 # themselves. Idempotent: the patch rewrites dock.pinned to exactly this
 # list, whatever the forked file held before.
+# --- Patch WidgetButton to forward click modifiers (2026-11-24) ---
+# Upstream WidgetButton's pressed signal carries only the button:
+# onClicked passes mouse.button, modifiers are dropped. A widget
+# therefore cannot tell Shift+right-click from a plain right-click.
+# Nyxiri clock/weather need that distinction (2026-11-24, Devi:
+# right-click opening settings stole the format swap): plain
+# right-click cycles the clock format / sends the weather notification,
+# Shift+right-click opens the standalone settings window. Forwarding is
+# backward compatible: handlers that only take the button ignore the
+# extra signal arg, and the triggerPress(button) callers in Bar.qml /
+# KeyboardPanel keep working, modifiers defaults to Qt.NoModifier.
+step "Patching WidgetButton to forward click modifiers"
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
+import sys
+root = sys.argv[1]
+path = root + "/shell/Ui/WidgetButton.qml"
+with open(path) as f:
+    s = f.read()
+orig = s
+old_sig = "  signal pressed(int button)"
+assert s.count(old_sig) == 1, "WidgetButton pressed signal anchor not found"
+s = s.replace(old_sig, """  // Hexciri (2026-11-24): pressed carries the click modifiers too,
+  // so a widget can tell Shift+right-click (open its settings) from a
+  // plain right-click (clock: cycle format, weather: status notification).
+  signal pressed(int button, int modifiers)""", 1)
+old_trig = """  function triggerPress(button) {
+    if (root.bar) root.bar.hideTooltip(root)
+    root.pressed(button)
+  }"""
+assert s.count(old_trig) == 1, "WidgetButton triggerPress anchor not found"
+s = s.replace(old_trig, """  function triggerPress(button, modifiers) {
+    if (root.bar) root.bar.hideTooltip(root)
+    root.pressed(button, modifiers !== undefined ? modifiers : Qt.NoModifier)
+  }""", 1)
+old_click = "    onClicked: function(mouse) { if (root.pressable) root.triggerPress(mouse.button) }"
+assert s.count(old_click) == 1, "WidgetButton onClicked anchor not found"
+s = s.replace(old_click, "    onClicked: function(mouse) { if (root.pressable) root.triggerPress(mouse.button, mouse.modifiers) }", 1)
+if s != orig:
+    with open(path, "w") as f:
+        f.write(s)
+    print("WidgetButton: pressed forwards click modifiers (Shift+right-click distinguishable)")
+else:
+    print("WidgetButton: modifiers forwarding already applied, skipping")
+PY
+
 step "Patching dock pinned list: Strata, Spotify, Brave Origin, Zed, Kitty"
 python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
 import json
@@ -4987,6 +5032,7 @@ grep -q '/usr/share/hexciri/bin/hexciri-theme-set-browser-policy' "$FORK_OUT/etc
 grep -q 'HEXCIRI_PATH="/usr/share/hexciri"' "$HEXCIRI_PATH/bin/hexciri-shell" || die "hexciri-shell does not default HEXCIRI_PATH, bar trigger and menu Apps click depend on session env"
 grep -q '/usr/share/hexciri/bin/hexciri-shell shell toggle hexciri.menu' "$HEXCIRI_PATH/shell/plugins/menu/BarWidget.qml" || die "bar trigger does not call hexciri-shell by absolute path"
 grep -q '/usr/share/hexciri/bin/hexciri-shell hexciri.dock apps' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu apps row does not call hexciri-shell by absolute path"
+grep -q 'signal pressed(int button, int modifiers)' "$HEXCIRI_PATH/shell/Ui/WidgetButton.qml" || die "WidgetButton does not forward click modifiers, Shift+right-click settings cannot be told from plain right-click (2026-11-24)"
 # Dead menu rows must be gone from the forked jsonc, not just uncallable.
 # NOTE 2026-11-24: '"install.' / '"remove.' must NOT be in this list.
 # b0eed823 restored Install/Remove (26 install.* + 20 remove.* rows, all
