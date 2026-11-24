@@ -1,120 +1,144 @@
-<div align="center">
+# Hexciri 2.0
 
-<img src="branding/hexciri-nb.png" alt="Hexciri" width="650">
+Minimal Arch with the feel and look of Omarchy. Branch `nyx` is the 2.0 build. `main` is still Hexciri v1 (CachyOS dots), do not mix them.
 
-**CachyOS dotfiles for Niri and Hyprland: a real menu and a theme engine.**
+## What it is
 
-</div>
-
-## What this is
-
-CachyOS is the house (Arch Linux, tuned for speed). hexciri is the furniture:
-a menu where every button works, and one theme pick that recolors all 30+
-apps at once. It never touches the foundation — kernel, drivers and updates
-stay exactly as CachyOS ships them.
-
-Niri and Hyprland are just two different window managers it runs on. Same
-menu, same themes, same keys on both.
+- Base: EndeavourOS, no desktop environment. Calamares online install, pick No Desktop.
+- Shell: Omarchy shell, forked and renamed to Hexciri. Menu, bar, themes, plugin support, all of it.
+- Pinned Omarchy source: `omacom/omarchy`, branch `quattro`, commit `94a8c3c3321129fae87a329947711355897e69fd`.
+- Compositor: Hyprland only (Lua config, 0.57 is Lua only). Quickshell only. No Niri, no Noctalia.
+- Boot: systemd-boot, ext4. No GRUB, no btrfs, no snapshots, no Limine, no Plymouth.
+- Login: SDDM, like Omarchy.
+- End goal: almost nothing installed, still feels like Omarchy.
 
 ## Install
 
-1. Install CachyOS with Niri or Hyprland (normal installer, pick either).
-2. Run one script, answer two questions (system update? reboot?):
+Fresh EndeavourOS no-DE install, then run as a normal user, from tty3 if you can:
 
 ```bash
-curl -LO https://hexciri.dirty.pizza/install.sh
-sh install.sh
+curl -LO https://hexciri.dirty.pizza/v2/bootstrap.sh
+bash bootstrap.sh
 ```
 
-Done. Safe to re-run any time — it only fills in what's missing. Staying
-current later is `Update > Hexciri` from the menu.
+That downloads the `nyx` branch, verifies it, and runs `v2/install.sh`. It does everything up to reboot, then you reboot and pick Hexciri at SDDM. Fallback, raw GitHub:
 
-## The menu
+```bash
+curl -LO https://raw.githubusercontent.com/Deoxizn/hexciri/nyx/v2/bootstrap.sh
+bash bootstrap.sh
+```
 
-`Mod+Alt+Space` opens nine buckets: Learn, Packages, Share & Capture,
-Reminders, Hardware, Themes, System, Restart, Update. Every row does its
-thing; `Esc` always goes back a level. (`Mod+Space` is the app launcher,
-`Mod+K` searches every keybind.)
+Do not pipe curl into bash, stdin stays on the terminal that way. No git auth needed.
+
+## Update
+
+```bash
+hexciri update
+```
+
+That is the normal path now. It runs system packages (pacman, AUR via yay, mise), then Hexciri self-update (git sync of `nyx`, tarball fallback), then re-applies the installer only when something in it changed. Patch-only changes use a short re-apply, not a full installer run. First update after a system-range change is full by design, then it goes quiet again. Bootstrap is fallback only.
+
+## Keybinds
+
+`Mod` is Super.
+
+| Keys | Do |
+|---|---|
+| `Mod+Space` | Apps |
+| `Mod+Alt+Space` | Menu |
+| `Mod+Ctrl+S` | Hexciri Settings |
+| `Mod+Ctrl+Shift+S` | Share |
+| `Mod+Shift+S` | Web search |
+| `Mod+Shift+C` | Calculator |
+| `Mod+Shift+M` | Spotify |
+| `Mod+Shift+T` | System monitor (`btm`) |
+| `Mod+K` | Keybinds cheatsheet |
+| `Mod+Q` | Close window |
+| `Mod+Return` | Terminal |
+| `Mod+Shift+F` | Files |
+
+Full list: `Mod+K`, or Learn in the menu.
+
+## Defaults
+
+| Thing | Default |
+|---|---|
+| Terminal | Kitty (Foot, Alacritty, Ghostty are install options) |
+| File manager | Strata |
+| Browser | Brave Origin |
+| Editor | Zed |
+| Image viewer | imv |
+| PDF reader | zathura |
+| System monitor | bottom (`btm`) |
+| Font | JetBrainsMono Nerd Font, Maple Mono NF installed, Maple Mono NF CN selectable |
+| Dock | Strata, Spotify, Brave Origin, Zed, Kitty |
 
 ## Themes
 
 ```bash
-hexciri-theme set <name>     # recolors everything at once
-hexciri-theme list           # pick from a preview list
+hexciri-theme set <name>
+hexciri-theme list
+hexciri theme sync
 ```
 
-One pick repaints your terminal, editor, browser, bar, lock screen, file
-manager and login screen from the same palette — 22 themes ship, any GitHub
-theme is one command away, and your own scripts in
-`~/.config/hexciri/hooks/theme-set.d/` run along (edits are kept as yours
-forever).
+23 stock themes ship. Theme format stays Omarchy compatible, so Omarchy themes load. One theme pick recolors terminal, editor, browser, bar, lock screen, file manager, and login screen.
 
-Your stuff, by path: wallpapers live in `~/.config/hexciri/wallpapers`
-(extra folders in `~/.config/hexciri/wallpaper-sources/extra.list`);
-extra themes in `~/.config/hexciri/theme-sources/extra.list` — one
-`owner/repo` per line. Both survive every swap and update.
+Theme hooks live in `~/.config/hexciri/hooks/theme-set.d/`. Hexciri adds its own: GTK/signals, Adapta (opt-in), THPM, plus custom Lua binds/apps. Extra themes, bulk add/remove:
 
-## Apps
+```bash
+# one git URL per line, # comments
+~/.config/hexciri/themes.list
+hexciri theme sync
+```
 
-Install adds what hexciri needs (kitty, Zed, Brave Origin, OpenCode…) and
-removes what they replace — once. Afterwards your installs and removals are
-yours; updates never undo them. File manager and image viewer follow the WM:
-strata + qview on Hyprland, nautilus + imv on Niri — change the pick any time
-in `System > Default Apps`.
+Trusted themes can also be linked with `hexciri theme link <git-url>`, which restores theme Lua that Omarchy 4.0.1 blocks.
 
-## Niri or Hyprland
+## Settings
 
-Same menu, themes and keys on both — only the tiling style differs:
+Hexciri Settings is a shell plugin, not a bar widget. `Mod+Ctrl+S`, or the launcher icon. 23 panes, no channel, no Herdr. It is installed and built automatically by `hexciri update`, no manual build. Source: `Deoxizn/hexciri-settings`, plugin id `pizza.dirty.settings`.
 
-| | Niri | Hyprland |
-|---|---|---|
-| Tiling | scrollable columns | classic tiles + floating |
-| `Mod+L` | — (nothing to cycle) | cycles dwindle → scrolling → monocle |
-| Files / images | nautilus + imv | strata + qview |
+Display HDR/VRR lives in the Display tab, Advanced group (collapsed).
 
-Pick one at CachyOS install time. hexciri detects the active WM and applies
-the matching config — it does not install, remove, or switch window managers.
-If you add the other WM later, install the CachyOS edition for it first, then
-re-run the hexciri installer.
+## Plugins, optional
 
-Added Niri or Hyprland after creating your user? Run `hexciri-update self`
-once: it seeds the missing entry point/config and wires the hexciri sections
-(a stock Niri config includes nothing, so keybinds would be inert). Then
-reload — `niri msg action load-config-file` or `hyprctl reload` — or relogin.
+Nyxiri and wallcraft are optional, user choice only, not base install. They just need to work with Hexciri.
 
-## Keys that matter
+```bash
+# fresh install, Nyxiri core seven from nyx branches
+bash v2/install.sh --with-nyxiri
+# cats too
+bash v2/install.sh --with-nyxiri --with-cats
+```
 
-`Mod` is Super. All of them, searchable: `Mod+K`.
+Nyxiri core: bar, menu, workspaces, clock, weather, arch-updates, wallcraft. Plugins live on `nyx` branches in their own repos and update from `nyx`, not `main`. Once installed, later updates re-add/update them even without the flag. Stock `hexciri.workspaces` is disabled (never removed) while Nyxiri workspaces is active.
 
-| Keys | Do |
+Other plugin bits: THPM installs from GitHub (`OldJobobo/thpm`), not AUR, with Steam via a standalone `steam-adwaita` checkout. Opencode is the default agent, installed via pacman, no account prompt. AI agent options are in Install > AI, Herdr is out.
+
+## Rename rule
+
+No file, path, or CLI is named `omarchy` in this project. Theme and plugin format and API stay Omarchy compatible, so Omarchy themes and plugins still load. A few runtime aliases are deliberate exceptions, because renaming them breaks things: GlobalShortcut appid stays `omarchy`, helpers dispatch stays `omarchy:`, the manifest key stays `"omarchy"`, and `/usr/local/bin/omarchy` forwards to `hexciri` for THPM, which hardcodes the Omarchy CLI.
+
+## Repo layout
+
+| Path | What |
 |---|---|
-| `Mod+Alt+Space` | hexciri menu |
-| `Mod+Space` | app launcher |
-| `Mod+Return` | terminal |
-| `Mod+Q` | close window |
-| `Mod+T` | float / tile toggle |
-| `Mod+L` | cycle layouts (Hyprland) |
-| `Mod+1…9` | workspaces (`Shift` moves windows) |
-| `Mod+Shift+F` | files |
-| `Mod+Shift+B` | browser |
-| `Mod+Shift+S` / `Mod+Shift+C` | web search / calculator |
-| `Mod+C` / `Mod+V` | copy / paste everywhere (Hyprland only — needs the compositor to send the keys) |
-| `Mod+Ctrl+B` | private browser window |
-| `Mod+Shift+T` | system monitor |
-| `Mod+Ctrl+V` | clipboard history |
-| `Mod+Escape` | power menu |
+| `v2/install.sh` | The installer, one script |
+| `v2/bootstrap.sh` | Thin bootstrap wrapper, downloads `nyx` and runs the installer |
+| `v2/hexciri-base.packages` | Minimal package list |
+| `v2/hexciri-tools.toml` | mise tools (node, uv, gh, lazy) |
+| `v2/hexciri-update-hexciri` | Hexciri self-update |
+| `v2/hexciri-theme-*` | Theme hooks, theme-link, theme sync, font helpers |
+| `v2/hexciri-web-search` | Web search, `Mod+Shift+S` |
+| `v2/hexciri-custom-binds.lua` | Hexciri-only keybinds |
+| `v2/hexciri-custom-apps.lua` | Hexciri-only window rules |
+| `v2/install-2.0.sh`, `v2/fork-shell.sh` | Phase 1 reference only, do not run |
+| `docs/v2/bootstrap.sh` | GitHub Pages copy, main only, backs the short URL |
+| `install.sh` (root) | Hexciri v1, CachyOS. Untouched by 2.0. |
 
-Search and calculator aren't apps — they're menu modes: `Mod+Shift+S`
-searches the web (and your files), `Mod+Shift+C` is a full calculator, both
-with history. `Mod+Ctrl+V` is the same idea for everything you copied.
+## Status
 
-## When something looks off
-
-1. Press `Update > Hexciri` — every press re-applies links, keybinds,
-   firewall and sshd settings, and heals anything missing.
-2. Still off? Re-run `install.sh` — safe on a working box too.
-3. Forgot a key? `Mod+K`. Need a doc? `Learn` in the root menu.
+Core build OS, live on the Framework laptop. Phase 1 done (boots, basic works, minimal). Phase 2 done for the updater, theme hook, Settings, Nyxiri nyx branches, wallcraft port, and theme sync. Still to do: move the inline fork patches into a `/patches` dir and slim `v2/install.sh` down, see `v2/README.md`.
 
 ## Sources
 
-[Omarchy](https://github.com/omacom/omarchy) × [Niri](https://github.com/YaLTeR/niri) × [Hyprland](https://hyprland.org) × [Noctalia](https://github.com/) × [Quickshell](https://github.com/outfoxxed/quickshell) × [theme-hook-plugin-manager](https://github.com/OldJobobo/theme-hook-plugin-manager) × [base16-Discord](https://github.com/imbypass/base16-discord) × [ClearVision-v7](https://github.com/ClearVision/ClearVision-v7) × [system24](https://github.com/refact0r/system24) × [omarchy-nautilus-theme](https://github.com/ilJapo/omarchy-nautilus-theme) × [omarchy-sakurazuki-theme](https://github.com/ahmed-z0/omarchy-sakurazuki-theme) × [Adwaita-for-Steam](https://github.com/tkashkin/Adwaita-for-Steam) × [Adapta](https://github.com/signaldirective/Adapta) × [Catppuccin-GTK-Theme](https://github.com/Fausto-Korpsvart/Catppuccin-GTK-Theme)
+[Omarchy](https://github.com/omacom/omarchy) x [EndeavourOS](https://endeavouros.com) x [Hyprland](https://hyprland.org) x [Quickshell](https://quickshell.org) x [THPM](https://github.com/OldJobobo/thpm) x [theme-link](https://github.com/ministry-of-taste/theme-link)

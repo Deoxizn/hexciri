@@ -1,114 +1,82 @@
-# Hexiri 2.0 Phase 1, base fork
+# Hexciri 2.0, `v2/`
 
-Branch: nyx, Deoxizn/hexciri. No merge to main.
-Pinned Omarchy source: omacom/omarchy, branch quattro, commit 94a8c3c3321129fae87a329947711355897e69fd, 2026-11-23.
+Branch `nyx`, `Deoxizn/hexciri`. No merge to main. Root `README.md` is the overview, this file is the `v2/` notes.
+
+Pinned Omarchy source: `omacom/omarchy`, branch `quattro`, commit `94a8c3c3321129fae87a329947711355897e69fd`.
 Base: EndeavourOS, Calamares online install, No Desktop.
-Name: Hexiri. Shell: exact same as Omarchy menu, bar, themes, all of it.
-End goal: a very minimal almost nothing installed Arch that still has the feel and look of Omarchy.
+Shell: Omarchy shell, forked and renamed to Hexciri. Hyprland + Quickshell only, no Niri, no Noctalia. SDDM like Omarchy. systemd-boot + ext4, no snapshots.
 
-## Files in v2/
+## Files
 
-- bootstrap.sh, the primary one-command path, thin wrapper, deliberately NOT a second installer. Download it first, then run it: `curl -LO https://hexciri.dirty.pizza/v2/bootstrap.sh`, then `bash bootstrap.sh`. Fallback, if the short URL is not live yet: `curl -LO https://raw.githubusercontent.com/Deoxizn/hexciri/nyx/v2/bootstrap.sh`. It downloads the nyx branch as a public tarball, no git, no auth, verifies it contains v2/install.sh, then execs that installer. It extracts to a temp dir, NOT ~/.local/opt/hexciri, which holds the v1 checkout.
-- docs/v2/bootstrap.sh, the GitHub Pages-served copy of bootstrap.sh. Pages publishes the docs/ folder from main, so https://hexciri.dirty.pizza/v2/bootstrap.sh goes live only when this file lands on main. It is on nyx now, staged and ready to cherry-pick to main. Do not edit it alone, keep it in sync with v2/bootstrap.sh. It does not touch docs/install.sh, the v1 path at https://hexciri.dirty.pizza/install.sh is unchanged.
-- install.sh, the one command, primary entry point. Run as normal user, not root, on a fresh EndeavourOS no-DE install: `bash v2/install.sh`
-  It does it all in order, minus the EndeavourOS install itself: packages, GPU drivers, Quickshell, Hyprland, SDDM plus uwsm, then downloads omacom/omarchy at the pinned commit as a public codeload tarball with curl (no git clone, no username or password prompt), verifies the SHA from the tarball top dir, forks and renames the shell inline, places the forked tree to /usr/share/hexciri, ~/.config/hexciri, ~/.local/state/hexciri, and ~/.config/hypr, wires hexciri-compat.sh into hexciri-launch-shell and env-bootstrap, requires hexciri-compat.lua from default/hypr/hexciri.lua, and verifies placement. Sudo is used only for the /usr/share and /etc steps.
-- install-2.0.sh, old Phase 1 EndeavourOS no-DE base installer, kept as reference. Do not use it as the entry point anymore, its steps are now in install.sh.
-- fork-shell.sh, old Phase 1 fork and rename script, kept as reference. Do not use it as the entry point anymore, its logic is now inline in install.sh. It took a cloned Omarchy tree at the pinned commit, or a tarball, extracted only the listed subsets, renamed omarchy to hexciri, generated the compatibility alias files, and failed loudly if any file named omarchy remained.
-- hexciri-base.packages, minimal Phase 1 package list. No apps, no GUI preinstalls.
-- README.md, this file.
+- `bootstrap.sh`, thin wrapper, not a second installer. Download it first, then run it. It downloads the `nyx` branch as a public tarball, no git, no auth, verifies it contains `v2/install.sh`, then runs it. It extracts to a temp dir, not `~/.local/opt/hexciri`, which holds the v1 checkout.
+- `install.sh`, the installer. Run as a normal user, not root, on a fresh EndeavourOS no-DE install. It does packages, GPU drivers, Quickshell, Hyprland, SDDM + uwsm, then forks Omarchy at the pinned commit, renames it inline, places the tree to `/usr/share/hexciri`, `~/.config/hexciri`, `~/.local/state/hexciri`, and `~/.config/hypr`, and verifies placement. Sudo only for `/usr/share` and `/etc` steps.
+- `hexciri-base.packages`, minimal package list. No apps, no GUI preinstalls.
+- `hexciri-tools.toml`, mise tools: node, uv, gh, lazy. No AI agent CLIs, no Herdr.
+- `hexciri-update-hexciri`, Hexciri self-update. Git sync of `nyx` to `~/.local/opt/hexciri-nyx`, tarball fallback only.
+- `hexciri-theme-ansi`, theme-matched green/red for update output, from the active theme, fallback dirty.pizza `#33ff99` / `#ff3333`.
+- `hexciri-theme-hook-gtk.sh`, `hexciri-theme-hook-adapta.sh`, `hexciri-theme-hook-thpm.sh`, `hexciri-theme-hook.toml`, `hexciri-theme-env.sh`, theme-set.d hooks. GTK/signals, Adapta opt-in, THPM.
+- `hexciri-theme-link`, trusted theme symlinks, restores theme Lua. `hexciri theme link <git-url>`.
+- `hexciri-theme-sync`, bulk themes. `hexciri theme sync`, reads `~/.config/hexciri/themes.list`.
+- `hexciri-web-search`, web search, `Mod+Shift+S`, QS prompt, Brave Origin.
+- `hexciri-custom-binds.lua`, Hexciri-only binds. `hexciri-custom-apps.lua`, Hexciri-only window rules.
+- `hexciri-font-maple-cn-present`, Maple Mono NF CN installed check, both AUR names.
+- `hexciri-speedtest-client`, curl-based speed test, used by System > Network.
+- `hexciri-settings-tabs`, `hexciri-launch-settings`, Settings plugin wiring.
+- `install-2.0.sh`, `fork-shell.sh`, Phase 1 reference only. Do not run, their steps are in `install.sh`.
 
-## Phase 1 scope, what is here
-
-- EndeavourOS no-DE base: Hyprland, uwsm, SDDM, xdg-desktop-portal-hyprland/gtk, polkit, Qt6, fonts, CLI helpers.
-- GPU branching: AMD Mesa/Vulkan, Nvidia Turing+ nvidia-open, Nvidia Pascal GTX 1080 Ti nvidia-580xx-dkms from AUR, never nvidia-open on Pascal.
-- SDDM plus uwsm, session hexciri.desktop, `uwsm start -e -D Hyprland hyprland.desktop`.
-- Dracut, not mkinitcpio. No Limine, no snap/btrfs, no Plymouth, no LUKS scripts.
-- Forked Omarchy shell, verbatim then renamed: shell/, default/hypr/ Lua, config/hypr/ templates, config/omarchy/shell.json, default/omarchy/hexciri-menu.jsonc, themes/ (23 themes at pinned commit), default/bash/env-bootstrap, and only the bin/ scripts the shell actually calls.
-- No file named omarchy in the repo. Files, paths, and CLI are hexciri.
-- Theme format colors.toml plus shell.toml stays Omarchy compatible. Plugin format manifest.json plus BarWidget.qml plus scripts/ plus shell.json layout stays Omarchy compatible.
-- Runtime alias in code, not a file named omarchy: a plugin asking for omarchy.bar gets hexciri.bar, omarchy-shell IPC gets hexciri-shell, OMARCHY_PATH is a runtime alias variable set to the same value as HEXCIRI_PATH. See fork-shell.sh, hexciri-compat.lua and hexciri-compat.sh, generated by the fork script.
-
-## What is NOT in Phase 1
-
-- No apps, no GUI preinstalls, no Docker, no AI agents.
-- No Noctalia, no Niri. Hyprland plus Quickshell only.
-- No Hexciri Phase 2 edits: no Lua binds, windowrules, workspaces, opacity or Steam rules, no Nyxiri overlay, no THPM install, no updater rework, no Hexciri scripts ported from Noctalia calls.
-- No vendored copy of every Omarchy QML file in this repo. The fork script is the vendoring mechanism: it downloads the pinned upstream commit as a tarball at install time, extracts the subsets, and renames them. A full file-by-file copy through the GitHub MCP was not feasible, and would have gone stale the next upstream commit. The pinned SHA, the subset list, and the rename map are in fork-shell.sh, and are the auditable fork.
-
-## Inventory corrections, verified at pinned commit
-
-- No shell/plugins/launcher/ directory. Launcher code lives in shell/plugins/menu/ and shell/plugins/dock/.
-- No bare bin/omarchy-plugin. Subcommands are omarchy-plugin-add, -catalog, -clone, -disable, -enable, -list, -remove, -update, -validate.
-- No bin/omarchy-qmlcache-purge.
-- Shell config is config/omarchy/shell.json, not config/shell.json.
-- themes/ has 23 directories.
-- default/hypr/ has 29 top-level Lua files, plus apps/, bindings/, toggles/ subdirs.
-- shell/plugins/ has 16+ plugin dirs, plus shell/Commons/, shell/Ui/, shell/services/.
-- Runtime call-graph is UNVERIFIED: existence of the bin/ files is verified, which scripts the shell actually invokes at runtime was not proven by grep in this pass.
-
-## How to test Phase 1, after install.sh
-
-Primary path, the bootstrap. Download the file first, then run it. Do NOT pipe curl into bash, so stdin stays on the terminal. No git, no username or password prompt:
+## Install
 
 ```bash
 curl -LO https://hexciri.dirty.pizza/v2/bootstrap.sh
 bash bootstrap.sh
 ```
 
-Important: that short URL is NOT live yet. GitHub Pages publishes the docs/ folder from main, not nyx, and the live site currently serves main's docs/install.sh (v1). The file that backs the short URL, docs/v2/bootstrap.sh, is staged on nyx in this commit, ready to cherry-pick to main. Once that one file lands on main, Pages redeploys and https://hexciri.dirty.pizza/v2/bootstrap.sh goes live, with no DNS change needed, the CNAME hexciri.dirty.pizza is already in docs/CNAME on main. Until then, use the fallback below. The v1 path https://hexciri.dirty.pizza/install.sh is unchanged.
-
-Fallback, raw GitHub link, live now:
+Fallback, raw GitHub:
 
 ```bash
 curl -LO https://raw.githubusercontent.com/Deoxizn/hexciri/nyx/v2/bootstrap.sh
 bash bootstrap.sh
 ```
 
-The bootstrap downloads the nyx branch as a public tarball, verifies it contains v2/install.sh, then execs that installer. The whole chain is git-auth free: the bootstrap uses curl only, and install.sh fetches its Omarchy source as a codeload tarball too.
+Then reboot, pick Hexciri at SDDM. Run from tty3 if you can, the installer replaces `/usr/share/hexciri` under the running shell.
 
-Fallback, manual tarball download, no git auth:
-
-```bash
-curl -L https://codeload.github.com/Deoxizn/hexciri/tar.gz/refs/heads/nyx -o hexciri-nyx.tar.gz
-tar -xzf hexciri-nyx.tar.gz
-cd hexciri-nyx
-bash v2/install.sh
-```
-
-Git clone is an optional alternative only, not the primary path:
+## Update
 
 ```bash
-git clone https://github.com/Deoxizn/hexciri.git ~/hexciri
-cd ~/hexciri
-git checkout nyx
-bash v2/install.sh
+hexciri update
 ```
 
-If you already have the nyx checkout, run as normal user on a fresh EndeavourOS no-DE install:
+System packages first (pacman, yay for AUR, mise), then Hexciri self-update. The installer re-runs only when its sha changed. Fingerprints decide how much: all match, light-sync; patch only, re-apply; provision only, re-apply-provision; anything else, full installer. First update after a system-range change is full by design, then it goes quiet again. User files (`shell.json`, Hyprland Lua, `kitty.conf`, current theme) are preserved on re-runs, upstream changes land as `.hexciri.new`.
 
-```bash
-bash v2/install.sh
-```
+## What is in the fork
 
-Then:
+- EndeavourOS no-DE base: Hyprland, uwsm, SDDM, portals, polkit, Qt6, fonts, CLI helpers.
+- GPU branching: AMD Mesa/Vulkan, Nvidia Turing+ `nvidia-open`, Nvidia Pascal GTX 1080 Ti `nvidia-580xx-dkms` from AUR, never `nvidia-open` on Pascal.
+- Dracut, not mkinitcpio. No Limine, no snap/btrfs, no Plymouth, no LUKS scripts.
+- Forked Omarchy shell, verbatim then renamed: `shell/`, `default/hypr/` Lua, `config/` templates, `default/hexciri/hexciri-menu.jsonc`, `themes/` (23 themes), `default/bash/env-bootstrap`, and only the `bin/` scripts the shell actually calls.
+- No file named `omarchy` in the repo. Files, paths, and CLI are `hexciri`. Theme format (`colors.toml` + `shell.toml`) and plugin format stay Omarchy compatible. Runtime alias in code, not a file: a plugin asking for `omarchy.bar` gets `hexciri.bar`.
+- Defaults: Kitty, Strata, Brave Origin, Zed, imv, zathura, bottom (`btm`), JetBrainsMono, Maple Mono NF.
+- Menu: full Install/Remove restored, no Omarchy specifics (no preinstalls, no Windows), AI agent options in, Herdr out, Foot as a terminal option, Kitty default.
+- Learn: Keybindings, Hexciri, Hyprland, Arch, Zed, Bash, Fish, Kitty, Quickshell, Tmux. No Neovim, no Community.
+- Settings plugin, `pizza.dirty.settings`, `Mod+Ctrl+S`. Nyxiri and wallcraft optional, `nyx` branches only.
 
-1. Reboot, SDDM login screen appears.
-2. Pick Hexiri at the SDDM session menu, log in.
-3. Hyprland starts, no black screen, no immediate logout to SDDM.
-4. Quickshell starts, stock bar appears. If stock quickshell fails, fallback is `yay -S quickshell-git`, then reboot and retest.
-5. Network: `nmcli device status`. Audio: `wpctl status`. Bluetooth if needed: `bluetoothctl devices`.
-6. Theme: `hexciri-theme-set` with a stock theme, check bar and menu recolor.
-7. Plugin: install a stock plugin, check it loads, check the alias resolves omarchy.bar to hexciri.bar.
+## What is NOT here
 
-If Hyprland fails: check version, 0.57 is Lua only, a stray hyprland.conf is ignored. Check GPU driver matches the card, Pascal needs nvidia-580xx, never nvidia-open. Check `journalctl --user -u hyprland` and `uwsm check`.
+- No Noctalia, no Niri. Hyprland + Quickshell only.
+- No apps beyond the defaults above, no Docker, no Herdr.
+- No vendored copy of every Omarchy QML file in this repo. The installer is the vendoring mechanism: it downloads the pinned upstream commit as a tarball at install time, extracts the subsets, and renames them. Pinned SHA, subset list, and rename map are in `install.sh`.
+- No `/patches` dir yet. Fork patches are still inline in `install.sh`, which is why it is 7,000+ lines. Moving them out is the next cleanup, see below.
 
-## Phase 2, not started
+## Test after install
 
-Merge Hexciri Lua edits, port Hexciri scripts from Noctalia to QS, theme engine, arch-updates EndeavourOS backend, hexciri-update rework (eos-update --aur, guard dropped, Limine/snapper dropped, dracut followed), Nyxiri overlay, THPM install.
+1. Reboot, SDDM, pick Hexciri, log in.
+2. Hyprland starts, no black screen, no immediate logout.
+3. `Mod+Space` apps, `Mod+Alt+Space` menu, `Mod+Ctrl+S` Settings.
+4. `hexciri-theme-set` a stock theme, check bar and menu recolor.
+5. `hexciri update`, check it completes, then run it again, check the second run is short (re-apply or light-sync, not full).
 
-## Open blockers
+If Hyprland fails: check version, 0.57 is Lua only, a stray `hyprland.conf` is ignored. Check GPU driver matches the card. Check `journalctl --user -u hyprland` and `uwsm check`.
 
-- No live boot test yet. This is a script fork, not a tested install. Devi has not reformatted a machine yet, and should not until Phase 1 is tested on a spare drive or VM.
-- Full bin/ inventory is about 400 files, only shell-called names are listed in fork-shell.sh. If a shell-called script was skipped, the fork log will show it, adjust the allowlist from that log.
-- Quickshell version: stock Arch quickshell 0.3.2 is the default, Omarchy uses a patched build. If the menu fails to open on stock, use quickshell-git.
-- Hyprland version drift: EndeavourOS is rolling, Arch can ship Hyprland 0.57 at any time. Phase 1 ships Lua only, no .conf.
+## Next cleanup
+
+Move the inline fork patches out of `install.sh` into a `/patches` dir, one file per patch, applied in order by the installer. That shrinks `install.sh`, makes a patch change just that file, and lets fingerprints hash the patches dir instead of a giant script range. Do it as a clean refactor on its own commit, not mixed with a bug fix.
