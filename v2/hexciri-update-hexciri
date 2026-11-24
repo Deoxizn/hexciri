@@ -213,14 +213,34 @@ else
   fi
 fi
 
-NEW_SHA="$(sha256sum "$SOURCE_ROOT/v2/install.sh" | cut -d' ' -f1)"
+# Installer tree sha (2026-11-24 patches refactor): install.sh plus every
+# file in v2/patches/ (content, sorted). Same function as install.sh's
+# installer_tree_sha(), over the synced tree instead of the live one.
+# A patch-only change must count as an installer change, or the update
+# would call the tree up to date and skip it.
+installer_tree_sha() {
+  local _root="$1" _ts
+  {
+    sha256sum "$_root/v2/install.sh" 2>/dev/null || printf 'missing %s\n' "$_root/v2/install.sh"
+    if [ -d "$_root/v2/patches" ]; then
+      for _ts in "$_root"/v2/patches/*; do
+        [ -f "$_ts" ] && sha256sum "$_ts"
+      done
+    else
+      printf 'missing patches dir %s\n' "$_root/v2/patches"
+    fi
+  } | sha256sum | cut -d' ' -f1
+}
+
+NEW_SHA="$(installer_tree_sha "$SOURCE_ROOT")"
 OLD_SHA="$(cat "$MARKER" 2>/dev/null || true)"
 # Both shas go to the detail log only, so a skip is still provable
 # without printing 64-char hashes on screen. If they match, the skip is
 # correct and the installer already landed (e.g. via a bootstrap just
-# before this update). If they differ, re-install below.
-detail "installed installer sha: ${OLD_SHA:-none}"
-detail "nyx installer sha: $NEW_SHA"
+# before this update). If they differ, re-install below. These are
+# installer TREE shas (install.sh + v2/patches/), not install.sh alone.
+detail "installed installer tree sha: ${OLD_SHA:-none}"
+detail "nyx installer tree sha: $NEW_SHA"
 detail "sync method: $SYNC_METHOD"
 
 # Short commit for the one-line status, only when git gave us one.

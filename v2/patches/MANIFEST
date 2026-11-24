@@ -1,0 +1,15 @@
+# Hexciri fork patches, in application order. v2/patches/apply.sh reads
+# this file top to bottom; add a patch here (and only here) to change the
+# order. One file per patch; each is a standalone script taking FORK_OUT.
+00-compat-alias.sh
+01-binds.sh
+02-menu-audit.sh
+03-dock.sh
+04-widgetbutton.sh
+05-background-strata.sh
+06-sddm-about.sh
+07-theme-set-gnome.sh
+08-update-eos.sh
+09-opencode.sh
+10-plugin-update.sh
+11-plugin-enable.sh
