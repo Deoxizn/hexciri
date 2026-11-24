@@ -209,7 +209,8 @@ CORE_PKGS=(
   imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip
   ripgrep fd fzf eza bat starship zoxide fastfetch
   # NOTE 2026-11-23: no btop here, v1 removes it, bottom (in APP_PKGS below)
-  # is the Hexciri system monitor instead.
+  # is the Hexciri system monitor instead. fastfetch's Hexciri config is
+  # placed in the default apps step below (config/fastfetch/config.jsonc).
   python python-gobject lua51 luarocks
   kitty
   udiskie
@@ -375,6 +376,32 @@ fi
 if command -v imv >/dev/null 2>&1; then
   printf '%s' "imv" > "$HOME/.local/state/hexciri/defaults/images"
   info "Default image viewer: imv"
+fi
+
+# --- fastfetch config (Hexciri's, from the repo tree) ---
+# fastfetch itself is already in CORE_PKGS above (Arch extra). Its config
+# lives in v1 at config/fastfetch/config.jsonc, and its logo at
+# branding/hexciri-nb.png, both present on nyx. Place both under
+# ~/.config/fastfetch/ so `fastfetch` shows Hexciri's layout, not the stock
+# one. Best-effort, never fatal: a missing config still leaves a working
+# fastfetch. An existing config is backed up first, like place_user_file
+# does for the Hyprland templates below.
+mkdir -p "$HOME/.config/fastfetch"
+if [ -f "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" ]; then
+  if [ -f "$HOME/.config/fastfetch/config.jsonc" ] && ! cmp -s "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc"; then
+    cp -a "$HOME/.config/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc.hexciri.bak"
+    info "Backed up existing ~/.config/fastfetch/config.jsonc to config.jsonc.hexciri.bak"
+  fi
+  cp -a "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc"
+  info "Placed: ~/.config/fastfetch/config.jsonc (Hexciri fastfetch config)"
+else
+  warn "config/fastfetch/config.jsonc not found in the installer tree, fastfetch keeps its stock config."
+fi
+if [ -f "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" "$HOME/.config/fastfetch/hexciri-nb.png"
+  info "Placed: ~/.config/fastfetch/hexciri-nb.png (fastfetch logo)"
+else
+  warn "branding/hexciri-nb.png not found in the installer tree, fastfetch logo will be missing (the config references it)."
 fi
 
 # --- Quickshell ---
@@ -1583,6 +1610,8 @@ if command -v obsidian >/dev/null 2>&1; then info "  notes: obsidian present"; e
 if command -v mpv >/dev/null 2>&1; then info "  video: mpv present"; else warn "  video: mpv NOT installed"; fi
 if command -v gpu-screen-recorder >/dev/null 2>&1; then info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
 if command -v localsend >/dev/null 2>&1; then info "  share: localsend present"; else warn "  share: localsend NOT installed, menu Share > Receive will fail"; fi
+if command -v fastfetch >/dev/null 2>&1; then info "  fastfetch: present"; else warn "  fastfetch: NOT installed"; fi
+if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
 command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
 if [ "$HC_FAIL" -eq 0 ]; then
@@ -1611,6 +1640,7 @@ Reboot, then check in order:
   12. Clock popup shows the real month and weekday names, not clock.monthYear / clock.weekShort
   13. Workspace 1 shows 1 / its mode glyph, and SDDM shows the Hexciri emblem, not Omarchy logos
   14. Default apps: Super+Shift+Return opens Brave Origin (default browser), Super+Shift+N opens Zed, Super+Shift+O opens Obsidian, Super+Alt+Return opens tmux in Kitty, menu Capture > Screenrecord records (gpu-screen-recorder), menu Share > Receive opens LocalSend
+  15. fastfetch: run `fastfetch` in Kitty, Hexciri logo + layout, not stock
 
 If Super+Space still does nothing after reboot, run this in a terminal and report what it prints:
   hexciri-menu toggle root
