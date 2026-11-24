@@ -66,11 +66,13 @@ luarocks
 # Terminal and fonts
 foot
 noto-fonts
-noto-fonts-cjk-vf
+noto-fonts-cjk
 noto-fonts-emoji
-ttf-jetbrains-mono-nerd-basic
+ttf-jetbrains-mono-nerd
 woff2-font-awesome
 terminus-font
+# NOTE 2026-11-23: noto-fonts-cjk-vf and ttf-jetbrains-mono-nerd-basic are
+# Omarchy-repo-only names, NOT Arch. Arch extra: noto-fonts-cjk, ttf-jetbrains-mono-nerd.
 #
 # GPU, installer branches by PCI vendor, do NOT install all of these
 # AMD: mesa vulkan-radeon lib32-mesa lib32-vulkan-radeon amd-ucode linux-firmware

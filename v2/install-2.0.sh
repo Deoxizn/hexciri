@@ -133,7 +133,7 @@ CORE_PKGS=(
   ripgrep fd fzf eza bat btop starship zoxide fastfetch
   python python-gobject lua51 luarocks
   foot
-  noto-fonts noto-fonts-cjk-vf noto-fonts-emoji ttf-jetbrains-mono-nerd-basic woff2-font-awesome terminus-font
+  noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-jetbrains-mono-nerd woff2-font-awesome terminus-font
 )
 
 sudo pacman -S --needed --noconfirm "${CORE_PKGS[@]}"

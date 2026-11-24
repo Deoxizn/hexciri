@@ -196,7 +196,11 @@ CORE_PKGS=(
   ripgrep fd fzf eza bat btop starship zoxide fastfetch
   python python-gobject lua51 luarocks
   foot
-  noto-fonts noto-fonts-cjk-vf noto-fonts-emoji ttf-jetbrains-mono-nerd-basic woff2-font-awesome terminus-font
+  noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-jetbrains-mono-nerd woff2-font-awesome terminus-font
+  # NOTE 2026-11-23: noto-fonts-cjk-vf and ttf-jetbrains-mono-nerd-basic are
+  # Omarchy-repo-only names (Omarchy edge channel / omarchy pkg), NOT Arch.
+  # pacman on plain Arch/EndeavourOS fails with "target not found" on both.
+  # Arch extra equivalents: noto-fonts-cjk, ttf-jetbrains-mono-nerd.
 )
 
 sudo pacman -S --needed --noconfirm "${CORE_PKGS[@]}"
