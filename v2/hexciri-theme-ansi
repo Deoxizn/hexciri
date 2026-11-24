@@ -1,0 +1,24 @@
+#!/bin/bash
+# hexciri-theme-ansi: print the ANSI truecolor escape for a named color from
+# the ACTIVE theme, so update output follows the theme instead of stock
+# Omarchy green. Usage: hexciri-theme-ansi [green|red|accent|...]
+# Reads $HOME/.local/state/hexciri/current/theme/colors.toml (key `green =
+# "#..."`), falls back to the theme's accent, then to dirty.pizza #33ff99
+# (green) / #ff3333 (red) when no theme is set. Prints the escape with no
+# newline, so callers embed it: echo -e "$(hexciri-theme-ansi green)text"
+key="${1:-green}"
+colors="$HOME/.local/state/hexciri/current/theme/colors.toml"
+hex=""
+if [ -f "$colors" ]; then
+  hex="$(sed -nE "s/^${key}[[:space:]]*=[[:space:]]*\"#([0-9A-Fa-f]{6})\".*/\1/p" "$colors" 2>/dev/null | head -1)"
+  if [ -z "$hex" ]; then
+    hex="$(sed -nE "s/^accent[[:space:]]*=[[:space:]]*\"#([0-9A-Fa-f]{6})\".*/\1/p" "$colors" 2>/dev/null | head -1)"
+  fi
+fi
+if [ -z "$hex" ]; then
+  case "$key" in
+    red | bright_red) hex="ff3333" ;;
+    *) hex="33ff99" ;;
+  esac
+fi
+printf '\033[38;2;%d;%d;%dm' "$((16#${hex:0:2}))" "$((16#${hex:2:2}))" "$((16#${hex:4:2}))"

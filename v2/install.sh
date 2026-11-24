@@ -183,6 +183,25 @@ else
   fi
 fi
 
+# Pac-Man progress bars, 2026-11-24 (Devi prefers the Arch ILoveCandy
+# bar to pacman's plain [----] bar): ILoveCandy in /etc/pacman.conf makes
+# pacman draw Pac-Man eating dots. yay and eos-update both shell out to
+# pacman, so their bars get it too, as does the hexciri-update fallback
+# pacman path. curl --progress-bar downloads (bootstrap, tarball fetches)
+# are plain download bars, not pacman bars, and are left alone.
+step "Enabling Pac-Man progress bar (ILoveCandy) in /etc/pacman.conf"
+if grep -q '^ILoveCandy' /etc/pacman.conf; then
+  info "ILoveCandy already enabled in /etc/pacman.conf (pacman eats dots)"
+elif grep -q '^#ILoveCandy' /etc/pacman.conf; then
+  sudo sed -i 's/^#ILoveCandy/ILoveCandy/' /etc/pacman.conf
+  grep -q '^ILoveCandy' /etc/pacman.conf && info "ILoveCandy enabled in /etc/pacman.conf (was commented out)" || warn "could not enable ILoveCandy in /etc/pacman.conf"
+elif grep -q '^\[options\]' /etc/pacman.conf; then
+  sudo sed -i '/^\[options\]/a ILoveCandy' /etc/pacman.conf
+  grep -q '^ILoveCandy' /etc/pacman.conf && info "ILoveCandy added to /etc/pacman.conf under [options]" || warn "could not add ILoveCandy to /etc/pacman.conf"
+else
+  warn "no [options] section in /etc/pacman.conf, ILoveCandy not set (add ILoveCandy under [options] by hand)"
+fi
+
 step "Syncing package databases"
 sudo pacman -Sy --noconfirm
 
@@ -850,10 +869,27 @@ copy_subsets() {
   # cats $HEXCIRI_PATH/logo.txt and hexciri-branding-about reset copies
   # $HEXCIRI_PATH/icon.txt. None of these were copied before, so
   # Appearance > Icons had no sets to show and About's logo file was never
-  # created. Both txt files are ASCII block art with no "omarchy" string
-  # in them, so the no-omarchy-path verification still passes.
+  # created. icon.txt is abstract block art, no text in it. logo.txt is
+  # NOT neutral: upstream logo.txt is the OMARCHY block art, and
+  # hexciri-show-logo cats it at the top of every hexciri update, so the
+  # first full update showed OMARCHY. It is overwritten with HEXCIRI art
+  # just below, same 81-col width, 7 letters like OMARCHY.
   copy_subset "$OMARCHY_SRC/icons" "$FORK_OUT/icons" "icons/"
   copy_optional_file "$OMARCHY_SRC/logo.txt" "$FORK_OUT/logo.txt" "logo.txt" || warn "logo.txt not found in source, hexciri-show-logo will fail."
+  # 2026-11-24: replace the upstream OMARCHY art with HEXCIRI art in the
+  # same block style (81 cols, 8 rows). hexciri-branding-screensaver copies
+  # this file too, so it gets the Hexciri art as well.
+  cat > "$FORK_OUT/logo.txt" <<'HEXCIRI_LOGO_EOF'
+███   ███   █████████   ███   ███    ▄███████   █████████   ████████    █████████
+███   ███   ███         ███   ███   ███            ███      ███   ███      ███
+███   ███   ███          ███ ███    ███            ███      ███   ███      ███
+█████████   ███████       █████     ███            ███      ████████       ███
+█████████   ███████       █████     ███            ███      ███ ███        ███
+███   ███   ███          ███ ███    ███            ███      ███  ███       ███
+███   ███   ███         ███   ███   ███            ███      ███   ███      ███
+███   ███   █████████   ███   ███    ▀███████   █████████   ███   ███   █████████
+HEXCIRI_LOGO_EOF
+  info "Wrote Hexciri logo.txt (HEXCIRI block art, replaces upstream OMARCHY art)"
   copy_optional_file "$OMARCHY_SRC/icon.txt" "$FORK_OUT/icon.txt" "icon.txt" || warn "icon.txt not found in source, About branding reset will fail."
 
   # Kitty config: upstream config/kitty/kitty.conf includes the staged theme
@@ -2499,6 +2535,17 @@ if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" ]; then
 else
   die "v2/hexciri-update-hexciri not in the installer tree, hexciri update cannot pull Hexciri updates"
 fi
+# hexciri-theme-ansi (repo file v2/hexciri-theme-ansi): prints the ANSI
+# truecolor escape for a named color from the ACTIVE theme, so update
+# output follows the theme instead of stock Omarchy green. Copied here
+# like hexciri-update-hexciri, same step as the update fork patch below.
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$FORK_OUT/bin/hexciri-theme-ansi"
+  chmod +x "$FORK_OUT/bin/hexciri-theme-ansi"
+  info "  update: hexciri-theme-ansi installed (theme-matched green/red for update output)"
+else
+  die "v2/hexciri-theme-ansi not in the installer tree, update output falls back to stock green"
+fi
 python3 - "$FORK_OUT" <<'PY'
 import sys
 fork = sys.argv[1]
@@ -2586,6 +2633,25 @@ must_replace(fork + "/bin/hexciri-update-confirm",
     "https://github.com/omacom/hexciri/releases/latest",
     "https://github.com/Deoxizn/hexciri/releases/latest",
     "hexciri-update-confirm points at Deoxizn/hexciri releases")
+
+# 8. Theme-matched green/red in update output, 2026-11-24: upstream prints
+# section headers with hardcoded \e[32m (stock Omarchy green) and errors
+# with \e[31m. Replace both with hexciri-theme-ansi, which reads the green /
+# red of the ACTIVE theme (current/theme/colors.toml), falling back to the
+# theme accent, then dirty.pizza #33ff99 / #ff3333 with no theme set. The
+# helper prints a truecolor escape, which echo -e / printf interpret.
+# Scope is the update presentation path only: update-* bins, show-logo,
+# show-done. Other bins keep their own colours.
+for _name in ["hexciri-update", "hexciri-update-system-pkgs", "hexciri-update-keyring", "hexciri-update-aur-pkgs", "hexciri-update-mise", "hexciri-update-dev", "hexciri-update-firmware", "hexciri-update-orphan-pkgs", "hexciri-update-pkg-prune", "hexciri-update-restart", "hexciri-update-analyze-logs", "hexciri-show-logo", "hexciri-show-done"]:
+    _p = fork + "/bin/" + _name
+    _t = read(_p)
+    _t = _t.replace("\\e[32m", "$(hexciri-theme-ansi green)")
+    _t = _t.replace("\\033[32m", "$(hexciri-theme-ansi green)")
+    _t = _t.replace("\\033[0;31m", "$(hexciri-theme-ansi red)")
+    _t = _t.replace("\\e[31m", "$(hexciri-theme-ansi red)")
+    _t = _t.replace("\\033[31m", "$(hexciri-theme-ansi red)")
+    write(_p, _t)
+    print("  update: theme-matched green/red in %s" % _name)
 PY
 
 # Whole-file rewrites: keyring, system-pkgs, pacman guard, available.
@@ -2606,7 +2672,7 @@ if pacman -Qq endeavouros-keyring >/dev/null 2>&1; then
   keyrings+=(endeavouros-keyring)
 fi
 
-echo -e "\e[32m\n$(hexciri-i18n update.signingKeys)\e[0m"
+echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.signingKeys)\e[0m"
 sudo pacman-key --populate archlinux endeavouros 2>/dev/null || sudo pacman-key --populate archlinux || true
 sudo pacman -Sy --needed --noconfirm "${keyrings[@]}"
 echo "$(hexciri-i18n update.keysCorrect)"
@@ -2638,7 +2704,7 @@ fi
 # itself, so it only runs in interactive mode. On failure, fall through to
 # the pacman path below instead of stopping the whole update.
 if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} != "1" ]] && command -v eos-update >/dev/null 2>&1; then
-  echo -e "\e[32m\n$(hexciri-i18n update.systemPackages) (eos-update --aur)\e[0m"
+  echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.systemPackages) (eos-update --aur)\e[0m"
   if eos-update --aur; then
     # Tell the aur-pkgs step the AUR is already done, for this run only.
     [[ -n ${HEXCIRI_UPDATE_EOS_MARKER:-} ]] && : > "$HEXCIRI_UPDATE_EOS_MARKER"
@@ -2647,7 +2713,7 @@ if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} != "1" ]] && command -v eos-update >/dev/n
   echo "eos-update --aur failed, falling back to pacman -Syu --noconfirm (review /tmp/hexciri-update.log for details)." >&2
 fi
 
-echo -e "\e[32m\n$(hexciri-i18n update.systemPackages)\e[0m"
+echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.systemPackages)\e[0m"
 
 errors=$(mktemp)
 trap 'rm -f "$errors"' EXIT
@@ -2734,17 +2800,17 @@ cat >> "$FORK_OUT/bin/hexciri-update-analyze-logs" <<'ANALYZE_EOF'
 # dracut (EndeavourOS default, not mkinitcpio): a failed initramfs rebuild
 # shows as dracut errors in the log. Also surface a failed transaction.
 if grep -qiE "dracut: (failed|error)|dracut:.*failed" "$update_log"; then
-  echo -e '\e[31mError: dracut reported errors during the update. Review logs before restart.\e[0m'
+  echo -e "$(hexciri-theme-ansi red)Error: dracut reported errors during the update. Review logs before restart.\e[0m"
   echo
 fi
 if grep -q "error: failed to commit transaction" "$update_log"; then
-  echo -e '\e[31mError: pacman transaction failed. Review /tmp/hexciri-update.log before retrying.\e[0m'
+  echo -e "$(hexciri-theme-ansi red)Error: pacman transaction failed. Review /tmp/hexciri-update.log before retrying.\e[0m"
   echo
 fi
 ANALYZE_EOF
 
 # Every patched update script must still parse.
-for _f in hexciri-update hexciri-update-system-pkgs hexciri-update-keyring hexciri-update-aur-pkgs hexciri-update-mise hexciri-update-available hexciri-update-boot hexciri-update-analyze-logs hexciri-update-hexciri hexciri-update-pacman-guard hexciri-update-confirm; do
+for _f in hexciri-update hexciri-update-system-pkgs hexciri-update-keyring hexciri-update-aur-pkgs hexciri-update-mise hexciri-update-available hexciri-update-boot hexciri-update-analyze-logs hexciri-update-hexciri hexciri-update-pacman-guard hexciri-update-confirm hexciri-theme-ansi; do
   bash -n "$FORK_OUT/bin/$_f" || die "bash -n failed on patched $_f"
 done
 unset _f
@@ -3104,7 +3170,7 @@ unset _bin
 # text-size feed the display panel's scale, network-* feeds the network
 # panel, apply-lock writes the lock PAM file, setup-* are the Setup
 # wizards, pkg-add/pkg-missing are their pacman primitives.
-for _bin in hexciri-system hexciri-dock hexciri-dns hexciri-state hexciri-setup-git hexciri-setup-hostname hexciri-setup-keyboard hexciri-setup-input hexciri-setup-security-fingerprint hexciri-setup-security-fido2 hexciri-setup-security-sshd hexciri-setup-security-ssh-agent hexciri-sudo-passwordless hexciri-security-functions hexciri-apply-lock hexciri-pkg-add hexciri-pkg-missing hexciri-monitor-state hexciri-display-text-size hexciri-network-status hexciri-network-band hexciri-network-wifi-connected hexciri-network-captive-portal hexciri-network-password hexciri-network-qr hexciri-network-speedtest hexciri-region hexciri-font-list hexciri-font-current hexciri-font-set hexciri-show-logo hexciri-show-done hexciri-file-select hexciri-input-method hexciri-git-url-check hexciri-disk-speedtest hexciri-kernel hexciri-language hexciri-locale-session hexciri-locale-generate hexciri-refresh-shell hexciri-refresh-tmux hexciri-refresh-hyprsunset hexciri-refresh-applications hexciri-refresh-config hexciri-device-touchpad hexciri-device-touchscreen hexciri-theme-set-browser-policy hexciri-toggle hexciri-dictation hexciri-default-dictation; do
+for _bin in hexciri-system hexciri-dock hexciri-dns hexciri-state hexciri-setup-git hexciri-setup-hostname hexciri-setup-keyboard hexciri-setup-input hexciri-setup-security-fingerprint hexciri-setup-security-fido2 hexciri-setup-security-sshd hexciri-setup-security-ssh-agent hexciri-sudo-passwordless hexciri-security-functions hexciri-apply-lock hexciri-pkg-add hexciri-pkg-missing hexciri-monitor-state hexciri-display-text-size hexciri-network-status hexciri-network-band hexciri-network-wifi-connected hexciri-network-captive-portal hexciri-network-password hexciri-network-qr hexciri-network-speedtest hexciri-region hexciri-font-list hexciri-font-current hexciri-font-set hexciri-show-logo hexciri-show-done hexciri-file-select hexciri-input-method hexciri-git-url-check hexciri-disk-speedtest hexciri-kernel hexciri-language hexciri-locale-session hexciri-locale-generate hexciri-refresh-shell hexciri-refresh-tmux hexciri-refresh-hyprsunset hexciri-refresh-applications hexciri-refresh-config hexciri-device-touchpad hexciri-device-touchscreen hexciri-theme-set-browser-policy hexciri-toggle hexciri-dictation hexciri-default-dictation hexciri-theme-ansi; do
   [ -x "$HEXCIRI_PATH/bin/$_bin" ] || die "missing bin (menu audit 2026-11-23, a kept menu row or panel calls it): $_bin"
 done
 unset _bin
@@ -3202,6 +3268,10 @@ grep -q 'eos-update --aur' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die
 grep -q 'hexciri-update-hexciri' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not call hexciri-update-hexciri"
 grep -q 'hexciri-snapshot create' "$HEXCIRI_PATH/bin/hexciri-update" && die "hexciri-update still calls the snapshot step (dropped 2026-11-24)"
 grep -q 'dracut' "$HEXCIRI_PATH/bin/hexciri-update-analyze-logs" || die "hexciri-update-analyze-logs has no dracut scan"
+grep -q 'hexciri-theme-ansi green' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "update headers are not theme-matched (no hexciri-theme-ansi call in hexciri-update-system-pkgs)"
+grep -q 'hexciri-theme-ansi green' "$HEXCIRI_PATH/bin/hexciri-show-logo" || die "show-logo is not theme-matched (no hexciri-theme-ansi call)"
+head -1 "$HEXCIRI_PATH/logo.txt" | grep -q '███' || die "logo.txt is not the HEXCIRI block art"
+grep -q '^ILoveCandy' /etc/pacman.conf || warn "  pacman bars: ILoveCandy NOT set in /etc/pacman.conf, pacman shows the plain bar"
 [ -f "$HEXCIRI_PATH/.installer-sha" ] || die "installer sha marker missing, hexciri-update-hexciri cannot tell if the installer changed"
 [ -f /etc/mise/conf.d/hexciri-tools.toml ] || warn "  mise tools config missing at /etc/mise/conf.d/hexciri-tools.toml (node/uv/gh lazy declarations)"
 info "PASS: menu audit verified (dead rows gone, audit bins present, shell IPC paths absolute)"
@@ -3758,17 +3828,22 @@ fi
 # never installed again. foot and btop were never installed by this
 # installer (Kitty over Foot, bottom over btop) but were left over from the
 # EndeavourOS base / an earlier install, so they are removed here too.
-# 2026-11-23: ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta,
-# xterm and stoken join the trim list (Devi does not want them, see the
-# trim script comment for what each one was). They are out of every
-# package list too, so they cannot come back through an install.
+# 2026-11-23: ghostwriter, meld, ncspot, neovim, obsidian, pinta and
+# xterm join the trim list (Devi does not want them, see the trim script
+# comment for what each one was). They are out of every package list too,
+# so they cannot come back through an install. vim and stoken were in the
+# list until 2026-11-24, when the first full hexciri update showed why
+# they cannot be: vim is required by ex-vi-compat (Arch base) and stoken
+# by openconnect, so pacman -Rns refuses both on every run and the
+# post-update hook printed the refusal after every update. They stay
+# installed; their app entries are hidden with NoDisplay instead.
 # Reinstall is prevented three ways: the packages are out of every list
 # (CORE_PKGS / APP_PKGS here, v2/hexciri-base.packages), this step removes
 # them if present, and a post-update hook (below) re-runs the trim on every
 # hexciri-update, so a future -Syu that would pull one back as a dependency
 # gets it removed again right after. pacman -Syu itself never installs new
 # packages, so the hook is the backstop, not the mechanism.
-step "Trimming bloat: foot, btop, apostrophe, pandoc-cli / Haskell, ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta, xterm, stoken"
+step "Trimming bloat: foot, btop, apostrophe, pandoc-cli / Haskell, ghostwriter, meld, ncspot, neovim, obsidian, pinta, xterm"
 cat > "$HOME/.local/bin/hexciri-trim-bloat" <<'TRIM_EOF'
 #!/bin/bash
 # Hexciri 2.0: remove packages Devi does not want, best-effort, idempotent.
@@ -3781,20 +3856,21 @@ cat > "$HOME/.local/bin/hexciri-trim-bloat" <<'TRIM_EOF'
 # vim + stoken survived the trim on the last live run.
 # 2026-11-23 removals, Devi does not want them: ghostwriter (markdown
 # editor, was the omawrite substitute), meld (diff/merge tool), ncspot
-# (Spotify TUI, was the cliamp substitute), neovim + vim (nano ships in
-# Arch base and is the editor fallback now; vim is in the Arch base group,
-# -Rns refuses if anything actually depends on it), obsidian (notes),
-# pinta (image editor), xterm (provides xterm AND uxterm, both entries
-# gone with the one package), stoken (Software Token + Software Token
-# (small): RSA SecurID-compatible software token, CLI + GTK GUI, one
-# package behind both desktop entries). stoken is a dependency of
-# openconnect, so pacman -Rns refuses the removal and the trim only
-# ever "kept" it; the NoDisplay hide below is what actually removes
-# both entries from the grid. yad is deliberately NOT here:
+# (Spotify TUI, was the cliamp substitute), neovim (nano ships in Arch
+# base and is the editor fallback now), obsidian (notes), pinta (image
+# editor), xterm (provides xterm AND uxterm, both entries gone with the
+# one package). vim and stoken are deliberately NOT here anymore
+# (2026-11-24): vim is required by ex-vi-compat and stoken by openconnect,
+# so pacman -Rns refuses both, and the post-update hook re-trying them on
+# every update printed "removing vim breaks dependency" / "removing
+# stoken breaks dependency" right after Restarting shell. Both stay
+# installed; the NoDisplay hide below is what actually removes their
+# entries (vim.desktop, stoken-gui.desktop, stoken-gui-small.desktop)
+# from the grid. yad is deliberately NOT here:
 # eos-bash-shared depends on it, its entry is hidden instead (above).
-for _pkg in foot btop apostrophe pandoc-cli ghostwriter meld ncspot neovim vim obsidian pinta xterm stoken; do
+for _pkg in foot btop apostrophe pandoc-cli ghostwriter meld ncspot neovim obsidian pinta xterm; do
   if pacman -Q "$_pkg" >/dev/null 2>&1; then
-    if sudo pacman -Rns --noconfirm "$_pkg" 2>/dev/null; then
+    if sudo pacman -Rns --noconfirm "$_pkg" >/dev/null 2>&1; then
       echo "trim-bloat: removed $_pkg"
     else
       echo "trim-bloat: kept $_pkg (removal refused, something depends on it)" >&2
@@ -3870,7 +3946,7 @@ cat > "$HOME/.config/hexciri/hooks/post-update.d/10-hexciri-trim-bloat" <<'HOOK_
 hexciri-trim-bloat 2>/dev/null || "$HOME/.local/bin/hexciri-trim-bloat" 2>/dev/null || true
 HOOK_EOF
 chmod +x "$HOME/.config/hexciri/hooks/post-update.d/10-hexciri-trim-bloat"
-info "Installed: hexciri-trim-bloat + post-update hook (foot/btop/apostrophe/pandoc-cli/ghostwriter/meld/ncspot/neovim/vim/obsidian/pinta/xterm/stoken stay removed)"
+info "Installed: hexciri-trim-bloat + post-update hook (foot/btop/apostrophe/pandoc-cli/ghostwriter/meld/ncspot/neovim/obsidian/pinta/xterm stay removed; vim/stoken stay installed, unremovable, entries hidden)"
 # First-update marker: the install itself is the first update, so mark it.
 # Without this, hexciri-update-available counts every pending pacman update
 # on first boot and the update icon never clears.
@@ -3964,6 +4040,7 @@ command -v gnome-calculator >/dev/null 2>&1 && info "  calculator: gnome-calcula
 command -v hexciri >/dev/null 2>&1 && info "  cli: hexciri present" || warn "  cli: hexciri NOT on PATH, hexciri plugin list will fail"
 command -v checkupdates >/dev/null 2>&1 && info "  update check: checkupdates present (update icon)" || warn "  update check: checkupdates NOT installed, update icon never shows"
 command -v eos-update >/dev/null 2>&1 && info "  update engine: eos-update present (repo + AUR, --aur)" || warn "  update engine: eos-update NOT installed, hexciri update falls back to pacman -Syu --noconfirm"
+grep -q '^ILoveCandy' /etc/pacman.conf 2>/dev/null && info "  pacman bars: ILoveCandy on (Pac-Man eating dots)" || warn "  pacman bars: ILoveCandy NOT set in /etc/pacman.conf, pacman shows the plain bar"
 command -v mise >/dev/null 2>&1 && info "  mise: $(mise --version 2>/dev/null || echo present)" || warn "  mise: NOT installed, Omarchy scripts that call mise will fail"
 [ -f /etc/mise/conf.d/hexciri-tools.toml ] && info "  mise tools: /etc/mise/conf.d/hexciri-tools.toml present (node, uv, gh, lazy; no AI agents, no Herdr)" || warn "  mise tools: /etc/mise/conf.d/hexciri-tools.toml missing"
 [ -f "$HOME/.config/kitty/kitty.conf" ] && info "  kitty config: ~/.config/kitty/kitty.conf present (theme include)" || warn "  kitty config: not placed, Kitty will not load theme colours"
@@ -3999,11 +4076,11 @@ Reboot, then check in order:
   15. fastfetch: run `fastfetch` in Kitty, Hexciri logo + layout, not stock, WM shows Hyprland | Quickshell, not Niri | Noctalia
   16. Spotify + Arch substitutes: Super+Shift+M opens Spotify, Super+Shift+Q opens the calculator (gnome-calculator), PRINT takes a screenshot (grim + slurp, saved to ~/Pictures/Screenshots). Super+Ctrl+Return (Herdr) is deliberately unbound, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.
 
-  17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update (eos-update --aur for repo + AUR, Hexciri self-update pulls nyx and re-runs the installer when it changed, mise up for mise tools). `hexciri-update` is the same script, and `hexciri update hexciri` re-runs just the Hexciri self-update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta, xterm, stoken and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). YAD settings is hidden, yad itself stays (EOS tools depend on it).
+  17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update (eos-update --aur for repo + AUR, Hexciri self-update pulls nyx and re-runs the installer when it changed, mise up for mise tools). `hexciri-update` is the same script, and `hexciri update hexciri` re-runs just the Hexciri self-update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, obsidian, pinta, xterm and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). vim and stoken stay installed, they cannot be removed (ex-vi-compat / openconnect depend on them), their entries are hidden instead, and the trim no longer tries them. YAD settings is hidden, yad itself stays (EOS tools depend on it).
 
   18. Menu audit 2026-11-23: Install and Remove subtrees were deleted then (install-*/remove-* were never in the fork), restored 2026-11-24 where a backing script exists (see item 21). Update > Channel is gone (Hexciri has no channels), Update > Hexciri is back (Phase 2, 2026-11-24, runs hexciri-update in a floating terminal), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (AI agents are out of scope, Herdr stays removed; mise itself is back in, Phase 2 2026-11-24, for the non-agent tools node, uv, gh). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
 
-  19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are removed for real this time (trim used sudo -n, which silently failed once the sudo timestamp expired); the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
+  19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are NOT removed (ex-vi-compat / openconnect depend on them, the trim stopped trying them 2026-11-24 after the first full update printed the refusal on every run), their entries are hidden with NoDisplay instead; the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
   20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now, fitted to the rendered content at launch (two-mode launch-about, --render measures logo + modules and resizes the window, no fixed 920x480); systemd-boot timeout 1s in every loader.conf AND the LoaderConfigTimeout EFI variable (bootctl set-timeout 1, the variable overrides loader.conf); Super+Shift+T runs btm (bottom package binary); LocalSend file picker is dark (theme name Adwaita in gtk-3.0/gtk-4.0 settings.ini, dconf color-scheme prefer-dark via dbus-run-session, FileChooser=gtk portal; Adwaita-dark is not a theme name); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
 
   21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back (Package, AUR, Web App, TUI, Style, Gaming and their Remove counterparts, kept only where the backing script exists in the fork; AI, services, terminals, Windows, preinstalls and dictation stay out, and install-browser stays out because its helper tree is not copied).
