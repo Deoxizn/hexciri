@@ -816,6 +816,17 @@ if [ -f "$FORK_CACHE_DIR/upstream-fingerprint" ] && [ -d "$FORK_CACHE_DIR/upstre
   rm -rf "$FORK_OUT"
   cp -a "$FORK_CACHE_DIR/upstream-out" "$FORK_OUT"
   info "Fork cache hit (upstream): Omarchy $PINNED_SHA unchanged, reusing cached upstream fork (no download, no re-copy, no re-rename)"
+  # Emergency-mode guard, 2026-11-24: a restored cache was trusted
+  # blindly, and the 0376cee update shipped an installed tree missing
+  # default/hypr/bootstrap.lua (Hyprland dofiles it first; missing =
+  # emergency mode, no binds) while the installer reported success.
+  # If the cached upstream tree lacks it, the cache is stale or
+  # incomplete: drop it and full re-fork below instead of shipping it.
+  if [ ! -f "$FORK_OUT/default/hypr/bootstrap.lua" ]; then
+    warn "Fork cache invalid: cached upstream tree is missing default/hypr/bootstrap.lua, dropping the cache and full re-forking"
+    rm -rf "$FORK_CACHE_DIR"
+    SKIP_UPSTREAM=0
+  fi
 else
   info "Fork cache miss (upstream): forking Omarchy $PINNED_SHA (full fork; per-file detail: $FORK_LOG)"
 fi
@@ -833,6 +844,17 @@ if [ "${SKIP_UPSTREAM:-0}" = "1" ] && [ -f "$FORK_CACHE_DIR/patch-fingerprint" ]
   _fc_bins="$(find "$FORK_OUT/bin" -type f 2>/dev/null | wc -l | tr -d ' ')"
   info "Fork cache hit: Omarchy $PINNED_SHA, fork unchanged, reusing cached fork ($_fc_files files, $_fc_themes themes, $_fc_bins bin scripts, no download, no re-fork)"
   unset _fc_files _fc_themes _fc_bins
+  # Same emergency-mode guard for the patched cache: if it lacks
+  # bootstrap.lua (or hexciri.lua) it is stale -- drop back to the
+  # cached upstream tree and re-apply patches instead of shipping it.
+  if [ ! -f "$FORK_OUT/default/hypr/bootstrap.lua" ] || [ ! -f "$FORK_OUT/default/hypr/hexciri.lua" ]; then
+    warn "Fork cache invalid: cached patched tree is missing default/hypr/bootstrap.lua or hexciri.lua, re-applying patches to the cached upstream tree"
+    rm -rf "$FORK_CACHE_DIR/fork-out" "$FORK_CACHE_DIR/patch-fingerprint" "$FORK_CACHE_DIR/fork-fingerprint"
+    SKIP_PATCHES=0
+    SKIP_FORK=0
+    rm -rf "$FORK_OUT"
+    cp -a "$FORK_CACHE_DIR/upstream-out" "$FORK_OUT"
+  fi
 elif [ "${SKIP_UPSTREAM:-0}" = "1" ]; then
   info "Fork cache hit (upstream only): patches changed, re-applying fork patches to the cached upstream tree (no download)"
 fi
@@ -1701,6 +1723,13 @@ if [ "${SKIP_UPSTREAM:-0}" = "0" ] && [ -n "${UP_FP:-}" ] && [ -n "${FORK_CACHE_
   cp -a "$FORK_OUT" "$FORK_CACHE_DIR/upstream-out"
   printf '%s\n' "$UP_FP" > "$FORK_CACHE_DIR/upstream-fingerprint"
   fork_detail "Upstream fork cache saved: $FORK_CACHE_DIR/upstream-out"
+fi
+# Emergency-mode guard, 2026-11-24: fail fast if the fork lost
+# bootstrap.lua, before patches run and before placement wipes the
+# last good /usr/share/hexciri. Hyprland dofiles this file first;
+# without it the next boot trips emergency mode with no binds.
+if [ "${SKIP_UPSTREAM:-0}" = "0" ] && [ ! -f "$FORK_OUT/default/hypr/bootstrap.lua" ]; then
+  die "fork lost default/hypr/bootstrap.lua (Hyprland dofiles it first; missing it trips emergency mode). Refusing to continue with a broken fork."
 fi
 
 # Patch guard: compat wiring + all fork patches run on the upstream
@@ -3712,6 +3741,7 @@ step "Verifying placement"
 [ -f "$HEXCIRI_PATH/shell/shell.qml" ] || die "missing: $HEXCIRI_PATH/shell/shell.qml"
 [ -f "$HEXCIRI_PATH/default/hypr/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/hexciri.lua"
 [ -f "$HEXCIRI_PATH/default/hypr/hexciri-compat.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/hexciri-compat.lua"
+[ -f "$HEXCIRI_PATH/default/hypr/bootstrap.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/bootstrap.lua (Hyprland dofiles it first; without it Hyprland trips emergency mode with no binds)"
 [ -f "$HEXCIRI_PATH/bin/hexciri-compat.sh" ] || die "missing: $HEXCIRI_PATH/bin/hexciri-compat.sh"
 [ -f "$HOME/.config/hypr/hyprland.lua" ] || die "missing: $HOME/.config/hypr/hyprland.lua"
 if grep -q 'default\.hypr\.omarchy' "$HOME/.config/hypr/hyprland.lua"; then
@@ -4752,7 +4782,7 @@ if command -v systemctl >/dev/null 2>&1; then
     HC_FAIL=1
   fi
 fi
-for _check in "$HEXCIRI_PATH/bin/hexciri-launch-shell" "$HEXCIRI_PATH/bin/hexciri-menu" "$HEXCIRI_PATH/bin/hexciri-shell" "$HEXCIRI_PATH/shell/shell.qml" "$HOME/.config/hypr/hyprland.lua" "$HOME/.config/hexciri/shell.json" /usr/share/wayland-sessions/hexciri.desktop; do
+for _check in "$HEXCIRI_PATH/bin/hexciri-launch-shell" "$HEXCIRI_PATH/bin/hexciri-menu" "$HEXCIRI_PATH/bin/hexciri-shell" "$HEXCIRI_PATH/shell/shell.qml" "$HEXCIRI_PATH/default/hypr/bootstrap.lua" "$HOME/.config/hypr/hyprland.lua" "$HOME/.config/hexciri/shell.json" /usr/share/wayland-sessions/hexciri.desktop; do
   if [ -e "$_check" ]; then
     hc_info "  present: $_check"
   else
@@ -4807,9 +4837,9 @@ if command -v mpv >/dev/null 2>&1; then hc_info "  video: mpv present"; else war
 if command -v gpu-screen-recorder >/dev/null 2>&1; then hc_info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
 if command -v localsend >/dev/null 2>&1; then hc_info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
 if command -v fastfetch >/dev/null 2>&1; then hc_info "  fastfetch: present"; else warn "  fastfetch: NOT installed"; fi
-if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then hc_info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
+if [ -f /etc/fastfetch/config.jsonc ]; then hc_info "  fastfetch config: /etc/fastfetch/config.jsonc present (Hexciri config)"; elif [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then hc_info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
 grep -q 'hexciri-launch-about --render' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q 'hexciri-launch-or-focus-tui --app-id=org.hexciri.about' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q '_about_fit' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && hc_info "  about: launch-about is the two-mode fastfetch (--render runs inside the terminal, no bash -c quoting trap)" || warn "  about: launch-about is not the two-mode --render script, System > About may open and close at once"
-grep -q 'icon.txt' /etc/fastfetch/config.jsonc 2>/dev/null && hc_info "  about logo: fastfetch config logo points at icon.txt" || warn "  about logo: fastfetch config logo does not point at icon.txt, About may render a blank logo column"
+if grep -q 'icon.txt' /etc/fastfetch/config.jsonc 2>/dev/null; then hc_info "  about logo: fastfetch config logo points at icon.txt"; elif grep -q 'hexciri-nb.png' /etc/fastfetch/config.jsonc 2>/dev/null && [ -f "$HOME/.config/fastfetch/hexciri-nb.png" ]; then hc_info "  about logo: fastfetch config logo points at hexciri-nb.png (present)"; else warn "  about logo: fastfetch config logo does not point at icon.txt or hexciri-nb.png, About may render a blank logo column"; fi
 if grep -q '^gtk-theme-name=Adwaita$' "$HOME/.config/gtk-4.0/settings.ini" 2>/dev/null && ! grep -q 'Adwaita-dark' "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini" 2>/dev/null; then hc_info "  gtk picker: settings.ini theme=Adwaita, no Adwaita-dark (GTK4 dark comes from prefer-dark)"; else warn "  gtk picker: settings.ini still names Adwaita-dark or is missing, file picker will come up light with ghost text"; fi
 if command -v dbus-run-session >/dev/null 2>&1; then _gtk_scheme_now="$(dbus-run-session -- gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || echo unknown)"; if [ "$_gtk_scheme_now" = "'prefer-dark'" ]; then hc_info "  gtk picker: dconf color-scheme=prefer-dark (portal dialog reads dconf on Wayland, not settings.ini)"; else warn "  gtk picker: dconf color-scheme=$_gtk_scheme_now, portal file picker may stay light (expected 'prefer-dark' for a dark theme)"; fi; unset _gtk_scheme_now; fi
 [ -x /usr/lib/hexciri/speedtest ] && hc_info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
