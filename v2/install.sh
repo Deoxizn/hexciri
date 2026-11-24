@@ -3437,7 +3437,7 @@ if pacman -Qem >/dev/null; then
   _aur_accessible=0
   if command -v hexciri-pkg-aur-accessible >/dev/null 2>&1; then
     hexciri-pkg-aur-accessible && _aur_accessible=1 || _aur_accessible=0
-  elif curl -sf --connect-timeout 30 --retry 3 --retry-delay 3 -A "hexciri-update" "https://aur.archlinux.org/rpc/?v=5&type=info&arg=base" >/dev/null 2>&1; then
+  elif curl -sf --connect-timeout 10 --retry 1 --retry-delay 2 -A "hexciri-update" "https://aur.archlinux.org/rpc/?v=5&type=info&arg=base" >/dev/null 2>&1; then
     _aur_accessible=1
   fi
   if [[ "$_aur_accessible" == "1" ]]; then
@@ -3683,6 +3683,34 @@ must_replace(_p,
     "    hexciri-restart-hyprctl && echo \"Hyprland config reloaded (hyprctl reload)\"\n"
     "  fi\nfi",
     "restart reloads Hyprland config after the shell restart")
+PY
+
+# 8e. Restart refreshes the stock system-update widget (2026-11-24, Devi:
+# its icon stayed on after an update because it only rechecks every 6h /
+# on network-online and nothing ever told it to refresh. Its own ShellIpc
+# refresh, same pattern as `hexciri-shell hexciri.dock refresh`.
+# Best-effort: the widget may not be in the active bar (Nyxiri bar uses
+# arch-updates).)
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
+import sys
+fork = sys.argv[1]
+def read(p):
+    with open(p) as f:
+        return f.read()
+def write(p, t):
+    with open(p, "w") as f:
+        f.write(t)
+def must_replace(path, old, new, what):
+    t = read(path)
+    assert old in t, what + ": pattern not found in " + path
+    assert t.count(old) == 1, what + ": pattern not unique in " + path
+    write(path, t.replace(old, new, 1))
+    print("  update: " + what)
+_p = fork + "/bin/hexciri-update-restart"
+must_replace(_p,
+    '    hexciri-restart-hyprctl && echo "Hyprland config reloaded (hyprctl reload)"\n  fi\nfi',
+    '    hexciri-restart-hyprctl && echo "Hyprland config reloaded (hyprctl reload)"\n  fi\n\n  # Hexciri: tell the stock system-update widget to recheck now\n  # (2026-11-24, Devi: its icon stayed on after an update because it\n  # only rechecks every 6h / on network-online and nothing ever told\n  # it to refresh. Its own ShellIpc refresh, same pattern as\n  # `hexciri-shell hexciri.dock refresh`. Best-effort: the widget may\n  # not be in the active bar (Nyxiri bar uses arch-updates).)\n  hexciri-shell hexciri.system-update refresh >/dev/null 2>&1 || true\nfi',
+    "restart refreshes the system-update widget after an update")
 PY
 
 # 9. pkg-prune: whole-file rewrite (2026-11-24, Devi: Prune package
@@ -4018,10 +4046,23 @@ cat > "$FORK_OUT/bin/hexciri-update-available" <<'AVAIL_EOF'
 set -euo pipefail
 
 updates=()
-for _checkout in "$HOME/.local/opt/hexciri" "$HOME/.local/opt/hexciri-nyx"; do
+# Hexciri (2026-11-24, Devi: stock system-update icon stayed on after an
+# update): upstream omarchy-update-available fetched before rev-list, this
+# rewrite did not, so behind was counted against a stale upstream ref.
+# Fetch first (best-effort, timeout 10), and only count the v1 dev
+# checkout (~/.local/opt/hexciri) when the v2 nyx checkout does not
+# exist: a stale v1 checkout behind its upstream lit the icon forever.
+_checkouts=("$HOME/.local/opt/hexciri-nyx" "$HOME/.local/opt/hexciri")
+if [[ ! -d ${_checkouts[0]}/.git ]]; then
+  _checkouts=("${_checkouts[1]}")
+else
+  _checkouts=("${_checkouts[0]}")
+fi
+for _checkout in "${_checkouts[@]}"; do
   if [[ -d $_checkout/.git ]]; then
     upstream="$(git -C "$_checkout" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
     if [[ -n $upstream ]]; then
+      GIT_TERMINAL_PROMPT=0 timeout 10 git -C "$_checkout" fetch --quiet 2>/dev/null || true
       behind="$(git -C "$_checkout" rev-list --count "HEAD..$upstream" 2>/dev/null || echo 0)"
       if (( behind > 0 )); then
         commit_label=commits
@@ -4031,7 +4072,7 @@ for _checkout in "$HOME/.local/opt/hexciri" "$HOME/.local/opt/hexciri-nyx"; do
     fi
   fi
 done
-unset _checkout
+unset _checkout _checkouts
 
 mapfile -t _pending < <(checkupdates --nocolor 2>/dev/null || true)
 updates+=("${_pending[@]}")
@@ -5040,6 +5081,9 @@ grep -q 'AUR packages are up to date' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs
 for _sp in hexciri-update-pkg-prune hexciri-update-orphan-pkgs hexciri-update-mise hexciri-update-aur-pkgs hexciri-update-restart; do grep -qx 'echo' "$HEXCIRI_PATH/bin/$_sp" && die "$_sp still prints a bare blank line (update section spacing, 2026-11-24: the header's leading newline is the only separator)"; done
 grep -q '_restart_needs_blank' "$HEXCIRI_PATH/bin/hexciri-update-restart" || die "hexciri-update-restart has no conditional top blank (update section spacing, 2026-11-24)"
 grep -q 'Hyprland config reloaded (hyprctl reload)' "$HEXCIRI_PATH/bin/hexciri-update-restart" || die "hexciri-update-restart does not reload Hyprland after the shell restart (emergency mode returns after every update, 2026-11-24)"
+grep -q 'hexciri-shell hexciri.system-update refresh' "$HEXCIRI_PATH/bin/hexciri-update-restart" || die "hexciri-update-restart does not refresh the system-update widget after an update (stock icon stays on up to 6h, 2026-11-24)"
+grep -q 'timeout 10 git -C "$_checkout" fetch --quiet' "$HEXCIRI_PATH/bin/hexciri-update-available" || die "hexciri-update-available does not fetch before counting git behind (stale ref keeps the update icon on, 2026-11-24)"
+grep -q 'connect-timeout 10 --retry 1' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" || die "hexciri-update-aur-pkgs still probes the AUR with a 30s x3 curl (up to ~99s before yay starts, 2026-11-24)"
 grep -q 'already updated by eos-update --aur, skipping' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" && die "hexciri-update-aur-pkgs still prints the noisy skipping line"
 [ -x "$HEXCIRI_PATH/bin/hexciri-pkg-aur-accessible" ] || die "hexciri-pkg-aur-accessible missing from fork (hexciri-update-aur-pkgs calls it, 2026-11-24 live log: command not found)"
 grep -q 'HEXCIRI_UPDATE_REEXECED' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not skip the second confirm on a self-update re-exec"
