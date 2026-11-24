@@ -1,0 +1,301 @@
+#!/bin/bash
+
+# omarchy:summary=Sync git themes listed in ~/.config/hexciri/themes.list
+# omarchy:args=[--dry-run] [--no-remove]
+# omarchy:examples=hexciri theme sync
+# omarchy:examples=hexciri theme sync --dry-run
+#
+# Hexciri theme sync: bulk git-theme sync driven by a declarative list.
+#
+#   ~/.config/hexciri/themes.list — one git URL per line, `#` comments,
+#   blank lines ignored. The installer seeds it (comments only); Devi
+#   adds the theme repos he wants.
+#
+# What one run does, in order:
+#   1. Clone every listed repo that is missing from
+#      ~/.config/hexciri/themes/ (name derived exactly like
+#      `hexciri theme install` derives it, so a theme installed by hand
+#      and one synced from the list land under the same directory).
+#   2. `git pull --ff-only` every listed theme already present.
+#      A diverged checkout is left alone (warned, counted as failed);
+#      sync never force-resets or discards local theme edits.
+#   3. Declarative removal: a real git checkout in ~/.config/hexciri/themes/
+#      whose name is NOT in the list is removed. Guarded hard:
+#        - only inside ~/.config/hexciri/themes/ (never stock
+#          /usr/share/hexciri/themes, never anywhere else);
+#        - symlinks are never removed (theme-link symlinks are managed
+#          by theme-link, and their targets live outside this dir);
+#        - a directory without .git is never removed (a hand-made theme
+#          is user work, not a sync-managed checkout);
+#        - the current theme (from ~/.local/state/hexciri/current/theme.name)
+#          is never removed.
+#      Removal runs only when the list declares at least one theme: an
+#      empty or missing list never deletes anything. A missing list file
+#      refuses outright (prints how to create it) instead of syncing.
+#   4. At most one theme apply, at the end, and only if the current theme
+#      is gone: if theme.name names a theme that exists in neither the
+#      user themes dir nor the stock themes dir, the first listed theme
+#      present on disk is applied once with hexciri-theme-set. The
+#      removal guard above never removes the current theme, so this
+#      normally never fires; it covers a theme deleted outside sync
+#      (by hand, or by an earlier partial run), so sync never leaves
+#      the session pointing at a theme that no longer exists.
+#
+# This is a CLI tool, not part of `hexciri update`: it never runs
+# unattended, and removing themes is a deliberate act, not a side
+# effect of updating the system. Settings has no bulk button for it
+# on purpose (2026-11-24); run `hexciri theme sync` when the list
+# changes. `--dry-run` prints every planned clone/pull/remove and
+# changes nothing; `--no-remove` skips step 3 only.
+#
+# Exit status: 0 when every listed theme cloned/pulled cleanly, 1 when
+# any theme failed, the list file is missing, or a removal was refused
+# by a guard. A failure on one theme never stops the rest.
+
+set -uo pipefail
+
+THEMES_LIST="${HEXCIRI_THEMES_LIST:-$HOME/.config/hexciri/themes.list}"
+THEMES_DIR="$HOME/.config/hexciri/themes"
+STOCK_THEMES_DIR="${HEXCIRI_PATH:-/usr/share/hexciri}/themes"
+CURRENT_NAME_FILE="$HOME/.local/state/hexciri/current/theme.name"
+
+DRY_RUN=0
+NO_REMOVE=0
+
+if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
+  cat <<'EOF'
+Usage: hexciri theme sync [--dry-run] [--no-remove]
+
+Syncs the git themes listed in ~/.config/hexciri/themes.list:
+clones missing ones, pulls present ones (--ff-only), and removes
+git checkouts in ~/.config/hexciri/themes/ that the list no longer
+declares. Never touches stock themes, symlinks (theme-link),
+hand-made themes (no .git), or the current theme.
+
+  --dry-run    Print what would happen, change nothing.
+  --no-remove  Clone/pull only, skip the removal pass.
+EOF
+  exit 0
+fi
+
+for _arg in "$@"; do
+  case "$_arg" in
+  --dry-run) DRY_RUN=1 ;;
+  --no-remove) NO_REMOVE=1 ;;
+  *)
+    echo "hexciri-theme-sync: unknown option: $_arg (usage: hexciri theme sync [--dry-run] [--no-remove])" >&2
+    exit 1
+    ;;
+  esac
+done
+unset _arg
+
+fail_count=0
+removed_count=0
+
+# Name derivation, byte-identical to hexciri-theme-install (upstream
+# omarchy-theme-install): basename of the repo path, strip .git, strip
+# a leading omarchy- and a trailing -theme, lowercase. Sync must use
+# exactly this spelling or a hand-installed theme and its list entry
+# land under different names and the removal pass deletes the wrong one.
+theme_name_for_url() {
+  local _repo="$1" _path _name
+  _path="$_repo"
+  if [[ $_path != *"://"* && $_path == *:*/* ]]; then
+    _path="${_path#*:}"
+  fi
+  _name="$(basename "$_path" .git | sed -E 's/^omarchy-//; s/-theme$//' | tr '[:upper:]' '[:lower:]')"
+  printf '%s' "$_name"
+}
+
+valid_theme_name() {
+  [[ $1 =~ ^[a-z0-9][a-z0-9-]*$ ]]
+}
+
+# The removal pass deletes directories, so the target root is nailed
+# down first: it must be exactly $HOME/.config/hexciri/themes, never a
+# stock dir, never a symlink, never empty.
+if [[ -z $THEMES_DIR || $THEMES_DIR != "$HOME/.config/hexciri/themes" ]]; then
+  echo "hexciri-theme-sync: refusing: themes dir is not \$HOME/.config/hexciri/themes ($THEMES_DIR)" >&2
+  exit 1
+fi
+
+if [[ ! -f $THEMES_LIST ]]; then
+  echo "hexciri-theme-sync: no list file: $THEMES_LIST" >&2
+  echo "Create it, one git URL per line, '#' comments, blank lines ignored:" >&2
+  echo "  # ~/.config/hexciri/themes.list" >&2
+  echo "  # https://github.com/example/omarchy-example-theme.git" >&2
+  echo "Nothing was synced and nothing was removed." >&2
+  exit 1
+fi
+
+# Parse the list: full-line # comments and blank lines ignored, one
+# URL per remaining line. A duplicate URL is synced once (second
+# occurrence is a no-op, not an error).
+declare -a WANTED_URLS=()
+declare -a WANTED_NAMES=()
+while IFS= read -r _line || [[ -n $_line ]]; do
+  _line="${_line%%$'\r'}"
+  _trimmed="$(printf '%s' "$_line" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  [[ -z $_trimmed ]] && continue
+  [[ $_trimmed == \#* ]] && continue
+  _name="$(theme_name_for_url "$_trimmed")"
+  if ! valid_theme_name "$_name"; then
+    echo "hexciri-theme-sync: skipping unusable URL (no theme name derives from it): $_trimmed" >&2
+    fail_count=$((fail_count + 1))
+    continue
+  fi
+  _seen=0
+  for _w in "${WANTED_NAMES[@]}"; do
+    [[ $_w == "$_name" ]] && _seen=1
+  done
+  if [[ $_seen == 0 ]]; then
+    WANTED_URLS+=("$_trimmed")
+    WANTED_NAMES+=("$_name")
+  fi
+done <"$THEMES_LIST"
+unset _line _trimmed _name _seen _w
+
+if [[ ${#WANTED_NAMES[@]} -eq 0 ]]; then
+  echo "hexciri-theme-sync: list declares no themes ($THEMES_LIST), nothing to clone or pull."
+  echo "Removal skipped on an empty list: add a theme URL to the list first."
+  exit 0
+fi
+
+current_theme=""
+if [[ -f $CURRENT_NAME_FILE ]]; then
+  current_theme="$(tr -d '[:space:]' <"$CURRENT_NAME_FILE" 2>/dev/null || echo "")"
+fi
+
+# Steps 1+2: clone missing, pull present. One bad theme never stops
+# the rest; failures are counted and reported at the end.
+for _i in "${!WANTED_URLS[@]}"; do
+  _url="${WANTED_URLS[$_i]}"
+  _name="${WANTED_NAMES[$_i]}"
+  _dir="$THEMES_DIR/$_name"
+  if [[ -L $_dir ]]; then
+    echo "hexciri-theme-sync: skip $_name (symlink, managed by theme-link, not by sync)"
+    continue
+  fi
+  if [[ -d $_dir ]]; then
+    if [[ ! -d $_dir/.git ]]; then
+      echo "hexciri-theme-sync: skip $_name (exists but is not a git checkout, left alone)"
+      continue
+    fi
+    if [[ $DRY_RUN == 1 ]]; then
+      echo "hexciri-theme-sync: would pull --ff-only: $_name ($_url)"
+      continue
+    fi
+    if git -C "$_dir" pull --ff-only --quiet 2>/tmp/hexciri-theme-sync-pull.err; then
+      echo "hexciri-theme-sync: updated: $_name"
+    else
+      echo "hexciri-theme-sync: pull failed (diverged or no upstream?), kept as-is: $_name ($_url)" >&2
+      sed 's/^/  git: /' /tmp/hexciri-theme-sync-pull.err >&2 || true
+      fail_count=$((fail_count + 1))
+    fi
+    rm -f /tmp/hexciri-theme-sync-pull.err
+    continue
+  fi
+  if [[ $DRY_RUN == 1 ]]; then
+    echo "hexciri-theme-sync: would clone: $_url -> $_name"
+    continue
+  fi
+  mkdir -p "$THEMES_DIR"
+  if git clone --quiet -- "$_url" "$_dir" 2>/tmp/hexciri-theme-sync-clone.err; then
+    echo "hexciri-theme-sync: cloned: $_name ($_url)"
+  else
+    echo "hexciri-theme-sync: clone failed: $_url" >&2
+    sed 's/^/  git: /' /tmp/hexciri-theme-sync-clone.err >&2 || true
+    fail_count=$((fail_count + 1))
+  fi
+  rm -f /tmp/hexciri-theme-sync-clone.err
+done
+unset _i _url _name _dir
+
+# Step 3: declarative removal. Only real git checkouts, only inside
+# THEMES_DIR, never symlinks, never the current theme.
+if [[ $NO_REMOVE == 1 ]]; then
+  echo "hexciri-theme-sync: removal skipped (--no-remove)"
+elif [[ $DRY_RUN == 1 ]]; then
+  for _dir in "$THEMES_DIR"/*/; do
+    [[ -d $_dir ]] || continue
+    _name="$(basename "$_dir")"
+    [[ -L $_dir ]] && continue
+    [[ -d $_dir/.git ]] || continue
+    [[ -n $current_theme && $_name == "$current_theme" ]] && continue
+    _wanted=0
+    for _w in "${WANTED_NAMES[@]}"; do
+      [[ $_w == "$_name" ]] && _wanted=1
+    done
+    [[ $_wanted == 1 ]] && continue
+    echo "hexciri-theme-sync: would remove (not in list): $_name"
+  done
+  unset _dir _name _wanted _w
+else
+  for _dir in "$THEMES_DIR"/*/; do
+    [[ -d $_dir ]] || continue
+    # Containment: the glob is rooted at THEMES_DIR, but a name with a
+    # slash can never come out of basename; re-check anyway, rm -rf
+    # deserves paranoia.
+    _name="$(basename "$_dir")"
+    [[ $_dir == "$THEMES_DIR/$_name/" ]] || { echo "hexciri-theme-sync: refusing to remove path outside themes dir: $_dir" >&2; fail_count=$((fail_count + 1)); continue; }
+    [[ -L $_dir ]] && continue
+    [[ -d $_dir/.git ]] || continue
+    if [[ -n $current_theme && $_name == "$current_theme" ]]; then
+      echo "hexciri-theme-sync: keep $_name (current theme, never removed)"
+      continue
+    fi
+    _wanted=0
+    for _w in "${WANTED_NAMES[@]}"; do
+      [[ $_w == "$_name" ]] && _wanted=1
+    done
+    if [[ $_wanted == 1 ]]; then
+      continue
+    fi
+    if rm -rf -- "$_dir"; then
+      echo "hexciri-theme-sync: removed (not in list): $_name"
+      removed_count=$((removed_count + 1))
+    else
+      echo "hexciri-theme-sync: failed to remove: $_name" >&2
+      fail_count=$((fail_count + 1))
+    fi
+  done
+  unset _dir _name _wanted _w
+fi
+
+# Step 4: at most one apply, only if the current theme is gone from
+# both the user themes dir and the stock themes dir. The removal guard
+# never removes the current theme, so this fires only when the theme
+# vanished outside sync. A dry run reports, never applies.
+if [[ -n $current_theme ]]; then
+  if [[ ! -d $THEMES_DIR/$current_theme && ! -d $STOCK_THEMES_DIR/$current_theme ]]; then
+    _fallback=""
+    for _name in "${WANTED_NAMES[@]}"; do
+      if [[ -d $THEMES_DIR/$_name ]]; then
+        _fallback="$_name"
+        break
+      fi
+    done
+    if [[ -n $_fallback ]]; then
+      if [[ $DRY_RUN == 1 ]]; then
+        echo "hexciri-theme-sync: would apply once (current theme '$current_theme' is gone): $_fallback"
+      elif command -v hexciri-theme-set >/dev/null 2>&1; then
+        echo "hexciri-theme-sync: current theme '$current_theme' is gone, applying once: $_fallback"
+        hexciri-theme-set "$_fallback" >/dev/null 2>&1 || { echo "hexciri-theme-sync: fallback apply failed: $_fallback" >&2; fail_count=$((fail_count + 1)); }
+      else
+        echo "hexciri-theme-sync: current theme '$current_theme' is gone, but hexciri-theme-set is not on PATH, no fallback applied" >&2
+        fail_count=$((fail_count + 1))
+      fi
+    else
+      echo "hexciri-theme-sync: current theme '$current_theme' is gone and no listed theme is on disk, nothing to apply" >&2
+    fi
+    unset _fallback _name
+  fi
+fi
+
+if [[ $fail_count -gt 0 ]]; then
+  echo "hexciri-theme-sync: done with $fail_count failure(s), $removed_count theme(s) removed." >&2
+  exit 1
+fi
+echo "hexciri-theme-sync: done, $removed_count theme(s) removed."
+exit 0

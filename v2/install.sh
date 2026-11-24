@@ -213,7 +213,7 @@ patch_fingerprint() {
   {
     sed -n '/^# --- Wire the compat alias in, before placement ---/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
     sed -n '/^# --- Hexciri Settings, Hexciri shell plugin/,/^step "Installing Hexciri theme hooks/p' "$INSTALLER_DIR/install.sh" | sha256sum | cut -d' ' -f1
-    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings"; do
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
@@ -460,7 +460,7 @@ current_theme_name() {
 # no fork, no theme re-apply, no settings touched at all.
 if [ "${LIGHT_SYNC:-0}" = "1" ]; then
   _ls_sha="$(sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1)"
-  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link hexciri-web-search hexciri-settings-tabs hexciri-launch-settings; do
+  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link hexciri-theme-sync hexciri-web-search hexciri-settings-tabs hexciri-launch-settings; do
     if [ -f "$HEXCIRI_REPO_ROOT/v2/$_ls_f" ] && [ -d /usr/share/hexciri/bin ]; then
       if ! cmp -s "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" 2>/dev/null; then
         sudo install -Dm755 "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" && info "Light sync: updated /usr/share/hexciri/bin/$_ls_f"
@@ -3779,6 +3779,21 @@ if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" ]; then
 else
   die "v2/hexciri-theme-link not in the installer tree, hexciri theme link will not exist"
 fi
+# hexciri-theme-sync (repo file v2/hexciri-theme-sync): `hexciri theme
+# sync` bulk git-theme sync from ~/.config/hexciri/themes.list
+# (clone missing, pull present --ff-only, declarative removal guarded
+# to ~/.config/hexciri/themes/, never stock/symlinks/current theme).
+# The dispatcher already allows theme-* bins, so this lands as the
+# theme sync command with no allowlist change. Copied here like
+# hexciri-theme-link; the list file itself is seeded by the theme-link
+# step below, never overwritten.
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" "$FORK_OUT/bin/hexciri-theme-sync"
+  chmod +x "$FORK_OUT/bin/hexciri-theme-sync"
+  info "  theme sync: hexciri-theme-sync installed (hexciri theme sync [--dry-run] [--no-remove])"
+else
+  die "v2/hexciri-theme-sync not in the installer tree, hexciri theme sync will not exist"
+fi
 # hexciri-web-search (repo file v2/hexciri-web-search): Super+Shift+S
 # web search. v1 web search without fuzzel: prompt via
 # hexciri-menu-input (QS menu), provider table + state file kept from
@@ -6708,11 +6723,10 @@ unset SETTINGS_PLUGIN_ID SETTINGS_PLUGIN_DIR SETTINGS_PLUGIN_URL _HEXCIRI_CLI _H
 #     disable). shell.json and plugin config dirs (~/.config/pizza.dirty.*,
 #     e.g. the clock's calendars.json) are never touched by either the
 #     remove or the re-clone, so settings survive a re-add.
-#   * wallcraft nyx == main at 1f635bb, NO port yet (blocked pending
-#     Devi's go-ahead on execution risk). When opted in / already
-#     installed, it is re-added from nyx so the branch is right when
-#     the port lands, but it still carries omarchy paths until then;
-#     NOT claimed ported anywhere here.
+#   * wallcraft ported to Hexciri 2026-11-24 (nyx, clonedFrom
+#     hexciri.background, hexciri paths/commands, theme-set
+#     skip-background kept on the OMARCHY_ spelling the fork still
+#     reads). Re-added from nyx like the rest here, opt-in only.
 # Best-effort, never dies: a failed clone/update warns, the rest of the
 # install still lands, and the next hexciri update retries it.
 step "Nyxiri plugins (opt-in, nyx branch: re-add if installed, install only with --with-nyxiri)"
@@ -6971,6 +6985,26 @@ if command -v theme-link >/dev/null 2>&1; then
   fi
 fi
 unset THEME_LINK_SRC THEME_LINK_PIN
+# themes.list seed-once, never overwrite: the declarative list
+# `hexciri theme sync` reads. Comments only on first seed; Devi adds
+# the theme repos he wants, one git URL per line. A missing list file
+# makes theme-sync refuse outright, and an empty list never removes
+# anything, so seeding this file can never delete a theme.
+if [ ! -f "$HOME/.config/hexciri/themes.list" ]; then
+  mkdir -p "$HOME/.config/hexciri/themes"
+  cat > "$HOME/.config/hexciri/themes.list" <<'THEMES_LIST_EOF'
+# Hexciri themes, one git URL per line. `hexciri theme sync` clones the
+# missing ones, pulls the present ones (--ff-only), and removes git
+# checkouts in ~/.config/hexciri/themes/ that are no longer listed.
+# Never touches stock themes, theme-link symlinks, hand-made themes,
+# or the current theme. Run `hexciri theme sync --dry-run` first.
+# Example (commented out, add yours below):
+# https://github.com/example/omarchy-example-theme.git
+THEMES_LIST_EOF
+  info "  themes.list seeded: ~/.config/hexciri/themes.list (comments only, add theme URLs to sync them)"
+else
+  info "  themes.list kept: ~/.config/hexciri/themes.list (re-run, your list preserved)"
+fi
 
 # Minimal re-apply: Spotify wrapper + trim run in full mode and in
 # --re-apply-provision mode. --re-apply (fork patch) skips them.
@@ -7287,6 +7321,7 @@ command -v xdg-terminal-exec >/dev/null 2>&1 && hc_info "  xdg-terminal-exec: pr
 if command -v spotify >/dev/null 2>&1; then hc_info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then hc_info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
 command -v gnome-calculator >/dev/null 2>&1 && hc_info "  calculator: gnome-calculator present (Super+Shift+Q / Super+Shift+C)" || warn "  calculator: gnome-calculator NOT installed, Super+Shift+Q / Super+Shift+C will fail"
 [ -x "$HEXCIRI_PATH/bin/hexciri-web-search" ] && hc_info "  web search: hexciri-web-search present (Super+Shift+S, QS prompt, Brave Origin)" || warn "  web search: hexciri-web-search missing from $HEXCIRI_PATH/bin, Super+Shift+S will fail"
+[ -x "$HEXCIRI_PATH/bin/hexciri-theme-sync" ] && hc_info "  theme sync: hexciri-theme-sync present (hexciri theme sync, bulk git themes from ~/.config/hexciri/themes.list)" || warn "  theme sync: hexciri-theme-sync missing from $HEXCIRI_PATH/bin, hexciri theme sync will fail"
 command -v hexciri >/dev/null 2>&1 && hc_info "  cli: hexciri present" || warn "  cli: hexciri NOT on PATH, hexciri plugin list will fail"
 command -v checkupdates >/dev/null 2>&1 && hc_info "  update check: checkupdates present (update icon)" || warn "  update check: checkupdates NOT installed, update icon never shows"
 command -v eos-update >/dev/null 2>&1 && hc_info "  update engine: eos-update present (repo + AUR, --aur)" || warn "  update engine: eos-update NOT installed, hexciri update falls back to pacman -Syu --noconfirm"
