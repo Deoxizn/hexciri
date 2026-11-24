@@ -3994,6 +3994,7 @@ _pending="$(wc -l < "$_pending_file" | tr -d ' ')"
 if [[ "$_checkupdates_status" == "1" ]]; then
   _pending="$(pacman -Qu 2>/dev/null | wc -l | tr -d ' ')"
 fi
+_pending_list="$(cat "$_pending_file" 2>/dev/null || true)"
 rm -f "$_pending_file"
 if [[ "$_pending" == "0" ]]; then
   echo "System packages are up to date"
@@ -4043,13 +4044,56 @@ if [[ "$_su_status" == "0" ]]; then
   if [[ "$_upgraded" == "0" ]] && ! grep -q 'there is nothing to do' "$_su_log" 2>/dev/null; then
     _upgraded="$_pending"
   fi
+  # DB race / mirror lag retry (2026-11-24, Devi: zxing-cpp 3.2.0-1
+  # listed by checkupdates, pacman -Su said "there is nothing to do").
+  # checkupdates syncs its own temp DB, pacman -Su uses the main DB
+  # synced seconds earlier: the two syncs can hit different geo-mirror
+  # backends, and a package built ~90 min earlier can be on one and
+  # not the other. One forced re-sync (-Syy, which re-downloads the
+  # DBs instead of trusting the "already up to date" shortcut and can
+  # land on a fresher mirror) + a re-count against the main DB (the DB
+  # -Su actually uses), then a second -Su, before giving up. -Syy
+  # here is safe: -Su runs immediately after, in this same script,
+  # so there is no -Sy-without--Su window.
+  if [[ "$_upgraded" == "0" ]] && [[ "$_pending" != "0" ]]; then
+    _retry_log="$(mktemp /tmp/hexciri-syspkgs-retry.XXXXXX)"
+    if LC_ALL=C hexciri-update-pacman -Syy --noconfirm >"$_retry_log" 2>&1; then
+      _requ="$(pacman -Qu 2>/dev/null | wc -l | tr -d ' ')"
+      if [[ "$_requ" != "0" ]]; then
+        _su_log2="$(mktemp /tmp/hexciri-syspkgs-su2.XXXXXX)"
+        LC_ALL=C hexciri-update-pacman -Su --noconfirm \
+          --overwrite '/usr/share/hexciri/*' 2>"$errors" | tee "$_su_log2"
+        _su2_status="${PIPESTATUS[0]}"
+        if [[ "$_su2_status" == "0" ]]; then
+          _upgraded="$(grep -cE '(\\([0-9]+/[0-9]+\\) )?upgrading ' "$_su_log2" 2>/dev/null || true)"
+          _upgraded="$(echo "$_upgraded" | tr -d ' ')"
+          if [[ "$_upgraded" == "0" ]] && ! grep -q 'there is nothing to do' "$_su_log2" 2>/dev/null; then
+            _upgraded="$_requ"
+          fi
+        fi
+        rm -f "$_su_log2"
+      fi
+    fi
+    rm -f "$_retry_log"
+  fi
   rm -f "$_su_log"
   _pacnew="$(find /etc -name '*.pacnew' 2>/dev/null | wc -l | tr -d ' ')"
   if [[ "$_pacnew" != "0" ]]; then
     echo "Note: $_pacnew .pacnew file(s) in /etc need review (run pacdiff)" >&2
   fi
   if [[ "$_upgraded" == "0" ]]; then
-    echo "System packages are up to date"
+    # Never claim up to date when checkupdates counted something and
+    # pacman upgraded nothing: that is the zxing-cpp case above, and
+    # "up to date" hides a real pending package behind a stale badge.
+    if [[ "$_pending" != "0" ]]; then
+      echo "Note: checkupdates listed $_pending update(s) but pacman found nothing to upgrade (mirror DB lag?)"
+      if [[ -n "$_pending_list" ]]; then
+        printf '%s\n' "$_pending_list"
+      fi
+      echo "Re-run hexciri update later; the badge clears once the mirror catches up."
+    else
+      echo "System packages are up to date"
+    fi
   else
     echo "System packages updated ($_upgraded package(s))"
   fi
@@ -5141,6 +5185,8 @@ grep -q 'already updated by eos-update --aur, skipping' "$HEXCIRI_PATH/bin/hexci
 [ -x "$HEXCIRI_PATH/bin/hexciri-pkg-aur-accessible" ] || die "hexciri-pkg-aur-accessible missing from fork (hexciri-update-aur-pkgs calls it, 2026-11-24 live log: command not found)"
 grep -q 'HEXCIRI_UPDATE_REEXECED' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not skip the second confirm on a self-update re-exec"
 grep -q '_upgraded' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs does not count real upgrades (it claimed updated (1) after nothing to do)"
+grep -q 'mirror DB lag' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs still claims up to date when checkupdates counted updates pacman skipped (zxing-cpp 3.2.0-1, 2026-11-24)"
+grep -q 'hexciri-update-pacman -Syy' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs has no forced re-sync retry for the checkupdates/pacman DB race (zxing-cpp, 2026-11-24)"
 grep -q 'endeavouros repo not found' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs has no endeavouros-repo check (EOS pkgs must still update via pacman)"
 [ -f "$HEXCIRI_PATH/.fork-fingerprint" ] || die "fork fingerprint missing, hexciri update cannot tell if the fork changed"
 [ -f "$HEXCIRI_PATH/.patch-fingerprint" ] || die "patch fingerprint missing, hexciri update cannot tell if the fork patches changed"
