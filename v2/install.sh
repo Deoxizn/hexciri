@@ -1456,6 +1456,13 @@ HEXCIRI_LOGO_EOF
   # kitty.conf. Without this file Kitty never loads the theme colours.
   copy_subset "$OMARCHY_SRC/config/kitty" "$FORK_OUT/config/kitty" "config/kitty/"
 
+  # Tmux config: hexciri-menu-tmux-keybindings (Learn > Tmux) falls back
+  # to $HEXCIRI_PATH/config/tmux/tmux.conf when ~/.config/tmux/tmux.conf
+  # is absent, and Super+Alt+Return opens tmux in Kitty. This copy was
+  # missing, so Learn > Tmux died with "Tmux config not found" even
+  # though tmux itself is in APP_PKGS (2026-11-24).
+  copy_subset "$OMARCHY_SRC/config/tmux" "$FORK_OUT/config/tmux" "config/tmux/"
+
   # Terminal preference list: launch-terminal's fast path reads
   # xdg-terminals.list (kitty.desktop after the rename map) instead of
   # calling xdg-terminal-exec. Optional: falls back to xdg-terminal-exec.
@@ -2792,6 +2799,37 @@ else:
 if m != m_orig:
     with open(menu, "w") as f:
         f.write(m)
+
+# 2b. Learn menu rework (2026-11-24, Devi: tmux not installed?, no kitty
+# link, QS missing). Audit of all 9 upstream Learn rows: keybindings /
+# hexciri / hyprland / arch / bash kept (all live); neovim -> zed (neovim
+# is trimmed in v2, Zed is the default editor); community dropped (Omarchy
+# Discord invite, Hexciri has no Discord); fish + kitty + quickshell added
+# (interactive shell, default terminal, the shell itself). Tmux row kept,
+# its backing config is copied into the fork above.
+with open(menu) as f:
+    _llines = f.read().splitlines()
+_learn_out = []
+_learn_changed = []
+for _line in _llines:
+    _k = _row_key(_line)
+    if _k == "learn.neovim":
+        _learn_out.append("  \"learn.zed\": {\"icon\":\"\uf15c\",\"label\":\"Zed\",\"action\":\"hexciri-launch-webapp 'https://zed.dev/docs'\"},")
+        _learn_changed.append("learn.neovim -> learn.zed (neovim trimmed in v2)")
+        continue
+    if _k == "learn.community":
+        _learn_changed.append("learn.community dropped (Omarchy Discord invite, Hexciri has none)")
+        continue
+    _learn_out.append(_line)
+    if _k == "learn.bash" and not any('"learn.fish"' in _l for _l in _llines):
+        _learn_out.append("  \"learn.fish\": {\"icon\":\"\U000f1183\",\"label\":\"Fish\",\"action\":\"hexciri-launch-webapp 'https://fishshell.com/docs/current/'\"},")
+        _learn_out.append("  \"learn.kitty\": {\"icon\":\"\ue795\",\"label\":\"Kitty\",\"action\":\"hexciri-launch-webapp 'https://sw.kovidgoyal.net/kitty/'\"},")
+        _learn_out.append("  \"learn.quickshell\": {\"icon\":\"\U000f09d1\",\"label\":\"Quickshell\",\"action\":\"hexciri-launch-webapp 'https://quickshell.org/docs/'\"},")
+        _learn_changed.append("learn.fish + learn.kitty + learn.quickshell added")
+with open(menu, "w") as f:
+    f.write("\n".join(_learn_out) + "\n")
+if _learn_changed:
+    changed.append("menu learn rework: " + "; ".join(_learn_changed))
 
 # 3. hexciri-shell: default HEXCIRI_PATH instead of failing when unset.
 sh = root + "/bin/hexciri-shell"
@@ -5309,6 +5347,13 @@ grep -q '/usr/share/hexciri/bin/hexciri-shell shell toggle hexciri.menu' "$HEXCI
 grep -q '/usr/share/hexciri/bin/hexciri-shell hexciri.dock apps' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu apps row does not call hexciri-shell by absolute path"
 grep -q 'signal pressed(int button, int modifiers)' "$HEXCIRI_PATH/shell/Ui/WidgetButton.qml" || die "WidgetButton does not forward click modifiers, Shift+right-click settings cannot be told from plain right-click (2026-11-24)"
 grep -q 'hexciri-launch-files "$THEME_USER_BACKGROUNDS"' "$HEXCIRI_PATH/bin/hexciri-theme-bg-install" || die "theme-bg-install still calls folio, Install > Style > Background opens nothing (folio is not installed in Hexciri v2; 2026-11-24)"
+# Learn menu rework 2026-11-24: tmux config must be in the fork (Learn >
+# Tmux falls back to it), new Learn rows must be present.
+[ -f "$HEXCIRI_PATH/config/tmux/tmux.conf" ] || die "missing: config/tmux/tmux.conf, Learn > Tmux dies with 'Tmux config not found' (2026-11-24)"
+for _lrow in '"learn.zed"' '"learn.fish"' '"learn.kitty"' '"learn.quickshell"' '"learn.tmux-keybindings"'; do
+  grep -q "$_lrow" "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "Learn row missing from hexciri-menu.jsonc: $_lrow (2026-11-24)"
+done
+unset _lrow
 grep -q 'strata "$@"' "$HEXCIRI_PATH/bin/hexciri-launch-files" || die "launch-files drops its path argument, background folder opens at Strata home instead of the theme backgrounds folder (2026-11-24)"
 # Full Install/Remove restore 2026-11-24: every restored row's backing bin
 # must be in the fork, plus the data files those bins read at runtime.
@@ -5350,7 +5395,7 @@ unset _rb
 # preinstalls, factory-reset, sudoless-docker, docker-dbs, foot, emacs).
 # The full restore 2026-11-24 took services, development, terminals,
 # browsers and dictation OUT of this list: those rows are live now.
-for _dead in '"install.ai.' '"install.windows"' '"install.preinstalls"' '"install.development.docker-dbs"' '"install.terminal.foot"' '"install.editor.emacs"' '"remove.ai.' '"remove.windows"' '"remove.preinstalls"' '"remove.factory-reset"' '"remove.security.sudoless-docker"' '"update.channel' '"update.omarchy"' '"system.screensaver"' '"learn.herdr-keybindings"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
+for _dead in '"install.ai.' '"install.windows"' '"install.preinstalls"' '"install.development.docker-dbs"' '"install.terminal.foot"' '"install.editor.emacs"' '"remove.ai.' '"remove.windows"' '"remove.preinstalls"' '"remove.factory-reset"' '"remove.security.sudoless-docker"' '"update.channel' '"update.omarchy"' '"system.screensaver"' '"learn.herdr-keybindings"' '"learn.neovim"' '"learn.community"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
   if grep -q "$_dead" "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc"; then
     die "dead menu row still present in hexciri-menu.jsonc: $_dead"
   fi
@@ -6783,6 +6828,7 @@ else
   warn "  sddm theme: hexciri theme not installed, SDDM uses its default theme (cosmetic only, login still works)"
 fi
 command -v kitty >/dev/null 2>&1 && hc_info "  terminal: kitty present" || warn "  terminal: kitty NOT installed, terminal binds fall back to xdg-terminal-exec"
+command -v tmux >/dev/null 2>&1 && hc_info "  tmux: present" || warn "  tmux: NOT installed, Learn > Tmux and Super+Alt+Return will fail"
 command -v udiskie >/dev/null 2>&1 && hc_info "  udiskie: present" || warn "  udiskie: NOT installed, autostart will pop a Command not found error"
 if command -v brave-origin >/dev/null 2>&1; then
   hc_info "  browser: Brave Origin present (default: $(xdg-settings get default-web-browser 2>/dev/null || echo unknown))"
