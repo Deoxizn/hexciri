@@ -5258,7 +5258,7 @@ binds_chain_ok "$FORK_OUT" || die "binds chain broken in fork (Super+Space apps 
 
 sudo rm -rf "$HEXCIRI_PATH"
 sudo mkdir -p "$HEXCIRI_PATH"
-sudo cp -a "$FORK_OUT/shell" "$FORK_OUT/default" "$FORK_OUT/themes" "$FORK_OUT/bin" "$FORK_OUT/install" "$FORK_OUT/icons" "$FORK_OUT/config" "$HEXCIRI_PATH/"
+sudo cp -a "$FORK_OUT/shell" "$FORK_OUT/default" "$FORK_OUT/themes" "$FORK_OUT/bin" "$FORK_OUT/install" "$FORK_OUT/icons" "$FORK_OUT/config" "$FORK_OUT/applications" "$HEXCIRI_PATH/"
 # config/ was missing from the placement copy (2026-11-24): the Learn
 # fix copied config/tmux into the fork and verified
 # $HEXCIRI_PATH/config/tmux/tmux.conf, but placement never copied
@@ -5266,6 +5266,16 @@ sudo cp -a "$FORK_OUT/shell" "$FORK_OUT/default" "$FORK_OUT/themes" "$FORK_OUT/b
 # chromium-flags.conf / alacritty / ghostty, checked right after it.
 # FORK_OUT/config is already curated (copy_subsets only), no
 # omarchy-named files, no foot/herdr/obsidian clutter.
+# applications/ was missing from the placement copy (2026-11-24, Devi:
+# update died at "missing: applications/foot.desktop"): the 81356136
+# verification checks $HEXCIRI_PATH/applications/foot.desktop and
+# install-terminal foot copies it from there at runtime, but placement
+# only ever put the fork's applications/*.desktop files in
+# ~/.local/share/applications/ as user entries, never in the placed
+# tree, so the check died on every update since. Same fix as config/
+# in the tmux placement fix above. FORK_OUT/applications is already
+# curated (copy_subsets copies only omarchy-browser, omarchy-terminal
+# and foot .desktop files), no Omarchy web-app clutter.
 # icons/ is required (copy_subset dies if upstream lacks it), but
 # logo.txt / icon.txt are optional in copy_subsets (warn only), so
 # copy them only when present: a missing file in the cp line above
@@ -5362,8 +5372,10 @@ info "Linked: ~/.local/bin/hexciri (bare dispatcher, the hexciri-* glob never ma
 # terminal launchers (and the dock's stand-ins for WebBrowser /
 # TerminalEmulator windows), so they are placed even though they are NOT
 # dock pins: the pinned list is brave-origin / kitty directly, and pinning
-# these wrappers too would duplicate both. Only these two are placed: the
-# other applications/*.desktop files are Omarchy web apps (ChatGPT, Herdr,
+# these wrappers too would duplicate both. Plus foot.desktop (2026-11-24):
+# install-terminal foot installs it as the Foot desktop entry, so it is
+# placed as a user entry here too. Only these three are placed: the other
+# applications/*.desktop files are Omarchy web apps (ChatGPT, Herdr,
 # Discord, ...) and AI/out-of-scope entries.
 mkdir -p "$HOME/.local/share/applications"
 for desk_file in "$FORK_OUT"/applications/*.desktop; do
@@ -5771,6 +5783,16 @@ unset _bin
 [ -f "$HEXCIRI_PATH/default/alacritty/Alacritty.desktop" ] || die "missing: default/alacritty/Alacritty.desktop, install-terminal alacritty installs without its desktop entry"
 [ -f "$HEXCIRI_PATH/config/foot/foot.ini" ] || die "missing: config/foot/foot.ini, install-terminal foot has no config to install"
 [ -f "$HEXCIRI_PATH/applications/foot.desktop" ] || die "missing: applications/foot.desktop, install-terminal foot installs without its desktop entry"
+# Install > Terminal is four rows (2026-11-24, Devi: alacritty, kitty,
+# ghostty, foot, not just two): the placed install-terminal must map
+# every one to a desktop entry, or its row installs the package and
+# then copies nothing. Ghostty needs no custom desktop file (it uses
+# the shipped com.mitchellh.ghostty.desktop id); the other three copy
+# theirs from the placed tree, which is why applications/ is placed.
+for _term in alacritty foot ghostty kitty; do
+  grep -q "^$_term) desktop_id=" "$HEXCIRI_PATH/bin/hexciri-install-terminal" || die "install-terminal has no desktop entry for $_term, Install > Terminal > $_term installs a terminal with no desktop entry"
+done
+unset _term
 # Herdr stays out (2026-11-24 correction): no Herdr bin in the fork, no
 # Herdr row in the menu. The Learn > Herdr keybindings row is already
 # dead-listed below; this is the Install > AI Herdr row + bin.
@@ -5785,7 +5807,7 @@ grep -q '"install.ai.herdr"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" 
 grep -q 'ExecStart=/usr/share/hexciri/bin/hexciri-tailscale-receive' "$HEXCIRI_PATH/default/systemd/user/hexciri-tailscale-receive.service" || die "tailscale unit ExecStart is not /usr/share/hexciri/bin/hexciri-tailscale-receive, the Taildrop receiver never starts"
 grep -q 'default/systemd/user/hexciri-tailscale-receive.service' "$HEXCIRI_PATH/bin/hexciri-install-service-tailscale" || die "install-service-tailscale does not install the Taildrop unit before enabling it"
 grep -q 'rm -f ~/.config/systemd/user/hexciri-tailscale-receive.service' "$HEXCIRI_PATH/bin/hexciri-remove-service-tailscale" || die "remove-service-tailscale does not remove the Taildrop unit file"
-for _row in '"install.browser"' '"install.terminal"' '"install.terminal.foot"' '"install.ai"' '"install.ai.amp"' '"install.ai.antigravity"' '"install.ai.chatgpt"' '"install.ai.claude"' '"install.ai.grok-bot"' '"install.ai.hermes"' '"install.ai.lm-studio"' '"install.ai.ollama"' '"install.ai.openclaw"' '"install.ai.perplexity"' '"install.ai.t3-code"' '"install.editor"' '"install.service"' '"install.development"' '"install.gaming.vibes"' '"install.gaming.xbox-cloud"' '"install.gaming.retro-launcher"' '"remove.ai"' '"remove.ai.amp"' '"remove.ai.antigravity"' '"remove.ai.chatgpt"' '"remove.ai.claude"' '"remove.ai.grok-bot"' '"remove.ai.hermes"' '"remove.ai.lm-studio"' '"remove.ai.ollama"' '"remove.ai.openclaw"' '"remove.ai.perplexity"' '"remove.ai.t3-code"' '"remove.service"' '"remove.development"' '"remove.dictation"' '"remove.security.fido2"' '"remove.security.sshd"' '"remove.gaming.battlenet"' '"remove.gaming.heroic"' '"remove.gaming.lutris"' '"remove.gaming.moonlight"' '"remove.gaming.vibes"' '"setup.default.terminal.foot"'; do
+for _row in '"install.browser"' '"install.terminal"' '"install.terminal.alacritty"' '"install.terminal.kitty"' '"install.terminal.ghostty"' '"install.terminal.foot"' '"install.ai"' '"install.ai.amp"' '"install.ai.antigravity"' '"install.ai.chatgpt"' '"install.ai.claude"' '"install.ai.grok-bot"' '"install.ai.hermes"' '"install.ai.lm-studio"' '"install.ai.ollama"' '"install.ai.openclaw"' '"install.ai.perplexity"' '"install.ai.t3-code"' '"install.editor"' '"install.service"' '"install.development"' '"install.gaming.vibes"' '"install.gaming.xbox-cloud"' '"install.gaming.retro-launcher"' '"remove.ai"' '"remove.ai.amp"' '"remove.ai.antigravity"' '"remove.ai.chatgpt"' '"remove.ai.claude"' '"remove.ai.grok-bot"' '"remove.ai.hermes"' '"remove.ai.lm-studio"' '"remove.ai.ollama"' '"remove.ai.openclaw"' '"remove.ai.perplexity"' '"remove.ai.t3-code"' '"remove.service"' '"remove.development"' '"remove.dictation"' '"remove.security.fido2"' '"remove.security.sshd"' '"remove.gaming.battlenet"' '"remove.gaming.heroic"' '"remove.gaming.lutris"' '"remove.gaming.moonlight"' '"remove.gaming.vibes"' '"setup.default.terminal.foot"'; do
   grep -q "$_row" "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "restored menu row missing from hexciri-menu.jsonc: $_row"
 done
 unset _row
@@ -7451,7 +7473,7 @@ Reboot, then check in order:
   19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are NOT removed (ex-vi-compat / openconnect depend on them, the trim stopped trying them 2026-11-24 after the first full update printed the refusal on every run), their entries are hidden with NoDisplay instead; the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
   20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now, fitted to the rendered content at launch (two-mode launch-about, --render measures logo + modules and resizes the window, no fixed 920x480); systemd-boot timeout 1s in every loader.conf AND the LoaderConfigTimeout EFI variable (bootctl set-timeout 1, the variable overrides loader.conf); Super+Shift+T runs btm (bottom package binary); LocalSend file picker is dark (theme name Adwaita in gtk-3.0/gtk-4.0 settings.ini, dconf color-scheme prefer-dark via dbus-run-session, FileChooser=gtk portal; Adwaita-dark is not a theme name); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
 
-  21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back in FULL (Package, AUR, Web App, TUI, Style, Gaming, Browser, Terminal, Editor, Service, Development, Dictation and their Remove counterparts, kept only where the backing script exists in the fork; Herdr, Windows, preinstalls, Docker rows, factory reset and Emacs stay out, see item 18; Foot and the AI rows are back (2026-11-24 correction). Every restored bin was combed for hard defaults: no folio or nautilus calls in any restored row or bin (folio only ever lived in theme-bg-install, fixed 748c59a; nautilus-dropbox appears only as a package removal), the chromium flags file's extension paths resolve to /usr/share/hexciri/default/chromium/ (copied whole), and the Tailscale Taildrop unit is installed by its install bin (ExecStart fixed to /usr/share/hexciri/bin). The restored AI bins were combed too: no folio/nautilus/herdr/docker calls in any of them; install-terminal foot copies config/foot + applications/foot.desktop.
+  21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back in FULL (Package, AUR, Web App, TUI, Style, Gaming, Browser, Terminal, Editor, Service, Development, Dictation and their Remove counterparts, kept only where the backing script exists in the fork; Herdr, Windows, preinstalls, Docker rows, factory reset and Emacs stay out, see item 18; Foot and the AI rows are back (2026-11-24 correction). Every restored bin was combed for hard defaults: no folio or nautilus calls in any restored row or bin (folio only ever lived in theme-bg-install, fixed 748c59a; nautilus-dropbox appears only as a package removal), the chromium flags file's extension paths resolve to /usr/share/hexciri/default/chromium/ (copied whole), and the Tailscale Taildrop unit is installed by its install bin (ExecStart fixed to /usr/share/hexciri/bin). The restored AI bins were combed too: no folio/nautilus/herdr/docker calls in any of them; install-terminal foot copies config/foot + applications/foot.desktop. Install > Terminal is four rows now (Alacritty, Kitty, Ghostty, Foot, Kitty stays default): the 81356136 Foot verification checked $HEXCIRI_PATH/applications/foot.desktop but placement never copied applications/ there, so every update since died at verification and the shell never restarted; applications/ joins the placement copy (same as config/ in the tmux fix, curated to the three desktop files only), and placement now checks all four terminal rows plus the four desktop_id arms in install-terminal.
 
   22. Keyring auto-unlock 2026-11-24: Brave Origin asked for the keyring password on every launch because gnome-keyring was installed but nothing unlocked it at login. SDDM PAM now has pam_gnome_keyring.so (auth at the end of the auth section, session auto_start at the end of the session section, placed after the fingerprint block so the pam_unix success=2 skip still lands on the gate + pam_fprintd), plus password sync in /etc/pam.d/passwd so a future login-password change updates the keyring password. Brave keeps using gnome-libsecret, no --password-store flag, no plaintext storage. Two limits: a fingerprint login carries no password so the keyring stays locked that session, log in with the password to unlock it; and the Login keyring password must match the login password, if it does not, change it in Seahorse (right-click Login, Change Password), do NOT delete login.keyring, that destroys the stored secrets including Brave's Safe Storage key.
 
