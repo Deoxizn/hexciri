@@ -3105,10 +3105,8 @@ if pacman -Qem >/dev/null; then
       rm -f "$_aur_log" "$_aur_log.filtered"
       exit 1
     fi
-    echo
   else
     echo "AUR is unavailable, skipping AUR updates (aur.archlinux.org not reachable)"
-    echo
   fi
 fi
 ''')
@@ -3188,6 +3186,57 @@ write(_p, _t)
 print("  update: analyze-logs initramfs line uses double quotes (no more literal)")
 PYEOF8B
 
+# 8c. Update section spacing (2026-11-24, Devi: inconsistent blank lines
+# between update sections in the 0bbabdb log: 2 blanks after Prune, 3 after
+# Orphan, 2 after Mise, 1 everywhere else, 1 trailing at the end). Root
+# cause: every section header already prints one leading blank via its
+# `\n`, but prune/orphan/mise/aur-pkgs also printed a trailing bare
+# `echo`, and hexciri-update-restart printed an unconditional `echo` at
+# the top on top of its header's `\n`. Rule: the header's leading `\n`
+# is the only separator. The trailing echoes are removed in the rewrites
+# above/below; this block fixes restart, the one upstream file in the
+# chain: its top blank is now conditional on a service-restart line
+# following it, and confirm_reboot prints its own leading blank only
+# when it actually prints the reboot-later line (unattended mode), so a
+# --reboot-only run with no reboot needed prints nothing at all, no
+# trailing blank line at the end of the update.
+python3 - "$FORK_OUT" <<'PYEOF8C'
+import sys
+fork = sys.argv[1]
+def read(p):
+    with open(p) as f:
+        return f.read()
+def write(p, t):
+    with open(p, "w") as f:
+        f.write(t)
+def must_replace(path, old, new, what):
+    t = read(path)
+    assert old in t, what + ": pattern not found in " + path
+    assert t.count(old) == 1, what + ": pattern not unique in " + path
+    write(path, t.replace(old, new, 1))
+    print("  update spacing: " + what)
+_p = fork + "/bin/hexciri-update-restart"
+must_replace(_p,
+    "esac\n\necho\nconfirm_reboot() {",
+    "esac\n\n# Section spacing (2026-11-24): the old unconditional `echo` here\n"
+    "# plus the \"Restarting shell\" header's leading \\n printed two blanks\n"
+    "# before it (three after a step that also trailed a blank). A blank is\n"
+    "# printed only when a line without its own header follows it: a\n"
+    "# service-restart line below, or a reboot prompt from confirm_reboot\n"
+    "# (which prints its own leading blank when it speaks).\n"
+    "_restart_needs_blank=0\n"
+    "for _restart_file in \"$HOME\"/.local/state/hexciri/restart-*-required; do\n"
+    "  if [[ -f $_restart_file ]]; then _restart_needs_blank=1; break; fi\n"
+    "done\n"
+    "if [[ $_restart_needs_blank == \"1\" ]]; then echo; fi\n"
+    "confirm_reboot() {",
+    "restart top echo is conditional on a service line following")
+must_replace(_p,
+    "confirm_reboot() {\n  if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} == \"1\" ]]; then\n    echo \"$(hexciri-i18n update.rebootLater \"$1\" \"hexciri-system reboot\")\"",
+    "confirm_reboot() {\n  if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} == \"1\" ]]; then\n    echo\n    echo \"$(hexciri-i18n update.rebootLater \"$1\" \"hexciri-system reboot\")\"",
+    "confirm_reboot prints its own leading blank in unattended mode")
+PYEOF8C
+
 # 9. pkg-prune: whole-file rewrite (2026-11-24, Devi: Prune package
 # cache was missing from hexciri update, see Fix 1 above). Upstream bin
 # printed the themed header then ran `sudo paccache -rk2` live, whose
@@ -3227,7 +3276,6 @@ else
   cat "$_prune_log" >&2 || true
 fi
 rm -f "$_prune_log"
-echo
 PRUNE_EOF
 info "  update: hexciri-update-pkg-prune rewritten (quiet: one status line, paccache -rk2)"
 
@@ -3253,27 +3301,22 @@ echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.orphans)\e[0m"
 mapfile -t orphans < <(pacman -Qtdq 2>/dev/null || true)
 if (( ${#orphans[@]} == 0 )); then
   echo "No orphaned packages"
-  echo
   exit 0
 fi
 printf '  %s\n' "${orphans[@]}"
-echo
 
 if [[ ${1:-} != "-y" && ( ! -t 0 || ! -t 1 ) ]]; then
-  echo "$(hexciri-i18n --count "${#orphans[@]}" update.orphansFound "${#orphans[@]}" hexciri-update-orphan-pkgs)"
-  echo
+  echo -e "\n$(hexciri-i18n --count "${#orphans[@]}" update.orphansFound "${#orphans[@]}" hexciri-update-orphan-pkgs)"
   exit 0
 fi
 
 if [[ ${1:-} != "-y" ]] && ! gum confirm --default=false --affirmative "$(hexciri-i18n common.yes)" --negative "$(hexciri-i18n common.no)" "$(hexciri-i18n --count "${#orphans[@]}" update.removeOrphans "${#orphans[@]}")"; then
-  echo "$(hexciri-i18n update.keepingOrphans)"
-  echo
+  echo -e "\n$(hexciri-i18n update.keepingOrphans)"
   exit 0
 fi
 
 echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.removingOrphans)\e[0m"
 hexciri-pkg-drop "${orphans[@]}"
-echo
 ORPHAN_EOF
 info "  update: hexciri-update-orphan-pkgs rewritten (always a section, one line when none)"
 
@@ -3306,7 +3349,6 @@ if hexciri-cmd-present mise; then
     rm -f "$_mise_log"
     exit 1
   fi
-  echo
 fi
 MISE_EOF
 info "  update: hexciri-update-mise rewritten (quiet: one status line)"
@@ -4201,6 +4243,8 @@ grep -q 'Hexciri is up to date' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" || di
 grep -q 'HEXCIRI_UPDATE_UNATTENDED=1' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not go unattended after the start confirm (yay inside eos-update would prompt [Y/n])"
 grep -q 'System packages are up to date' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs has no quiet up-to-date status line"
 grep -q 'AUR packages are up to date' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" || die "hexciri-update-aur-pkgs has no quiet up-to-date status line"
+for _sp in hexciri-update-pkg-prune hexciri-update-orphan-pkgs hexciri-update-mise hexciri-update-aur-pkgs hexciri-update-restart; do grep -qx 'echo' "$HEXCIRI_PATH/bin/$_sp" && die "$_sp still prints a bare blank line (update section spacing, 2026-11-24: the header's leading newline is the only separator)"; done
+grep -q '_restart_needs_blank' "$HEXCIRI_PATH/bin/hexciri-update-restart" || die "hexciri-update-restart has no conditional top blank (update section spacing, 2026-11-24)"
 grep -q 'already updated by eos-update --aur, skipping' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" && die "hexciri-update-aur-pkgs still prints the noisy skipping line"
 [ -x "$HEXCIRI_PATH/bin/hexciri-pkg-aur-accessible" ] || die "hexciri-pkg-aur-accessible missing from fork (hexciri-update-aur-pkgs calls it, 2026-11-24 live log: command not found)"
 grep -q 'HEXCIRI_UPDATE_REEXECED' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not skip the second confirm on a self-update re-exec"
