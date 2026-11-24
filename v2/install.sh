@@ -962,7 +962,10 @@ replacements = [
     # prefix (hl.dsp.global("omarchy:menu.root") in helpers.lua, and the
     # shell QML that registers the same names). Both sides use it, so
     # renaming one side would break every global shortcut. It is an
-    # internal namespace, not a file, path, or CLI name.
+    # internal namespace, not a file, path, or CLI name. Same for the
+    # GlobalShortcut appid in shell.qml, restored to "omarchy" by the
+    # repair pass below: Hyprland dispatch is appid:name, so appid
+    # "hexciri" + dispatch "omarchy:..." matches nothing.
     (b"omarchy-menu", b"hexciri-menu"),
     (b"omarchy ", b"hexciri "),
     (b"omarchy.lua", b"hexciri.lua"),
@@ -1092,6 +1095,35 @@ for dirpath, dirnames, filenames in os.walk(root):
                 f.write(new_data)
             repaired += 1
             print("Lua repair pass: %s value.omarchy -> value.hexciri" % path)
+# GlobalShortcut appid repair, 2026-11-23: Super+Space (apps), Super+Alt+Space
+# (menu) and Super+K (cheatsheet, { menu = "learn.keybindings" }) were ALL dead
+# after reboot, while browser / file manager / Spotify binds worked. Those
+# three are { menu = ... } / { ipc = ... } binds, which helpers.lua dispatches
+# as hl.dsp.global("omarchy:" .. name), and gestures.lua does the same for the
+# 3-finger swipe down ("omarchy:menu.root"). The { hexciri = ... } launch binds
+# use hl.dsp.exec_cmd("hexciri-launch-...") instead, so they were unaffected.
+# Quickshell docs: bind = <mods>, <key>, global, <appid>:<name>. The shell
+# registers that appid in shell.qml, GlobalShortcut { appid: "omarchy" }.
+# The generic '"omarchy"' rename rule turned it into appid: "hexciri", while
+# helpers.lua deliberately keeps "omarchy:" (see the comment above that rule),
+# so Hyprland dispatched omarchy:menu.root / omarchy:ipc.hexciri.dock.apps
+# to a shortcut registered as hexciri:menu.root / hexciri:ipc.hexciri.dock.apps
+# and nothing happened, silently, no error, no popup. Restore appid "omarchy":
+# it is an internal Wayland namespace, like the "omarchy:" prefix, not a file,
+# path, or CLI name. Proved by simulation against upstream 94a8c3c.
+_shell_qml = root + "/shell/shell.qml"
+with open(_shell_qml, "rb") as f:
+    _sq = f.read()
+if b'appid: "hexciri"' in _sq:
+    _sq = _sq.replace(b'appid: "hexciri"', b'appid: "omarchy"', 1)
+    with open(_shell_qml, "wb") as f:
+        f.write(_sq)
+    repaired += 1
+    print("GlobalShortcut repair: shell.qml appid hexciri -> omarchy (Hyprland global dispatch is appid:name)")
+elif b'appid: "omarchy"' in _sq:
+    print("GlobalShortcut appid already omarchy, skipping")
+else:
+    print("WARN: GlobalShortcut appid not found in shell.qml, appid repair NOT applied")
 print("Content rewrite: %d files scanned, %d files changed" % (total_files, changed_files))
 PY
   info "Content rewrite complete"
@@ -1876,6 +1908,15 @@ for _reader in "$HEXCIRI_PATH/shell/shell.qml" "$HEXCIRI_PATH/default/hypr/helpe
   fi
 done
 unset _reader _spath
+
+# Global-shortcut appid agreement: Hyprland dispatch is appid:name.
+# helpers.lua + gestures.lua dispatch "omarchy:menu.root" etc., so the shell
+# must register GlobalShortcut appid "omarchy", not "hexciri". A mismatch
+# silently kills every menu / panel / ipc bind (Super+Space apps,
+# Super+Alt+Space menu, Super+K cheatsheet) while launch binds still work.
+grep -q 'appid: "omarchy"' "$HEXCIRI_PATH/shell/shell.qml" || die "GlobalShortcut appid is not omarchy in installed shell.qml, menu/apps/cheatsheet global shortcuts will match nothing"
+grep -q 'dsp.global("omarchy:"' "$HEXCIRI_PATH/default/hypr/helpers.lua" || die "helpers.lua does not dispatch omarchy: global shortcuts, menu/apps/cheatsheet will match nothing"
+info "PASS: GlobalShortcut appid omarchy agrees with helpers.lua omarchy: dispatch"
 
 # Menu / dock / terminal / file manager essentials: Super+Space, Super+Alt+Space,
 # Super+Return and Super+Shift+F all go through these.
