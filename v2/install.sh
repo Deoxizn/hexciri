@@ -61,6 +61,16 @@
 #   it, because hexciri-update-restart only restarts Quickshell and
 #   theme-set reloads Hyprland only on a real theme change. Installer now
 #   reloads Hyprland after placement/health, and placement runs a real
+#   TRUE root cause (2026-11-24, Devi's refork theory was right):
+#   Hyprland 0.57 Lua tracks every file the config require()s and its
+#   inotify watcher reloads on any change, so the installer's rm -rf +
+#   cp -a of /usr/share/hexciri near-certainly reloads mid-copy into
+#   emergency mode. Upstream fixed this with omarchy-hyprland-reload-
+#   guard driven by ALPM hooks on omarchy-settings; Hexciri has no
+#   packages and never forked those hooks, so the guard shipped but
+#   nothing called it. The installer now pauses the guard (via sudo,
+#   like upstream's root-run hooks, /run/hexciri is root-owned) before
+#   placement and resumes it at the end; resume reloads once itself.
 #   boot-path test (dofile bootstrap.lua, search default.hypr.hexciri in
 #   package.path) plus hyprlua_ok() content checks everywhere
 #   bootstrap_ok() is used. Re-run spam cut again: Kept/already-present
@@ -309,6 +319,55 @@ LUA
   rm -f "$_lua"; return 1
 }
 
+# --- Hyprland reload guard (2026-11-24, Devi: emergency mode trips on
+# every installer re-run) ---
+# The guard binary is upstream's, forked into bin/ but never called:
+# hexciri-hyprland-reload-guard pause sets misc.disable_autoreload=true
+# + debug.suppress_errors=true via hyprctl eval and saves the previous
+# values to /run/hexciri/hyprland-reload-guard/<sig>; resume restores
+# suppress_errors, reloads once on the complete tree, then restores
+# disable_autoreload. monitor-watch already respects it (it skips its
+# own reload while the guard is paused). Run via sudo, like upstream's
+# root-run ALPM hooks: /run/hexciri is root-owned and a user pause
+# would die on mkdir. Best-effort everywhere: a guard failure warns,
+# never dies the installer. HYPR_GUARD_PAUSED is only ever 1 between
+# pause and resume in this run; cleanup() resumes it on any exit, so
+# a dying installer can never leave autoreload off and errors hidden.
+HYPR_GUARD_PAUSED=0
+HYPR_GUARD_BIN=""
+hypr_guard_bin() {
+  if [ -x "$HEXCIRI_PATH/bin/hexciri-hyprland-reload-guard" ]; then
+    HYPR_GUARD_BIN="$HEXCIRI_PATH/bin/hexciri-hyprland-reload-guard"
+  elif [ -n "${FORK_OUT:-}" ] && [ -x "$FORK_OUT/bin/hexciri-hyprland-reload-guard" ]; then
+    HYPR_GUARD_BIN="$FORK_OUT/bin/hexciri-hyprland-reload-guard"
+  else
+    HYPR_GUARD_BIN=""
+  fi
+  [ -n "$HYPR_GUARD_BIN" ]
+}
+hypr_guard_pause() {
+  pgrep -x Hyprland >/dev/null 2>&1 || return 0
+  hypr_guard_bin || { warn "reload guard not found, Hyprland may trip emergency mode during placement (run: hyprctl reload)"; return 0; }
+  if sudo "$HYPR_GUARD_BIN" pause 2>/dev/null; then
+    HYPR_GUARD_PAUSED=1
+    info "Hyprland config auto-reload paused (reload guard, placement replaces /usr/share/hexciri)"
+  else
+    warn "reload guard pause failed, Hyprland may trip emergency mode during placement (run: hyprctl reload)"
+  fi
+  return 0
+}
+hypr_guard_resume() {
+  [ "${HYPR_GUARD_PAUSED:-0}" = "1" ] || return 0
+  HYPR_GUARD_PAUSED=0
+  hypr_guard_bin || return 0
+  if sudo "$HYPR_GUARD_BIN" resume 2>/dev/null; then
+    info "Hyprland config auto-reload resumed (reload guard, one clean reload on the placed tree)"
+  else
+    warn "reload guard resume failed, re-enable auto-reload by hand: sudo hexciri-hyprland-reload-guard resume (then check misc.disable_autoreload)"
+  fi
+  return 0
+}
+
 # --- Re-run detection (2026-11-24, Devi: every update reset shell/theme) ---
 # A re-run is any install where Hexciri is already installed: the
 # self-update path (hexciri-update-hexciri) re-runs this installer whenever
@@ -361,6 +420,12 @@ fi
 cleanup() {
   if [ -n "${TMP_WORK:-}" ] && [ -d "$TMP_WORK" ]; then
     rm -rf "$TMP_WORK"
+  fi
+  # A dying installer must never leave auto-reload off and errors hidden:
+  # resume the reload guard if this run paused it. No-op when it never
+  # paused (fresh install, no Hyprland, light-sync, --print-fingerprints).
+  if [ "${HYPR_GUARD_PAUSED:-0}" = "1" ]; then
+    hypr_guard_resume || true
   fi
 }
 trap cleanup EXIT
@@ -4124,6 +4189,12 @@ unset THPM_SRC THPM_NEED_INSTALL STEAM_ADWAITA
 
 step "Placing forked tree: /usr/share/hexciri (sudo), ~/.config, ~/.local/state"
 
+# Pause Hyprland auto-reload BEFORE the tree is replaced (2026-11-24):
+# rm -rf + cp -a fires inotify on every tracked Lua file and Hyprland
+# reloads mid-copy into emergency mode. The guard (upstream's fix,
+# never wired in Hexciri) disables autoreload until resume.
+hypr_guard_pause
+
 sudo rm -rf "$HEXCIRI_PATH"
 sudo mkdir -p "$HEXCIRI_PATH"
 sudo cp -a "$FORK_OUT/shell" "$FORK_OUT/default" "$FORK_OUT/themes" "$FORK_OUT/bin" "$FORK_OUT/install" "$FORK_OUT/icons" "$HEXCIRI_PATH/"
@@ -5678,7 +5749,10 @@ unset _check
 # reboot needed. Best-effort, never fatal, and a no-op when Hyprland
 # is not running (tty3 bootstrap). hexciri-restart-hyprctl already
 # handles the instance signature and exits 0 with no Hyprland.
-if pgrep -x Hyprland >/dev/null 2>&1 && [ -x "$HEXCIRI_PATH/bin/hexciri-restart-hyprctl" ]; then
+if [ "${HYPR_GUARD_PAUSED:-0}" = "1" ]; then
+  step "Resuming Hyprland config auto-reload (one clean reload on the placed tree)"
+  hypr_guard_resume
+elif pgrep -x Hyprland >/dev/null 2>&1 && [ -x "$HEXCIRI_PATH/bin/hexciri-restart-hyprctl" ]; then
   step "Reloading Hyprland config (new Lua tree placed, clears a stale or emergency config)"
   "$HEXCIRI_PATH/bin/hexciri-restart-hyprctl" && info "Hyprland config reloaded (hyprctl reload, binds live again without a reboot)"
 fi

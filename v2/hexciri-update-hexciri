@@ -250,7 +250,8 @@ if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA == "$OLD_SHA" ]]; then
     # installer re-run below is interrupted.
     for _bs_cache in "$HOME/.cache/hexciri/fork-cache/fork-out/default/hypr/bootstrap.lua" "$HOME/.cache/hexciri/fork-cache/upstream-out/default/hypr/bootstrap.lua"; do
       if bootstrap_ok "$_bs_cache" && ! bootstrap_ok /usr/share/hexciri/default/hypr/bootstrap.lua; then
-        if sudo cp -a "$_bs_cache" /usr/share/hexciri/default/hypr/bootstrap.lua 2>/dev/null && bootstrap_ok /usr/share/hexciri/default/hypr/bootstrap.lua; then
+        _tmp_bs="/usr/share/hexciri/default/hypr/.bootstrap.lua.hexciri-new"
+        if sudo cp -a "$_bs_cache" "$_tmp_bs" 2>/dev/null && sudo mv "$_tmp_bs" /usr/share/hexciri/default/hypr/bootstrap.lua 2>/dev/null && bootstrap_ok /usr/share/hexciri/default/hypr/bootstrap.lua; then
           detail "self-healed bootstrap.lua from fork cache: $_bs_cache"
           break
         fi
@@ -262,7 +263,8 @@ if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA == "$OLD_SHA" ]]; then
     # survived into the next boot as emergency mode.
     for _hx_cache in "$HOME/.cache/hexciri/fork-cache/fork-out/default/hypr/hexciri.lua" "$HOME/.cache/hexciri/fork-cache/upstream-out/default/hypr/hexciri.lua"; do
       if hyprlua_ok "$_hx_cache" && ! hyprlua_ok /usr/share/hexciri/default/hypr/hexciri.lua; then
-        if sudo cp -a "$_hx_cache" /usr/share/hexciri/default/hypr/hexciri.lua 2>/dev/null && hyprlua_ok /usr/share/hexciri/default/hypr/hexciri.lua; then
+        _tmp_hx="/usr/share/hexciri/default/hypr/.hexciri.lua.hexciri-new"
+        if sudo cp -a "$_hx_cache" "$_tmp_hx" 2>/dev/null && sudo mv "$_tmp_hx" /usr/share/hexciri/default/hypr/hexciri.lua 2>/dev/null && hyprlua_ok /usr/share/hexciri/default/hypr/hexciri.lua; then
           detail "self-healed hexciri.lua from fork cache: $_hx_cache"
           break
         fi
