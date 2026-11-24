@@ -2650,12 +2650,54 @@ grep -q 'HEXCIRI_PATH="/usr/share/hexciri"' "$HEXCIRI_PATH/bin/hexciri-shell" ||
 grep -q '/usr/share/hexciri/bin/hexciri-shell shell toggle hexciri.menu' "$HEXCIRI_PATH/shell/plugins/menu/BarWidget.qml" || die "bar trigger does not call hexciri-shell by absolute path"
 grep -q '/usr/share/hexciri/bin/hexciri-shell hexciri.dock apps' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu apps row does not call hexciri-shell by absolute path"
 # Dead menu rows must be gone from the forked jsonc, not just uncallable.
-for _dead in '"install.' '"remove.' '"update.channel' '"update.hexciri"' '"update.omarchy"' '"system.screensaver"' '"learn.herdr-keybindings"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
+# NOTE 2026-11-24: '"install.' / '"remove.' must NOT be in this list.
+# b0eed823 restored Install/Remove (26 install.* + 20 remove.* rows, all
+# with backing bins, verified in sim6), and the broad patterns matched the
+# first restored row and killed the install with
+#   ERROR: dead menu row still present in hexciri-menu.jsonc: "install.
+# Only the subtrees the menu audit actually drops are dead here: the
+# _drop_prefix / _drop_exact sets in the menu patch above (AI, services,
+# development, terminals, browsers, dictation, windows, preinstalls,
+# factory-reset, fido2, sshd, sudoless-docker). Non-Zed editors are
+# dropped by the menu patch too, but are covered by the action-token
+# check below, not by a grep pattern (there is no grep for "not zed").
+for _dead in '"install.ai.' '"install.service.' '"install.development.' '"install.terminal.' '"install.browser.' '"install.dictation.' '"install.windows"' '"install.preinstalls"' '"remove.ai.' '"remove.service.' '"remove.development.' '"remove.dictation.' '"remove.windows"' '"remove.preinstalls"' '"remove.factory-reset"' '"remove.security.fido2"' '"remove.security.sshd"' '"remove.security.sudoless-docker"' '"update.channel' '"update.hexciri"' '"update.omarchy"' '"system.screensaver"' '"learn.herdr-keybindings"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
   if grep -q "$_dead" "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc"; then
     die "dead menu row still present in hexciri-menu.jsonc: $_dead"
   fi
 done
 unset _dead
+# Real dead-row invariant: every kept install./remove. row's action must
+# name bins that exist in $HEXCIRI_PATH/bin. A row whose action calls a
+# missing bin is dead even if its key looks live; a header row (no
+# action) is kept only while it has kept children, which the menu patch
+# already enforces. This is the check the broad grep patterns were
+# standing in for, and it passes on the restored Install/Remove rows.
+python3 - "$HEXCIRI_PATH" <<'PYEOF' || die "dead install/remove menu row: an action calls a bin that is not installed (see above)"
+import os, re, sys
+root = sys.argv[1]
+menu = root + "/default/hexciri/hexciri-menu.jsonc"
+bin_dir = root + "/bin"
+have = set(os.listdir(bin_dir)) if os.path.isdir(bin_dir) else set()
+dead = []
+with open(menu) as f:
+    for line in f:
+        m = re.match(r'\s*"((?:install|remove)(?:\.[^"]+)?)"\s*:', line)
+        if not m:
+            continue
+        a = re.search(r'"action"\s*:\s*"((?:[^"\\]|\\.)*)"', line)
+        if not a:
+            continue
+        toks = re.findall(r'hexciri-[a-z0-9-]+', a.group(1))
+        missing = [t for t in toks if t not in have]
+        if missing:
+            dead.append("%s calls missing %s" % (m.group(1), ",".join(missing)))
+if dead:
+    for d in dead:
+        print("  dead menu row: " + d)
+    sys.exit(1)
+print("  install/remove menu rows: all actions resolve to installed bins")
+PYEOF
 # Regression verification, 2026-11-23: socat is hexciri-shell's IPC
 # transport (menu Apps, bar trigger, theme-set applyTheme, lock, background
 # picker all go through it); icons/ feeds Appearance > Icons and
