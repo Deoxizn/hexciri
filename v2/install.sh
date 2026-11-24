@@ -1292,7 +1292,7 @@ is_allowed_bin() {
       provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | mise-install | mise-default-tools | launch-* | \
       cmd-* | default-terminal | action | i18n | notification-wait | software-rendering | toggle-enabled | hyprland-toggle-enabled | hyprland-software-rendering | hw-software-rendering | powerprofiles-init | powerprofiles-set | powerprofiles-floor | powerprofiles-list | hyprland-monitor-watch | hyprland-monitor-clamshell | hyprland-monitor-modeless | hyprland-monitor-external-active | hyprland-monitor-identity | hyprland-monitor-internal | hyprland-monitor-internal-mirror | hyprland-monitor-laptop | hyprland-workspace-layout-current | hyprland-workspace-layout-toggle | hyprland-workspace-layout-default | hw-laptop | hw-clamshell | hw-external-monitors | system-lid-inhibit | restart-hyprctl | \
       capture-* | system-* | system | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | pkg-add | pkg-missing | pkg-install | pkg-aur-install | pkg-aur-accessible | pkg-remove | pkg-drop | sudo-keepalive | cmd-present | reminder | transcode | transcode-* | tray-* | weather-* | tui-* | webapp-* | osd | \
-      dock | dns | state | show-* | setup-* | device-* | apply-lock | sudo-passwordless | security-functions | display-* | monitor-* | network-* | font-* | disk-speedtest | file-select | input-method | git-url-check | kernel | language | locale-session | locale-generate | refresh-shell | refresh-tmux | refresh-hyprsunset | refresh-applications | refresh-config | install-font | install-app | install-and-launch | install-editor-zed | install-gaming-steam | install-gaming-heroic | install-gaming-lutris | install-gaming-retroarch | install-gaming-battlenet | install-gaming-geforce-now | install-gaming-gpu-lib32 | remove-browser | remove-security-fingerprint | remove-gaming-steam | remove-gaming-retroarch | remove-gaming-minecraft | remove-gaming-geforce-now)
+      dock | dns | state | show-* | setup-* | device-* | apply-lock | sudo-passwordless | security-functions | display-* | monitor-* | network-* | font-* | disk-speedtest | file-select | input-method | git-url-check | kernel | language | locale-session | locale-generate | refresh-shell | refresh-tmux | refresh-hyprsunset | refresh-applications | refresh-config | install-font | install-app | install-and-launch | install-editor-zed | install-gaming-steam | install-gaming-heroic | install-gaming-lutris | install-gaming-retroarch | install-gaming-battlenet | install-gaming-geforce-now | install-gaming-gpu-lib32 | remove-browser | remove-security-fingerprint | remove-gaming-steam | remove-gaming-retroarch | remove-gaming-minecraft | remove-gaming-geforce-now | install-browser | install-terminal | install-editor-vscode | install-editor-helix | install-dev-env | remove-dev-env | install-service-1password | install-service-dropbox | install-service-microsoft | install-service-nordvpn | install-service-once | install-service-signal | install-service-tailscale | remove-service-1password | remove-service-dropbox | remove-service-microsoft | remove-service-ssh-agent | remove-service-tailscale | remove-security-fido2 | remove-security-sshd | install-dictation-hex | install-dictation-superwhisper | install-dictation-voxtype | remove-dictation-hex | remove-dictation-superwhisper | remove-dictation-voxtype | install-gaming-xbox-cloud | install-gaming-xbox-controllers | remove-gaming-battlenet | remove-gaming-heroic | remove-gaming-lutris | remove-gaming-moonlight | remove-gaming-xbox-cloud | remove-gaming-xbox-controllers | games-retro-install | games-retro-cores | games-vibes-install | games-vibes-remove | games-vibes-launch | games-vibes-copy | install-chromium-copy-url | install-chromium-ytdlp | install-video-decode | install-camera | pkg-aur-add | chromium-add-feature | chromium-copy-url-host | chromium-ytdlp-host | tailscale-receive | tailscale-send)
       # Dinner audit 2026-11-23: the families above were missing, so binds and
       # menu rows that call them failed with Command not found, exactly like
       # monitor-watch did. capture-* (screenshot/screenrecording/text/region),
@@ -1339,19 +1339,20 @@ is_allowed_bin() {
       # Dictation rows and the Alt+Space bind. No backend is installed yet
       # (install-dictation-* stays out), so dictation fails gracefully
       # ("No dictation backend configured") until one is picked.
-      # Deliberately still NOT included: install-ai-*, install-service-*,
-      # install-terminal-*, install-dictation-*, install-browser (its tree
-      # pulls install-chromium-*, install-video-decode, install-camera and
-      # config/chromium-flags.conf, none of which the fork copies; Brave
-      # Origin is already installed, so no row needs it), install-windows-vm,
-      # install-preinstalls, install-dev-env, channel-*, mirror-*, keyring-*,
+      # Deliberately still NOT included: install-ai-* (AI agents are out
+      # of scope, Herdr stays removed), install-windows-vm, install-preinstalls,
+      # install-docker-dbs (Docker out), channel-*, mirror-*, keyring-*,
       # upgrade-* (Omarchy repo machinery, out of the shell-only Phase 1
       # scope), and windows-vm (Docker/KVM VM manager, needs Docker).
-      # The install-*/remove-* scripts that ARE listed are the bounded set
-      # the menu restore keeps rows for (pkg-*, font, app, and-launch,
-      # editor-zed, gaming, remove-browser/fingerprint/gaming); the menu
-      # patch step below drops every other install/remove row whose backing
-      # script is not in the fork, so no dead row can be clicked.
+      # 2026-11-24 full Install/Remove restore (Devi: full menu back):
+      # install-service-*, install-terminal-*, install-browser (+ its
+      # chromium tree: install-chromium-*, install-video-decode,
+      # install-camera, config/chromium-flags.conf, default/chromium/),
+      # install-dev-env / remove-dev-env (mise, back in Phase 2) and
+      # install/remove-dictation-* are listed now, with the bins the
+      # menu patch step below keeps rows for. The menu patch still drops
+      # every other install/remove row whose backing script is not in
+      # the fork, so no dead row can be clicked.
       return 0
       ;;
     *)
@@ -1499,6 +1500,31 @@ HEXCIRI_LOGO_EOF
   mkdir -p "$FORK_OUT/default/systemd/system-sleep" "$FORK_OUT/default/systemd/system/fprintd.service.d"
   copy_optional_file "$OMARCHY_SRC/default/systemd/system-sleep/fprintd-resume" "$FORK_OUT/default/systemd/system-sleep/fprintd-resume" "default/systemd/system-sleep/fprintd-resume" || warn "fprintd-resume hook not found in source, fingerprint resume may wedge fprintd after suspend."
   copy_optional_file "$OMARCHY_SRC/default/systemd/system/fprintd.service.d/10-stop-timeout.conf" "$FORK_OUT/default/systemd/system/fprintd.service.d/10-stop-timeout.conf" "default/systemd/system/fprintd.service.d/10-stop-timeout.conf" || warn "fprintd stop-timeout override not found in source."
+
+  # Full Install/Remove restore (2026-11-24, Devi: full menu back):
+  # install-browser's tree: config/chromium-flags.conf (copied to
+  # ~/.config/<browser>-flags.conf by install-browser; the rename turns
+  # its /usr/share/omarchy/default/chromium/extensions/ paths into
+  # /usr/share/hexciri/...) + default/chromium/ whole (extensions the
+  # flags file loads, native-messaging-hosts templates the chromium
+  # copy-url/ytdlp installers fill in, policies browser-policy.sh
+  # reads). 96K total. install-terminal's tree: config/alacritty +
+  # config/ghostty (kitty config already copied above) + the Alacritty
+  # desktop entry it installs for alacritty. install-dictation-voxtype's
+  # tree: default/voxtype/config.toml. Tailscale: the Taildrop receiver
+  # unit install-service-tailscale enables; default/systemd/user/ as a
+  # whole stays out, only this unit. default/games/vibes/ is deliberately
+  # NOT copied: those are Omarchy-bundled games, and games-vibes-remove's
+  # "comes with Omarchy" guard degrades gracefully without it (a game
+  # under ~/Games/vibes is always removable then).
+  copy_optional_file "$OMARCHY_SRC/config/chromium-flags.conf" "$FORK_OUT/config/chromium-flags.conf" "config/chromium-flags.conf" || warn "config/chromium-flags.conf not found in source, install-browser flags files load no extensions."
+  copy_optional_path "$OMARCHY_SRC/default/chromium" "$FORK_OUT/default/chromium" "default/chromium/" || warn "default/chromium/ not found in source, install-browser extension flags point at nothing."
+  copy_subset "$OMARCHY_SRC/config/alacritty" "$FORK_OUT/config/alacritty" "config/alacritty/"
+  copy_subset "$OMARCHY_SRC/config/ghostty" "$FORK_OUT/config/ghostty" "config/ghostty/"
+  copy_optional_file "$OMARCHY_SRC/default/alacritty/Alacritty.desktop" "$FORK_OUT/default/alacritty/Alacritty.desktop" "default/alacritty/Alacritty.desktop" || warn "default/alacritty/Alacritty.desktop not found in source, install-terminal alacritty installs without its desktop entry."
+  copy_optional_path "$OMARCHY_SRC/default/voxtype" "$FORK_OUT/default/voxtype" "default/voxtype/" || warn "default/voxtype/ not found in source, install-dictation-voxtype has no config to install."
+  mkdir -p "$FORK_OUT/default/systemd/user"
+  copy_optional_file "$OMARCHY_SRC/default/systemd/user/omarchy-tailscale-receive.service" "$FORK_OUT/default/systemd/user/hexciri-tailscale-receive.service" "default/systemd/user/omarchy-tailscale-receive.service" || warn "default/systemd/user/omarchy-tailscale-receive.service not found in source, install-service-tailscale enables a unit that is never installed."
 
   # Bash env bootstrap and envs, renamed by the rename step below
   if ! copy_optional_path "$OMARCHY_SRC/default/bash/env-bootstrap" "$FORK_OUT/default/bash/env-bootstrap" "default/bash/env-bootstrap"; then
@@ -2565,16 +2591,20 @@ PY
 # Menu audit 2026-11-23 (Devi: "basically super alt space menu needs a full
 # audit"): every menu entry was checked against the forked bin/ allowlist.
 # What this block does, all on the fork output before placement:
-#  1. Deletes dead menu rows, and restores Install + Remove where a backing
-#     script exists in the fork (2026-11-24, Devi: install/remove exist in
-#     Hexciri v1 and should come back). A row stays when every hexciri-*
-#     command its action names exists in bin/, so Package / AUR / Web App /
-#     TUI / Style / Gaming and their Remove counterparts come back, while
-#     rows whose script was never copied (AI, services, terminals, windows,
-#     preinstalls, dictation, install-browser) still drop. A when/disabled
+#  1. Deletes dead menu rows, and restores the FULL Install + Remove
+#     subtrees (2026-11-24, Devi: full install/remove back, except
+#     Omarchy specifics). A row stays when every hexciri-* command its
+#     action names exists in bin/, so Package / AUR / Web App / TUI /
+#     Style / Gaming / Browser / Terminal / Editor / Service / Development
+#     / Dictation and their Remove counterparts come back: their backing
+#     bins are in the allowlist now (is_allowed_bin above). A when/disabled
 #     guard naming a missing command only hides or mis-guards the row, it
 #     never runs, so only the action decides. Header rows (no action) stay
 #     only while at least one child row under them stays. Still deleted:
+#     AI (agents out of scope), Windows + preinstalls (Omarchy-specific),
+#     Docker rows (Docker out), factory reset (btrfs-only), Foot (Omarchy
+#     default terminal, Kitty is the Hexciri equivalent), Emacs (dead
+#     upstream: install-editor-emacs calls a bin that does not exist).
 #     Update > Channel (Hexciri has no channels), Update > Games /
 #     Password (games-*/drive-* out of scope), Update > Config > Plymouth
 #     (plymouth out), System > Screensaver (no screensaver binary ships
@@ -2631,20 +2661,22 @@ kept = []
 removed = []
 kept_keys = set()
 # Out of scope even when the action's helper exists: generic helpers
-# (install-and-launch, install-app, launch-floating-terminal) make AI,
-# service, editor and dev-env rows look valid, but those subtrees are
-# Phase 2 / not wanted (vim was removed on purpose, AI agents are out,
-# factory reset is destructive and btrfs-only). Zed is the one editor kept.
+# (install-and-launch, install-app, launch-floating-terminal) make AI
+# rows look valid, but AI agents are out (Herdr removed, standing
+# decision). Everything else upstream is restored 2026-11-24, so the
+# prefix drop is AI only; the exact drops are the Omarchy-specific /
+# Docker / dead rows (windows, preinstalls, factory reset is btrfs-only,
+# sudoless-docker needs Docker, docker-dbs needs Docker, Foot is the
+# Omarchy default terminal, Emacs is dead upstream).
 _drop_prefix = (
-    "install.ai.", "install.service.", "install.development.",
-    "install.terminal.", "install.browser.", "install.dictation.",
-    "remove.ai.", "remove.service.", "remove.development.",
-    "remove.dictation.",
+    "install.ai.",
+    "remove.ai.",
 )
 _drop_exact = {
-    "install.windows", "install.preinstalls", "install.dictation",
+    "install.windows", "install.preinstalls",
+    "install.development.docker-dbs", "install.terminal.foot",
+    "install.editor.emacs",
     "remove.windows", "remove.preinstalls", "remove.factory-reset",
-    "remove.security.fido2", "remove.security.sshd",
     "remove.security.sudoless-docker",
 }
 for line in lines:
@@ -2655,7 +2687,7 @@ for line in lines:
             continue
         kept.append(line)
         continue
-    if key in _drop_exact or key.startswith(_drop_prefix) or (key.startswith("install.editor.") and key != "install.editor.zed"):
+    if key in _drop_exact or key.startswith(_drop_prefix):
         removed.append(line.strip()[:60])
         continue
     toks = _action_tokens(line)
@@ -2687,7 +2719,7 @@ while True:
 if removed:
     with open(menu, "w") as f:
         f.write("\n".join(kept) + "\n")
-    changed.append("menu: removed %d dead rows (kept install/remove rows whose backing bin exists, dropped the rest + update channels, screensaver, unlock, herdr keys, neovim editor, sudoless-docker)" % len(removed))
+    changed.append("menu: removed %d dead rows (full Install/Remove restored 2026-11-24, dropped only AI, windows, preinstalls, docker rows, factory-reset, foot, emacs + update channels, screensaver, unlock, herdr keys, neovim editor, sudoless-docker)" % len(removed))
     for r in removed[:8]:
         print("  menu removed: " + r)
     if len(removed) > 8:
@@ -3259,6 +3291,73 @@ if os.path.isfile(rfp):
             f.write(r)
 else:
     print("WARN: hexciri-remove-security-fingerprint not in fork, fingerprint row will drop")
+
+# 7. Tailscale service unit (2026-11-24, full Install/Remove restore):
+#    the fork rename turns the unit's ExecStart into
+#    /usr/bin/hexciri-tailscale-receive, which does not exist (bins live
+#    in /usr/share/hexciri/bin), and nothing installs the unit to
+#    ~/.config/systemd/user, so install-service-tailscale's enable would
+#    fail and the Taildrop receiver would never run. Fix the ExecStart
+#    (ConditionEnvironment was already renamed OMARCHY_PATH ->
+#    HEXCIRI_PATH by the rename pass), and make the install bin place
+#    the unit + daemon-reload before enabling it, and the remove bin
+#    drop the unit file after disabling it. The tailscale bar plugin
+#    (hexciri.tailscale) is already in the forked shell, so the
+#    plugin-enable/disable calls in both bins work as renamed.
+_unit = root + "/default/systemd/user/hexciri-tailscale-receive.service"
+if os.path.isfile(_unit):
+    with open(_unit) as f:
+        _u = f.read()
+    _u_orig = _u
+    _u = _u.replace("ExecStart=/usr/bin/hexciri-tailscale-receive", "ExecStart=/usr/share/hexciri/bin/hexciri-tailscale-receive", 1)
+    if _u != _u_orig:
+        with open(_unit, "w") as f:
+            f.write(_u)
+        changed.append("tailscale unit: ExecStart points at /usr/share/hexciri/bin (rename left /usr/bin, which does not exist)")
+    else:
+        print("tailscale unit ExecStart already fixed, skipping")
+else:
+    print("WARN: tailscale unit not in fork, install-service-tailscale enable will fail")
+_its = root + "/bin/hexciri-install-service-tailscale"
+if os.path.isfile(_its):
+    with open(_its) as f:
+        _t = f.read()
+    _t_orig = _t
+    _old_enable = "systemctl --user enable --now hexciri-tailscale-receive.service"
+    _new_enable = ("mkdir -p ~/.config/systemd/user\n"
+        "cp -f \"${HEXCIRI_PATH:-/usr/share/hexciri}/default/systemd/user/hexciri-tailscale-receive.service\" ~/.config/systemd/user/ 2>/dev/null || true\n"
+        "systemctl --user daemon-reload 2>/dev/null || true\n" + _old_enable)
+    if _old_enable in _t and "default/systemd/user/hexciri-tailscale-receive.service" not in _t:
+        _t = _t.replace(_old_enable, _new_enable, 1)
+        changed.append("install-service-tailscale: installs the Taildrop unit + daemon-reload before enabling it")
+    elif "default/systemd/user/hexciri-tailscale-receive.service" in _t:
+        print("install-service-tailscale unit install already present, skipping")
+    else:
+        print("WARN: install-service-tailscale enable line not found, unit install NOT added")
+    if _t != _t_orig:
+        with open(_its, "w") as f:
+            f.write(_t)
+else:
+    print("WARN: hexciri-install-service-tailscale not in fork, Tailscale row will drop")
+_rts = root + "/bin/hexciri-remove-service-tailscale"
+if os.path.isfile(_rts):
+    with open(_rts) as f:
+        _t = f.read()
+    _t_orig = _t
+    _old_disable = "systemctl --user disable --now hexciri-tailscale-receive.service 2>/dev/null || true"
+    _new_disable = (_old_disable + "\nrm -f ~/.config/systemd/user/hexciri-tailscale-receive.service 2>/dev/null || true\nsystemctl --user daemon-reload 2>/dev/null || true")
+    if _old_disable in _t and "rm -f ~/.config/systemd/user/hexciri-tailscale-receive.service" not in _t:
+        _t = _t.replace(_old_disable, _new_disable, 1)
+        changed.append("remove-service-tailscale: removes the Taildrop unit file after disabling it")
+    elif "rm -f ~/.config/systemd/user/hexciri-tailscale-receive.service" in _t:
+        print("remove-service-tailscale unit removal already present, skipping")
+    else:
+        print("WARN: remove-service-tailscale disable line not found, unit removal NOT added")
+    if _t != _t_orig:
+        with open(_rts, "w") as f:
+            f.write(_t)
+else:
+    print("WARN: hexciri-remove-service-tailscale not in fork, Tailscale remove row will drop")
 
 for c in changed:
     print("  fork patch: " + c)
@@ -5211,6 +5310,35 @@ grep -q '/usr/share/hexciri/bin/hexciri-shell hexciri.dock apps' "$HEXCIRI_PATH/
 grep -q 'signal pressed(int button, int modifiers)' "$HEXCIRI_PATH/shell/Ui/WidgetButton.qml" || die "WidgetButton does not forward click modifiers, Shift+right-click settings cannot be told from plain right-click (2026-11-24)"
 grep -q 'hexciri-launch-files "$THEME_USER_BACKGROUNDS"' "$HEXCIRI_PATH/bin/hexciri-theme-bg-install" || die "theme-bg-install still calls folio, Install > Style > Background opens nothing (folio is not installed in Hexciri v2; 2026-11-24)"
 grep -q 'strata "$@"' "$HEXCIRI_PATH/bin/hexciri-launch-files" || die "launch-files drops its path argument, background folder opens at Strata home instead of the theme backgrounds folder (2026-11-24)"
+# Full Install/Remove restore 2026-11-24: every restored row's backing bin
+# must be in the fork, plus the data files those bins read at runtime.
+for _bin in hexciri-install-browser hexciri-install-terminal hexciri-install-editor-vscode hexciri-install-editor-helix hexciri-install-dev-env hexciri-remove-dev-env hexciri-install-service-1password hexciri-install-service-dropbox hexciri-install-service-microsoft hexciri-install-service-nordvpn hexciri-install-service-once hexciri-install-service-signal hexciri-install-service-tailscale hexciri-remove-service-1password hexciri-remove-service-dropbox hexciri-remove-service-microsoft hexciri-remove-service-ssh-agent hexciri-remove-service-tailscale hexciri-remove-security-fido2 hexciri-remove-security-sshd hexciri-install-dictation-hex hexciri-install-dictation-superwhisper hexciri-install-dictation-voxtype hexciri-remove-dictation-hex hexciri-remove-dictation-superwhisper hexciri-remove-dictation-voxtype hexciri-install-gaming-xbox-cloud hexciri-install-gaming-xbox-controllers hexciri-remove-gaming-battlenet hexciri-remove-gaming-heroic hexciri-remove-gaming-lutris hexciri-remove-gaming-moonlight hexciri-remove-gaming-xbox-cloud hexciri-remove-gaming-xbox-controllers hexciri-games-retro-install hexciri-games-retro-cores hexciri-games-vibes-install hexciri-games-vibes-remove hexciri-games-vibes-launch hexciri-games-vibes-copy hexciri-install-chromium-copy-url hexciri-install-chromium-ytdlp hexciri-install-video-decode hexciri-install-camera hexciri-pkg-aur-add hexciri-chromium-add-feature hexciri-chromium-copy-url-host hexciri-chromium-ytdlp-host hexciri-tailscale-receive hexciri-tailscale-send; do
+  [ -x "$HEXCIRI_PATH/bin/$_bin" ] || die "missing bin (full Install/Remove restore 2026-11-24, a restored menu row calls it): $_bin"
+done
+unset _bin
+[ -f "$HEXCIRI_PATH/config/chromium-flags.conf" ] || die "missing: config/chromium-flags.conf, install-browser writes flags files Chromium cannot load extensions from"
+[ -f "$HEXCIRI_PATH/default/chromium/extensions/copy-url/manifest.json" ] || die "missing: default/chromium/extensions/copy-url, install-browser flags file loads an extension that is not installed"
+[ -f "$HEXCIRI_PATH/default/chromium/native-messaging-hosts/com.hexciri.copy_url.json" ] || die "missing: default/chromium/native-messaging-hosts/com.hexciri.copy_url.json, install-chromium-copy-url has no template to fill in"
+[ -f "$HEXCIRI_PATH/default/chromium/native-messaging-hosts/com.hexciri.ytdlp.json" ] || die "missing: default/chromium/native-messaging-hosts/com.hexciri.ytdlp.json, install-chromium-ytdlp has no template to fill in"
+[ -f "$HEXCIRI_PATH/config/alacritty/alacritty.toml" ] || die "missing: config/alacritty/alacritty.toml, install-terminal alacritty has no config to install"
+[ -f "$HEXCIRI_PATH/config/ghostty/config" ] || die "missing: config/ghostty/config, install-terminal ghostty has no config to install"
+[ -f "$HEXCIRI_PATH/default/alacritty/Alacritty.desktop" ] || die "missing: default/alacritty/Alacritty.desktop, install-terminal alacritty installs without its desktop entry"
+[ -f "$HEXCIRI_PATH/default/voxtype/config.toml" ] || die "missing: default/voxtype/config.toml, install-dictation-voxtype has no config to install"
+[ -f "$HEXCIRI_PATH/default/systemd/user/hexciri-tailscale-receive.service" ] || die "missing: default/systemd/user/hexciri-tailscale-receive.service, install-service-tailscale enables a unit that is never installed"
+grep -q 'ExecStart=/usr/share/hexciri/bin/hexciri-tailscale-receive' "$HEXCIRI_PATH/default/systemd/user/hexciri-tailscale-receive.service" || die "tailscale unit ExecStart is not /usr/share/hexciri/bin/hexciri-tailscale-receive, the Taildrop receiver never starts"
+grep -q 'default/systemd/user/hexciri-tailscale-receive.service' "$HEXCIRI_PATH/bin/hexciri-install-service-tailscale" || die "install-service-tailscale does not install the Taildrop unit before enabling it"
+grep -q 'rm -f ~/.config/systemd/user/hexciri-tailscale-receive.service' "$HEXCIRI_PATH/bin/hexciri-remove-service-tailscale" || die "remove-service-tailscale does not remove the Taildrop unit file"
+for _row in '"install.browser"' '"install.terminal"' '"install.editor"' '"install.service"' '"install.development"' '"install.gaming.vibes"' '"install.gaming.xbox-cloud"' '"install.gaming.retro-launcher"' '"remove.service"' '"remove.development"' '"remove.dictation"' '"remove.security.fido2"' '"remove.security.sshd"' '"remove.gaming.battlenet"' '"remove.gaming.heroic"' '"remove.gaming.lutris"' '"remove.gaming.moonlight"' '"remove.gaming.vibes"'; do
+  grep -q "$_row" "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "restored menu row missing from hexciri-menu.jsonc: $_row"
+done
+unset _row
+# No hard defaults in the restored rows: folio and nautilus are not
+# installed in Hexciri v2, so no restored row or bin may call them.
+grep -q 'folio' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" && die "restored menu still references folio, which is not installed in Hexciri v2"
+for _rb in hexciri-install-browser hexciri-install-terminal hexciri-install-editor-vscode hexciri-install-editor-helix hexciri-install-dev-env hexciri-remove-dev-env hexciri-install-service-1password hexciri-install-service-dropbox hexciri-install-service-microsoft hexciri-install-service-nordvpn hexciri-install-service-once hexciri-install-service-signal hexciri-install-service-tailscale hexciri-games-vibes-install hexciri-games-vibes-remove hexciri-games-retro-install; do
+  grep -qE '(^|[^a-z-])folio([^a-z-]|$)' "$HEXCIRI_PATH/bin/$_rb" && die "restored bin $_rb still calls folio, which is not installed in Hexciri v2"
+done
+unset _rb
 # Dead menu rows must be gone from the forked jsonc, not just uncallable.
 # NOTE 2026-11-24: '"install.' / '"remove.' must NOT be in this list.
 # b0eed823 restored Install/Remove (26 install.* + 20 remove.* rows, all
@@ -5218,12 +5346,11 @@ grep -q 'strata "$@"' "$HEXCIRI_PATH/bin/hexciri-launch-files" || die "launch-fi
 # first restored row and killed the install with
 #   ERROR: dead menu row still present in hexciri-menu.jsonc: "install.
 # Only the subtrees the menu audit actually drops are dead here: the
-# _drop_prefix / _drop_exact sets in the menu patch above (AI, services,
-# development, terminals, browsers, dictation, windows, preinstalls,
-# factory-reset, fido2, sshd, sudoless-docker). Non-Zed editors are
-# dropped by the menu patch too, but are covered by the action-token
-# check below, not by a grep pattern (there is no grep for "not zed").
-for _dead in '"install.ai.' '"install.service.' '"install.development.' '"install.terminal.' '"install.browser.' '"install.dictation.' '"install.windows"' '"install.preinstalls"' '"remove.ai.' '"remove.service.' '"remove.development.' '"remove.dictation.' '"remove.windows"' '"remove.preinstalls"' '"remove.factory-reset"' '"remove.security.fido2"' '"remove.security.sshd"' '"remove.security.sudoless-docker"' '"update.channel' '"update.omarchy"' '"system.screensaver"' '"learn.herdr-keybindings"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
+# _drop_prefix / _drop_exact sets in the menu patch above (AI, windows,
+# preinstalls, factory-reset, sudoless-docker, docker-dbs, foot, emacs).
+# The full restore 2026-11-24 took services, development, terminals,
+# browsers and dictation OUT of this list: those rows are live now.
+for _dead in '"install.ai.' '"install.windows"' '"install.preinstalls"' '"install.development.docker-dbs"' '"install.terminal.foot"' '"install.editor.emacs"' '"remove.ai.' '"remove.windows"' '"remove.preinstalls"' '"remove.factory-reset"' '"remove.security.sudoless-docker"' '"update.channel' '"update.omarchy"' '"system.screensaver"' '"learn.herdr-keybindings"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
   if grep -q "$_dead" "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc"; then
     die "dead menu row still present in hexciri-menu.jsonc: $_dead"
   fi
@@ -6804,12 +6931,12 @@ Reboot, then check in order:
 
   17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update (eos-update --aur for repo + AUR, Hexciri self-update syncs nyx with git (tarball fallback) and re-runs the installer when it changed, mise up for mise tools). `hexciri-update` is the same script, and `hexciri update hexciri` re-runs just the Hexciri self-update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, obsidian, pinta, xterm and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). vim and stoken stay installed, they cannot be removed (ex-vi-compat / openconnect depend on them), their entries are hidden instead, and the trim no longer tries them. YAD settings is hidden, yad itself stays (EOS tools depend on it).
 
-  18. Menu audit 2026-11-23: Install and Remove subtrees were deleted then (install-*/remove-* were never in the fork), restored 2026-11-24 where a backing script exists (see item 21). Update > Channel is gone (Hexciri has no channels), Update > Hexciri is back (Phase 2, 2026-11-24, runs hexciri-update in a floating terminal), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (AI agents are out of scope, Herdr stays removed; mise itself is back in, Phase 2 2026-11-24, for the non-agent tools node, uv, gh). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
+  18. Menu audit 2026-11-23: Install and Remove subtrees were deleted then (install-*/remove-* were never in the fork), restored 2026-11-24 where a backing script exists (see item 21), then restored in FULL 2026-11-24 (Devi: full install/remove back): Browser, Terminal, Editor, Service, Development, Dictation, Gaming extras and their Remove counterparts are back, with their bins and data files copied. Still out: AI (agents out of scope), Windows + preinstalls (Omarchy-specific), Docker rows, factory reset (btrfs-only), Foot (Kitty is the Hexciri equivalent), Emacs (dead upstream). Update > Channel is gone (Hexciri has no channels), Update > Hexciri is back (Phase 2, 2026-11-24, runs hexciri-update in a floating terminal), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (AI agents are out of scope, Herdr stays removed; mise itself is back in, Phase 2 2026-11-24, for the non-agent tools node, uv, gh). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (pick a backend, its installer is in the fork now). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
 
   19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are NOT removed (ex-vi-compat / openconnect depend on them, the trim stopped trying them 2026-11-24 after the first full update printed the refusal on every run), their entries are hidden with NoDisplay instead; the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
   20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now, fitted to the rendered content at launch (two-mode launch-about, --render measures logo + modules and resizes the window, no fixed 920x480); systemd-boot timeout 1s in every loader.conf AND the LoaderConfigTimeout EFI variable (bootctl set-timeout 1, the variable overrides loader.conf); Super+Shift+T runs btm (bottom package binary); LocalSend file picker is dark (theme name Adwaita in gtk-3.0/gtk-4.0 settings.ini, dconf color-scheme prefer-dark via dbus-run-session, FileChooser=gtk portal; Adwaita-dark is not a theme name); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
 
-  21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back (Package, AUR, Web App, TUI, Style, Gaming and their Remove counterparts, kept only where the backing script exists in the fork; AI, services, terminals, Windows, preinstalls and dictation stay out, and install-browser stays out because its helper tree is not copied).
+  21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back in FULL (Package, AUR, Web App, TUI, Style, Gaming, Browser, Terminal, Editor, Service, Development, Dictation and their Remove counterparts, kept only where the backing script exists in the fork; AI, Windows, preinstalls, Docker rows, factory reset, Foot and Emacs stay out, see item 18). Every restored bin was combed for hard defaults: no folio or nautilus calls in any restored row or bin (folio only ever lived in theme-bg-install, fixed 748c59a; nautilus-dropbox appears only as a package removal), the chromium flags file's extension paths resolve to /usr/share/hexciri/default/chromium/ (copied whole), and the Tailscale Taildrop unit is installed by its install bin (ExecStart fixed to /usr/share/hexciri/bin).
 
   22. Keyring auto-unlock 2026-11-24: Brave Origin asked for the keyring password on every launch because gnome-keyring was installed but nothing unlocked it at login. SDDM PAM now has pam_gnome_keyring.so (auth at the end of the auth section, session auto_start at the end of the session section, placed after the fingerprint block so the pam_unix success=2 skip still lands on the gate + pam_fprintd), plus password sync in /etc/pam.d/passwd so a future login-password change updates the keyring password. Brave keeps using gnome-libsecret, no --password-store flag, no plaintext storage. Two limits: a fingerprint login carries no password so the keyring stays locked that session, log in with the password to unlock it; and the Login keyring password must match the login password, if it does not, change it in Seahorse (right-click Login, Change Password), do NOT delete login.keyring, that destroys the stored secrets including Brave's Safe Storage key.
 
