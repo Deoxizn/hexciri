@@ -205,7 +205,7 @@ CORE_PKGS=(
   xdg-user-dirs xdg-utils xorg-xwayland
   qt6-base qt6-declarative qt6-wayland qt6-svg qt6-5compat qt6-multimedia qt6-imageformats
   polkit rtkit gnome-keyring libsecret
-  pamixer brightnessctl jq bc curl wget git base-devel pacman-contrib # checkupdates, for hexciri-update-available (update icon)
+  pamixer brightnessctl jq bc curl wget git base-devel pacman-contrib socat # checkupdates, for hexciri-update-available (update icon); socat is hexciri-shell's IPC transport (socket fast path), upstream omarchy-base.packages line 145, without it every hexciri-shell call fails "not responding"
   fprintd usbutils # fprintd + usbutils: Setup > Security > Fingerprint needs fprintd-enroll/verify, hw-fingerprint probes USB readers
   imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip
   ripgrep fd fzf eza bat starship zoxide fastfetch
@@ -458,22 +458,34 @@ fi
 # --- fastfetch config (Hexciri's, from the repo tree) ---
 # fastfetch itself is already in CORE_PKGS above (Arch extra). Its config
 # lives in v1 at config/fastfetch/config.jsonc, and its logo at
-# branding/hexciri-nb.png, both present on nyx. Place both under
-# ~/.config/fastfetch/ so `fastfetch` shows Hexciri's layout, not the stock
-# one. Best-effort, never fatal: a missing config still leaves a working
-# fastfetch. An existing config is backed up first, like place_user_file
-# does for the Hyprland templates below.
+# branding/hexciri-nb.png, both present on nyx. The config goes to
+# /etc/fastfetch/config.jsonc, NOT ~/.config/fastfetch/: hexciri-launch-about
+# treats any config under ~/.config/fastfetch as a user custom config and
+# skips ALL window fitting (custom_fastfetch_config returns true), so About
+# opened at the 920x480 float-rule size no matter what, and the remembered
+# about.fit was never even read. /etc/fastfetch is the location launch-about
+# treats as Hexciri-owned, so the fit path runs and About sizes itself to
+# the logo + modules. A user config left behind is moved aside first,
+# otherwise it still wins and fitting stays skipped. Terminal fastfetch
+# still finds the config: it searches /etc/fastfetch after the user dir.
+# Best-effort, never fatal: a missing config still leaves a working
+# fastfetch.
 mkdir -p "$HOME/.config/fastfetch"
+if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then
+  mv "$HOME/.config/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc.hexciri.bak"
+  info "Moved existing ~/.config/fastfetch/config.jsonc aside to config.jsonc.hexciri.bak (it disables About fitting)"
+fi
 if [ -f "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" ]; then
-  if [ -f "$HOME/.config/fastfetch/config.jsonc" ] && ! cmp -s "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc"; then
-    cp -a "$HOME/.config/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc.hexciri.bak"
-    info "Backed up existing ~/.config/fastfetch/config.jsonc to config.jsonc.hexciri.bak"
+  if sudo install -Dm644 "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" /etc/fastfetch/config.jsonc; then
+    info "Placed: /etc/fastfetch/config.jsonc (Hexciri fastfetch config, About fitting works from here)"
+  else
+    warn "could not install /etc/fastfetch/config.jsonc, fastfetch keeps its stock config and About fitting stays skipped"
   fi
-  cp -a "$HEXCIRI_REPO_ROOT/config/fastfetch/config.jsonc" "$HOME/.config/fastfetch/config.jsonc"
-  info "Placed: ~/.config/fastfetch/config.jsonc (Hexciri fastfetch config)"
 else
   warn "config/fastfetch/config.jsonc not found in the installer tree, fastfetch keeps its stock config."
 fi
+[ -f /etc/fastfetch/config.jsonc ] || warn "no /etc/fastfetch/config.jsonc, About will use the stock fastfetch layout"
+[ ! -f "$HOME/.config/fastfetch/config.jsonc" ] || warn "a user fastfetch config is still present, About fitting stays skipped until it is moved aside"
 if [ -f "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" ]; then
   cp -a "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" "$HOME/.config/fastfetch/hexciri-nb.png"
   info "Placed: ~/.config/fastfetch/hexciri-nb.png (fastfetch logo)"
@@ -823,6 +835,18 @@ copy_subsets() {
   # was missing, so theme-set generated NOTHING and no app got themed.
   copy_subset "$OMARCHY_SRC/default/themed" "$FORK_OUT/default/themed" "default/themed/"
 
+  # Icon sets + ASCII logos, 2026-11-23 regression fix: hexciri-icons-list /
+  # switcher / set and hexciri-theme-set-icons read $HEXCIRI_PATH/icons/
+  # (upstream icons/ ships arcade, original, papercraft); hexciri-show-logo
+  # cats $HEXCIRI_PATH/logo.txt and hexciri-branding-about reset copies
+  # $HEXCIRI_PATH/icon.txt. None of these were copied before, so
+  # Appearance > Icons had no sets to show and About's logo file was never
+  # created. Both txt files are ASCII block art with no "omarchy" string
+  # in them, so the no-omarchy-path verification still passes.
+  copy_subset "$OMARCHY_SRC/icons" "$FORK_OUT/icons" "icons/"
+  copy_optional_file "$OMARCHY_SRC/logo.txt" "$FORK_OUT/logo.txt" "logo.txt" || warn "logo.txt not found in source, hexciri-show-logo will fail."
+  copy_optional_file "$OMARCHY_SRC/icon.txt" "$FORK_OUT/icon.txt" "icon.txt" || warn "icon.txt not found in source, About branding reset will fail."
+
   # Kitty config: upstream config/kitty/kitty.conf includes the staged theme
   # kitty.conf. Without this file Kitty never loads the theme colours.
   copy_subset "$OMARCHY_SRC/config/kitty" "$FORK_OUT/config/kitty" "config/kitty/"
@@ -1013,10 +1037,14 @@ replacements = [
     # match the class name, and Strata's app ID was not verified, so a global
     # folio -> strata rename would break those rules.
     (b"-- folio", b"-- strata"),
-    # Terminal: Devi chose Kitty over Omarchy's default Foot. The terminals
-    # list (default/xdg-terminal-exec/hyprland-xdg-terminals.list) names
-    # foot.desktop; rename it so launch-terminal's fast path opens Kitty.
-    (b"foot.desktop", b"kitty.desktop"),
+    # Terminal: Devi chose Kitty over Omarchy's default Foot. There used
+    # to be a GLOBAL foot.desktop -> kitty.desktop rule here; it rewrote
+    # bin/hexciri-default-terminal so its getter returned "foot" for
+    # kitty.desktop and its setter wrote kitty.desktop for foot, so the
+    # settings menu always showed Foot and picking Kitty did nothing.
+    # The rename now happens ONLY for hyprland-xdg-terminals.list, in the
+    # per-file step below, and the repair pass after this map restores
+    # the two corrupted lines if they survive in any form.
     # Menu trigger icon: shell/plugins/menu/BarWidget.qml draws text "\ue900"
     # in fontFamily "omarchy", the Omarchy logo glyph (U+E900) from Omarchy's
     # private-use icon font default/fonts/omarchy/omarchy.ttf, which v2 never
@@ -1118,6 +1146,12 @@ for dirpath, dirnames, filenames in os.walk(root):
         for old, new in replacements:
             if old in new_data:
                 new_data = new_data.replace(old, new)
+        # Terminal list ONLY: Devi chose Kitty over Foot, and this list
+        # names foot.desktop; rename it here and nowhere else, so
+        # launch-terminal's fast path opens Kitty. See the comment where
+        # the global rule used to be: it corrupted default-terminal.
+        if name == "hyprland-xdg-terminals.list":
+            new_data = new_data.replace(b"foot.desktop", b"kitty.desktop")
         if new_data != data:
             with open(path, "wb") as f:
                 f.write(new_data)
@@ -1205,6 +1239,24 @@ elif b'appid: "omarchy"' in _sq:
     print("GlobalShortcut appid already omarchy, skipping")
 else:
     print("WARN: GlobalShortcut appid not found in shell.qml, appid repair NOT applied")
+# Default terminal repair, 2026-11-23: the old global foot.desktop ->
+# kitty.desktop rule rewrote bin/hexciri-default-terminal so its getter
+# returned "foot" for kitty.desktop (first arm, the real kitty arm below
+# it unreachable) and its setter wrote kitty.desktop when foot was
+# chosen. The settings menu therefore always showed Foot and picking
+# Kitty changed nothing. The rule is now scoped to the terminals list
+# only; this repair restores the two corrupted lines in case they
+# survive in any form.
+_dt = root + "/bin/hexciri-default-terminal"
+with open(_dt, "rb") as f:
+    _dtb = f.read()
+_dt_new = _dtb.replace(b'  kitty.desktop) echo "foot" ;;', b'  foot.desktop) echo "foot" ;;')
+_dt_new = _dt_new.replace(b'foot) terminal="foot"; desktop_id="kitty.desktop";', b'foot) terminal="foot"; desktop_id="foot.desktop";')
+if _dt_new != _dtb:
+    with open(_dt, "wb") as f:
+        f.write(_dt_new)
+    repaired += 1
+    print("Default-terminal repair: foot.desktop restored in hexciri-default-terminal getter/setter")
 print("Content rewrite: %d files scanned, %d files changed" % (total_files, changed_files))
 PY
   info "Content rewrite complete"
@@ -2079,6 +2131,12 @@ for bin_file in "$HEXCIRI_PATH"/bin/hexciri-*; do
   ln -sf "$bin_file" "$HOME/.local/bin/$(basename "$bin_file")"
 done
 info "Linked: $HEXCIRI_PATH/bin/hexciri-* into ~/.local/bin/"
+# Bare dispatcher, 2026-11-23: the glob above is hexciri-*, which never
+# matches the bare `hexciri` binary itself, so ~/.local/bin/hexciri was
+# never linked and `hexciri plugin list` was "command not found" in every
+# terminal whose /usr/local/bin link had also failed (sudo timestamp).
+ln -sf "$HEXCIRI_PATH/bin/hexciri" "$HOME/.local/bin/hexciri"
+info "Linked: ~/.local/bin/hexciri (bare dispatcher, the hexciri-* glob never matches it)"
 
 # Browser + terminal desktop entries: upstream applications/ ships
 # omarchy-browser.desktop and omarchy-terminal.desktop, renamed to
@@ -2093,7 +2151,15 @@ mkdir -p "$HOME/.local/share/applications"
 for desk_file in "$FORK_OUT"/applications/*.desktop; do
   [ -e "$desk_file" ] || continue
   cp -a "$desk_file" "$HOME/.local/share/applications/$(basename "$desk_file")"
-  info "Placed desktop entry: $HOME/.local/share/applications/$(basename "$desk_file")"
+  # NoDisplay on the placed wrappers, 2026-11-23: without it the Super+Space
+  # app grid shows Browser + Terminal wrapper entries next to Brave Origin
+  # + Kitty, which are already pinned. The dock stand-in logic does not
+  # need these entries visible, and hexciri-launch-browser / terminal exec
+  # the default browser / terminal directly, not via the .desktop file.
+  if ! grep -q '^NoDisplay=' "$HOME/.local/share/applications/$(basename "$desk_file")"; then
+    printf 'NoDisplay=true\n' >> "$HOME/.local/share/applications/$(basename "$desk_file")"
+  fi
+  info "Placed desktop entry: $HOME/.local/share/applications/$(basename "$desk_file") (NoDisplay, wrapper only)"
 done
 
 # hexciri CLI on PATH everywhere, not just login shells: /usr/local/bin is
@@ -2104,6 +2170,11 @@ done
 # hexciri-* symlinks work there too.
 if [ -x "$HEXCIRI_PATH/bin/hexciri" ]; then
   sudo ln -sf "$HEXCIRI_PATH/bin/hexciri" /usr/local/bin/hexciri 2>/dev/null && info "Linked: /usr/local/bin/hexciri" || warn "could not link /usr/local/bin/hexciri, hexciri CLI needs ~/.local/bin on PATH"
+fi
+if [ -x /usr/local/bin/hexciri ]; then
+  info "Verified: /usr/local/bin/hexciri"
+else
+  warn "could not link /usr/local/bin/hexciri (sudo timestamp may have expired), hexciri CLI relies on ~/.local/bin on PATH"
 fi
 if [ -f "$HOME/.bashrc" ] && ! grep -q 'hexciri/bin' "$HOME/.bashrc" 2>/dev/null; then
   printf '\n# Hexciri 2.0: hexciri CLI and helpers on PATH for interactive shells\ncase ":$PATH:" in\n  *:/usr/share/hexciri/bin:*) ;;\n  *) export PATH="/usr/share/hexciri/bin:$HOME/.local/bin:$PATH" ;;\nesac\n' >> "$HOME/.bashrc"
@@ -2323,6 +2394,20 @@ for _dead in '"install.' '"remove.' '"update.channel' '"update.hexciri"' '"updat
   fi
 done
 unset _dead
+# Regression verification, 2026-11-23: socat is hexciri-shell's IPC
+# transport (menu Apps, bar trigger, theme-set applyTheme, lock, background
+# picker all go through it); icons/ feeds Appearance > Icons and
+# theme-set-icons; logo.txt / icon.txt feed show-logo and About branding;
+# default-terminal must report foot for foot.desktop, or the settings menu
+# shows Foot when Kitty is the default.
+command -v socat >/dev/null 2>&1 || die "socat not installed, hexciri-shell IPC (menu Apps, bar trigger, theme-set applyTheme, lock, background picker) fails without it"
+[ -d "$HEXCIRI_PATH/icons" ] || die "missing: icons/, Appearance > Icons has no sets and theme-set-icons draws nothing"
+[ -f "$HEXCIRI_PATH/logo.txt" ] || die "missing: logo.txt, hexciri-show-logo fails"
+[ -f "$HEXCIRI_PATH/icon.txt" ] || die "missing: icon.txt, About branding reset fails"
+grep -q 'foot.desktop) echo "foot"' "$HEXCIRI_PATH/bin/hexciri-default-terminal" || die "hexciri-default-terminal getter still corrupted, settings show Foot for Kitty"
+grep -q 'kitty.desktop) echo "kitty"' "$HEXCIRI_PATH/bin/hexciri-default-terminal" || die "hexciri-default-terminal getter has no kitty arm"
+[ -L "$HOME/.local/bin/hexciri" ] || die "missing symlink ~/.local/bin/hexciri, hexciri will be command not found in terminals"
+bash -lc 'command -v hexciri' >/dev/null 2>&1 || warn "hexciri not on PATH in a fresh login shell, check ~/.bashrc / fish conf.d PATH lines"
 info "PASS: menu audit verified (dead rows gone, audit bins present, shell IPC paths absolute)"
 # Dock pinned list (Devi 2026-11-23): Strata, Spotify, Brave Origin, Zed,
 # Kitty. hexciri-browser / hexciri-terminal are deliberately NOT pinned,
@@ -2394,11 +2479,41 @@ if [ -x "$HEXCIRI_PATH/bin/hexciri-apply-lock" ]; then
 else
   warn "hexciri-apply-lock not found, System > Lock will return missing-pam"
 fi
+[ -f /etc/pam.d/hexciri-lock-password ] || warn "Lock PAM file /etc/pam.d/hexciri-lock-password still missing after apply-lock, System > Lock will return missing-pam until it exists. Run by hand: sudo hexciri-apply-lock"
 # System > About measured its floating size against the old fastfetch
 # config/logo once and remembered it in about.fit; the Hexciri config and
 # logo changed since, so the remembered size is wrong. Delete it and the
 # next About launch re-measures.
 rm -f "$HOME/.local/state/hexciri/windows/about.fit" 2>/dev/null || true
+# System > About logo, 2026-11-23: launch-about measures its window from
+# ~/.config/hexciri/branding/about.txt, which nothing ever created (the
+# fork never copied icon.txt, and branding-about only writes it on an
+# explicit image/text/reset action), so logo_dimensions failed and the
+# fit never ran even after about.fit was deleted. Transcode Hexciri's own
+# logo image to ASCII if one is in the installer tree, else fall back to
+# the fork's icon.txt (upstream ASCII art, works as a logo until a
+# Hexciri ASCII logo is authored).
+mkdir -p "$HOME/.config/hexciri/branding"
+if [ ! -f "$HOME/.config/hexciri/branding/about.txt" ]; then
+  _logo_img=""
+  for _cand in "$HEXCIRI_REPO_ROOT/branding/sddm/logo.png" "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" "$HEXCIRI_REPO_ROOT/branding/sddm/logo.svg"; do
+    if [ -f "$_cand" ]; then _logo_img="$_cand"; break; fi
+  done
+  if [ -n "$_logo_img" ] && [ -x "$HEXCIRI_PATH/bin/hexciri-transcode-ascii" ]; then
+    if "$HEXCIRI_PATH/bin/hexciri-transcode-ascii" "$_logo_img" "$HOME/.config/hexciri/branding/about.txt" --width 54 --height 26 2>/dev/null; then
+      info "About logo: transcoded $_logo_img to branding/about.txt"
+    elif [ -f "$HEXCIRI_PATH/icon.txt" ]; then
+      cp -a "$HEXCIRI_PATH/icon.txt" "$HOME/.config/hexciri/branding/about.txt" && info "About logo: branding/about.txt from fork icon.txt (transcode failed)"
+    else
+      warn "could not create branding/about.txt, About fit will be skipped"
+    fi
+  elif [ -f "$HEXCIRI_PATH/icon.txt" ]; then
+    cp -a "$HEXCIRI_PATH/icon.txt" "$HOME/.config/hexciri/branding/about.txt" && info "About logo: branding/about.txt from fork icon.txt"
+  else
+    warn "no Hexciri logo image and no fork icon.txt, branding/about.txt not created, About fit will be skipped"
+  fi
+  unset _logo_img _cand
+fi
 
 # --- Apply a default theme, like v1 does its theme sync ---
 # v1 finishes with a theme applied, not just themes installed. Pick the
@@ -2606,7 +2721,11 @@ cat > "$HOME/.local/bin/hexciri-trim-bloat" <<'TRIM_EOF'
 # Hexciri 2.0: remove packages Devi does not want, best-effort, idempotent.
 # Runs at install time and from the post-update hook, so an update can never
 # leave them installed again. pacman -Rns refuses if something still depends
-# on a package, so a removal here is always safe. sudo -n never prompts.
+# on a package, so a removal here is always safe. Plain sudo, NOT sudo -n:
+# the installer runs interactively from a terminal, and sudo -n fails
+# silently once the sudo timestamp expires mid-install (the install takes
+# far longer than the timeout), so every removal was quietly "kept" and
+# vim + stoken survived the trim on the last live run.
 # 2026-11-23 removals, Devi does not want them: ghostwriter (markdown
 # editor, was the omawrite substitute), meld (diff/merge tool), ncspot
 # (Spotify TUI, was the cliamp substitute), neovim + vim (nano ships in
@@ -2619,7 +2738,7 @@ cat > "$HOME/.local/bin/hexciri-trim-bloat" <<'TRIM_EOF'
 # eos-bash-shared depends on it, its entry is hidden instead (above).
 for _pkg in foot btop apostrophe pandoc-cli ghostwriter meld ncspot neovim vim obsidian pinta xterm stoken; do
   if pacman -Q "$_pkg" >/dev/null 2>&1; then
-    if sudo -n pacman -Rns --noconfirm "$_pkg" 2>/dev/null; then
+    if sudo pacman -Rns --noconfirm "$_pkg" 2>/dev/null; then
       echo "trim-bloat: removed $_pkg"
     else
       echo "trim-bloat: kept $_pkg (removal refused, something depends on it)" >&2
@@ -2634,7 +2753,7 @@ if [ -n "$_orphans" ]; then
   _hs="$(printf '%s\n' "$_orphans" | grep -E '^(ghc-libs|haskell-|hslua-cli|pandoc-cli)' || true)"
   if [ -n "$_hs" ]; then
     # shellcheck disable=SC2086
-    sudo -n pacman -Rns --noconfirm $_hs 2>/dev/null && echo "trim-bloat: removed orphaned Haskell packages" || echo "trim-bloat: Haskell orphan removal refused" >&2
+    sudo pacman -Rns --noconfirm $_hs 2>/dev/null && echo "trim-bloat: removed orphaned Haskell packages" || echo "trim-bloat: Haskell orphan removal refused" >&2
   fi
   unset _hs
 fi
@@ -2642,7 +2761,22 @@ unset _orphans
 TRIM_EOF
 chmod +x "$HOME/.local/bin/hexciri-trim-bloat"
 sudo ln -sf "$HOME/.local/bin/hexciri-trim-bloat" "$HEXCIRI_PATH/bin/hexciri-trim-bloat" 2>/dev/null || warn "could not link hexciri-trim-bloat into $HEXCIRI_PATH/bin"
+sudo -v || warn "sudo timestamp refresh failed, trim-bloat removals may be refused"
 "$HOME/.local/bin/hexciri-trim-bloat" || warn "trim-bloat run failed, not fatal"
+# Hide fallback, 2026-11-23: if a trim package still cannot be removed (a
+# dependency holds it), its app entry must still not show in the grid.
+# vim ships vim.desktop, stoken ships stoken-gui.desktop + stoken-small.
+for _hide_desk in vim.desktop stoken-gui.desktop stoken-small.desktop; do
+  if [ -f "/usr/share/applications/$_hide_desk" ] && [ ! -f "$HOME/.local/share/applications/$_hide_desk" ]; then
+    cp -a "/usr/share/applications/$_hide_desk" "$HOME/.local/share/applications/$_hide_desk"
+    printf 'NoDisplay=true\n' >> "$HOME/.local/share/applications/$_hide_desk"
+    info "Hidden: $_hide_desk (package still installed, entry hidden from app grid)"
+  elif [ -f "$HOME/.local/share/applications/$_hide_desk" ] && ! grep -q '^NoDisplay=' "$HOME/.local/share/applications/$_hide_desk"; then
+    printf 'NoDisplay=true\n' >> "$HOME/.local/share/applications/$_hide_desk"
+    info "Hidden: $_hide_desk (entry hidden from app grid)"
+  fi
+done
+unset _hide_desk
 # YAD settings: Devi does not want the "YAD settings" app entry. yad
 # itself CANNOT be removed: eos-bash-shared depends on yad, and
 # eos-bash-shared is required by welcome, eos-log-tool, eos-rankmirrors,
@@ -2789,6 +2923,8 @@ Reboot, then check in order:
   17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta, xterm, stoken and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). YAD settings is hidden, yad itself stays (EOS tools depend on it).
 
   18. Menu audit 2026-11-23: the whole Install and Remove subtrees are gone (install-*/remove-* were never in the fork), Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
+
+  19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are removed for real this time (trim used sudo -n, which silently failed once the sudo timestamp expired); the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
 
 If Super+Alt+Space (menu) still does nothing after reboot, run this in a terminal and report what it prints:
   hexciri-shell shell toggle hexciri.menu '{"menu":"root"}'

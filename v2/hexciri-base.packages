@@ -41,6 +41,7 @@ wget
 git
 base-devel
 imagemagick
+socat
 inotify-tools
 grim
 slurp
