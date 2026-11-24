@@ -37,6 +37,7 @@
 #   Upstream Omarchy migrations, channel/keyring/mirror scripts
 #   Waybar, Mako, Walker, hyprlock, hypridle, swaybg, hyprpolkitagent
 #   Apps beyond the Hexciri default apps step below, Docker, AI agents
+#   other than opencode (in the default apps step, v1 pacman install)
 #   Noctalia, Niri. Hyprland plus Quickshell only, SDDM like Omarchy.
 #
 # Hard rule: no file named omarchy in the Hexiri repo. Files, paths, and CLI
@@ -457,8 +458,10 @@ xdg-user-dirs-update || warn "xdg-user-dirs-update failed, not fatal."
 #   zed as editor (v1 want), bottom over btop (v1 stock removal)
 # NOT installed: google-chrome, foot, folio, btop, plain / omacalc /
 # omawrite / omaview / herdr / cliamp / omasnap (Omarchy-repo-only, no Arch
-# or AUR package exists for them), docker, AI agents (opencode,
-# pi-coding-agent), fuzzel / noctalia (v2 shell is Quickshell, not
+# or AUR package exists for them), docker, AI agents (pi-coding-agent),
+# fuzzel / noctalia (v2 shell is Quickshell, not fuzzel/Noctalia).
+# opencode is the exception (2026-11-24, Devi): v1 shipped it via
+# pacman and it just opens and works, so it is in APP_PKGS above.
 # fuzzel/Noctalia). They are SUBSTITUTED with Arch defaults instead, so
 # their binds work (2026-11-23, Devi: most Omarchy apps can just
 # substitute with Arch defaults/alternatives):
@@ -519,6 +522,12 @@ APP_PKGS=(
   cliphist libqalculate libreoffice-fresh gnome-disk-utility
   lazygit yt-dlp gvfs zbar qrencode imv
   gnome-calculator
+  opencode # v1 pacman install (2026-11-24, Devi): Hexciri v1 shipped
+  # opencode in its pacman wants list, install and start using, no setup.
+  # Arch extra has opencode 2.4.1-1 (2026-11-23). Its free models
+  # (Big Pickle et al) need no account: the TUI opens straight to the
+  # prompt. Do NOT move it to mise: hexciri-tools.toml excludes AI CLIs
+  # on purpose, and default-agent must see the pacman binary as present.
 )
 if ! run_pacman "Default apps" -S --needed --noconfirm "${APP_PKGS[@]}"; then
   warn "Bulk default-apps install failed, retrying per package (best-effort)."
@@ -548,6 +557,29 @@ elif yay -S --needed --noconfirm localsend-bin 2>/dev/null; then
   info "LocalSend installed via yay (AUR localsend-bin)"
 else
   warn "LocalSend install failed (yay/AUR unreachable), menu Share > Receive will fail until it is installed. Install by hand: yay -S localsend-bin"
+fi
+
+# --- LocalSend firewall (2026-11-24): discovery is multicast UDP
+# 224.0.0.167:53317, transfer is HTTPS TCP 53317, and LocalSend is NOT
+# mDNS (no UDP 5353 involved). firewalld is enabled on EndeavourOS and
+# its default zone drops inbound traffic, so without this rule no other
+# device can reach this laptop's LocalSend at all: it never appears in
+# their device list, and they never appear here either. Best-effort,
+# never dies: when the daemon is running, firewall-cmd --permanent plus
+# --reload applies it live; when it is not running yet, the offline
+# tool writes the permanent config and it applies at next start.
+if systemctl is-active --quiet firewalld 2>/dev/null && command -v firewall-cmd >/dev/null 2>&1; then
+  if sudo firewall-cmd --permanent --add-port=53317/tcp --add-port=53317/udp >/dev/null 2>&1 && sudo firewall-cmd --reload >/dev/null 2>&1; then
+    info "LocalSend firewall: 53317/tcp + 53317/udp open in firewalld (discovery + transfer)"
+  else
+    warn "LocalSend firewall: could not open 53317 in firewalld, other devices may not see this laptop (run: sudo firewall-cmd --permanent --add-port=53317/tcp --add-port=53317/udp && sudo firewall-cmd --reload)"
+  fi
+elif command -v firewall-offline-cmd >/dev/null 2>&1; then
+  if sudo firewall-offline-cmd --add-port=53317/tcp --add-port=53317/udp >/dev/null 2>&1; then
+    info "LocalSend firewall: 53317/tcp + 53317/udp open in firewalld permanent config (applies at next firewalld start)"
+  else
+    warn "LocalSend firewall: could not open 53317 in firewalld, other devices may not see this laptop (run: sudo firewall-cmd --permanent --add-port=53317/tcp --add-port=53317/udp && sudo firewall-cmd --reload)"
+  fi
 fi
 
 # --- Brave Origin (default browser), AUR, best-effort ---
@@ -2853,7 +2885,7 @@ PY
 #     is running, so if hexciri-update itself changed it re-execs the new
 #     copy (same PID, so the sudo keepalive and the update lock survive).
 #   * Keyring: Arch + EndeavourOS keyrings only. There is no Hexciri
-#     keyring package, no WKD key, no pkgs@hexciri.org, no Omarchy repo.
+#     keyring package, no WKD key, no Hexciri package repo, no Omarchy repo.
 #   * Boot: no lifecycle-dispatch package is registered (it is a no-op on
 #     x86 and is deliberately not copied), so boot verification runs
 #     bootctl status directly instead of failing with 127.
@@ -2971,7 +3003,7 @@ must_replace(upd, "  hexciri-update-dev\n", "\n".join([
     "  if [[ ${HEXCIRI_UPDATE_SELF_DONE:-0} != \"1\" ]]; then",
     "    _hexciri_update_self_before=\"$(sha256sum \"$0\" 2>/dev/null || true)\"",
     "    _hexciri_update_self_before=\"${_hexciri_update_self_before%% *}\"",
-    "    hexciri-update-hexciri",
+    "    HEXCIRI_UPDATE_CONTINUE_ON_SYNC_FAIL=1 hexciri-update-hexciri",
     "    _hexciri_update_self_after=\"$(sha256sum \"$0\" 2>/dev/null || true)\"",
     "    _hexciri_update_self_after=\"${_hexciri_update_self_after%% *}\"",
     "    # If this script itself changed, re-exec the new copy so the rest of",
@@ -3123,6 +3155,35 @@ must_replace(fork + "/bin/hexciri-update-confirm",
     "https://github.com/omacom/hexciri/releases/latest",
     "https://github.com/Deoxizn/hexciri",
     "hexciri-update-confirm points at Deoxizn/hexciri (repo root, no releases)")
+
+# 7b. Dead-domain cleanup (2026-11-24, Devi: no hexciri.org, no discord).
+# The rename turns omarchy.org/discord into hexciri.org/discord, and
+# omarchy.org/manual + omarchy.org/themes into hexciri.org/* too. None
+# of those domains are Devi's, so every user-visible one points at the
+# GitHub issues page / repo instead, the only help destination that
+# actually exists. (geo.hexciri.org in hexciri-weather-location and
+# pkgs.hexciri.org in hexciri-version-channel are left alone: the first
+# needs a geo-service decision, the second is dead channel code that
+# just reports "unknown".)
+must_replace(fork + "/bin/hexciri-update",
+    "https://hexciri.org/discord",
+    "https://github.com/Deoxizn/hexciri/issues",
+    "hexciri-update error footer points at Deoxizn/hexciri/issues, not hexciri.org/discord")
+must_replace(fork + "/bin/hexciri-theme-install",
+    "https://hexciri.org/themes/",
+    "https://github.com/Deoxizn/hexciri",
+    "hexciri-theme-install hint points at the repo, not hexciri.org/themes")
+must_replace(fork + "/bin/hexciri-launch-manual",
+    'exec hexciri-launch-webapp "${site:-https://hexciri.org/}manual/"',
+    'exec hexciri-launch-webapp "${site:-https://github.com/Deoxizn/hexciri/}"',
+    "hexciri-launch-manual opens the repo, not hexciri.org/manual")
+import re as _re7b
+_loc = fork + "/default/i18n/locales.json"
+_t7b = read(_loc)
+_n7b = len(_re7b.findall(r'"site": "https://[^"]*hexciri[^"]*"', _t7b))
+_t7b = _re7b.sub(r'"site": "https://[^"]*hexciri[^"]*"', '"site": "https://github.com/Deoxizn/hexciri/"', _t7b)
+write(_loc, _t7b)
+print("  update: locales.json manual sites (%d) point at the repo, not hexciri.org" % _n7b)
 
 # 8. Theme-matched green/red in update output, 2026-11-24: upstream prints
 # section headers with hardcoded \e[32m (stock Omarchy green) and errors
@@ -3355,12 +3416,12 @@ info "  update: hexciri-update-mise rewritten (quiet: one status line)"
 
 # Whole-file rewrites: keyring, system-pkgs, pacman guard, available.
 # The keyring file: Arch + EndeavourOS keyrings only. No Hexciri keyring
-# package, no WKD key, no pkgs@hexciri.org, no Omarchy repo. ARM handling
+# package, no WKD key, no Hexciri package repo, no Omarchy repo. ARM handling
 # dropped: Hexciri machines are x86_64.
 cat > "$FORK_OUT/bin/hexciri-update-keyring" <<'KEYRING_EOF'
 #!/bin/bash
 # Hexciri: refresh Arch + EndeavourOS keyrings only. There is no Hexciri
-# keyring package, no WKD key, no pkgs@hexciri.org, no Omarchy repo, so the
+# keyring package, no WKD key, no Hexciri package repo, no Omarchy repo, so the
 # upstream keyring step (which tries to install a Hexciri keyring package
 # from the Omarchy repo) cannot work here. ARM keyring handling is dropped
 # too: Hexciri machines are x86_64.
@@ -3611,6 +3672,105 @@ for _f in hexciri-update hexciri-update-system-pkgs hexciri-update-keyring hexci
 done
 unset _f
 info "  update: hexciri-update patched (eos-update --aur, no snapshot, Hexciri self-update, mise, dracut log scan)"
+
+# --- opencode out of the box, no account (2026-11-24, Devi) ---
+# v1 installed opencode with pacman and hexciri-agent just exec'd it:
+# install and start using, no setup. v2 left it a lazy mise tool and
+# the agents panel treated OpenCode as a subscription to sign in to,
+# running `opencode auth login opencode --method device` (make an
+# OpenCode Console account, enter the code). The free models need no
+# account at all: opencode 1.19.6 and 2.4.1 both open straight into
+# the TUI on Big Pickle with no auth.json, and v2.4.0 did a task on
+# Big Pickle with no account in 12.6s (2026-11-23 test). So:
+#   * default-agent counts a system /usr/bin binary as present, or
+#     it would mise-install over the pacman one every time;
+#   * the panel's plain OpenCode tile makes opencode the default and
+#     opens it instead of the Console device login. OpenCode Go keeps
+#     the device login: Go is a paid subscription, an account IS
+#     required there, and its tile signs in as opencode.
+DA_FILE="$FORK_OUT/bin/hexciri-default-agent"
+if [ -f "$DA_FILE" ]; then
+  python3 - "$DA_FILE" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path) as f:
+    s = f.read()
+old = """  agent_present() { user_install || mise where "$agent_tool" &>/dev/null; }"""
+new = """  # A system install counts too: v1 installed opencode with pacman, and
+  # a /usr/bin binary is a real install, not a mise shim. Only mise's own
+  # shims and command wrappers are skipped, as in
+  # hexciri-agent-account-add's cli_missing().
+  system_install() {
+    local mise_data=${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}
+    local dir path=""
+    local IFS=:
+    for dir in $PATH; do
+      if [[ $dir != "$mise_data/command-wrappers/bin" && $dir != "$mise_data/shims" ]]; then
+        path+="${path:+:}$dir"
+      fi
+    done
+    PATH=$path type -P "$agent" >/dev/null
+  }
+  agent_present() { user_install || system_install || mise where "$agent_tool" &>/dev/null; }"""
+assert s.count(old) == 1, "default-agent agent_present anchor not found exactly once"
+s = s.replace(old, new, 1)
+# agent_install runs even when agent_present is true (it is the step
+# after the present check, for --select and for the menu path), so a
+# system install must skip the mise install too, or `mise use -g
+# opencode` would download a mise copy over the pacman one.
+old_install = """  agent_install() {
+    user_install && return"""
+new_install = """  agent_install() {
+    # A system install is a real install too (pacman opencode, v1): do
+    # not mise-install over it just because it is not in ~/.local/bin.
+    user_install || system_install && return"""
+assert s.count(old_install) == 1, "default-agent agent_install anchor not found exactly once"
+s = s.replace(old_install, new_install, 1)
+with open(path, "w") as f:
+    f.write(s)
+print("default-agent: system binary counts as present (pacman opencode, v1 behaviour)")
+PY
+  bash -n "$DA_FILE" || die "bash -n failed on patched $DA_FILE"
+  info "  opencode: default-agent accepts a system install (no mise re-install over pacman opencode)"
+else
+  warn "  opencode: hexciri-default-agent not in fork output, system-install patch skipped"
+fi
+
+PANEL_QML="$FORK_OUT/shell/plugins/agents/Panel.qml"
+if [ -f "$PANEL_QML" ]; then
+  python3 - "$PANEL_QML" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path) as f:
+    s = f.read()
+old = """    if (id === otherInOpenCode) {
+      openOpenCodeLogin()
+      return
+    }"""
+new = """    if (id === otherInOpenCode) {
+      openOpenCodeLogin()
+      return
+    }
+    if (id === "opencode") {
+      // OpenCode's free models need no account (v1 behaviour: install
+      // and start using). Make it the default and open it instead of
+      // the Console device login, which is for paid Go only. The Go
+      // tile signs in as opencode and still reaches account-add below.
+      var opencodeTile = signInProviders.find(function(p) { return p.providerId === "opencode" })
+      makeDefault(opencodeTile, null)
+      runLine(opencodeTile)
+      return
+    }"""
+assert s.count(old) == 1, "Panel.qml chooseAddProvider anchor not found exactly once"
+s = s.replace(old, new, 1)
+with open(path, "w") as f:
+    f.write(s)
+print("agents panel: plain OpenCode tile opens opencode with no sign-in (Go tile unchanged)")
+PY
+  info "  opencode: agents panel OpenCode tile opens opencode with no account (Go keeps device login)"
+else
+  warn "  opencode: agents Panel.qml not in fork output, panel patch skipped"
+fi
 
 # Save the fully patched fork for the next re-run (fork cache,
 # 2026-11-24). Only when patches actually ran (SKIP_PATCHES=0) and
@@ -5235,6 +5395,7 @@ fi
 if command -v mpv >/dev/null 2>&1; then hc_info "  video: mpv present"; else warn "  video: mpv NOT installed"; fi
 if command -v gpu-screen-recorder >/dev/null 2>&1; then hc_info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
 if command -v localsend >/dev/null 2>&1; then hc_info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
+if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then if sudo firewall-cmd --list-ports 2>/dev/null | grep -q '53317/tcp' && sudo firewall-cmd --list-ports 2>/dev/null | grep -q '53317/udp'; then hc_info "  share: firewalld allows 53317/tcp+udp (LocalSend discovery + transfer)"; else warn "  share: firewalld does not allow 53317, other devices may not see this laptop's LocalSend (run: sudo firewall-cmd --permanent --add-port=53317/tcp --add-port=53317/udp && sudo firewall-cmd --reload)"; fi; fi
 if command -v fastfetch >/dev/null 2>&1; then hc_info "  fastfetch: present"; else warn "  fastfetch: NOT installed"; fi
 if [ -f /etc/fastfetch/config.jsonc ]; then hc_info "  fastfetch config: /etc/fastfetch/config.jsonc present (Hexciri config)"; elif [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then hc_info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
 grep -q 'hexciri-launch-about --render' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q 'hexciri-launch-or-focus-tui --app-id=org.hexciri.about' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q '_about_fit' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && hc_info "  about: launch-about is the two-mode fastfetch (--render runs inside the terminal, no bash -c quoting trap)" || warn "  about: launch-about is not the two-mode --render script, System > About may open and close at once"
@@ -5243,6 +5404,7 @@ if grep -q '^gtk-theme-name=Adwaita$' "$HOME/.config/gtk-4.0/settings.ini" 2>/de
 if command -v dbus-run-session >/dev/null 2>&1; then _gtk_scheme_now="$(dbus-run-session -- gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || echo unknown)"; if [ "$_gtk_scheme_now" = "'prefer-dark'" ]; then hc_info "  gtk picker: dconf color-scheme=prefer-dark (portal dialog reads dconf on Wayland, not settings.ini)"; else warn "  gtk picker: dconf color-scheme=$_gtk_scheme_now, portal file picker may stay light (expected 'prefer-dark' for a dark theme)"; fi; unset _gtk_scheme_now; fi
 [ -x /usr/lib/hexciri/speedtest ] && hc_info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
 command -v btm >/dev/null 2>&1 && hc_info "  activity monitor: btm present (Super+Shift+T)" || warn "  activity monitor: btm NOT installed, Super+Shift+T will fail (package: bottom, binary: btm)"
+command -v opencode >/dev/null 2>&1 && hc_info "  agent: opencode present ($(opencode --version 2>/dev/null | head -1), free models need no account)" || warn "  agent: opencode NOT installed, hexciri-agent / default agent opencode will fail (pacman -S opencode)"
 _boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do if [ -f "$_f" ]; then _boot_hc_seen=1; grep -q '^timeout 1$' "$_f" 2>/dev/null || _boot_hc_ok=0; fi; done; if [ "$_boot_hc_seen" -eq 1 ] && [ "$_boot_hc_ok" -eq 1 ]; then hc_info "  boot timeout: every loader.conf says timeout 1"; elif [ "$_boot_hc_seen" -eq 0 ]; then _boot_hc_noconf=1; else warn "  boot timeout: a loader.conf does not say timeout 1 (grep timeout in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf)"; fi; _boot_hc_efi=""; [ -r /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f ] && _boot_hc_efi="$(tail -c +5 /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')"; if [ "$_boot_hc_efi" = "1" ]; then hc_info "  boot timeout EFI: LoaderConfigTimeout=1"; elif [ -n "$_boot_hc_efi" ]; then warn "  boot timeout EFI: LoaderConfigTimeout=$_boot_hc_efi, overrides loader.conf (run: sudo bootctl set-timeout 1)"; else hc_info "  boot timeout EFI: no LoaderConfigTimeout variable, loader.conf controls it"; fi; if [ "${_boot_hc_noconf:-0}" = "1" ] && [ "$_boot_hc_efi" != "1" ]; then warn "  boot timeout: no loader.conf found and LoaderConfigTimeout is not 1 (GRUB or other bootloader?)"; elif [ "${_boot_hc_noconf:-0}" = "1" ]; then hc_info "  boot timeout: no loader.conf on this ESP layout, EFI LoaderConfigTimeout=1 controls it"; fi; unset _boot_hc_ok _boot_hc_seen _boot_hc_efi _boot_hc_noconf _f
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && hc_info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
 command -v xdg-terminal-exec >/dev/null 2>&1 && hc_info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
