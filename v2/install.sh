@@ -2307,6 +2307,29 @@ elif "SUPER + SHIFT + S" in _c and "Amap" in _c:
 if _c != _c_orig:
     with open(_cn, "w") as f:
         f.write(_c)
+# 6b. Reclaim SUPER+CTRL+S for Hexciri Settings (2026-11-24, Devi:
+# Super+Ctrl+S does not open Settings, Super+Alt+S does not either).
+# The 690c325 agent claimed the chord was free; it was not. Upstream
+# utilities.lua:106 binds SUPER+CTRL+S to Share ({ menu = "share" }),
+# and SUPER+ALT+S is scratchpad (tiling.lua). Move Share to
+# SUPER+CTRL+SHIFT+S, verified free in upstream 94a8c3c (no
+# SUPER+SHIFT+CTRL+S bind exists), and let
+# default/hypr/bindings/hexciri.lua own SUPER+CTRL+S for hexciri-settings.
+_utils = root + "/default/hypr/bindings/utilities.lua"
+with open(_utils) as f:
+    _u2 = f.read()
+_u2_orig = _u2
+_old_share = 'o.bind("SUPER + CTRL + S", "Share", { menu = "share" })'
+if _old_share in _u2:
+    _u2 = _u2.replace(_old_share, 'o.bind("SUPER + CTRL + SHIFT + S", "Share", { menu = "share" })  -- Hexciri: Super+Ctrl+S is Hexciri Settings, Share moved here', 1)
+    changed.append("Share bind moved Super+Ctrl+S -> Super+Ctrl+Shift+S (Super+Ctrl+S is Hexciri Settings)")
+elif 'o.bind("SUPER + CTRL + SHIFT + S", "Share"' in _u2:
+    print("Share bind already on Super+Ctrl+Shift+S, skipping")
+else:
+    print("WARN: Share bind line shape changed, Super+Ctrl+S NOT reclaimed")
+if _u2 != _u2_orig:
+    with open(_utils, "w") as f:
+        f.write(_u2)
 for c in changed[_changed_before_reclaim:]:
     print("regions: " + c)
 
@@ -2768,7 +2791,7 @@ elif command -v luac >/dev/null 2>&1; then
   luac -p "$FORK_OUT/default/hypr/bindings/utilities.lua" && info "utilities.lua patch OK (luac syntax OK)" || warn "luac syntax check failed on patched utilities.lua, Hyprland will report the real error at boot if this is broken."
 fi
 bash -n "$FORK_OUT/bin/hexciri-capture-screenshot" || die "bash -n failed on rewritten $FORK_OUT/bin/hexciri-capture-screenshot"
-info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, btm (bottom package), Herdr removed, cliamp/omawrite/Obsidian binds removed (ncspot/ghostwriter/obsidian not wanted), screenshot via grim+slurp, touchpad bottom-right = right click, Super+Shift+S web search + Super+Shift+C calculator reclaimed from region webapps (Google Maps / Hey Calendar)"
+info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, btm (bottom package), Herdr removed, cliamp/omawrite/Obsidian binds removed (ncspot/ghostwriter/obsidian not wanted), screenshot via grim+slurp, touchpad bottom-right = right click, Super+Shift+S web search + Super+Shift+C calculator reclaimed from region webapps (Google Maps / Hey Calendar), Super+Ctrl+S Settings reclaimed from Share (Share now Super+Ctrl+Shift+S)"
 
 # --- Patch dock pinned list (Devi 2026-11-23 20:59 / 21:00 MST) ---
 # Upstream config/omarchy/shell.json pins folio, omarchy-browser,
@@ -5414,7 +5437,7 @@ if [ -d "$HEXCIRI_REPO_ROOT/v2/hexciri-settings" ]; then
     if "$SETTINGS_SRC/install" --quiet; then
       info "  settings installed: hexciri-settings $(hexciri-settings --version 2>/dev/null || echo present) (Super+Ctrl+S, launcher: Hexciri Settings)"
     else
-      warn "  Hexciri Settings build failed (see ~/.cache/hexciri-settings-build/build.log), app missing until rebuilt by hand: $SETTINGS_SRC/install"
+      warn "  Hexciri Settings build failed (log: ~/.cache/hexciri-settings-build/build.log, status: $SETTINGS_SRC/install --status), app missing until rebuilt by hand: $SETTINGS_SRC/install"
     fi
   else
     warn "  Hexciri Settings install script missing, app not built"
