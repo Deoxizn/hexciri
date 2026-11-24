@@ -137,6 +137,30 @@ if ! command -v yay >/dev/null 2>&1; then
   die "yay not found. EndeavourOS should ship yay. Fix yay first, then rerun."
 fi
 
+# Pac-Man progress bars, 2026-11-24 (Devi prefers the Arch ILoveCandy
+# bar to pacman's plain [----] bar): ILoveCandy in /etc/pacman.conf makes
+# pacman draw Pac-Man eating dots. yay and eos-update both shell out to
+# pacman, so their bars get it too, as does the hexciri-update fallback
+# pacman path. The curl downloads (bootstrap, tarball fetches) used
+# to show curl's old -=O=- bar; they are now silent (curl -fsSL)
+# with a size line after, so the only progress bar you see is
+# pacman's ILoveCandy one. Note: on a re-run installer most
+# packages are already installed (--needed), so pacman has
+# nothing to download and no Pac-Man bar appears at all. That
+# is normal, not a broken bar.
+step "Enabling Pac-Man progress bar (ILoveCandy) in /etc/pacman.conf"
+if grep -q '^ILoveCandy' /etc/pacman.conf; then
+  info "ILoveCandy already enabled in /etc/pacman.conf (pacman eats dots)"
+elif grep -q '^#ILoveCandy' /etc/pacman.conf; then
+  sudo sed -i 's/^#ILoveCandy/ILoveCandy/' /etc/pacman.conf
+  grep -q '^ILoveCandy' /etc/pacman.conf && info "ILoveCandy enabled in /etc/pacman.conf (was commented out)" || warn "could not enable ILoveCandy in /etc/pacman.conf"
+elif grep -q '^\[options\]' /etc/pacman.conf; then
+  sudo sed -i '/^\[options\]/a ILoveCandy' /etc/pacman.conf
+  grep -q '^ILoveCandy' /etc/pacman.conf && info "ILoveCandy added to /etc/pacman.conf under [options]" || warn "could not add ILoveCandy to /etc/pacman.conf"
+else
+  warn "no [options] section in /etc/pacman.conf, ILoveCandy not set (add ILoveCandy under [options] by hand)"
+fi
+
 if ! command -v lspci >/dev/null 2>&1; then
   warn "lspci not found, installing pciutils first so GPU detection works."
   sudo pacman -S --needed --noconfirm pciutils
@@ -181,25 +205,6 @@ else
   else
     die "Could not enable multilib in /etc/pacman.conf. Enable it manually, then rerun."
   fi
-fi
-
-# Pac-Man progress bars, 2026-11-24 (Devi prefers the Arch ILoveCandy
-# bar to pacman's plain [----] bar): ILoveCandy in /etc/pacman.conf makes
-# pacman draw Pac-Man eating dots. yay and eos-update both shell out to
-# pacman, so their bars get it too, as does the hexciri-update fallback
-# pacman path. curl --progress-bar downloads (bootstrap, tarball fetches)
-# are plain download bars, not pacman bars, and are left alone.
-step "Enabling Pac-Man progress bar (ILoveCandy) in /etc/pacman.conf"
-if grep -q '^ILoveCandy' /etc/pacman.conf; then
-  info "ILoveCandy already enabled in /etc/pacman.conf (pacman eats dots)"
-elif grep -q '^#ILoveCandy' /etc/pacman.conf; then
-  sudo sed -i 's/^#ILoveCandy/ILoveCandy/' /etc/pacman.conf
-  grep -q '^ILoveCandy' /etc/pacman.conf && info "ILoveCandy enabled in /etc/pacman.conf (was commented out)" || warn "could not enable ILoveCandy in /etc/pacman.conf"
-elif grep -q '^\[options\]' /etc/pacman.conf; then
-  sudo sed -i '/^\[options\]/a ILoveCandy' /etc/pacman.conf
-  grep -q '^ILoveCandy' /etc/pacman.conf && info "ILoveCandy added to /etc/pacman.conf under [options]" || warn "could not add ILoveCandy to /etc/pacman.conf"
-else
-  warn "no [options] section in /etc/pacman.conf, ILoveCandy not set (add ILoveCandy under [options] by hand)"
 fi
 
 step "Syncing package databases"
@@ -649,8 +654,8 @@ for cmd in curl python3 tar grep find cp mkdir rm; do
   command -v "$cmd" >/dev/null 2>&1 || die "missing required command: $cmd"
 done
 OMARCHY_TARBALL="$TMP_WORK/omarchy.tar.gz"
-info "Omarchy tarball is about 94 MB, this can take a minute on a slow connection"
-curl --progress-bar -fSL --max-time 300 -o "$OMARCHY_TARBALL" "$OMARCHY_TARBALL_URL" || die "curl download of omacom/omarchy tarball failed. Fix networking, then rerun."
+info "Omarchy tarball is about 94 MB, this can take a minute on a slow connection (silent download, no progress bar)"
+curl -fsSL --max-time 300 -o "$OMARCHY_TARBALL" "$OMARCHY_TARBALL_URL" || die "curl download of omacom/omarchy tarball failed. Fix networking, then rerun."
 [ -s "$OMARCHY_TARBALL" ] || die "Downloaded Omarchy tarball is empty: $OMARCHY_TARBALL"
 OMARCHY_SIZE="$(wc -c < "$OMARCHY_TARBALL" | tr -d ' ')"
 info "Downloaded: $OMARCHY_SIZE bytes (~$((OMARCHY_SIZE / 1024 / 1024)) MB): $OMARCHY_TARBALL"
@@ -2507,8 +2512,9 @@ PY
 #     keeping -y non-interactive.
 #   * Hexciri self-update: the dev-checkout step is a no-op on an installed
 #     machine (HEXCIRI_PATH is /usr/share/hexciri, not a checkout), so
-#     hexciri-update-hexciri (repo file v2/hexciri-update-hexciri) pulls the
-#     nyx tarball like bootstrap and re-runs this installer when the
+#     hexciri-update-hexciri (repo file v2/hexciri-update-hexciri) syncs
+#     nyx with git like v1 (clone/pull ~/.local/opt/hexciri-nyx, no
+#     auth, tarball fallback) and re-runs this installer when the
 #     installer sha changed, judged by /usr/share/hexciri/.installer-sha.
 #     The installer re-places /usr/share/hexciri/bin while hexciri-update
 #     is running, so if hexciri-update itself changed it re-execs the new
@@ -2532,7 +2538,7 @@ step "Patching hexciri-update for EndeavourOS (eos-update --aur, no snapshot, He
 if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" ]; then
   cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$FORK_OUT/bin/hexciri-update-hexciri"
   chmod +x "$FORK_OUT/bin/hexciri-update-hexciri"
-  info "  update: hexciri-update-hexciri installed (nyx tarball self-update, re-runs installer when it changed)"
+  info "  update: hexciri-update-hexciri installed (nyx git sync self-update, tarball fallback, re-runs installer when it changed)"
 else
   die "v2/hexciri-update-hexciri not in the installer tree, hexciri update cannot pull Hexciri updates"
 fi
@@ -2716,9 +2722,27 @@ if pacman -Qq endeavouros-keyring >/dev/null 2>&1; then
 fi
 
 echo -e "$(hexciri-theme-ansi green)\n$(hexciri-i18n update.signingKeys)\e[0m"
-sudo pacman-key --populate archlinux endeavouros 2>/dev/null || sudo pacman-key --populate archlinux || true
-sudo pacman -Sy --needed --noconfirm "${keyrings[@]}"
-echo "$(hexciri-i18n update.keysCorrect)"
+# Quiet on purpose (2026-11-24, Devi): pacman-key --populate prints
+# "Appending keys..." / "Updating trust database..." and `pacman -Sy
+# --needed` prints the db sync lines plus "warning: <keyring> is up to
+# date -- skipping" twice and "there is nothing to do". All of that
+# reads as errors to a new person when it is really nothing. Capture
+# everything, show it only if something actually fails.
+sudo pacman-key --populate archlinux endeavouros >/dev/null 2>&1 || sudo pacman-key --populate archlinux >/dev/null 2>&1 || true
+_keyring_log="$(mktemp /tmp/hexciri-keyring.XXXXXX)"
+if sudo pacman -Sy --needed --noconfirm "${keyrings[@]}" >"$_keyring_log" 2>&1; then
+  if grep -qE "upgrading|installing|reinstalling" "$_keyring_log"; then
+    echo "Keys updated"
+  else
+    echo "$(hexciri-i18n update.keysCorrect)"
+  fi
+else
+  echo "ERROR: keyring update failed, output:" >&2
+  cat "$_keyring_log" >&2
+  rm -f "$_keyring_log"
+  exit 1
+fi
+rm -f "$_keyring_log"
 KEYRING_EOF
 chmod +x "$FORK_OUT/bin/hexciri-update-keyring"
 
@@ -2801,8 +2825,8 @@ chmod +x "$FORK_OUT/bin/hexciri-update-pacman-guard"
 # first-update, which Hexciri does not ship, so it always reported up to
 # date. Now any pending checkupdates entry counts, plus a git checkout
 # behind count when a dev checkout exists at ~/.local/opt/hexciri (v1 dev
-# path; an installed machine has no checkout, tarball install, so the
-# installer sha check lives in hexciri-update-hexciri, not here).
+# path) or ~/.local/opt/hexciri-nyx (v2 git sync); the installer sha
+# check lives in hexciri-update-hexciri, not here).
 cat > "$FORK_OUT/bin/hexciri-update-available" <<'AVAIL_EOF'
 #!/bin/bash
 # hexciri-update-available: check whether Hexciri / system updates are available.
@@ -2811,17 +2835,20 @@ cat > "$FORK_OUT/bin/hexciri-update-available" <<'AVAIL_EOF'
 set -euo pipefail
 
 updates=()
-if [[ -d $HOME/.local/opt/hexciri/.git ]]; then
-  upstream="$(git -C "$HOME/.local/opt/hexciri" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
-  if [[ -n $upstream ]]; then
-    behind="$(git -C "$HOME/.local/opt/hexciri" rev-list --count "HEAD..$upstream" 2>/dev/null || echo 0)"
-    if (( behind > 0 )); then
-      commit_label=commits
-      (( behind == 1 )) && commit_label=commit
-      updates+=("hexciri-dev-checkout $behind new $commit_label on $upstream")
+for _checkout in "$HOME/.local/opt/hexciri" "$HOME/.local/opt/hexciri-nyx"; do
+  if [[ -d $_checkout/.git ]]; then
+    upstream="$(git -C "$_checkout" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+    if [[ -n $upstream ]]; then
+      behind="$(git -C "$_checkout" rev-list --count "HEAD..$upstream" 2>/dev/null || echo 0)"
+      if (( behind > 0 )); then
+        commit_label=commits
+        (( behind == 1 )) && commit_label=commit
+        updates+=("hexciri-dev-checkout $behind new $commit_label on $upstream")
+      fi
     fi
   fi
-fi
+done
+unset _checkout
 
 mapfile -t _pending < <(checkupdates --nocolor 2>/dev/null || true)
 updates+=("${_pending[@]}")
@@ -4120,7 +4147,7 @@ Reboot, then check in order:
   15. fastfetch: run `fastfetch` in Kitty, Hexciri logo + layout, not stock, WM shows Hyprland | Quickshell, not Niri | Noctalia
   16. Spotify + Arch substitutes: Super+Shift+M opens Spotify, Super+Shift+Q opens the calculator (gnome-calculator), PRINT takes a screenshot (grim + slurp, saved to ~/Pictures/Screenshots). Super+Ctrl+Return (Herdr) is deliberately unbound, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.
 
-  17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update (eos-update --aur for repo + AUR, Hexciri self-update pulls nyx and re-runs the installer when it changed, mise up for mise tools). `hexciri-update` is the same script, and `hexciri update hexciri` re-runs just the Hexciri self-update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, obsidian, pinta, xterm and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). vim and stoken stay installed, they cannot be removed (ex-vi-compat / openconnect depend on them), their entries are hidden instead, and the trim no longer tries them. YAD settings is hidden, yad itself stays (EOS tools depend on it).
+  17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update (eos-update --aur for repo + AUR, Hexciri self-update syncs nyx with git (tarball fallback) and re-runs the installer when it changed, mise up for mise tools). `hexciri-update` is the same script, and `hexciri update hexciri` re-runs just the Hexciri self-update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, obsidian, pinta, xterm and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). vim and stoken stay installed, they cannot be removed (ex-vi-compat / openconnect depend on them), their entries are hidden instead, and the trim no longer tries them. YAD settings is hidden, yad itself stays (EOS tools depend on it).
 
   18. Menu audit 2026-11-23: Install and Remove subtrees were deleted then (install-*/remove-* were never in the fork), restored 2026-11-24 where a backing script exists (see item 21). Update > Channel is gone (Hexciri has no channels), Update > Hexciri is back (Phase 2, 2026-11-24, runs hexciri-update in a floating terminal), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (AI agents are out of scope, Herdr stays removed; mise itself is back in, Phase 2 2026-11-24, for the non-agent tools node, uv, gh). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
 

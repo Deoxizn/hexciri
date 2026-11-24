@@ -1,22 +1,39 @@
 #!/bin/bash
-# hexciri-update-hexciri: pull Hexciri nyx and re-run the installer when it changed.
+# hexciri-update-hexciri: sync Hexciri nyx and re-run the installer when it changed.
 # Called by hexciri-update (the dev-checkout step is a no-op on an installed
 # machine: HEXCIRI_PATH is /usr/share/hexciri, not a git checkout, so it can
 # never pull Hexciri updates). Also runnable standalone: hexciri update hexciri
 #
-# Tarball model, like bootstrap: no git, no auth. No snapshot, no GRUB/btrfs.
-# The installer is idempotent, so re-running it is the Hexciri sync: it
-# re-forks Omarchy at the pinned commit, re-places the tree, re-applies the
-# theme and the post-placement fixes, and re-runs the trim. It only runs
-# when the installer itself changed, judged by a sha marker the installer
-# writes at /usr/share/hexciri/.installer-sha on every install.
+# Git sync, like v1 (2026-11-24, Devi: "shouldn't that just be a git
+# clone/sync like in hexciri v1?"). v1's docs/install.sh did exactly this:
+# `git clone https://github.com/Deoxizn/hexciri.git ~/.local/opt/hexciri`
+# once, then `git pull --ff-only` on every run, no auth, public repo.
+# v2 uses a separate checkout so it never clobbers the v1 checkout:
+#   ~/.local/opt/hexciri-nyx, branch nyx
+# The old tarball download (codeload, curl -=O=- bar, 43 MB every update
+# just to check a sha) is now only the fallback, when git is missing or
+# the fetch/clone fails. No snapshot, no GRUB/btrfs.
+#
+# Yes, the installer DOES re-run inside an update, but only when the
+# installer itself changed, and it is not a fresh bootstrap: it does not
+# re-install EndeavourOS, wipe anything, or start over. It is an
+# idempotent re-apply (re-fork Omarchy at the pinned commit, re-place the
+# tree, re-apply theme and fixes, re-run the trim). When the installer
+# sha matches and the installed tree is not drifting, it skips the
+# re-install entirely and the update goes straight to eos-update.
+# The git fetch to check that is tiny, so an unchanged update no longer
+# downloads 43 MB first.
 #
 # Usage: hexciri-update-hexciri [--force]
 #   --force re-runs the installer even when the sha marker matches.
 
 set -euo pipefail
+export GIT_TERMINAL_PROMPT=0
 
-HEXCIRI_NYX_TARBALL_URL="https://codeload.github.com/Deoxizn/hexciri/tar.gz/refs/heads/nyx"
+REPO_URL="https://github.com/Deoxizn/hexciri.git"
+BRANCH="nyx"
+CHECKOUT="${HEXCIRI_NYX_CHECKOUT:-$HOME/.local/opt/hexciri-nyx}"
+TARBALL_URL="https://codeload.github.com/Deoxizn/hexciri/tar.gz/refs/heads/nyx"
 EXPECTED_TOP_DIR="hexciri-nyx"
 MARKER="/usr/share/hexciri/.installer-sha"
 FORCE=0
@@ -26,34 +43,77 @@ fi
 
 die() { printf 'ERROR: %s\n' "$1" >&2; exit 1; }
 
-WORKDIR="$(mktemp -d /tmp/hexciri-update-hexciri.XXXXXX)"
-trap 'rm -rf "$WORKDIR"' EXIT
+SOURCE_ROOT=""
+SYNC_METHOD=""
+OLD_COMMIT="none"
+NEW_COMMIT="none"
 
-for cmd in curl tar sha256sum; do
-  command -v "$cmd" >/dev/null 2>&1 || die "missing required command: $cmd"
-done
+# Git sync, like v1. Returns 0 and sets SOURCE_ROOT on success.
+git_sync() {
+  command -v git >/dev/null 2>&1 || return 1
+  if [[ -e "$CHECKOUT" && ! -d "$CHECKOUT/.git" ]]; then
+    echo "Hexciri checkout $CHECKOUT exists but is not a git checkout, not using git." >&2
+    return 1
+  fi
+  if [[ -d "$CHECKOUT/.git" ]]; then
+    OLD_COMMIT="$(git -C "$CHECKOUT" rev-parse --short HEAD 2>/dev/null || echo none)"
+    echo "Syncing Hexciri nyx with git (like v1, no auth): $CHECKOUT"
+    git -C "$CHECKOUT" fetch --quiet origin "$BRANCH" 2>/dev/null || return 1
+    git -C "$CHECKOUT" checkout --quiet "$BRANCH" 2>/dev/null || return 1
+    git -C "$CHECKOUT" pull --ff-only --quiet origin "$BRANCH" 2>/dev/null || return 1
+  else
+    echo "Cloning Hexciri nyx with git (like v1, no auth): $CHECKOUT"
+    mkdir -p "$(dirname "$CHECKOUT")"
+    git clone --quiet --branch "$BRANCH" "$REPO_URL" "$CHECKOUT" 2>/dev/null || return 1
+  fi
+  [ -f "$CHECKOUT/v2/install.sh" ] || return 1
+  NEW_COMMIT="$(git -C "$CHECKOUT" rev-parse --short HEAD 2>/dev/null || echo none)"
+  SOURCE_ROOT="$CHECKOUT"
+  SYNC_METHOD="git"
+  return 0
+}
 
-TARBALL="$WORKDIR/hexciri-nyx.tar.gz"
-echo "Downloading Hexciri nyx (no git, no auth)..."
-curl --progress-bar -fSL --max-time 300 -o "$TARBALL" "$HEXCIRI_NYX_TARBALL_URL" || die "curl download of Hexciri nyx tarball failed. Fix networking, then rerun hexciri update."
-[ -s "$TARBALL" ] || die "Downloaded Hexciri tarball is empty: $TARBALL"
+# Tarball fallback, the old path. Only runs when git is missing or failed.
+# Silent curl (no --progress-bar -=O=- bar), size line after.
+tarball_sync() {
+  local workdir tarball top_dir
+  workdir="$(mktemp -d /tmp/hexciri-update-hexciri.XXXXXX)"
+  tarball="$workdir/hexciri-nyx.tar.gz"
+  echo "Downloading Hexciri nyx as a tarball (git unavailable, no auth)..."
+  curl -fsSL --max-time 300 -o "$tarball" "$TARBALL_URL" || { rm -rf "$workdir"; return 1; }
+  [ -s "$tarball" ] || { rm -rf "$workdir"; return 1; }
+  local size_bytes
+  size_bytes="$(wc -c < "$tarball" | tr -d ' ')"
+  echo "Downloaded: $size_bytes bytes (~$((size_bytes / 1024 / 1024)) MB)"
+  tar -tzf "$tarball" > "$workdir/tar-list.txt" || { rm -rf "$workdir"; return 1; }
+  top_dir="$(head -1 "$workdir/tar-list.txt" | cut -d/ -f1)"
+  [ "$top_dir" = "$EXPECTED_TOP_DIR" ] || { rm -rf "$workdir"; return 1; }
+  tar -xzf "$tarball" -C "$workdir" || { rm -rf "$workdir"; return 1; }
+  [ -f "$workdir/$top_dir/v2/install.sh" ] || { rm -rf "$workdir"; return 1; }
+  # Keep the extracted tree until the installer finishes: the trap in the
+  # old script deleted it on EXIT, which is after the installer runs, so
+  # stash the path in a global the caller can clean up.
+  TARBALL_WORKDIR="$workdir"
+  SOURCE_ROOT="$workdir/$top_dir"
+  SYNC_METHOD="tarball"
+  return 0
+}
 
-# Write the listing to a file first: tar -tzf | head -1 under set -o pipefail
-# dies with SIGPIPE (exit 141) on any tarball whose listing is bigger than
-# the pipe buffer. Same trap the bootstrap hit on 2026-11-23.
-tar -tzf "$TARBALL" > "$WORKDIR/tar-list.txt" || die "Downloaded file is not a valid gzip tarball: $TARBALL."
-TOP_DIR="$(head -1 "$WORKDIR/tar-list.txt" | cut -d/ -f1)"
-[ "$TOP_DIR" = "$EXPECTED_TOP_DIR" ] || die "tarball top dir is '$TOP_DIR', expected '$EXPECTED_TOP_DIR'."
+if git_sync; then
+  echo "Hexciri nyx synced with git: $CHECKOUT ($OLD_COMMIT -> $NEW_COMMIT)"
+else
+  echo "git sync unavailable or failed, falling back to tarball download..."
+  tarball_sync || die "Hexciri nyx sync failed (git and tarball both failed). Fix networking, then rerun hexciri update."
+fi
 
-tar -xzf "$TARBALL" -C "$WORKDIR" || die "Failed to extract Hexciri tarball."
-EXTRACTED="$WORKDIR/$TOP_DIR"
-[ -f "$EXTRACTED/v2/install.sh" ] || die "Extracted Hexciri tree is missing v2/install.sh: $EXTRACTED"
-
-NEW_SHA="$(sha256sum "$EXTRACTED/v2/install.sh" | cut -d' ' -f1)"
+NEW_SHA="$(sha256sum "$SOURCE_ROOT/v2/install.sh" | cut -d' ' -f1)"
 OLD_SHA="$(cat "$MARKER" 2>/dev/null || true)"
 # Log BOTH shas, so a skip is provable in the update log: if they match,
 # the skip is correct and the installer already landed (e.g. via a
 # bootstrap just before this update). If they differ, re-install below.
+if [[ $SYNC_METHOD == "git" ]]; then
+  echo "Hexciri nyx: git $OLD_COMMIT -> $NEW_COMMIT"
+fi
 echo "Hexciri installer sha: installed ${OLD_SHA:-none} / nyx $NEW_SHA"
 # Drift check: a matching sha only proves the marker was written, not
 # that the installed tree is complete. If theme-ansi is missing or the
@@ -63,12 +123,13 @@ if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA == "$OLD_SHA" ]]; then
     echo "Hexciri installer sha matches but the installed tree is drifting (theme-ansi or logo.txt missing), re-running the installer..."
   else
     echo "Hexciri installer unchanged ($NEW_SHA), skipping re-install."
+    [[ -n ${TARBALL_WORKDIR:-} ]] && rm -rf "$TARBALL_WORKDIR"
     exit 0
   fi
 fi
 
-echo "Hexciri installer changed, re-running the installer (this is the Hexciri sync)..."
-bash "$EXTRACTED/v2/install.sh" --yes --no-reboot
+echo "Hexciri installer changed, re-running the installer (this is the Hexciri sync, not a fresh bootstrap: no OS reinstall, idempotent re-apply)..."
+bash "$SOURCE_ROOT/v2/install.sh" --yes --no-reboot
 
 # The installer writes the new marker itself; verify it landed.
 NEW_MARKER="$(cat "$MARKER" 2>/dev/null || true)"
@@ -76,3 +137,4 @@ if [[ $NEW_MARKER != "$NEW_SHA" ]]; then
   echo "Warning: installer sha marker was not updated (got '${NEW_MARKER:-none}', expected $NEW_SHA), the next hexciri update will re-run the installer again." >&2
 fi
 echo "Hexciri installer re-run done."
+if [[ -n ${TARBALL_WORKDIR:-} ]]; then rm -rf "$TARBALL_WORKDIR"; fi
