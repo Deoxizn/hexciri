@@ -2544,6 +2544,10 @@ PY
 #     nyx with git like v1 (clone/pull ~/.local/opt/hexciri-nyx, no
 #     auth, tarball fallback) and re-runs this installer when the
 #     installer sha changed, judged by /usr/share/hexciri/.installer-sha.
+#     Output is quiet (2026-11-24, Devi): one themed 'Updating Hexciri'
+#     header and one short status line on screen; full shas, paths and
+#     reasons go to /tmp/hexciri-update-hexciri.log (or to the screen
+#     with HEXCIRI_UPDATE_VERBOSE=1). Real errors still print clearly.
 #     The installer re-places /usr/share/hexciri/bin while hexciri-update
 #     is running, so if hexciri-update itself changed it re-execs the new
 #     copy (same PID, so the sudo keepalive and the update lock survive).
@@ -3387,6 +3391,10 @@ grep -q '"update.hexciri"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" ||
 grep '"update.hexciri"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" | grep -q 'hexciri-update' || die "menu Update > Hexciri row does not call hexciri-update"
 grep -q 'eos-update --aur' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs does not call eos-update --aur"
 grep -q 'hexciri-update-hexciri' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not call hexciri-update-hexciri"
+grep -q 'Updating Hexciri' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" || die "hexciri-update-hexciri has no themed Updating Hexciri header"
+grep -q 'Hexciri installer sha: installed' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" && die "hexciri-update-hexciri still prints full installer shas on screen"
+grep -q 'Hexciri nyx synced with git' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" && die "hexciri-update-hexciri still prints the noisy git sync line"
+grep -q 'Hexciri is up to date' "$HEXCIRI_PATH/bin/hexciri-update-hexciri" || die "hexciri-update-hexciri has no short up-to-date status line"
 grep -q 'hexciri-snapshot create' "$HEXCIRI_PATH/bin/hexciri-update" && die "hexciri-update still calls the snapshot step (dropped 2026-11-24)"
 grep -q 'dracut' "$HEXCIRI_PATH/bin/hexciri-update-analyze-logs" || die "hexciri-update-analyze-logs has no dracut scan"
 grep -q 'hexciri-theme-ansi green' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "update headers are not theme-matched (no hexciri-theme-ansi call in hexciri-update-system-pkgs)"

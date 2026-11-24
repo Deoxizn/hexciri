@@ -24,6 +24,20 @@
 # The git fetch to check that is tiny, so an unchanged update no longer
 # downloads 43 MB first.
 #
+# Output (2026-11-24, Devi): one themed section, like every other update
+# step, then one short status line, then the next section. Screen shows:
+#   Updating Hexciri            <- themed header, active theme green
+#   Hexciri is up to date (ef56f34)
+# or, when the installer changed:
+#   Updating Hexciri
+#   Updating Hexciri to ef56f34...
+#   Hexciri updated to ef56f34
+# No full 64-char shas, no checkout paths, no duplicate git old->new +
+# synced + sha lines on screen. Full detail (checkout path, full
+# commits, full installer shas, tarball size, drift reason) goes to
+# /tmp/hexciri-update-hexciri.log, or to the screen as well with
+# HEXCIRI_UPDATE_VERBOSE=1. Real errors still print clearly.
+#
 # Usage: hexciri-update-hexciri [--force]
 #   --force re-runs the installer even when the sha marker matches.
 
@@ -41,7 +55,18 @@ if [[ ${1:-} == "--force" ]]; then
   FORCE=1
 fi
 
+# Detail log: full shas, paths and reasons live here, not on screen.
+DETAIL_LOG="${HEXCIRI_UPDATE_DETAIL_LOG:-/tmp/hexciri-update-hexciri.log}"
+{ printf 'Hexciri self-update %s\n' "$(date -Is 2>/dev/null || date)"; } > "$DETAIL_LOG" 2>/dev/null || DETAIL_LOG=/dev/null
+
 die() { printf 'ERROR: %s\n' "$1" >&2; exit 1; }
+# detail: log file, plus screen when HEXCIRI_UPDATE_VERBOSE=1.
+# say_detail is the same thing, kept for the sync lines.
+detail() {
+  printf '%s\n' "$*" >> "$DETAIL_LOG" 2>/dev/null || true
+  if [[ ${HEXCIRI_UPDATE_VERBOSE:-0} == "1" ]]; then printf '%s\n' "$*"; fi
+}
+say_detail() { detail "$@"; }
 
 SOURCE_ROOT=""
 SYNC_METHOD=""
@@ -49,47 +74,50 @@ OLD_COMMIT="none"
 NEW_COMMIT="none"
 
 # Git sync, like v1. Returns 0 and sets SOURCE_ROOT on success.
+# Quiet on purpose: sync progress goes to the detail log, the screen
+# only gets the themed header (below) and one short status line.
 git_sync() {
-  command -v git >/dev/null 2>&1 || return 1
+  command -v git >/dev/null 2>&1 || { detail "git not found, skipping git sync"; return 1; }
   if [[ -e "$CHECKOUT" && ! -d "$CHECKOUT/.git" ]]; then
-    echo "Hexciri checkout $CHECKOUT exists but is not a git checkout, not using git." >&2
+    detail "checkout $CHECKOUT exists but is not a git checkout, not using git"
     return 1
   fi
   if [[ -d "$CHECKOUT/.git" ]]; then
     OLD_COMMIT="$(git -C "$CHECKOUT" rev-parse --short HEAD 2>/dev/null || echo none)"
-    echo "Syncing Hexciri nyx with git (like v1, no auth): $CHECKOUT"
-    git -C "$CHECKOUT" fetch --quiet origin "$BRANCH" 2>/dev/null || return 1
-    git -C "$CHECKOUT" checkout --quiet "$BRANCH" 2>/dev/null || return 1
-    git -C "$CHECKOUT" pull --ff-only --quiet origin "$BRANCH" 2>/dev/null || return 1
+    say_detail "Syncing Hexciri nyx with git: $CHECKOUT"
+    git -C "$CHECKOUT" fetch --quiet origin "$BRANCH" 2>/dev/null || { detail "git fetch failed"; return 1; }
+    git -C "$CHECKOUT" checkout --quiet "$BRANCH" 2>/dev/null || { detail "git checkout $BRANCH failed"; return 1; }
+    git -C "$CHECKOUT" pull --ff-only --quiet origin "$BRANCH" 2>/dev/null || { detail "git pull --ff-only failed"; return 1; }
   else
-    echo "Cloning Hexciri nyx with git (like v1, no auth): $CHECKOUT"
+    say_detail "Cloning Hexciri nyx with git: $CHECKOUT"
     mkdir -p "$(dirname "$CHECKOUT")"
-    git clone --quiet --branch "$BRANCH" "$REPO_URL" "$CHECKOUT" 2>/dev/null || return 1
+    git clone --quiet --branch "$BRANCH" "$REPO_URL" "$CHECKOUT" 2>/dev/null || { detail "git clone failed"; return 1; }
   fi
-  [ -f "$CHECKOUT/v2/install.sh" ] || return 1
+  [ -f "$CHECKOUT/v2/install.sh" ] || { detail "cloned tree has no v2/install.sh"; return 1; }
   NEW_COMMIT="$(git -C "$CHECKOUT" rev-parse --short HEAD 2>/dev/null || echo none)"
+  detail "git full commits: $(git -C "$CHECKOUT" rev-parse HEAD 2>/dev/null || echo none) (old short: $OLD_COMMIT, new short: $NEW_COMMIT)"
   SOURCE_ROOT="$CHECKOUT"
   SYNC_METHOD="git"
   return 0
 }
 
 # Tarball fallback, the old path. Only runs when git is missing or failed.
-# Silent curl (no --progress-bar -=O=- bar), size line after.
+# Silent curl (no --progress-bar -=O=- bar), size in the detail log only.
 tarball_sync() {
   local workdir tarball top_dir
   workdir="$(mktemp -d /tmp/hexciri-update-hexciri.XXXXXX)"
   tarball="$workdir/hexciri-nyx.tar.gz"
-  echo "Downloading Hexciri nyx as a tarball (git unavailable, no auth)..."
-  curl -fsSL --max-time 300 -o "$tarball" "$TARBALL_URL" || { rm -rf "$workdir"; return 1; }
-  [ -s "$tarball" ] || { rm -rf "$workdir"; return 1; }
+  detail "Tarball fallback: $TARBALL_URL"
+  curl -fsSL --max-time 300 -o "$tarball" "$TARBALL_URL" || { rm -rf "$workdir"; detail "tarball download failed"; return 1; }
+  [ -s "$tarball" ] || { rm -rf "$workdir"; detail "tarball download empty"; return 1; }
   local size_bytes
   size_bytes="$(wc -c < "$tarball" | tr -d ' ')"
-  echo "Downloaded: $size_bytes bytes (~$((size_bytes / 1024 / 1024)) MB)"
-  tar -tzf "$tarball" > "$workdir/tar-list.txt" || { rm -rf "$workdir"; return 1; }
+  detail "Tarball downloaded: $size_bytes bytes (~$((size_bytes / 1024 / 1024)) MB)"
+  tar -tzf "$tarball" > "$workdir/tar-list.txt" || { rm -rf "$workdir"; detail "tarball is not a valid gzip tarball"; return 1; }
   top_dir="$(head -1 "$workdir/tar-list.txt" | cut -d/ -f1)"
-  [ "$top_dir" = "$EXPECTED_TOP_DIR" ] || { rm -rf "$workdir"; return 1; }
-  tar -xzf "$tarball" -C "$workdir" || { rm -rf "$workdir"; return 1; }
-  [ -f "$workdir/$top_dir/v2/install.sh" ] || { rm -rf "$workdir"; return 1; }
+  [ "$top_dir" = "$EXPECTED_TOP_DIR" ] || { rm -rf "$workdir"; detail "tarball top dir is '$top_dir', expected '$EXPECTED_TOP_DIR'"; return 1; }
+  tar -xzf "$tarball" -C "$workdir" || { rm -rf "$workdir"; detail "tarball extraction failed"; return 1; }
+  [ -f "$workdir/$top_dir/v2/install.sh" ] || { rm -rf "$workdir"; detail "extracted tree has no v2/install.sh"; return 1; }
   # Keep the extracted tree until the installer finishes: the trap in the
   # old script deleted it on EXIT, which is after the installer runs, so
   # stash the path in a global the caller can clean up.
@@ -99,42 +127,67 @@ tarball_sync() {
   return 0
 }
 
+# Themed section header, same pattern as the other update steps
+# (keyring, system-pkgs): active theme green, blank line before it.
+echo -e "$(hexciri-theme-ansi green)\nUpdating Hexciri\e[0m"
+
 if git_sync; then
-  echo "Hexciri nyx synced with git: $CHECKOUT ($OLD_COMMIT -> $NEW_COMMIT)"
+  say_detail "Synced with git ($OLD_COMMIT -> $NEW_COMMIT)"
 else
-  echo "git sync unavailable or failed, falling back to tarball download..."
-  tarball_sync || die "Hexciri nyx sync failed (git and tarball both failed). Fix networking, then rerun hexciri update."
+  echo "Git sync failed, trying tarball download..."
+  tarball_sync || die "Hexciri sync failed (git and tarball both failed). Fix networking, then rerun hexciri update. Details: $DETAIL_LOG"
 fi
 
 NEW_SHA="$(sha256sum "$SOURCE_ROOT/v2/install.sh" | cut -d' ' -f1)"
 OLD_SHA="$(cat "$MARKER" 2>/dev/null || true)"
-# Log BOTH shas, so a skip is provable in the update log: if they match,
-# the skip is correct and the installer already landed (e.g. via a
-# bootstrap just before this update). If they differ, re-install below.
-if [[ $SYNC_METHOD == "git" ]]; then
-  echo "Hexciri nyx: git $OLD_COMMIT -> $NEW_COMMIT"
+# Both shas go to the detail log only, so a skip is still provable
+# without printing 64-char hashes on screen. If they match, the skip is
+# correct and the installer already landed (e.g. via a bootstrap just
+# before this update). If they differ, re-install below.
+detail "installed installer sha: ${OLD_SHA:-none}"
+detail "nyx installer sha: $NEW_SHA"
+detail "sync method: $SYNC_METHOD"
+
+# Short commit for the one-line status, only when git gave us one.
+SHORT=""
+if [[ $SYNC_METHOD == "git" && $NEW_COMMIT != "none" ]]; then
+  SHORT="$NEW_COMMIT"
 fi
-echo "Hexciri installer sha: installed ${OLD_SHA:-none} / nyx $NEW_SHA"
+
 # Drift check: a matching sha only proves the marker was written, not
 # that the installed tree is complete. If theme-ansi is missing or the
 # logo is not Devi's art, re-run the installer even on a sha match.
 if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA == "$OLD_SHA" ]]; then
   if [[ ! -x /usr/share/hexciri/bin/hexciri-theme-ansi ]] || ! head -1 /usr/share/hexciri/logo.txt 2>/dev/null | grep -q '▄███▄'; then
-    echo "Hexciri installer sha matches but the installed tree is drifting (theme-ansi or logo.txt missing), re-running the installer..."
+    detail "sha matches but installed tree is drifting (theme-ansi or logo.txt missing), re-running installer"
+    echo "Hexciri is up to date${SHORT:+ ($SHORT)}, but some installed files are missing, re-running the installer..."
   else
-    echo "Hexciri installer unchanged ($NEW_SHA), skipping re-install."
+    if [[ -n $SHORT ]]; then
+      echo "Hexciri is up to date ($SHORT)"
+    else
+      echo "Hexciri is up to date"
+    fi
     [[ -n ${TARBALL_WORKDIR:-} ]] && rm -rf "$TARBALL_WORKDIR"
     exit 0
   fi
 fi
 
-echo "Hexciri installer changed, re-running the installer (this is the Hexciri sync, not a fresh bootstrap: no OS reinstall, idempotent re-apply)..."
+if [[ -n $SHORT ]]; then
+  echo "Updating Hexciri to $SHORT..."
+else
+  echo "Updating Hexciri..."
+fi
 bash "$SOURCE_ROOT/v2/install.sh" --yes --no-reboot
 
 # The installer writes the new marker itself; verify it landed.
 NEW_MARKER="$(cat "$MARKER" 2>/dev/null || true)"
 if [[ $NEW_MARKER != "$NEW_SHA" ]]; then
-  echo "Warning: installer sha marker was not updated (got '${NEW_MARKER:-none}', expected $NEW_SHA), the next hexciri update will re-run the installer again." >&2
+  detail "marker mismatch after re-run: got '${NEW_MARKER:-none}', expected $NEW_SHA"
+  echo "ERROR: installer did not finish updating, it will retry on the next update (details: $DETAIL_LOG)" >&2
 fi
-echo "Hexciri installer re-run done."
+if [[ -n $SHORT ]]; then
+  echo "Hexciri updated to $SHORT"
+else
+  echo "Hexciri updated"
+fi
 if [[ -n ${TARBALL_WORKDIR:-} ]]; then rm -rf "$TARBALL_WORKDIR"; fi
