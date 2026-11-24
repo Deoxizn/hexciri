@@ -2047,6 +2047,27 @@ else:
     with open(path, "w") as f:
         f.write(line + "\n" + content)
     print("hexciri.lua: inserted compat require as first line")
+# Hexciri custom binds (2026-11-24, Devi: Super+Ctrl+S bind never
+# registered): default/hypr/bindings/hexciri.lua is placed but nothing
+# in upstream's load chain requires default.hypr.bindings (the
+# require_all loader), so the file never executed and none of its binds
+# (Settings, web search, calculator, monocle, Brave incognito,
+# Messenger, screen record) registered. Require it explicitly here,
+# after the applications require. Do NOT require the whole
+# bindings.lua loader: it would double-register every bindings file
+# hexciri.lua already requires individually.
+_anchor = 'require_optional.module("default.hypr.bindings.applications")'
+_bindline = 'require("default.hypr.bindings.hexciri")  -- Hexciri custom binds: Super+Ctrl+S Settings, Super+Shift+S web search, Super+Shift+C calculator, monocle cycle, Brave incognito, Messenger, screen record'
+with open(path) as f:
+    _c = f.read()
+if "default.hypr.bindings.hexciri" in _c:
+    print("hexciri.lua: custom binds require already present, skipping")
+elif _c.count(_anchor) == 1:
+    with open(path, "w") as f:
+        f.write(_c.replace(_anchor, _anchor + "\n" + _bindline, 1))
+    print("hexciri.lua: custom binds require inserted after applications require")
+else:
+    print("WARN: applications require anchor not unique in hexciri.lua (count %d), custom binds NOT wired" % _c.count(_anchor))
 PY
   # Syntax-only check: parse the file, never execute it. luac -p is the
   # correct tool for that. The old check used
@@ -3255,7 +3276,7 @@ for _lua in "hexciri-custom-binds.lua:default/hypr/bindings/hexciri.lua" "hexcir
     mkdir -p "$FORK_OUT/$(dirname "$_lua_dst")"
     cp -a "$HEXCIRI_REPO_ROOT/v2/$_lua_src" "$FORK_OUT/$_lua_dst"
     if command -v luac5.1 >/dev/null 2>&1; then luac5.1 -p "$FORK_OUT/$_lua_dst" || die "Lua syntax check failed on $_lua_dst"; elif command -v luac >/dev/null 2>&1; then luac -p "$FORK_OUT/$_lua_dst" || die "Lua syntax check failed on $_lua_dst"; fi
-    info "  hexciri lua: $_lua_src -> $_lua_dst (custom-only, auto-loaded by require_all.files)"
+    info "  hexciri lua: $_lua_src -> $_lua_dst (custom-only, explicitly required from hexciri.lua; require_all never loads bindings/)"
   else
     die "v2/$_lua_src not in the installer tree, Hexciri custom Lua ($_lua_dst) cannot be installed"
   fi
@@ -4517,6 +4538,7 @@ hyprlua_ok "$HEXCIRI_PATH/default/hypr/hexciri.lua" || die "missing or corrupt: 
 [ -f "$HEXCIRI_PATH/default/hypr/hexciri-compat.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/hexciri-compat.lua"
 bootstrap_ok "$HEXCIRI_PATH/default/hypr/bootstrap.lua" || die "missing or corrupt: $HEXCIRI_PATH/default/hypr/bootstrap.lua (empty/truncated; Hyprland dofiles it first, without it the next boot trips emergency mode with no binds)"
 [ -f "$HEXCIRI_PATH/default/hypr/bindings/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/bindings/hexciri.lua (Hexciri custom binds, monocle cycle / Brave incognito / Messenger / screen record)"
+grep -q 'require("default.hypr.bindings.hexciri")' "$HEXCIRI_PATH/default/hypr/hexciri.lua" || die "placed hexciri.lua does not require default.hypr.bindings.hexciri (the custom binds file is never executed, Super+Ctrl+S Settings / Super+Shift+S web search / Super+Shift+C calculator will not register; 2026-11-24)"
 [ -f "$HEXCIRI_PATH/default/hypr/apps/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/apps/hexciri.lua (Hexciri custom window rules, TUI float / mpv+imv opacity)"
 [ -f "$HEXCIRI_PATH/bin/hexciri-compat.sh" ] || die "missing: $HEXCIRI_PATH/bin/hexciri-compat.sh"
 [ -f "$HOME/.config/hypr/hyprland.lua" ] || die "missing: $HOME/.config/hypr/hyprland.lua"
@@ -5876,6 +5898,7 @@ command -v mise >/dev/null 2>&1 && hc_info "  mise: $(mise --version 2>/dev/null
 [ -f "$HOME/.config/kitty/kitty.conf" ] && hc_info "  kitty config: ~/.config/kitty/kitty.conf present (theme include)" || warn "  kitty config: not placed, Kitty will not load theme colours"
 [ -d "$HEXCIRI_PATH/default/themed" ] && hc_info "  theme templates: default/themed present" || warn "  theme templates: default/themed missing, theme-set generates nothing"
 [ -f "$HEXCIRI_PATH/default/hypr/bindings/hexciri.lua" ] && [ -f "$HEXCIRI_PATH/default/hypr/apps/hexciri.lua" ] && hc_info "  hexciri lua: bindings/hexciri.lua + apps/hexciri.lua present (custom binds/rules only, Omarchy binds not duplicated)" || warn "  hexciri lua: custom binds/apps Lua missing, monocle cycle / TUI float / mpv+imv opacity will not load"
+grep -q 'require("default.hypr.bindings.hexciri")' "$HEXCIRI_PATH/default/hypr/hexciri.lua" 2>/dev/null && hc_info "  hexciri binds wired: hexciri.lua requires default.hypr.bindings.hexciri (Super+Ctrl+S Settings, Super+Shift+S web search, Super+Shift+C calculator register)" || warn "  hexciri binds NOT wired: hexciri.lua does not require default.hypr.bindings.hexciri, Super+Ctrl+S Settings will not register (run hexciri update)"
 [ -x "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-gtk" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/11-hexciri-adapta" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/20-hexciri-thpm" ] && [ -f "$HOME/.config/hexciri/hooks/lib/theme-env.sh" ] && hc_info "  theme hooks: 10-gtk + 11-adapta + 20-thpm + theme-env.sh present (theme-set.d)" || warn "  theme hooks: a Hexciri theme hook is missing from ~/.config/hexciri/hooks/theme-set.d/, theme switch will skip GTK/Adapta/THPM"
 command -v thpm >/dev/null 2>&1 && hc_info "  thpm: $(thpm --version 2>/dev/null || echo present) (source install, not AUR)" || warn "  thpm: NOT installed, theme switch skips THPM integrations (install: git clone OldJobobo/thpm, ./install.sh --no-ui)"
 [ -x /usr/local/bin/omarchy ] && hc_info "  thpm compat: /usr/local/bin/omarchy -> hexciri (THPM hardcodes the omarchy CLI)" || warn "  thpm compat: /usr/local/bin/omarchy missing, thpm install/doctor will fail its capability check"

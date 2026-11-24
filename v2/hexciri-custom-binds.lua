@@ -12,9 +12,12 @@
 -- below, 2026-11-24 (Devi: Mod+Shift+S web search, Mod+Shift+C
 -- calculator in v1). No fuzzel in v2, so the search prompt is
 -- hexciri-menu-input (QS menu) via the hexciri-web-search bin.
--- Installed by the installer into default/hypr/bindings/hexciri.lua;
--- bindings.lua require_all.files() auto-loads every file in that dir,
--- so no edit to hexciri.lua is needed. Syntax-checked at install time.
+-- Installed by the installer into default/hypr/bindings/hexciri.lua
+-- and explicitly required from hexciri.lua (default.hypr.bindings,
+-- the require_all loader, is never required by upstream's load chain,
+-- so a file only placed in bindings/ never executes -- that is why
+-- Super+Ctrl+S never registered until 2026-11-24). Syntax-checked at
+-- install time.
 
 -- Monocle stack flipping: every window is fullscreen, so directional
 -- focus is useless, cycle the stack instead (forward/back, wrapping).
