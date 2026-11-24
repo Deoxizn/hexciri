@@ -2892,6 +2892,53 @@ else:
     print("WidgetButton: modifiers forwarding already applied, skipping")
 PY
 
+# --- Patch background install to Strata (2026-11-24, Devi: Install > Style > Background loads nothing) ---
+# Upstream bin/omarchy-theme-bg-install (menu row install.style.background,
+# action hexciri-theme-bg-install) ends with bare `folio "$THEME_USER_BACKGROUNDS"`.
+# Folio is not installed in Hexciri v2 (Devi: file manager is Strata via GitHub,
+# not Folio; no nautilus either), so the command fails silently and nothing
+# opens. The fork rename only mapped folio -> strata for the uwsm-app
+# invocation in launch-files; the bare `folio <dir>` call here was never
+# touched. Fix: open the folder with hexciri-launch-files (the v2
+# file-manager launcher, strata via uwsm-app). That launcher dropped its
+# arguments, so it is patched here too to forward "$@" to strata (zero
+# args expands to nothing, so Super+Shift+F is unchanged). Strata accepts
+# a path argument: hexciri-launch-files-cwd already passes
+# strata "$(hexciri-cmd-terminal-cwd)". No Folio/nautilus install.
+step "Patching background install to Strata file manager"
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
+import sys
+root = sys.argv[1]
+# 1. Background install: folio -> Strata launcher, with the folder path.
+path = root + "/bin/hexciri-theme-bg-install"
+with open(path) as f:
+    s = f.read()
+orig = s
+old = 'folio "$THEME_USER_BACKGROUNDS"'
+assert s.count(old) == 1, "theme-bg-install folio anchor not found"
+s = s.replace(old, 'hexciri-launch-files "$THEME_USER_BACKGROUNDS"', 1)
+if s != orig:
+    with open(path, "w") as f:
+        f.write(s)
+    print("theme-bg-install: opens backgrounds folder with hexciri-launch-files (Strata), not folio")
+else:
+    print("theme-bg-install: Strata launcher already applied, skipping")
+# 2. File-manager launcher: forward its arguments to strata.
+path = root + "/bin/hexciri-launch-files"
+with open(path) as f:
+    s = f.read()
+orig = s
+old = "exec setsid uwsm-app -- strata"
+assert s.count(old) == 1, "launch-files strata anchor not found"
+s = s.replace(old, 'exec setsid uwsm-app -- strata "$@"', 1)
+if s != orig:
+    with open(path, "w") as f:
+        f.write(s)
+    print("launch-files: forwards \"$@\" to strata (folder opens at the requested path)")
+else:
+    print("launch-files: \"$@\" forwarding already applied, skipping")
+PY
+
 step "Patching dock pinned list: Strata, Spotify, Brave Origin, Zed, Kitty"
 python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
 import json
@@ -5077,6 +5124,8 @@ grep -q 'HEXCIRI_PATH="/usr/share/hexciri"' "$HEXCIRI_PATH/bin/hexciri-shell" ||
 grep -q '/usr/share/hexciri/bin/hexciri-shell shell toggle hexciri.menu' "$HEXCIRI_PATH/shell/plugins/menu/BarWidget.qml" || die "bar trigger does not call hexciri-shell by absolute path"
 grep -q '/usr/share/hexciri/bin/hexciri-shell hexciri.dock apps' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu apps row does not call hexciri-shell by absolute path"
 grep -q 'signal pressed(int button, int modifiers)' "$HEXCIRI_PATH/shell/Ui/WidgetButton.qml" || die "WidgetButton does not forward click modifiers, Shift+right-click settings cannot be told from plain right-click (2026-11-24)"
+grep -q 'hexciri-launch-files "$THEME_USER_BACKGROUNDS"' "$HEXCIRI_PATH/bin/hexciri-theme-bg-install" || die "theme-bg-install still calls folio, Install > Style > Background opens nothing (folio is not installed in Hexciri v2; 2026-11-24)"
+grep -q 'strata "$@"' "$HEXCIRI_PATH/bin/hexciri-launch-files" || die "launch-files drops its path argument, background folder opens at Strata home instead of the theme backgrounds folder (2026-11-24)"
 # Dead menu rows must be gone from the forked jsonc, not just uncallable.
 # NOTE 2026-11-24: '"install.' / '"remove.' must NOT be in this list.
 # b0eed823 restored Install/Remove (26 install.* + 20 remove.* rows, all
