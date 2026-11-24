@@ -230,7 +230,7 @@ provision_fingerprint() {
 system_fingerprint() {
   {
     sed -n '/^# --- Preflight ---/,/^# --- Fork cache check/p' "$INSTALLER_DIR/install.sh"
-    sed -n '/^# --- mise + Hexciri tools config/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
+    sed -n '/^# --- mise + Hexciri tools config/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh" | grep -vF 'binds_chain_ok "$FORK_OUT"'
   } | sha256sum | cut -d' ' -f1
 }
 # --print-fingerprints: no side effects, used by hexciri-update-hexciri
@@ -4073,6 +4073,42 @@ must_replace(_p,
     "restart refreshes the system-update widget after an update")
 PY
 
+# 8f. Restart re-registers GlobalShortcuts after the last Hyprland reload
+# (2026-11-24, Devi: Super+Space / Super+Alt+Space were still dead
+# after the 6e48f01 update, with the installer smoke check warning
+# about it. Root cause is ordering: hexciri-update-restart restarted
+# the shell FIRST, then reloaded Hyprland AFTER it, and a Hyprland
+# reload drops the shell's GlobalShortcut registrations until the
+# shell re-registers them. The update ended with the shell restarted
+# before the last reload, so omarchy:menu.root and
+# omarchy:ipc.hexciri.dock.apps stayed unregistered until the next
+# shell restart or login. Poll for both after the reload; if either
+# is still missing, restart the shell once more AFTER the last reload
+# and poll again. Polling is the only signal here: Hyprland gives no
+# event when a shortcut registers. Best-effort, never fails the update;
+# no-op when Hyprland is not running.)
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
+import sys
+fork = sys.argv[1]
+def read(p):
+    with open(p) as f:
+        return f.read()
+def write(p, t):
+    with open(p, "w") as f:
+        f.write(t)
+def must_replace(path, old, new, what):
+    t = read(path)
+    assert old in t, what + ": pattern not found in " + path
+    assert t.count(old) == 1, what + ": pattern not unique in " + path
+    write(path, t.replace(old, new, 1))
+    print("  update: " + what)
+_p = fork + "/bin/hexciri-update-restart"
+must_replace(_p,
+    '  hexciri-shell hexciri.system-update refresh >/dev/null 2>&1 || true\nfi',
+    '  hexciri-shell hexciri.system-update refresh >/dev/null 2>&1 || true\n\n  # Hexciri: GlobalShortcuts must be registered AFTER the last Hyprland\n  # reload (2026-11-24, Devi: shell restarted before the reload, reload\n  # dropped omarchy:menu.root / omarchy:ipc.hexciri.dock.apps, update\n  # ended with Super+Space / Super+Alt+Space dead). Poll, restart the\n  # shell once more if either is missing, poll again. Best-effort.\n  if pgrep -x Hyprland >/dev/null 2>&1 && command -v hyprctl >/dev/null 2>&1; then\n    _gs_ok=0\n    for _gs_try in 1 2 3 4 5 6 7 8 9 10; do\n      if hyprctl globalshortcuts 2>/dev/null | grep -q \'omarchy:menu.root\' && hyprctl globalshortcuts 2>/dev/null | grep -q \'omarchy:ipc.hexciri.dock.apps\'; then _gs_ok=1; break; fi\n      sleep 0.5\n    done\n    if [[ $_gs_ok == "0" ]]; then\n      hexciri-restart-shell || true\n      for _gs_try in 1 2 3 4 5 6 7 8 9 10; do\n        if hyprctl globalshortcuts 2>/dev/null | grep -q \'omarchy:menu.root\' && hyprctl globalshortcuts 2>/dev/null | grep -q \'omarchy:ipc.hexciri.dock.apps\'; then _gs_ok=1; break; fi\n        sleep 0.5\n      done\n    fi\n    if [[ $_gs_ok == "1" ]]; then echo "GlobalShortcuts registered: Super+Space apps / Super+Alt+Space menu"; else echo "GlobalShortcuts still missing after shell restart (omarchy:menu.root / omarchy:ipc.hexciri.dock.apps; run: hexciri-restart-shell)"; fi\n    unset _gs_ok _gs_try\n  fi\nfi',
+    "restart re-registers GlobalShortcuts after the last Hyprland reload")
+PY
+
 # 9. pkg-prune: whole-file rewrite (2026-11-24, Devi: Prune package
 # cache was missing from hexciri update, see Fix 1 above). Upstream bin
 # printed the themed header then ran `sudo paccache -rk2` live, whose
@@ -4966,18 +5002,6 @@ if command -v thpm >/dev/null 2>&1; then
 fi
 unset THPM_SRC THPM_NEED_INSTALL STEAM_ADWAITA
 
-# Pre-placement binds guard (2026-11-24, Devi: Super+Space apps and
-# Super+Alt+Space menu both died after the 2cdc33c7 update): that update
-# replaced /usr/share/hexciri, then placement verification died on
-# config/tmux/tmux.conf, so the update aborted with a new, unverified
-# tree live, Hyprland reloaded on it by the guard resume, and the shell
-# never restarted. Both chords go through GlobalShortcuts, so a reload
-# onto a bad tree (or a shell that never re-registers them) kills both
-# at once while plain command binds keep working. Check the whole chain
-# in the FORK, before anything is replaced: a broken fork dies here
-# with the last good tree still live, never after rm -rf.
-binds_chain_ok "$FORK_OUT" || die "binds chain broken in fork (Super+Space apps / Super+Alt+Space menu would not register; see above). Refusing to place a broken fork over the working tree."
-
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
 # runs as the normal user.
@@ -4989,6 +5013,23 @@ step "Placing forked tree: /usr/share/hexciri (sudo), ~/.config, ~/.local/state"
 # reloads mid-copy into emergency mode. The guard (upstream's fix,
 # never wired in Hexciri) disables autoreload until resume.
 hypr_guard_pause
+
+# Pre-placement binds guard (2026-11-24, Devi: Super+Space apps and
+# Super+Alt+Space menu both died after the 2cdc33c7 update): that update
+# replaced /usr/share/hexciri, then placement verification died on
+# config/tmux/tmux.conf, so the update aborted with a new, unverified
+# tree live, Hyprland reloaded on it by the guard resume, and the shell
+# never restarted. Both chords go through GlobalShortcuts, so a reload
+# onto a bad tree (or a shell that never re-registers them) kills both
+# at once while plain command binds keep working. Check the whole chain
+# in the FORK, before anything is replaced: a broken fork dies here
+# with the last good tree still live, never after rm -rf.
+# Moved here 2026-11-24 (noise fix): it used to sit before the Place
+# header, inside system_fingerprint()'s range, so this one check line
+# moved the system fingerprint and forced a full installer on every
+# update after 6e48f01. It now sits after the Place header, outside
+# every fingerprint range, so a check can never move a fingerprint.
+binds_chain_ok "$FORK_OUT" || die "binds chain broken in fork (Super+Space apps / Super+Alt+Space menu would not register; see above). Refusing to place a broken fork over the working tree."
 
 sudo rm -rf "$HEXCIRI_PATH"
 sudo mkdir -p "$HEXCIRI_PATH"
@@ -5572,6 +5613,7 @@ for _sp in hexciri-update-pkg-prune hexciri-update-orphan-pkgs hexciri-update-mi
 grep -q '_restart_needs_blank' "$HEXCIRI_PATH/bin/hexciri-update-restart" || die "hexciri-update-restart has no conditional top blank (update section spacing, 2026-11-24)"
 grep -q 'Hyprland config reloaded (hyprctl reload)' "$HEXCIRI_PATH/bin/hexciri-update-restart" || die "hexciri-update-restart does not reload Hyprland after the shell restart (emergency mode returns after every update, 2026-11-24)"
 grep -q 'hexciri-shell hexciri.system-update refresh' "$HEXCIRI_PATH/bin/hexciri-update-restart" || die "hexciri-update-restart does not refresh the system-update widget after an update (stock icon stays on up to 6h, 2026-11-24)"
+grep -q 'GlobalShortcuts registered' "$HEXCIRI_PATH/bin/hexciri-update-restart" || die "hexciri-update-restart does not re-register GlobalShortcuts after the last Hyprland reload (Super+Space / Super+Alt+Space stay dead after an update, 2026-11-24)"
 grep -q 'timeout 10 git -C "$_checkout" fetch --quiet' "$HEXCIRI_PATH/bin/hexciri-update-available" || die "hexciri-update-available does not fetch before counting git behind (stale ref keeps the update icon on, 2026-11-24)"
 grep -q 'connect-timeout 10 --retry 1' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" || die "hexciri-update-aur-pkgs still probes the AUR with a 30s x3 curl (up to ~99s before yay starts, 2026-11-24)"
 grep -q 'already updated by eos-update --aur, skipping' "$HEXCIRI_PATH/bin/hexciri-update-aur-pkgs" && die "hexciri-update-aur-pkgs still prints the noisy skipping line"
@@ -7049,14 +7091,20 @@ fi
 # runs after this installer and re-registers the shortcuts, and a tty3
 # run has no Hyprland at all. (hyprctl binds is not grepped here: its
 # output format varies, globalshortcuts is the authority.)
+# 2026-11-24 noise fix: the two GlobalShortcut lines below used to warn
+# here, but at this point the guard-resume reload has just run and the
+# shell restart has NOT happened yet, so missing registrations are the
+# expected state, not a failure. They now go to the detail log only.
+# The real check is patch 8f in hexciri-update-restart, which polls
+# after the last reload and restarts the shell again if needed.
 if pgrep -x Hyprland >/dev/null 2>&1 && command -v hyprctl >/dev/null 2>&1; then
   _cfgerr="$(hyprctl configerrors 2>/dev/null || true)"
   if [ -n "$_cfgerr" ]; then
     warn "Hyprland config errors after reload (binds may be dead, emergency mode?): $_cfgerr (check: hyprctl configerrors, then hyprctl reload)"
   elif hyprctl globalshortcuts >/dev/null 2>&1; then
     _gs="$(hyprctl globalshortcuts 2>/dev/null || true)"
-    echo "$_gs" | grep -q 'omarchy:menu.root' || warn "Super+Alt+Space menu shortcut not registered by the shell (omarchy:menu.root missing from hyprctl globalshortcuts; shell restart in hexciri-update-restart should re-register it, or run: hexciri-restart-shell)"
-    echo "$_gs" | grep -q 'omarchy:ipc.hexciri.dock.apps' || warn "Super+Space apps shortcut not registered by the shell (omarchy:ipc.hexciri.dock.apps missing from hyprctl globalshortcuts; shell restart in hexciri-update-restart should re-register it, or run: hexciri-restart-shell)"
+    echo "$_gs" | grep -q 'omarchy:menu.root' || printf '%s\n' "binds smoke check (expected before shell restart): omarchy:menu.root not yet registered" >> "$INSTALL_DETAIL_LOG" 2>/dev/null || true
+    echo "$_gs" | grep -q 'omarchy:ipc.hexciri.dock.apps' || printf '%s\n' "binds smoke check (expected before shell restart): omarchy:ipc.hexciri.dock.apps not yet registered" >> "$INSTALL_DETAIL_LOG" 2>/dev/null || true
   fi
   unset _cfgerr _gs
 fi

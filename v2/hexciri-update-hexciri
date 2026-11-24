@@ -279,6 +279,43 @@ if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA != "$OLD_SHA" && -n $INSTALLED_UP 
       detail "marker mismatch after re-apply-provision: got '${_rm_after:-none}', expected $NEW_SHA"
     fi
     detail "re-apply-provision failed, falling through to a full installer re-run"
+  elif [[ -n $_new_up && -n $_new_patch && -n $_new_prov && -n $_new_sys && $_new_up == "$INSTALLED_UP" && $_new_prov == "$INSTALLED_PROV" && ( $_new_patch != "$INSTALLED_PATCH" || $_new_sys != "$INSTALLED_SYS" ) ]]; then
+    # Migration (2026-11-24, noise fix): patch+system differ, but the
+    # system fingerprint moved only because a patch-level check line
+    # (binds_chain_ok guard, 6e48f01) sat inside its range, and the
+    # upstream fingerprint moved only on fork decisions. If the real
+    # system provisioning inputs are unchanged between the old and new
+    # installer, a full installer is pure noise: re-apply instead.
+    # System inputs = install.sh system ranges (Preflight..Fork cache
+    # check, mise..Place, guard line ignored) + base packages + tools.
+    _sys_unchanged=0
+    if [[ $SYNC_METHOD == "git" && $OLD_COMMIT != "none" && -n $NEW_COMMIT && $NEW_COMMIT != "none" ]]; then
+      _mig_tmp="$(mktemp -d /tmp/hexciri-mig.XXXXXX)"
+      if git -C "$CHECKOUT" show "$OLD_COMMIT:v2/install.sh" > "$_mig_tmp/old-install.sh" 2>>"$DETAIL_LOG" && git -C "$CHECKOUT" diff --quiet "$OLD_COMMIT" "$NEW_COMMIT" -- v2/hexciri-base.packages v2/hexciri-tools.toml 2>>"$DETAIL_LOG"; then
+        _old_sys="$( { sed -n '/^# --- Preflight ---/,/^# --- Fork cache check/p' "$_mig_tmp/old-install.sh"; sed -n '/^# --- mise + Hexciri tools config/,/^# --- Place the forked tree to its install targets ---/p' "$_mig_tmp/old-install.sh"; } | sed '/^# Pre-placement binds guard/,/^binds_chain_ok "\$FORK_OUT" || die/d' | grep -v '^$' | sha256sum | cut -d' ' -f1 )"
+        _new_sys_in="$( { sed -n '/^# --- Preflight ---/,/^# --- Fork cache check/p' "$SOURCE_ROOT/v2/install.sh"; sed -n '/^# --- mise + Hexciri tools config/,/^# --- Place the forked tree to its install targets ---/p' "$SOURCE_ROOT/v2/install.sh"; } | sed '/^# Pre-placement binds guard/,/^binds_chain_ok "\$FORK_OUT" || die/d' | grep -v '^$' | sha256sum | cut -d' ' -f1 )"
+        if [[ -n $_old_sys && $_old_sys == "$_new_sys_in" ]]; then _sys_unchanged=1; detail "migration: system inputs unchanged between $OLD_COMMIT and $NEW_COMMIT, re-apply instead of full"; else detail "migration: system inputs changed, falling through to full installer"; fi
+      else
+        detail "migration: could not diff old vs new installer, falling through to full installer"
+      fi
+      rm -rf "$_mig_tmp"
+    else
+      detail "migration: no git old commit to diff (tarball sync), falling through to full installer"
+    fi
+    if [[ $_sys_unchanged == "1" ]]; then
+      detail "patch/system differ but system inputs unchanged, re-apply (fork patch only, no packages / GPU / SDDM / theme / PAM / trim)"
+      if [[ -n $SHORT ]]; then echo "Updating Hexciri to $SHORT... (re-apply: fork patch only)"; else echo "Updating Hexciri... (re-apply: fork patch only)"; fi
+      if bash "$SOURCE_ROOT/v2/install.sh" --yes --no-reboot --re-apply; then
+        _rm_after="$(cat "$MARKER" 2>/dev/null || true)"
+        if [[ $_rm_after == "$NEW_SHA" ]]; then
+          if [[ -n $SHORT ]]; then echo "Hexciri updated to $SHORT"; else echo "Hexciri updated"; fi
+          [[ -n ${TARBALL_WORKDIR:-} ]] && rm -rf "$TARBALL_WORKDIR"
+          exit 0
+        fi
+        detail "marker mismatch after re-apply: got '${_rm_after:-none}', expected $NEW_SHA"
+      fi
+      detail "re-apply failed, falling through to a full installer re-run"
+    fi
   fi
 fi
 
