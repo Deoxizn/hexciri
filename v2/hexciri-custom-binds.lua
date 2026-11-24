@@ -6,9 +6,12 @@
 --   Super+L layout cycle, universal Super+C/V copy/paste, Super+comma
 --   notifications, Super+Escape system menu -- all already in Omarchy,
 --   NOT duplicated here. Duplicating them would double-register binds.
--- v1 bits deliberately left out: fuzzel search/calc (no fuzzel in v2,
--- QS menus instead), Noctalia notification/settings binds (no Noctalia
--- in v2), hexciri-agent on Super+grave (AI out of scope for v2 base).
+-- v1 bits deliberately left out: Noctalia notification/settings binds
+-- (no Noctalia in v2), hexciri-agent on Super+grave (AI out of scope
+-- for v2 base). fuzzel search/calc are NOT left out: they are restored
+-- below, 2026-11-24 (Devi: Mod+Shift+S web search, Mod+Shift+C
+-- calculator in v1). No fuzzel in v2, so the search prompt is
+-- hexciri-menu-input (QS menu) via the hexciri-web-search bin.
 -- Installed by the installer into default/hypr/bindings/hexciri.lua;
 -- bindings.lua require_all.files() auto-loads every file in that dir,
 -- so no edit to hexciri.lua is needed. Syntax-checked at install time.
@@ -33,3 +36,17 @@ o.bind("SUPER + CTRL + M", "Messenger webapp", "hexciri-launch-or-focus-webapp m
 
 -- Screen record on Alt+Print. Region/screenshot stay on Omarchy's binds.
 o.bind("ALT + Print", "Screen record", "hexciri-capture-screenrecording")
+
+-- Web search / calculator, v1 binds restored 2026-11-24 (Devi).
+-- Omarchy's regions/global.lua binds these chords to Google Maps /
+-- Hey Calendar webapps; the installer fork patch removes those two
+-- lines, so these are the only binds on the chords. Search prompts
+-- via hexciri-menu-input (QS menu) and opens in Brave Origin, the
+-- v2 default browser, via hexciri-web-search (v1 provider table,
+-- default google, state file ~/.local/state/hexciri/search-provider).
+o.bind("SUPER + SHIFT + S", "Web search", "hexciri-web-search")
+-- Calculator is deliberately also on Super+Shift+Q (Omarchy's chord,
+-- applications.lua, gnome-calculator in v2): Q and C are the same app,
+-- and the cheatsheet already lists Calculator as an alternative-chord
+-- action, so both chords show on one row instead of two.
+o.bind("SUPER + SHIFT + C", "Calculator", "gnome-calculator")

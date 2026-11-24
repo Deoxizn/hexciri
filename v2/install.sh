@@ -161,7 +161,7 @@ upstream_fingerprint() {
 patch_fingerprint() {
   {
     sed -n '/^# --- Wire the compat alias in, before placement ---/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
-    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link"; do
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
@@ -258,7 +258,7 @@ current_theme_name() {
 # no fork, no theme re-apply, no settings touched at all.
 if [ "${LIGHT_SYNC:-0}" = "1" ]; then
   _ls_sha="$(sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1)"
-  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link; do
+  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link hexciri-web-search; do
     if [ -f "$HEXCIRI_REPO_ROOT/v2/$_ls_f" ] && [ -d /usr/share/hexciri/bin ]; then
       if ! cmp -s "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" 2>/dev/null; then
         sudo install -Dm755 "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" && info "Light sync: updated /usr/share/hexciri/bin/$_ls_f"
@@ -2100,6 +2100,57 @@ for c in changed:
 if not changed:
     print("applications.lua: no bind changes needed")
 
+# 6. Reclaim Super+Shift+S / Super+Shift+C from Omarchy's region webapps.
+# (The applications.lua print loop above already ran, so reclaim changes
+# are printed here, not there.)
+_changed_before_reclaim = len(changed)
+# Upstream regions/global.lua (loaded when preinstalled bindings are
+# enabled) binds S to Google Maps and C to Hey Calendar. Devi
+# 2026-11-24: in v1 S was web search and C was calculator. Remove those
+# two lines (commented, not silently deleted) and let
+# default/hypr/bindings/hexciri.lua own the chords instead, where S runs
+# hexciri-web-search (QS prompt, Brave Origin) and C runs
+# gnome-calculator (same app as Super+Shift+Q). Idempotent: already
+# commented lines are skipped, a changed line shape warns instead of
+# silently no-opping.
+_glob = root + "/default/hypr/bindings/regions/global.lua"
+with open(_glob) as f:
+    _g = f.read()
+_g_orig = _g
+_old_maps = 'o.bind("SUPER + SHIFT + S", "Google Maps", { webapp = "https://maps.google.com/", focus = true })'
+_old_cal = 'o.bind("SUPER + SHIFT + C", "Calendar", { webapp = "https://app.hey.com/calendar/weeks/" })'
+if _old_maps in _g:
+    _g = _g.replace(_old_maps, '-- Hexciri: Super+Shift+S is web search in v1 (hexciri-web-search), not Google Maps.', 1)
+    changed.append("Google Maps bind removed from regions/global.lua (Super+Shift+S is web search)")
+elif "SUPER + SHIFT + S" in _g and "Google Maps" in _g:
+    print("WARN: Google Maps bind line shape changed, Super+Shift+S NOT reclaimed")
+if _old_cal in _g:
+    _g = _g.replace(_old_cal, '-- Hexciri: Super+Shift+C is calculator in v1 (gnome-calculator), not Hey Calendar.', 1)
+    changed.append("Hey Calendar bind removed from regions/global.lua (Super+Shift+C is calculator)")
+elif "SUPER + SHIFT + C" in _g and "Calendar" in _g:
+    print("WARN: Hey Calendar bind line shape changed, Super+Shift+C NOT reclaimed")
+if _g != _g_orig:
+    with open(_glob, "w") as f:
+        f.write(_g)
+# Same chord in the China region file (only one region module loads, so
+# global and cn never double-bind, but a cn install would otherwise keep
+# Amap on Super+Shift+S instead of web search).
+_cn = root + "/default/hypr/bindings/regions/cn.lua"
+with open(_cn) as f:
+    _c = f.read()
+_c_orig = _c
+_old_amap = 'o.bind("SUPER + SHIFT + S", "Amap", { webapp = "https://www.amap.com/", focus = true })'
+if _old_amap in _c:
+    _c = _c.replace(_old_amap, '-- Hexciri: Super+Shift+S is web search in v1 (hexciri-web-search), not Amap.', 1)
+    changed.append("Amap bind removed from regions/cn.lua (Super+Shift+S is web search)")
+elif "SUPER + SHIFT + S" in _c and "Amap" in _c:
+    print("WARN: Amap bind line shape changed, Super+Shift+S NOT reclaimed in cn.lua")
+if _c != _c_orig:
+    with open(_cn, "w") as f:
+        f.write(_c)
+for c in changed[_changed_before_reclaim:]:
+    print("regions: " + c)
+
 # 5d. Touchpad: bottom lower right = right click, Devi 2026-11-23.
 # Upstream default/hypr/input.lua sets clickfinger_behavior = true, which
 # maps 1/2/3 fingers to LMB/RMB/MMB and disables location-based clicks, so
@@ -2127,7 +2178,7 @@ if _inp != _inp_orig:
     with open(_input, "w") as f:
         f.write(_inp)
 
-# 6. Screenshot: hexciri-capture-screenshot execs omasnap (Omarchy-repo-only).
+# 7. Screenshot: hexciri-capture-screenshot execs omasnap (Omarchy-repo-only).
 # Rewrite it to grim + slurp (both in CORE_PKGS), wl-copy, and
 # hexciri-notification-send. Same CLI the binds and menu use:
 #   [smart|region|windows|fullscreen|scroll] [copy|save]
@@ -2514,7 +2565,7 @@ elif command -v luac >/dev/null 2>&1; then
   luac -p "$FORK_OUT/default/hypr/bindings/utilities.lua" && info "utilities.lua patch OK (luac syntax OK)" || warn "luac syntax check failed on patched utilities.lua, Hyprland will report the real error at boot if this is broken."
 fi
 bash -n "$FORK_OUT/bin/hexciri-capture-screenshot" || die "bash -n failed on rewritten $FORK_OUT/bin/hexciri-capture-screenshot"
-info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, btm (bottom package), Herdr removed, cliamp/omawrite/Obsidian binds removed (ncspot/ghostwriter/obsidian not wanted), screenshot via grim+slurp, touchpad bottom-right = right click"
+info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, btm (bottom package), Herdr removed, cliamp/omawrite/Obsidian binds removed (ncspot/ghostwriter/obsidian not wanted), screenshot via grim+slurp, touchpad bottom-right = right click, Super+Shift+S web search + Super+Shift+C calculator reclaimed from region webapps (Google Maps / Hey Calendar)"
 
 # --- Patch dock pinned list (Devi 2026-11-23 20:59 / 21:00 MST) ---
 # Upstream config/omarchy/shell.json pins folio, omarchy-browser,
@@ -2929,6 +2980,17 @@ if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" ]; then
   info "  theme link: hexciri-theme-link installed (hexciri theme link <git-url>)"
 else
   die "v2/hexciri-theme-link not in the installer tree, hexciri theme link will not exist"
+fi
+# hexciri-web-search (repo file v2/hexciri-web-search): Super+Shift+S
+# web search. v1 web search without fuzzel: prompt via
+# hexciri-menu-input (QS menu), provider table + state file kept from
+# v1, result opened in Brave Origin via hexciri-launch-browser.
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$FORK_OUT/bin/hexciri-web-search"
+  chmod +x "$FORK_OUT/bin/hexciri-web-search"
+  info "  web search: hexciri-web-search installed (Super+Shift+S, QS prompt, Brave Origin)"
+else
+  die "v2/hexciri-web-search not in the installer tree, Super+Shift+S web search will not exist"
 fi
 # Hexciri custom Lua, 2026-11-24 (Devi: Hexciri Lua, custom parts only).
 # v1 binds.lua / windowrules.lua mostly mimic Omarchy, so only the
@@ -5414,7 +5476,8 @@ _boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/l
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && hc_info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
 command -v xdg-terminal-exec >/dev/null 2>&1 && hc_info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
 if command -v spotify >/dev/null 2>&1; then hc_info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then hc_info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
-command -v gnome-calculator >/dev/null 2>&1 && hc_info "  calculator: gnome-calculator present (Super+Shift+Q)" || warn "  calculator: gnome-calculator NOT installed, Super+Shift+Q will fail"
+command -v gnome-calculator >/dev/null 2>&1 && hc_info "  calculator: gnome-calculator present (Super+Shift+Q / Super+Shift+C)" || warn "  calculator: gnome-calculator NOT installed, Super+Shift+Q / Super+Shift+C will fail"
+[ -x "$HEXCIRI_PATH/bin/hexciri-web-search" ] && hc_info "  web search: hexciri-web-search present (Super+Shift+S, QS prompt, Brave Origin)" || warn "  web search: hexciri-web-search missing from $HEXCIRI_PATH/bin, Super+Shift+S will fail"
 command -v hexciri >/dev/null 2>&1 && hc_info "  cli: hexciri present" || warn "  cli: hexciri NOT on PATH, hexciri plugin list will fail"
 command -v checkupdates >/dev/null 2>&1 && hc_info "  update check: checkupdates present (update icon)" || warn "  update check: checkupdates NOT installed, update icon never shows"
 command -v eos-update >/dev/null 2>&1 && hc_info "  update engine: eos-update present (repo + AUR, --aur)" || warn "  update engine: eos-update NOT installed, hexciri update falls back to pacman -Syu --noconfirm"
@@ -5463,7 +5526,7 @@ Reboot, then check in order:
   13. Workspace 1 shows 1 / its mode glyph, and SDDM shows the Hexciri emblem, not Omarchy logos
   14. Default apps: Super+Shift+Return opens Brave Origin (default browser), Super+Shift+N opens Zed (nano is the fallback now, neovim removed), Super+Alt+Return opens tmux in Kitty, menu Capture > Screenrecord records (gpu-screen-recorder), menu Share > Receive opens LocalSend. Super+Shift+O (Obsidian), Super+Shift+Alt+M (ncspot) and Super+Shift+W (Ghostwriter) are unbound now, those apps were removed 2026-11-23.
   15. fastfetch: run `fastfetch` in Kitty, Hexciri logo + layout, not stock, WM shows Hyprland | Quickshell, not Niri | Noctalia
-  16. Spotify + Arch substitutes: Super+Shift+M opens Spotify, Super+Shift+Q opens the calculator (gnome-calculator), PRINT takes a screenshot (grim + slurp, saved to ~/Pictures/Screenshots). Super+Ctrl+Return (Herdr) is deliberately unbound, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.
+  16. Spotify + Arch substitutes: Super+Shift+M opens Spotify, Super+Shift+Q opens the calculator (gnome-calculator), PRINT takes a screenshot (grim + slurp, saved to ~/Pictures/Screenshots). Super+Ctrl+Return (Herdr) is deliberately unbound, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux. v1 binds restored 2026-11-24: Super+Shift+S is web search (QS prompt via hexciri-web-search, Brave Origin) and Super+Shift+C is calculator too (same gnome-calculator as Super+Shift+Q, cheatsheet shows both chords on one Calculator row); the Google Maps / Hey Calendar region binds that owned those chords are gone.
 
   17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update (eos-update --aur for repo + AUR, Hexciri self-update syncs nyx with git (tarball fallback) and re-runs the installer when it changed, mise up for mise tools). `hexciri-update` is the same script, and `hexciri update hexciri` re-runs just the Hexciri self-update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, obsidian, pinta, xterm and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). vim and stoken stay installed, they cannot be removed (ex-vi-compat / openconnect depend on them), their entries are hidden instead, and the trim no longer tries them. YAD settings is hidden, yad itself stays (EOS tools depend on it).
 

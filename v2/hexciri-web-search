@@ -1,0 +1,75 @@
+#!/bin/bash
+
+# hexciri:summary=Web search in the default browser (Brave Origin), query via the QS menu
+# hexciri:group=launch
+# hexciri:args=[provider]
+# hexciri:examples=hexciri-web-search
+# hexciri:examples=hexciri-web-search brave
+# hexciri:examples=hexciri-web-search providers
+#
+# Hexciri web search, 2026-11-24 (Devi: in v1 Mod+Shift+S was web search
+# and Mod+Shift+C was calculator).
+#
+# v1 ran `hexciri-fuzzel search`: a fuzzel --dmenu prompt, then xdg-open
+# on the default provider's URL (provider table in hexciri-fuzzel, default
+# google, override in ~/.local/state/hexciri/search-provider). v2 has no
+# fuzzel; the prompt is hexciri-menu-input, the QS menu text input every
+# other v2 prompt uses. The provider table and state file are kept
+# identical to v1, so a saved provider carries over. The result opens in
+# the default browser (Brave Origin in v2) via hexciri-launch-browser.
+#
+#   hexciri-web-search            prompt, search with the default provider
+#   hexciri-web-search NAME       prompt, search with provider NAME
+#   hexciri-web-search providers  print name<TAB>label<TAB>url, one per line
+set -euo pipefail
+
+# Provider table, same as v1 hexciri-fuzzel (single source of truth there,
+# duplicated here because v2 has no fuzzel to read it from).
+declare -A PROVIDERS LABELS
+PROVIDERS[google]="https://google.com/search?udm=8&q=%s"; LABELS[google]="Google AI"
+PROVIDERS[googleclassic]="https://google.com/search?udm=14&q=%s"; LABELS[googleclassic]="Google (classic)"
+PROVIDERS[ddg]="https://duckduckgo.com/?q=%s"; LABELS[ddg]="DuckDuckGo"
+PROVIDERS[brave]="https://search.brave.com/search?q=%s"; LABELS[brave]="Brave"
+PROVIDERS[searxng]="https://searx.be/search?q=%s"; LABELS[searxng]="SearXNG"
+PROVIDERS[github]="https://github.com/search?q=%s&type=code"; LABELS[github]="GitHub"
+PROVIDERS[wiki]="https://en.wikipedia.org/w/index.php?search=%s"; LABELS[wiki]="Wikipedia"
+PROVIDERS[archwiki]="https://wiki.archlinux.org/index.php?search=%s"; LABELS[archwiki]="Arch Wiki"
+PROVIDERS[youtube]="https://www.youtube.com/results?search_query=%s"; LABELS[youtube]="YouTube"
+PROVIDERS[aur]="https://aur.archlinux.org/packages?K=%s"; LABELS[aur]="AUR"
+PROVIDERS[man]="https://man.archlinux.org/search?q=%s"; LABELS[man]="Arch Man Pages"
+
+if [[ "${1:-}" == "providers" ]]; then
+  for n in "${!PROVIDERS[@]}"; do
+    printf '%s\t%s\t%s\n' "$n" "${LABELS[$n]:-$n}" "${PROVIDERS[$n]}"
+  done | LC_ALL=C sort
+  exit 0
+fi
+
+# Default provider: state file (written by a provider picker, or by hand),
+# else env, else google, exactly like v1.
+DEFAULT_PROVIDER="google"
+SP_STATE="${XDG_STATE_HOME:-$HOME/.local/state}/hexciri/search-provider"
+if [[ -f $SP_STATE ]]; then
+  read -r DEFAULT_PROVIDER < "$SP_STATE" || true
+  [[ -n $DEFAULT_PROVIDER ]] || DEFAULT_PROVIDER="google"
+fi
+DEFAULT_PROVIDER="${HEXCIRI_SEARCH_PROVIDER:-$DEFAULT_PROVIDER}"
+
+prov="${1:-$DEFAULT_PROVIDER}"
+tpl="${PROVIDERS[$prov]:-}"
+if [[ -z $tpl ]]; then
+  echo "hexciri-web-search: unknown provider '$prov' (try: hexciri-web-search providers)" >&2
+  exit 1
+fi
+
+q="$(hexciri-menu-input "Search [${LABELS[$prov]:-$prov}]: " --width 700)" || exit 0
+[[ -n $q ]] || exit 0
+
+urlenc() { python3 -c 'import sys,urllib.parse;sys.stdout.write(urllib.parse.quote(sys.argv[1],safe=""))' "$1"; }
+url="${tpl/\%s/$(urlenc "$q")}"
+
+if command -v hexciri-launch-browser >/dev/null 2>&1; then
+  exec hexciri-launch-browser "$url"
+else
+  exec xdg-open "$url"
+fi
