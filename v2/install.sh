@@ -2169,7 +2169,7 @@ PY
 # fastfetch window, fixed 2026-11-24 to a two-mode script. No about.txt,
 # no fit measurement, no awk locale sizing. The menu row system.about
 # still calls it; the Hyprland rule in default/hypr/apps/system.lua floats
-# org.hexciri.about at 920x480. Never pass a bash -c '...' string through
+# org.hexciri.about (1280x800 start, fitted at launch). Never pass a bash -c '...' string through
 # launch-or-focus-tui: it builds LAUNCH_COMMAND with unquoted $@ and
 # launch-or-focus re-parses it with eval, so the -c string is split and
 # bash -c receives only `export`, prints the env and exits, which is why
@@ -2205,7 +2205,7 @@ if s != s_orig:
 #    the size in about.fit, and kept breaking (multibyte width, stale fit,
 #    blank logo). About is now just a floating Kitty running fastfetch with
 #    the Hexciri config at /etc/fastfetch/config.jsonc; the Hyprland rule
-#    in default/hypr/apps/system.lua floats org.hexciri.about at 920x480.
+#    in default/hypr/apps/system.lua floats org.hexciri.about (1280x800 start, fitted at launch).
 #    Also fix that rule's stale comment, which still describes the fit.
 # 2. hexciri-launch-about: two-mode script (2026-11-24, fixed same day).
 #    The old script measured the logo with wc/awk, remembered the size in
@@ -2218,22 +2218,75 @@ if s != s_orig:
 #    survive that chain intact, and --render runs inside the terminal:
 #    fastfetch with the Hexciri config at /etc/fastfetch/config.jsonc,
 #    then read blocks until any key. The Hyprland rule in
-#    default/hypr/apps/system.lua floats org.hexciri.about at 920x480.
+#    default/hypr/apps/system.lua floats org.hexciri.about (1280x800 start, fitted at launch).
 #    Also fix that rule's stale comment, which still describes the fit.
 la = root + "/bin/hexciri-launch-about"
 _about_lines = [
     "#!/bin/bash",
-    "# hexciri-launch-about (2026-11-24, fixed 2026-11-24): System > About is a floating fastfetch.",
-    "# No about.txt, no fit measurement, no awk locale sizing. Menu row",
-    "# system.about calls this script; it opens a floating terminal running",
-    "# fastfetch with the Hexciri config at /etc/fastfetch/config.jsonc.",
-    "# Window size comes from the Hyprland rule for org.hexciri.about (920x480).",
+    "# hexciri-launch-about (2026-11-24): System > About is a floating fastfetch,",
+    "# fitted to the rendered content at launch. No about.txt, no fit file.",
+    "# Menu row system.about calls this script; it opens a floating terminal",
+    "# running fastfetch with the Hexciri config at /etc/fastfetch/config.jsonc.",
+    "# Window size starts from the Hyprland rule for org.hexciri.about (1280x800);",
+    "# --render measures the real content and resizes the window to hug it",
+    "# before painting, so it fits on any font size / DPI instead of wrapping",
+    "# at a fixed 920x480 (module lines wrapped to the left margin).",
     "# --render runs INSIDE the terminal. Never pass a bash -c '...' string",
     "# through launch-or-focus-tui: unquoted $@ + eval splits it, bash -c",
     "# gets only `export` and exits, so About opens and closes at once.",
+    "_about_cfg=\"/etc/fastfetch/config.jsonc\"",
+    "_about_config() { if [ -f \"$_about_cfg\" ]; then fastfetch --config \"$_about_cfg\" \"$@\"; else fastfetch \"$@\"; fi; }",
+    "_about_strip() { sed 's/\\x1b\\[[0-9;?]*[a-zA-Z]//g'; }",
+    "_about_settle() {",
+    "  local current previous=\"\" held=0",
+    "  for _ in {1..20}; do",
+    "    current=$(stty size 2>/dev/null || echo \"\")",
+    "    if [[ $current == \"$previous\" && -n $current ]]; then (( ++held >= 3 )) && return 0; else held=0; previous=$current; fi",
+    "    sleep 0.05",
+    "  done",
+    "  return 0",
+    "}",
+    "_about_fit() {",
+    "  local modules module_w module_r logo_w logo_h logo_src target_c target_r",
+    "  modules=$(_about_config --logo none 2>/dev/null | _about_strip; printf X); modules=${modules%X}",
+    "  module_w=$(printf '%s' \"$modules\" | LC_ALL=C.UTF-8 wc -L 2>/dev/null || echo 60)",
+    "  module_r=$(printf '%s' \"$modules\" | wc -l 2>/dev/null || echo 36)",
+    "  logo_w=65; logo_h=35",
+    "  logo_src=$(grep -m1 -o '\"source\": *\"[^\"]*\"' \"$_about_cfg\" 2>/dev/null | sed 's/\"source\": *\"//; s/\"$//')",
+    "  if [[ $logo_src == *.txt ]]; then",
+    "    logo_src=${logo_src/#~/$HOME}",
+    "    if [ -f \"$logo_src\" ]; then logo_w=$(LC_ALL=C.UTF-8 wc -L <\"$logo_src\" 2>/dev/null || echo 54); logo_h=$(wc -l <\"$logo_src\" 2>/dev/null || echo 26); fi",
+    "  else",
+    "    logo_w=$(grep -m1 -o '\"width\": *[0-9]*' \"$_about_cfg\" 2>/dev/null | grep -o '[0-9]*' || echo 65)",
+    "    logo_h=$(grep -m1 -o '\"height\": *[0-9]*' \"$_about_cfg\" 2>/dev/null | grep -o '[0-9]*' || echo 35)",
+    "  fi",
+    "  target_c=$(( logo_w + 6 + module_w + 4 ))",
+    "  target_r=$(( module_r > logo_h + 3 ? module_r : logo_h + 3 ))",
+    "  target_r=$(( target_r + 2 ))",
+    "  local rows cols address width height nudges=0 shift_w shift_h target_w target_h mon_w mon_h",
+    "  _about_settle",
+    "  while :; do",
+    "    read -r rows cols <<<\"$(stty size 2>/dev/null || echo \"0 0\")\"",
+    "    read -r address width height <<<\"$(hyprctl clients -j 2>/dev/null | jq -r '.[] | select(.class == \"org.hexciri.about\") | \"\\(.address) \\(.size[0]) \\(.size[1])\"' 2>/dev/null || echo \"\")\"",
+    "    [[ -n ${address:-} && $cols -gt 0 && $rows -gt 0 && $width -gt 0 && $height -gt 0 ]] || return 0",
+    "    if (( cols >= target_c && cols <= target_c + 1 && rows >= target_r && rows <= target_r + 1 )); then return 0; fi",
+    "    (( ++nudges <= 2 )) || return 0",
+    "    shift_w=$(( (target_c - cols) * width ))",
+    "    shift_h=$(( (target_r - rows) * height ))",
+    "    target_w=$(( width + (shift_w >= 0 ? (shift_w + cols - 1) / cols : shift_w / cols) ))",
+    "    target_h=$(( height + (shift_h >= 0 ? (shift_h + rows - 1) / rows : shift_h / rows) ))",
+    "    read -r mon_w mon_h <<<\"$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused) | \"\\(.width) \\(.height)\"' 2>/dev/null || echo \"\")\"",
+    "    if [[ -n ${mon_w:-} && $mon_w -gt 0 ]]; then (( target_w > mon_w * 95 / 100 )) && target_w=$(( mon_w * 95 / 100 )); (( target_h > mon_h * 95 / 100 )) && target_h=$(( mon_h * 95 / 100 )); fi",
+    "    hyprctl dispatch resizewindowpixel \"exact $target_w $target_h,address:$address\" >/dev/null 2>&1 || return 0",
+    "    hyprctl dispatch centerwindow >/dev/null 2>&1 || true",
+    "    _about_settle",
+    "  done",
+    "}",
     "if [[ ${1:-} == \"--render\" ]]; then",
     "  export LC_ALL=C.UTF-8 LANG=C.UTF-8",
-    "  if [ -f /etc/fastfetch/config.jsonc ]; then fastfetch --config /etc/fastfetch/config.jsonc; else fastfetch; fi",
+    "  _about_fit",
+    "  clear",
+    "  _about_config",
     "  echo",
     "  read -n1 -s -r -p \"Press any key to close...\" || true",
     "  exit 0",
@@ -2248,7 +2301,8 @@ sl = root + "/default/hypr/apps/system.lua"
 with open(sl) as f:
     _sl = f.read()
 _sl_orig = _sl
-_sl = _sl.replace("-- The About fastfetch layout needs more columns than the standard float provides.\n-- This size only covers the first launch: hexciri-launch-about measures the\n-- rendered content, remembers the size that hugs it, and applies that as its own\n-- rule before every later launch.", "-- About is a floating fastfetch (hexciri-launch-about): this fixed\n-- 920x480 float is the whole sizing, no fit measurement.")
+_sl = _sl.replace("size = { 920, 480 }", "size = { 1280, 800 }", 1)
+_sl = _sl.replace("-- The About fastfetch layout needs more columns than the standard float provides.\n-- This size only covers the first launch: hexciri-launch-about measures the\n-- rendered content, remembers the size that hugs it, and applies that as its own\n-- rule before every later launch.", "-- About is a floating fastfetch (hexciri-launch-about): this fixed\n-- 1280x800 starting float; --render fits it to the content at launch.")
 if _sl != _sl_orig:
     with open(sl, "w") as f:
         f.write(_sl)
@@ -2321,6 +2375,78 @@ else:
 
 for c in changed:
     print("  fork patch: " + c)
+PY
+
+# --- Fork-time patch: theme-set-gnome writes GTK settings.ini (2026-11-24) ---
+# Upstream theme-set-gnome only sets gsettings and exits before doing
+# anything when there is no DBus session, so it never wrote settings.ini
+# and, from a tty3 install, never set dconf at all. It also set the theme
+# name to Adwaita-dark, which is not a theme name (see the GTK step above).
+# Every theme switch must rewrite both settings.ini files with theme name
+# Adwaita + prefer-dark, and set dconf (through dbus-run-session when there
+# is no live bus), or the file picker goes light again on the next switch.
+python3 - "$FORK_OUT" <<'PY'
+import os
+import sys
+
+root = sys.argv[1]
+gn = root + "/bin/hexciri-theme-set-gnome"
+with open(gn) as f:
+    _g = f.read()
+_g_lines = [
+    '#!/bin/bash',
+    '',
+    '# omarchy:summary=Apply the current theme to GNOME color mode and icon settings',
+    '# omarchy:hidden=true',
+    '# Hexciri (2026-11-24): also writes ~/.config/gtk-3.0/gtk-4.0/settings.ini.',
+    '# Upstream only set gsettings and exited before doing anything with no DBus',
+    '# session, so the GTK file picker (xdg-desktop-portal, GTK4) stayed light:',
+    '# on Wayland GTK reads the theme from dconf, not settings.ini, and the',
+    '# installer runs from tty3 with no bus, so dconf was never set. And the theme',
+    '# name it set, Adwaita-dark, is not a theme name: Adwaita dark form is a',
+    '# variant selected by prefer-dark-theme / color-scheme, naming Adwaita-dark',
+    '# falls back to light Adwaita while prefer-dark flips the foreground light,',
+    '# white-on-white. Theme name is Adwaita in both files and in dconf; dark',
+    '# comes from prefer-dark.',
+    'THEME_DIR=$HOME/.local/state/hexciri/current/theme',
+    'COLORS_FILE="$THEME_DIR/colors.toml"',
+    'mode=$(hexciri-theme-color --file "$COLORS_FILE" mode)',
+    'if [[ $mode == "light" ]]; then',
+    '  _dark=false; _scheme=prefer-light',
+    'else',
+    '  _dark=true; _scheme=prefer-dark',
+    'fi',
+    'for _ver in 3.0 4.0; do',
+    '  mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/gtk-$_ver"',
+    '  cat > "${XDG_CONFIG_HOME:-$HOME/.config}/gtk-$_ver/settings.ini" <<GTK_EOF',
+    '[Settings]',
+    'gtk-theme-name=Adwaita',
+    'gtk-icon-theme-name=Adwaita',
+    'gtk-application-prefer-dark-theme=$_dark',
+    'gtk-font-name=Noto Sans 11',
+    'GTK_EOF',
+    'done',
+    'unset _ver',
+    '_set_gtk() {',
+    '  if [[ -n ${DBUS_SESSION_BUS_ADDRESS:-} ]]; then',
+    '    gsettings set org.gnome.desktop.interface color-scheme "$_scheme"',
+    '    gsettings set org.gnome.desktop.interface gtk-theme "Adwaita"',
+    '    gsettings set org.gnome.desktop.interface icon-theme "Adwaita"',
+    '  elif command -v dbus-run-session >/dev/null 2>&1; then',
+    '    dbus-run-session -- gsettings set org.gnome.desktop.interface color-scheme "$_scheme"',
+    '    dbus-run-session -- gsettings set org.gnome.desktop.interface gtk-theme "Adwaita"',
+    '    dbus-run-session -- gsettings set org.gnome.desktop.interface icon-theme "Adwaita"',
+    '  fi',
+    '}',
+    '_set_gtk',
+]
+_g_new = chr(10).join(_g_lines) + chr(10)
+if _g != _g_new:
+    with open(gn, "w") as f:
+        f.write(_g_new)
+    print("  fork patch: theme-set-gnome writes gtk-3.0/gtk-4.0 settings.ini + dconf (Adwaita, prefer-dark)")
+else:
+    print("theme-set-gnome already patched, skipping")
 PY
 
 # --- Place the forked tree to its install targets ---
@@ -2995,35 +3121,60 @@ else
   warn "No themes found to apply, skipping theme apply."
 fi
 
-# --- GTK settings + portal FileChooser (LocalSend file picker, 2026-11-23) ---
-# LocalSend's file picker is the xdg-desktop-portal FileChooser dialog
-# (GTK, via xdg-desktop-portal-gtk). It was unthemed because nothing ever
-# wrote GTK settings: theme-set-gnome only runs gsettings, and it exits
-# silently with no session bus (which is exactly the install-time theme
-# apply), so no gtk-theme was ever set for the portal dialog. Write
-# gtk-3.0/gtk-4.0 settings.ini from the applied theme's mode and set
-# gsettings too when a bus is present, and pin the FileChooser portal to
-# gtk in portals.conf (hyprland's portal implements no FileChooser).
+# --- GTK settings + portal FileChooser (LocalSend file picker, 2026-11-23, fixed 2026-11-24) ---
+# The picker is the xdg-desktop-portal FileChooser dialog, served out of
+# process by xdg-desktop-portal-gtk (GTK4 on Arch). bb4df7f wrote
+# gtk-theme-name=Adwaita-dark into ~/.config/gtk-3.0/settings.ini and
+# ~/.config/gtk-4.0/settings.ini and pinned FileChooser=gtk, and the picker
+# still came up light with white-on-white ghost text (screenshot 22:58).
+# Two stacked causes, both in ~/.config (Devi's theory, confirmed):
+# 1. "Adwaita-dark" is not a theme name, in GTK3 or GTK4. Adwaita is compiled
+#    in and its dark form is a VARIANT, selected by
+#    gtk-application-prefer-dark-theme (GTK3) / color-scheme prefer-dark
+#    (GTK4), never by naming Adwaita-dark. Naming it makes GTK look for a
+#    stylesheet that does not exist and fall back to light Adwaita, while
+#    prefer-dark still flips the foreground light, which is exactly light
+#    background + light text. The theme name is Adwaita in both files now;
+#    dark comes from prefer-dark / color-scheme.
+# 2. On Wayland GTK reads the theme from dconf (org.gnome.desktop.interface),
+#    through the settings portal, NOT from settings.ini. The installer runs
+#    from tty3 with no DBus session, so the old gsettings block was skipped
+#    and dconf stayed at its defaults (Adwaita light, prefer-light), and
+#    theme-set-gnome exits before doing anything when there is no bus, so a
+#    theme switch never wrote settings.ini either. gsettings is now set
+#    through dbus-run-session when there is no live bus (it writes the dconf
+#    database persistently), and the forked theme-set-gnome writes both
+#    settings.ini files on every theme switch, so the picker stays dark.
 step "Writing GTK settings + portal FileChooser (LocalSend picker theming)"
 _gtk_mode="$(HEXCIRI_PATH="$HEXCIRI_PATH" "$HEXCIRI_PATH/bin/hexciri-theme-color" --file "$HOME/.local/state/hexciri/current/theme/colors.toml" mode 2>/dev/null || echo dark)"
-if [[ "$_gtk_mode" == "light" ]]; then _gtk_theme="Adwaita"; _gtk_dark="false"; else _gtk_theme="Adwaita-dark"; _gtk_dark="true"; fi
+if [[ "$_gtk_mode" == "light" ]]; then _gtk_dark="false"; _gtk_scheme="prefer-light"; else _gtk_dark="true"; _gtk_scheme="prefer-dark"; fi
 mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
 for _gtk_ver in 3.0 4.0; do
   cat > "$HOME/.config/gtk-$_gtk_ver/settings.ini" <<GTK_EOF
 [Settings]
-gtk-theme-name=$_gtk_theme
+gtk-theme-name=Adwaita
 gtk-icon-theme-name=Adwaita
 gtk-application-prefer-dark-theme=$_gtk_dark
 gtk-font-name=Noto Sans 11
 GTK_EOF
 done
 unset _gtk_ver
-info "GTK settings: theme=$_gtk_theme (mode=$_gtk_mode) in gtk-3.0/gtk-4.0 settings.ini"
-if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v gsettings >/dev/null 2>&1; then
-  gsettings set org.gnome.desktop.interface gtk-theme "$_gtk_theme" 2>/dev/null || true
-  gsettings set org.gnome.desktop.interface color-scheme "prefer-$([ "$_gtk_mode" == light ] && echo light || echo dark)" 2>/dev/null || true
-  gsettings set org.gnome.desktop.interface icon-theme "Adwaita" 2>/dev/null || true
-fi
+info "GTK settings: theme=Adwaita (dark=$_gtk_dark) in gtk-3.0/gtk-4.0 settings.ini (Adwaita-dark is not a theme name, dark comes from prefer-dark)"
+_gtk_set() {
+  if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    gsettings set org.gnome.desktop.interface gtk-theme "Adwaita" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface color-scheme "$_gtk_scheme" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface icon-theme "Adwaita" 2>/dev/null || true
+  elif command -v dbus-run-session >/dev/null 2>&1; then
+    dbus-run-session -- gsettings set org.gnome.desktop.interface gtk-theme "Adwaita" 2>/dev/null || true
+    dbus-run-session -- gsettings set org.gnome.desktop.interface color-scheme "$_gtk_scheme" 2>/dev/null || true
+    dbus-run-session -- gsettings set org.gnome.desktop.interface icon-theme "Adwaita" 2>/dev/null || true
+  else
+    warn "no DBus session and no dbus-run-session, dconf GTK theme not set (settings.ini only)"
+  fi
+}
+_gtk_set
+unset -f _gtk_set
 mkdir -p "$HOME/.config/xdg-desktop-portal"
 cat > "$HOME/.config/xdg-desktop-portal/portals.conf" <<PORTAL_EOF
 [preferred]
@@ -3032,8 +3183,8 @@ org.freedesktop.impl.portal.FileChooser=gtk
 org.freedesktop.impl.portal.Secret=gnome-keyring
 PORTAL_EOF
 info "Portal config: FileChooser=gtk in ~/.config/xdg-desktop-portal/portals.conf"
-systemctl --user try-restart xdg-desktop-portal-gtk.service 2>/dev/null || true
-unset _gtk_mode _gtk_theme _gtk_dark
+systemctl --user restart xdg-desktop-portal.service xdg-desktop-portal-gtk.service 2>/dev/null || systemctl --user try-restart xdg-desktop-portal-gtk.service 2>/dev/null || true
+unset _gtk_mode _gtk_dark _gtk_scheme
 
 # --- EOS update icon (Terminal=true launch, 2026-11-23) ---
 # The eos-update grid icon is /usr/share/applications/eos-update.desktop
@@ -3459,8 +3610,10 @@ if command -v gpu-screen-recorder >/dev/null 2>&1; then info "  screenrecord: gp
 if command -v localsend >/dev/null 2>&1; then info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
 if command -v fastfetch >/dev/null 2>&1; then info "  fastfetch: present"; else warn "  fastfetch: NOT installed"; fi
 if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
-grep -q 'hexciri-launch-about --render' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q 'hexciri-launch-or-focus-tui --app-id=org.hexciri.about' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && info "  about: launch-about is the two-mode fastfetch (--render runs inside the terminal, no bash -c quoting trap)" || warn "  about: launch-about is not the two-mode --render script, System > About may open and close at once"
+grep -q 'hexciri-launch-about --render' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q 'hexciri-launch-or-focus-tui --app-id=org.hexciri.about' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q '_about_fit' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && info "  about: launch-about is the two-mode fastfetch (--render runs inside the terminal, no bash -c quoting trap)" || warn "  about: launch-about is not the two-mode --render script, System > About may open and close at once"
 grep -q 'icon.txt' /etc/fastfetch/config.jsonc 2>/dev/null && info "  about logo: fastfetch config logo points at icon.txt" || warn "  about logo: fastfetch config logo does not point at icon.txt, About may render a blank logo column"
+if grep -q '^gtk-theme-name=Adwaita$' "$HOME/.config/gtk-4.0/settings.ini" 2>/dev/null && ! grep -q 'Adwaita-dark' "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini" 2>/dev/null; then info "  gtk picker: settings.ini theme=Adwaita, no Adwaita-dark (GTK4 dark comes from prefer-dark)"; else warn "  gtk picker: settings.ini still names Adwaita-dark or is missing, file picker will come up light with ghost text"; fi
+if command -v dbus-run-session >/dev/null 2>&1; then _gtk_scheme_now="$(dbus-run-session -- gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || echo unknown)"; if [ "$_gtk_scheme_now" = "'prefer-dark'" ]; then info "  gtk picker: dconf color-scheme=prefer-dark (portal dialog reads dconf on Wayland, not settings.ini)"; else warn "  gtk picker: dconf color-scheme=$_gtk_scheme_now, portal file picker may stay light (expected 'prefer-dark' for a dark theme)"; fi; unset _gtk_scheme_now; fi
 [ -x /usr/lib/hexciri/speedtest ] && info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
 command -v btm >/dev/null 2>&1 && info "  activity monitor: btm present (Super+Shift+T)" || warn "  activity monitor: btm NOT installed, Super+Shift+T will fail (package: bottom, binary: btm)"
 _boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do if [ -f "$_f" ]; then _boot_hc_seen=1; grep -q '^timeout 1$' "$_f" 2>/dev/null || _boot_hc_ok=0; fi; done; if [ "$_boot_hc_seen" -eq 1 ] && [ "$_boot_hc_ok" -eq 1 ]; then info "  boot timeout: every loader.conf says timeout 1"; elif [ "$_boot_hc_seen" -eq 0 ]; then warn "  boot timeout: no loader.conf found (GRUB or other bootloader?)"; else warn "  boot timeout: a loader.conf does not say timeout 1 (grep timeout in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf)"; fi; _boot_hc_efi=""; [ -r /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f ] && _boot_hc_efi="$(tail -c +5 /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')"; if [ "$_boot_hc_efi" = "1" ]; then info "  boot timeout EFI: LoaderConfigTimeout=1"; elif [ -n "$_boot_hc_efi" ]; then warn "  boot timeout EFI: LoaderConfigTimeout=$_boot_hc_efi, overrides loader.conf (run: sudo bootctl set-timeout 1)"; else info "  boot timeout EFI: no LoaderConfigTimeout variable, loader.conf controls it"; fi; unset _boot_hc_ok _boot_hc_seen _boot_hc_efi _f
@@ -3508,7 +3661,7 @@ Reboot, then check in order:
   18. Menu audit 2026-11-23: Install and Remove subtrees were deleted then (install-*/remove-* were never in the fork), restored 2026-11-24 where a backing script exists (see item 21). Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
 
   19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are removed for real this time (trim used sudo -n, which silently failed once the sudo timestamp expired); the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
-  20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now (two-mode launch-about, --render runs fastfetch + read inside the terminal, no bash -c quoting trap that made it open and close at once); systemd-boot timeout 1s in every loader.conf AND the LoaderConfigTimeout EFI variable (bootctl set-timeout 1, the variable overrides loader.conf); Super+Shift+T runs btm (bottom package binary); LocalSend file picker is themed (GTK settings.ini + FileChooser=gtk portal, zenity installed); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
+  20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now, fitted to the rendered content at launch (two-mode launch-about, --render measures logo + modules and resizes the window, no fixed 920x480); systemd-boot timeout 1s in every loader.conf AND the LoaderConfigTimeout EFI variable (bootctl set-timeout 1, the variable overrides loader.conf); Super+Shift+T runs btm (bottom package binary); LocalSend file picker is dark (theme name Adwaita in gtk-3.0/gtk-4.0 settings.ini, dconf color-scheme prefer-dark via dbus-run-session, FileChooser=gtk portal; Adwaita-dark is not a theme name); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
 
   21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back (Package, AUR, Web App, TUI, Style, Gaming and their Remove counterparts, kept only where the backing script exists in the fork; AI, services, terminals, Windows, preinstalls and dictation stay out, and install-browser stays out because its helper tree is not copied).
 
