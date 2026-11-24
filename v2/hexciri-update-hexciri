@@ -31,12 +31,25 @@
 # The git fetch to check that is tiny, so an unchanged update no longer
 # downloads 43 MB first.
 # Light sync (2026-11-24, Devi: v1 just cloned git and left the system
-# alone): if the installer changed but both fork fingerprints match the
+# alone): if the installer changed but all four fingerprints match the
 # installed ones, the installed fork is already correct -- the installer
 # is NOT re-run at all. install.sh --light-sync just updates the marker
-# and the two repo bins. A change outside the fork (output wording,
-# package lists, health) changes neither fingerprint, so it light-syncs
-# instead of re-running the installer and touching packages/theme.
+# and the repo bins. A change to output wording / health only changes
+# none of the four, so it light-syncs instead of re-running the
+# installer and touching packages/theme.
+# Minimal re-apply (2026-11-24, Devi: the full installer re-ran on
+# every update even when 99.9% of it never changed): when exactly one
+# group changed, run only that group, not the whole installer:
+#   * only patch differs    -> install.sh --re-apply (fork + placement
+#     + Settings/Nyxiri/theme-hooks/theme-link + health, no packages,
+#     GPU, SDDM, theme, PAM, trim). The 85b425b WidgetButton case.
+#   * only provision differs -> install.sh --re-apply-provision
+#     (system-config steps + health, no packages, fork, placement).
+#     E.g. a keyring PAM or SDDM fingerprint step change.
+# Anything else (upstream or system changed, patch+provision both
+# changed, fingerprint markers missing) runs the full installer, as
+# before. A re-apply failure falls through to the full installer,
+# never to a half-updated machine.
 #
 # Output (2026-11-24, Devi): one themed section, like every other update
 # step, then one short status line, then the next section. Screen shows:
@@ -222,13 +235,17 @@ fi
 # no installer re-run, no pacman, no theme, no settings touched.
 INSTALLED_UP="$(cat /usr/share/hexciri/.upstream-fingerprint 2>/dev/null || true)"
 INSTALLED_PATCH="$(cat /usr/share/hexciri/.patch-fingerprint 2>/dev/null || true)"
-if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA != "$OLD_SHA" && -n $INSTALLED_UP && -n $INSTALLED_PATCH ]] && bootstrap_ok /usr/share/hexciri/default/hypr/bootstrap.lua && hyprlua_ok /usr/share/hexciri/default/hypr/hexciri.lua && [ -x "$HOME/.local/bin/hexciri-settings" ]; then
+INSTALLED_PROV="$(cat /usr/share/hexciri/.provision-fingerprint 2>/dev/null || true)"
+INSTALLED_SYS="$(cat /usr/share/hexciri/.system-fingerprint 2>/dev/null || true)"
+if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA != "$OLD_SHA" && -n $INSTALLED_UP && -n $INSTALLED_PATCH && -n $INSTALLED_PROV && -n $INSTALLED_SYS ]] && bootstrap_ok /usr/share/hexciri/default/hypr/bootstrap.lua && hyprlua_ok /usr/share/hexciri/default/hypr/hexciri.lua && [ -x "$HOME/.local/bin/hexciri-settings" ]; then
   _fp_out="$(bash "$SOURCE_ROOT/v2/install.sh" --print-fingerprints 2>/dev/null || true)"
   _new_up="$(printf '%s\n' "$_fp_out" | grep '^upstream=' | cut -d= -f2)"
   _new_patch="$(printf '%s\n' "$_fp_out" | grep '^patch=' | cut -d= -f2)"
-  detail "installed fingerprints: upstream=${INSTALLED_UP:0:12} patch=${INSTALLED_PATCH:0:12}"
-  detail "nyx fingerprints: upstream=${_new_up:0:12} patch=${_new_patch:0:12}"
-  if [[ -n $_new_up && -n $_new_patch && $_new_up == "$INSTALLED_UP" && $_new_patch == "$INSTALLED_PATCH" ]]; then
+  _new_prov="$(printf '%s\n' "$_fp_out" | grep '^provision=' | cut -d= -f2)"
+  _new_sys="$(printf '%s\n' "$_fp_out" | grep '^system=' | cut -d= -f2)"
+  detail "installed fingerprints: upstream=${INSTALLED_UP:0:12} patch=${INSTALLED_PATCH:0:12} provision=${INSTALLED_PROV:0:12} system=${INSTALLED_SYS:0:12}"
+  detail "nyx fingerprints: upstream=${_new_up:0:12} patch=${_new_patch:0:12} provision=${_new_prov:0:12} system=${_new_sys:0:12}"
+  if [[ -n $_new_up && -n $_new_patch && -n $_new_prov && -n $_new_sys && $_new_up == "$INSTALLED_UP" && $_new_patch == "$INSTALLED_PATCH" && $_new_prov == "$INSTALLED_PROV" && $_new_sys == "$INSTALLED_SYS" ]]; then
     detail "fingerprints match, light sync (no installer re-run)"
     echo "Hexciri is up to date${SHORT:+ ($SHORT)} (light sync, no installer re-run)"
     if bash "$SOURCE_ROOT/v2/install.sh" --light-sync; then
@@ -236,6 +253,32 @@ if [[ $FORCE -eq 0 && -n $OLD_SHA && $NEW_SHA != "$OLD_SHA" && -n $INSTALLED_UP 
       exit 0
     fi
     detail "light sync failed, falling through to a full installer re-run"
+  elif [[ -n $_new_up && -n $_new_patch && -n $_new_prov && -n $_new_sys && $_new_up == "$INSTALLED_UP" && $_new_prov == "$INSTALLED_PROV" && $_new_sys == "$INSTALLED_SYS" && $_new_patch != "$INSTALLED_PATCH" ]]; then
+    detail "only the fork patch changed, re-apply (fork + placement only, no packages / GPU / SDDM / theme / PAM / trim)"
+    if [[ -n $SHORT ]]; then echo "Updating Hexciri to $SHORT... (re-apply: fork patch only)"; else echo "Updating Hexciri... (re-apply: fork patch only)"; fi
+    if bash "$SOURCE_ROOT/v2/install.sh" --yes --no-reboot --re-apply; then
+      _rm_after="$(cat "$MARKER" 2>/dev/null || true)"
+      if [[ $_rm_after == "$NEW_SHA" ]]; then
+        if [[ -n $SHORT ]]; then echo "Hexciri updated to $SHORT"; else echo "Hexciri updated"; fi
+        [[ -n ${TARBALL_WORKDIR:-} ]] && rm -rf "$TARBALL_WORKDIR"
+        exit 0
+      fi
+      detail "marker mismatch after re-apply: got '${_rm_after:-none}', expected $NEW_SHA"
+    fi
+    detail "re-apply failed, falling through to a full installer re-run"
+  elif [[ -n $_new_up && -n $_new_patch && -n $_new_prov && -n $_new_sys && $_new_up == "$INSTALLED_UP" && $_new_patch == "$INSTALLED_PATCH" && $_new_sys == "$INSTALLED_SYS" && $_new_prov != "$INSTALLED_PROV" ]]; then
+    detail "only the system config changed, re-apply-provision (config steps only, no packages / fork / placement)"
+    if [[ -n $SHORT ]]; then echo "Updating Hexciri to $SHORT... (re-apply: system config only)"; else echo "Updating Hexciri... (re-apply: system config only)"; fi
+    if bash "$SOURCE_ROOT/v2/install.sh" --yes --no-reboot --re-apply-provision; then
+      _rm_after="$(cat "$MARKER" 2>/dev/null || true)"
+      if [[ $_rm_after == "$NEW_SHA" ]]; then
+        if [[ -n $SHORT ]]; then echo "Hexciri updated to $SHORT"; else echo "Hexciri updated"; fi
+        [[ -n ${TARBALL_WORKDIR:-} ]] && rm -rf "$TARBALL_WORKDIR"
+        exit 0
+      fi
+      detail "marker mismatch after re-apply-provision: got '${_rm_after:-none}', expected $NEW_SHA"
+    fi
+    detail "re-apply-provision failed, falling through to a full installer re-run"
   fi
 fi
 

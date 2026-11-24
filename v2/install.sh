@@ -120,6 +120,8 @@ NO_REBOOT=0
 REFORK=0
 LIGHT_SYNC=0
 PRINT_FP=0
+REAPPLY=0
+REAPPLY_PROV=0
 WITH_CATS=0
 WITH_NYXIRI=0
 for _a in "$@"; do
@@ -128,11 +130,13 @@ for _a in "$@"; do
     --reboot) AUTO_REBOOT=1 ;;
     --no-reboot) NO_REBOOT=1 ;;
     --refork|--force) REFORK=1 ;;
+    --re-apply) REAPPLY=1 ;;
+    --re-apply-provision) REAPPLY_PROV=1 ;;
     --light-sync) LIGHT_SYNC=1 ;;
     --print-fingerprints) PRINT_FP=1 ;;
     --with-cats) WITH_CATS=1 ;;
     --with-nyxiri) WITH_NYXIRI=1 ;;
-    -h|--help) echo "usage: install.sh [--yes] [--reboot] [--no-reboot] [--refork] [--light-sync] [--print-fingerprints] [--with-cats] [--with-nyxiri]"; exit 0 ;;
+    -h|--help) echo "usage: install.sh [--yes] [--reboot] [--no-reboot] [--refork] [--light-sync] [--print-fingerprints] [--re-apply] [--re-apply-provision] [--with-cats] [--with-nyxiri]"; exit 0 ;;
     *) printf 'install.sh: unknown arg: %s (usage: install.sh [--yes] [--reboot] [--no-reboot] [--with-cats] [--with-nyxiri])\n' "$_a" >&2; exit 1 ;;
   esac
 done
@@ -186,9 +190,19 @@ FORK_FP=""
 #     Settings plugin step below. Changes when a patched bin/script
 #     or the Settings step changes.
 #   fork_fingerprint(): combined, kept for legacy checks.
-# A change to anything else (packages, SDDM, trim, theme re-apply,
-# health check, output wording) changes NEITHER fingerprint: the
-# self-update light-syncs instead of re-running the installer at all.
+#   provision_fingerprint() (2026-11-24, minimal re-apply): the
+#     system-config steps after placement (browser sudoers, lock PAM,
+#     SDDM fingerprint/keyring, locale, boot timeout, theme, GTK,
+#     EOS icon, speedtest, SDDM theme, Strata, Spotify wrapper,
+#     trim). Changes when one of those steps changes.
+#   system_fingerprint() (2026-11-24, minimal re-apply): system
+#     provisioning before the fork (preflight, packages, apps, GPU,
+#     SDDM, services) + mise/THPM. Changes when a package list or
+#     provisioning step changes; that used to change NEITHER fork
+#     fingerprint, so it light-synced and never applied at all.
+#     Now it forces a full installer re-run instead.
+# A change to output wording / health only changes NONE of the four:
+# the self-update light-syncs instead of re-running the installer.
 upstream_fingerprint() {
   {
     sed -n '/^# --- Fork and rename, inline/,/^# --- Wire the compat alias in, before placement ---/p' "$INSTALLER_DIR/install.sh"
@@ -207,12 +221,24 @@ patch_fingerprint() {
 fork_fingerprint() {
   printf '%s %s\n' "$(upstream_fingerprint)" "$(patch_fingerprint)" | sha256sum | cut -d' ' -f1
 }
+provision_fingerprint() {
+  {
+    sed -n '/^# --- Browser policy for theme-set-browser + lock PAM ---/,/^# --- Hexciri theme hooks (2026-11-24, Devi: modified better Omarchy theme hook) ---/p' "$INSTALLER_DIR/install.sh"
+    sed -n '/^# --- Spotify fallback wrapper (post-placement) ---/,/^# --- Health check, like v1 ---/p' "$INSTALLER_DIR/install.sh"
+  } | sha256sum | cut -d' ' -f1
+}
+system_fingerprint() {
+  {
+    sed -n '/^# --- Preflight ---/,/^# --- Fork cache check/p' "$INSTALLER_DIR/install.sh"
+    sed -n '/^# --- mise + Hexciri tools config/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
+  } | sha256sum | cut -d' ' -f1
+}
 # --print-fingerprints: no side effects, used by hexciri-update-hexciri
 # to decide light-sync vs full installer without running anything.
 # Must run before the IS_RERUN info line below, so the output is just
 # the two fingerprint lines and nothing else.
 if [ "${PRINT_FP:-0}" = "1" ]; then
-  printf 'upstream=%s\npatch=%s\n' "$(upstream_fingerprint)" "$(patch_fingerprint)"
+  printf 'upstream=%s\npatch=%s\nprovision=%s\nsystem=%s\n' "$(upstream_fingerprint)" "$(patch_fingerprint)" "$(provision_fingerprint)" "$(system_fingerprint)"
   exit 0
 fi
 # run_pacman: pacman bulk call with its noise captured. On a fresh
@@ -419,6 +445,8 @@ if [ "${LIGHT_SYNC:-0}" = "1" ]; then
   printf '%s\n' "$(upstream_fingerprint)" | sudo tee /usr/share/hexciri/.upstream-fingerprint >/dev/null
   printf '%s\n' "$(patch_fingerprint)" | sudo tee /usr/share/hexciri/.patch-fingerprint >/dev/null
   printf '%s\n' "$(fork_fingerprint)" | sudo tee /usr/share/hexciri/.fork-fingerprint >/dev/null
+  printf '%s\n' "$(provision_fingerprint)" | sudo tee /usr/share/hexciri/.provision-fingerprint >/dev/null
+  printf '%s\n' "$(system_fingerprint)" | sudo tee /usr/share/hexciri/.system-fingerprint >/dev/null
   info "Light sync done: installer marker updated, no packages, theme or settings touched"
   exit 0
 fi
@@ -436,6 +464,56 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# --- Minimal re-apply (2026-11-24, Devi: the full installer re-ran
+# on every update even when 99.9% of it never changed) ---
+# --re-apply (fork patch only) and --re-apply-provision (system
+# config only) skip whole installer chunks below via REAPPLY /
+# REAPPLY_PROV guards. The skipped chunks own things the kept chunks
+# need, so set them up here first:
+#   * Fresh install guard: on a machine with no Hexciri yet, a
+#     re-apply would skip provisioning before the first install.
+#     Fall back to the full installer instead, never silently
+#     ship a half-installed system.
+#   * EUID / sudo: the Preflight chunk is skipped in both modes,
+#     so its checks move here (placement still needs sudo).
+#   * TMP_WORK / FORK_OUT / OMARCHY_SRC: also set in Preflight,
+#     also skipped. --re-apply uses the temp fork-out like a full
+#     run; --re-apply-provision never forks, it only reads the
+#     browser sudoers file out of the cached patched tree, so
+#     FORK_OUT points at the fork cache there instead.
+if [ "${REAPPLY:-0}" = "1" ] || [ "${REAPPLY_PROV:-0}" = "1" ]; then
+  if [ "${IS_RERUN:-0}" != "1" ]; then
+    warn "Re-apply requested on a fresh install, running the full installer instead (provisioning cannot be skipped before the first install)"
+    REAPPLY=0
+    REAPPLY_PROV=0
+  else
+    if [ "$EUID" -eq 0 ]; then
+      die "Do not run as root. Run as your normal user with sudo available."
+    fi
+    if ! command -v sudo >/dev/null 2>&1; then
+      die "sudo is required."
+    fi
+    TMP_WORK="$(mktemp -d /tmp/hexciri-install.XXXXXX)"
+    FORK_OUT="$TMP_WORK/fork-out"
+    OMARCHY_SRC="$TMP_WORK/omarchy"
+    if [ "${REAPPLY_PROV:-0}" = "1" ] && [ -d "$FORK_CACHE_DIR/fork-out/etc/sudoers.d" ]; then
+      FORK_OUT="$FORK_CACHE_DIR/fork-out"
+    fi
+    if [ "${REAPPLY:-0}" = "1" ]; then
+      info "Re-apply: fork patch only (packages, GPU, SDDM, theme, GTK, PAM, trim skipped, none of their inputs changed)"
+    else
+      info "Re-apply: system config only (packages, fork, placement skipped, none of their inputs changed)"
+    fi
+    info "Work dir: $TMP_WORK"
+  fi
+fi
+
+# Minimal re-apply: system provisioning (preflight, packages, apps,
+# GPU, SDDM, services) runs on a fresh install and on a full re-run
+# only. Both re-apply modes skip it: none of its inputs changed, and
+# the early re-apply block above already set TMP_WORK / FORK_OUT and
+# checked EUID + sudo.
+if [ "${REAPPLY:-0}" != "1" ] && [ "${REAPPLY_PROV:-0}" != "1" ]; then
 # --- Preflight ---
 
 step "Preflight checks"
@@ -1019,6 +1097,11 @@ else
   warn "One or more services above did not report enabled. Check systemctl status for that service."
 fi
 
+fi # end system-provisioning guard (minimal re-apply: skipped in both re-apply modes)
+# Minimal re-apply: the fork + placement block runs in full mode and
+# in --re-apply (fork patch) mode. --re-apply-provision skips it: the
+# fork did not change, the placed tree is already correct.
+if [ "${REAPPLY_PROV:-0}" != "1" ]; then
 # --- Fork cache check (2026-11-24, split 2026-11-24: upstream vs patches) ---
 # BEGIN FORK CACHE CHECK
 UP_FP="$(upstream_fingerprint)"
@@ -4735,6 +4818,8 @@ sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1 | sudo tee "$H
 [ -n "${FORK_FP:-}" ] && printf '%s\n' "$FORK_FP" | sudo tee "$HEXCIRI_PATH/.fork-fingerprint" >/dev/null || true
 [ -n "${UP_FP:-}" ] && printf '%s\n' "$UP_FP" | sudo tee "$HEXCIRI_PATH/.upstream-fingerprint" >/dev/null || true
 [ -n "${PATCH_FP:-}" ] && printf '%s\n' "$PATCH_FP" | sudo tee "$HEXCIRI_PATH/.patch-fingerprint" >/dev/null || true
+printf '%s\n' "$(provision_fingerprint)" | sudo tee "$HEXCIRI_PATH/.provision-fingerprint" >/dev/null || true
+printf '%s\n' "$(system_fingerprint)" | sudo tee "$HEXCIRI_PATH/.system-fingerprint" >/dev/null || true
 info "Installed: $HEXCIRI_PATH/shell, $HEXCIRI_PATH/default, $HEXCIRI_PATH/themes, $HEXCIRI_PATH/bin, $HEXCIRI_PATH/install (browser-policy helpers), $HEXCIRI_PATH/icons, $HEXCIRI_PATH/logo.txt, $HEXCIRI_PATH/icon.txt"
 
 mkdir -p "$HOME/.config/hypr" "$HOME/.config/hexciri" \
@@ -5239,8 +5324,12 @@ grep -q 'hexciri-update-pacman -Syy' "$HEXCIRI_PATH/bin/hexciri-update-system-pk
 grep -q 'endeavouros repo not found' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs has no endeavouros-repo check (EOS pkgs must still update via pacman)"
 [ -f "$HEXCIRI_PATH/.fork-fingerprint" ] || die "fork fingerprint missing, hexciri update cannot tell if the fork changed"
 [ -f "$HEXCIRI_PATH/.patch-fingerprint" ] || die "patch fingerprint missing, hexciri update cannot tell if the fork patches changed"
+[ -f "$HEXCIRI_PATH/.provision-fingerprint" ] || die "provision fingerprint missing, hexciri update cannot tell if the system-config steps changed"
+[ -f "$HEXCIRI_PATH/.system-fingerprint" ] || die "system fingerprint missing, hexciri update cannot tell if the provisioning steps changed"
 grep -q 'upstream_fingerprint' "$INSTALLER_DIR/install.sh" || die "installer has no fork cache (upstream_fingerprint missing)"
 grep -q 'patch_fingerprint' "$INSTALLER_DIR/install.sh" || die "installer has no fork cache (patch_fingerprint missing)"
+grep -q 'provision_fingerprint' "$INSTALLER_DIR/install.sh" || die "installer has no provision fingerprint (provision_fingerprint missing)"
+grep -q 'system_fingerprint' "$INSTALLER_DIR/install.sh" || die "installer has no system fingerprint (system_fingerprint missing)"
 grep -q 'hexciri-snapshot create' "$HEXCIRI_PATH/bin/hexciri-update" && die "hexciri-update still calls the snapshot step (dropped 2026-11-24)"
 grep -q 'dracut' "$HEXCIRI_PATH/bin/hexciri-update-analyze-logs" || die "hexciri-update-analyze-logs has no dracut scan"
 grep -q 'hexciri-theme-ansi green' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "update headers are not theme-matched (no hexciri-theme-ansi call in hexciri-update-system-pkgs)"
@@ -5285,6 +5374,15 @@ if ! grep -rl 'hexciri.dock' "$HEXCIRI_PATH/shell/plugins" --include='manifest.j
 fi
 info "PASS: placement verified"
 
+fi # end fork + placement guard (minimal re-apply: skipped in provision-only mode)
+# Minimal re-apply: system-config steps (browser sudoers, lock PAM,
+# SDDM fingerprint/keyring, locale, boot timeout, theme, GTK, EOS
+# icon, speedtest, SDDM theme, Strata) run in full mode and in
+# --re-apply-provision mode. --re-apply (fork patch) skips them: none
+# of their inputs changed, and the staged theme / PAM state is already
+# correct for the unchanged theme. Settings, Nyxiri, theme hooks and
+# theme-link below are patch-covered, so they run in --re-apply too.
+if [ "${REAPPLY:-0}" != "1" ]; then
 # --- Browser policy for theme-set-browser + lock PAM ---
 # Two post-placement fixes, both best-effort except the sudoers validation:
 #  1. hexciri-theme-set-browser failed on every theme switch for four
@@ -5938,6 +6036,7 @@ STRATA_HOOK_EOF
 chmod +x "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-strata-theme"
 bash "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-strata-theme" 2>/dev/null && info "Installed: Strata Follow-Omarchy theme symlinks (theme-set.d hook + applied now)" || warn "Strata theme symlink hook failed, Strata will not follow live theme changes"
 
+fi # end system-config guard (minimal re-apply: skipped in fork-only mode)
 # --- Hexciri theme hooks (2026-11-24, Devi: modified better Omarchy theme hook) ---
 # Omarchy's theme-set already calls hexciri-hook theme-set at the end of
 # every switch, which runs every file in
@@ -6322,6 +6421,9 @@ if command -v theme-link >/dev/null 2>&1; then
 fi
 unset THEME_LINK_SRC THEME_LINK_PIN
 
+# Minimal re-apply: Spotify wrapper + trim run in full mode and in
+# --re-apply-provision mode. --re-apply (fork patch) skips them.
+if [ "${REAPPLY:-0}" != "1" ]; then
 # --- Spotify fallback wrapper (post-placement) ---
 # The Super+Shift+M bind calls `spotify`. The AUR `spotify` package
 # provides that binary directly, but if only the Arch extra
@@ -6474,6 +6576,20 @@ if [ -x "$HEXCIRI_PATH/bin/hexciri-done" ]; then
   "$HEXCIRI_PATH/bin/hexciri-done" mark first-update 2>/dev/null && info "Marked: first-update done (update icon will not count pending Arch updates)" || warn "could not mark first-update, update icon may show until the first hexciri-update"
 fi
 
+fi # end Spotify + trim guard (minimal re-apply: skipped in fork-only mode)
+# Provision re-apply marker write (2026-11-24): placement is skipped
+# in --re-apply-provision mode, so nothing else writes the installer
+# sha / fingerprints. Write them here, after the config steps ran,
+# or the next update would see a stale marker and re-run again.
+if [ "${REAPPLY_PROV:-0}" = "1" ]; then
+  sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1 | sudo tee "$HEXCIRI_PATH/.installer-sha" >/dev/null || warn "could not write installer sha marker, hexciri update will re-run the installer every time"
+  printf '%s\n' "$(upstream_fingerprint)" | sudo tee "$HEXCIRI_PATH/.upstream-fingerprint" >/dev/null
+  printf '%s\n' "$(patch_fingerprint)" | sudo tee "$HEXCIRI_PATH/.patch-fingerprint" >/dev/null
+  printf '%s\n' "$(fork_fingerprint)" | sudo tee "$HEXCIRI_PATH/.fork-fingerprint" >/dev/null
+  printf '%s\n' "$(provision_fingerprint)" | sudo tee "$HEXCIRI_PATH/.provision-fingerprint" >/dev/null
+  printf '%s\n' "$(system_fingerprint)" | sudo tee "$HEXCIRI_PATH/.system-fingerprint" >/dev/null
+  info "Provision re-apply done: installer marker + fingerprints updated, fork and packages untouched"
+fi
 # --- Health check, like v1 ---
 # Post-install sanity before the reboot offer, so a broken bring-up is
 # caught here, not at the login screen. Best-effort reads only.
