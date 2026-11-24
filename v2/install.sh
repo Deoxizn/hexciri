@@ -1447,6 +1447,33 @@ for c in changed:
 if not changed:
     print("applications.lua: no bind changes needed")
 
+# 5d. Touchpad: bottom lower right = right click, Devi 2026-11-23.
+# Upstream default/hypr/input.lua sets clickfinger_behavior = true, which
+# maps 1/2/3 fingers to LMB/RMB/MMB and disables location-based clicks, so
+# a 1-finger press in the bottom-right corner is a LEFT click, not right.
+# Devi clicks bottom lower right like a normal mouse and expects right
+# click (e.g. right-clicking the clock to cycle its format, which does
+# work once the click actually registers as right). Set it false so
+# libinput area mapping applies: bottom-left left, bottom-middle middle,
+# bottom-right right. 2-finger tap still right-clicks via tap_to_click.
+# Only this one key changes; natural_scroll, scroll_factor and everything
+# else in input.lua are untouched. config/hypr/input.lua is a commented
+# user template and is left alone. Idempotent.
+_input = root + "/default/hypr/input.lua"
+with open(_input) as f:
+    _inp = f.read()
+_inp_orig = _inp
+if "clickfinger_behavior = true" in _inp:
+    _inp = _inp.replace("clickfinger_behavior = true", "clickfinger_behavior = false", 1)
+    changed.append("clickfinger_behavior true -> false (bottom-right touchpad = right click)")
+elif "clickfinger_behavior = false" in _inp:
+    print("clickfinger_behavior already false, skipping")
+else:
+    print("WARN: clickfinger_behavior not found in default/hypr/input.lua, touchpad patch NOT applied")
+if _inp != _inp_orig:
+    with open(_input, "w") as f:
+        f.write(_inp)
+
 # 6. Screenshot: hexciri-capture-screenshot execs omasnap (Omarchy-repo-only).
 # Rewrite it to grim + slurp (both in CORE_PKGS), wl-copy, and
 # hexciri-notification-send. Same CLI the binds and menu use:
@@ -1554,7 +1581,7 @@ elif command -v luac >/dev/null 2>&1; then
   luac -p "$FORK_OUT/default/hypr/bindings/utilities.lua" && info "utilities.lua patch OK (luac syntax OK)" || warn "luac syntax check failed on patched utilities.lua, Hyprland will report the real error at boot if this is broken."
 fi
 bash -n "$FORK_OUT/bin/hexciri-capture-screenshot" || die "bash -n failed on rewritten $FORK_OUT/bin/hexciri-capture-screenshot"
-info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, ncspot, ghostwriter, bottom, Herdr removed, screenshot via grim+slurp"
+info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, ncspot, ghostwriter, bottom, Herdr removed, screenshot via grim+slurp, touchpad bottom-right = right click"
 
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
