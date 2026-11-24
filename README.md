@@ -1,6 +1,11 @@
-# Hexciri 2.0
-
-Minimal Arch with the feel and look of Omarchy. Branch `nyx` is the 2.0 build. `main` is still Hexciri v1 (CachyOS dots), do not mix them.
+```
+ ▄  █ ▄███▄      ▄  ▄█▄    ▄█ █▄▄▄▄ ▄█ 
+█   █ █▀   ▀ ▀▄   █ █▀ ▀▄  ██ █  ▄▀ ██ 
+██▀▀█ ██▄▄     █ ▀  █   ▀  ██ █▀▀▌  ██ 
+█   █ █▄   ▄▀ ▄ █   █▄  ▄▀ ▐█ █  █  ▐█ 
+   █  ▀███▀  █   ▀▄ ▀███▀   ▐   █    ▐ 
+  ▀           ▀                ▀
+```
 
 ## What it is
 
@@ -63,7 +68,7 @@ Full list: `Mod+K`, or Learn in the menu.
 
 | Thing | Default |
 |---|---|
-| Terminal | Kitty (Foot, Alacritty, Ghostty are install options) |
+| Terminal | Kitty |
 | File manager | Strata |
 | Browser | Brave Origin |
 | Editor | Zed |
@@ -99,45 +104,9 @@ Hexciri Settings is a shell plugin, not a bar widget. `Mod+Ctrl+S`, or the launc
 
 Display HDR/VRR lives in the Display tab, Advanced group (collapsed).
 
-## Plugins, optional
+## Plugins
 
-Nyxiri and wallcraft are optional, user choice only, not base install. They just need to work with Hexciri.
-
-```bash
-# fresh install, Nyxiri core seven from nyx branches
-bash v2/install.sh --with-nyxiri
-# cats too
-bash v2/install.sh --with-nyxiri --with-cats
-```
-
-Nyxiri core: bar, menu, workspaces, clock, weather, arch-updates, wallcraft. Plugins live on `nyx` branches in their own repos and update from `nyx`, not `main`. Once installed, later updates re-add/update them even without the flag. Stock `hexciri.workspaces` is disabled (never removed) while Nyxiri workspaces is active.
-
-Other plugin bits: THPM installs from GitHub (`OldJobobo/thpm`), not AUR, with Steam via a standalone `steam-adwaita` checkout. Opencode is the default agent, installed via pacman, no account prompt. AI agent options are in Install > AI, Herdr is out.
-
-## Rename rule
-
-No file, path, or CLI is named `omarchy` in this project. Theme and plugin format and API stay Omarchy compatible, so Omarchy themes and plugins still load. A few runtime aliases are deliberate exceptions, because renaming them breaks things: GlobalShortcut appid stays `omarchy`, helpers dispatch stays `omarchy:`, the manifest key stays `"omarchy"`, and `/usr/local/bin/omarchy` forwards to `hexciri` for THPM, which hardcodes the Omarchy CLI.
-
-## Repo layout
-
-| Path | What |
-|---|---|
-| `v2/install.sh` | The installer, one script |
-| `v2/bootstrap.sh` | Thin bootstrap wrapper, downloads `nyx` and runs the installer |
-| `v2/hexciri-base.packages` | Minimal package list |
-| `v2/hexciri-tools.toml` | mise tools (node, uv, gh, lazy) |
-| `v2/hexciri-update-hexciri` | Hexciri self-update |
-| `v2/hexciri-theme-*` | Theme hooks, theme-link, theme sync, font helpers |
-| `v2/hexciri-web-search` | Web search, `Mod+Shift+S` |
-| `v2/hexciri-custom-binds.lua` | Hexciri-only keybinds |
-| `v2/hexciri-custom-apps.lua` | Hexciri-only window rules |
-| `v2/install-2.0.sh`, `v2/fork-shell.sh` | Phase 1 reference only, do not run |
-| `docs/v2/bootstrap.sh` | GitHub Pages copy, main only, backs the short URL |
-| `install.sh` (root) | Hexciri v1, CachyOS. Untouched by 2.0. |
-
-## Status
-
-Core build OS, live on the Framework laptop. Phase 1 done (boots, basic works, minimal). Phase 2 done for the updater, theme hook, Settings, Nyxiri nyx branches, wallcraft port, and theme sync. Still to do: move the inline fork patches into a `/patches` dir and slim `v2/install.sh` down, see `v2/README.md`.
+Works with default Omarchy plugins. Some forking/tweaking may be needed to hexciri them.
 
 ## Sources
 

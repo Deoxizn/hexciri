@@ -1,4 +1,11 @@
-# Hexciri 2.0, `v2/`
+```
+ ▄  █ ▄███▄      ▄  ▄█▄    ▄█ █▄▄▄▄ ▄█ 
+█   █ █▀   ▀ ▀▄   █ █▀ ▀▄  ██ █  ▄▀ ██ 
+██▀▀█ ██▄▄     █ ▀  █   ▀  ██ █▀▀▌  ██ 
+█   █ █▄   ▄▀ ▄ █   █▄  ▄▀ ▐█ █  █  ▐█ 
+   █  ▀███▀  █   ▀▄ ▀███▀   ▐   █    ▐ 
+  ▀           ▀                ▀
+```
 
 Branch `nyx`, `Deoxizn/hexciri`. No merge to main. Root `README.md` is the overview, this file is the `v2/` notes.
 
@@ -54,7 +61,7 @@ System packages first (pacman, yay for AUR, mise), then Hexciri self-update. The
 - GPU branching: AMD Mesa/Vulkan, Nvidia Turing+ `nvidia-open`, Nvidia Pascal GTX 1080 Ti `nvidia-580xx-dkms` from AUR, never `nvidia-open` on Pascal.
 - Dracut, not mkinitcpio. No Limine, no snap/btrfs, no Plymouth, no LUKS scripts.
 - Forked Omarchy shell, verbatim then renamed: `shell/`, `default/hypr/` Lua, `config/` templates, `default/hexciri/hexciri-menu.jsonc`, `themes/` (23 themes), `default/bash/env-bootstrap`, and only the `bin/` scripts the shell actually calls.
-- No file named `omarchy` in the repo. Files, paths, and CLI are `hexciri`. Theme format (`colors.toml` + `shell.toml`) and plugin format stay Omarchy compatible. Runtime alias in code, not a file: a plugin asking for `omarchy.bar` gets `hexciri.bar`.
+- Theme format (`colors.toml` + `shell.toml`) and plugin format stay Omarchy compatible.
 - Defaults: Kitty, Strata, Brave Origin, Zed, imv, zathura, bottom (`btm`), JetBrainsMono, Maple Mono NF.
 - Menu: full Install/Remove restored, no Omarchy specifics (no preinstalls, no Windows), AI agent options in, Herdr out, Foot as a terminal option, Kitty default.
 - Learn: Keybindings, Hexciri, Hyprland, Arch, Zed, Bash, Fish, Kitty, Quickshell, Tmux. No Neovim, no Community.
