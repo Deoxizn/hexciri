@@ -5,6 +5,11 @@
 # Download this file first, then run it. Do NOT pipe curl into bash, so
 # stdin stays on the terminal for the installer's prompts and sudo.
 #
+#   curl -LO https://hexciri.dirty.pizza/v2/bootstrap.sh
+#   bash bootstrap.sh
+#
+# Fallback, if the short URL is not live yet (it goes live only when
+# docs/v2/bootstrap.sh lands on main, see v2/README.md):
 #   curl -LO https://raw.githubusercontent.com/Deoxizn/hexciri/nyx/v2/bootstrap.sh
 #   bash bootstrap.sh
 #

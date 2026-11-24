@@ -8,7 +8,8 @@ End goal: a very minimal almost nothing installed Arch that still has the feel a
 
 ## Files in v2/
 
-- bootstrap.sh, the primary one-command path, thin wrapper, deliberately NOT a second installer. Download it first, then run it: `curl -LO https://raw.githubusercontent.com/Deoxizn/hexciri/nyx/v2/bootstrap.sh`, then `bash bootstrap.sh`. It downloads the nyx branch as a public tarball, no git, no auth, verifies it contains v2/install.sh, then execs that installer. It extracts to a temp dir, NOT ~/.local/opt/hexciri, which holds the v1 checkout.
+- bootstrap.sh, the primary one-command path, thin wrapper, deliberately NOT a second installer. Download it first, then run it: `curl -LO https://hexciri.dirty.pizza/v2/bootstrap.sh`, then `bash bootstrap.sh`. Fallback, if the short URL is not live yet: `curl -LO https://raw.githubusercontent.com/Deoxizn/hexciri/nyx/v2/bootstrap.sh`. It downloads the nyx branch as a public tarball, no git, no auth, verifies it contains v2/install.sh, then execs that installer. It extracts to a temp dir, NOT ~/.local/opt/hexciri, which holds the v1 checkout.
+- docs/v2/bootstrap.sh, the GitHub Pages-served copy of bootstrap.sh. Pages publishes the docs/ folder from main, so https://hexciri.dirty.pizza/v2/bootstrap.sh goes live only when this file lands on main. It is on nyx now, staged and ready to cherry-pick to main. Do not edit it alone, keep it in sync with v2/bootstrap.sh. It does not touch docs/install.sh, the v1 path at https://hexciri.dirty.pizza/install.sh is unchanged.
 - install.sh, the one command, primary entry point. Run as normal user, not root, on a fresh EndeavourOS no-DE install: `bash v2/install.sh`
   It does it all in order, minus the EndeavourOS install itself: packages, GPU drivers, Quickshell, Hyprland, SDDM plus uwsm, then downloads omacom/omarchy at the pinned commit as a public codeload tarball with curl (no git clone, no username or password prompt), verifies the SHA from the tarball top dir, forks and renames the shell inline, places the forked tree to /usr/share/hexciri, ~/.config/hexciri, ~/.local/state/hexciri, and ~/.config/hypr, wires hexciri-compat.sh into hexciri-launch-shell and env-bootstrap, requires hexciri-compat.lua from default/hypr/hexciri.lua, and verifies placement. Sudo is used only for the /usr/share and /etc steps.
 - install-2.0.sh, old Phase 1 EndeavourOS no-DE base installer, kept as reference. Do not use it as the entry point anymore, its steps are now in install.sh.
@@ -48,6 +49,15 @@ End goal: a very minimal almost nothing installed Arch that still has the feel a
 ## How to test Phase 1, after install.sh
 
 Primary path, the bootstrap. Download the file first, then run it. Do NOT pipe curl into bash, so stdin stays on the terminal. No git, no username or password prompt:
+
+```bash
+curl -LO https://hexciri.dirty.pizza/v2/bootstrap.sh
+bash bootstrap.sh
+```
+
+Important: that short URL is NOT live yet. GitHub Pages publishes the docs/ folder from main, not nyx, and the live site currently serves main's docs/install.sh (v1). The file that backs the short URL, docs/v2/bootstrap.sh, is staged on nyx in this commit, ready to cherry-pick to main. Once that one file lands on main, Pages redeploys and https://hexciri.dirty.pizza/v2/bootstrap.sh goes live, with no DNS change needed, the CNAME hexciri.dirty.pizza is already in docs/CNAME on main. Until then, use the fallback below. The v1 path https://hexciri.dirty.pizza/install.sh is unchanged.
+
+Fallback, raw GitHub link, live now:
 
 ```bash
 curl -LO https://raw.githubusercontent.com/Deoxizn/hexciri/nyx/v2/bootstrap.sh
