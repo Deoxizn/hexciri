@@ -54,6 +54,13 @@
 #   v2/hexciri-theme-hook-*.sh + theme-env.sh in theme-set.d, THPM
 #   from GitHub source. Theme support itself needs no separate
 #   fork/re-add: the forked Omarchy shell/code already provides it.
+#   bootstrap.lua integrity done 2026-11-24 (second breakage): content
+#   checks everywhere instead of -f, atomic alias write, verified fork
+#   cache saves, self-heal in the drift check; update noise cut ~90%
+#   (command scan + omarchy scan to the fork log, one summary line
+#   each; run_pacman shows error lines only; eject dropped, it is not
+#   in the Arch repos); health WARNs fixed (sudoers via sudo test,
+#   fprintd via pacman -Q, boot timeout trusts the EFI variable).
 #   theme-link done 2026-11-24: ministry-of-taste/theme-link restores
 #   theme Lua via trusted symlinks, v2/hexciri-theme-link wrapper.)
 #   (hexciri-update rework done 2026-11-24: eos-update --aur + Hexciri
@@ -191,14 +198,31 @@ run_pacman() {
     rm -f "$_log"
     return 0
   fi
-  printf '[hexciri] pacman failed (%s), output:\n' "$_label" >&2
-  cat "$_log" >&2
-  rm -f "$_log"
+  printf '[hexciri] pacman failed (%s), error lines only (full log kept at %s):\n' "$_label" "$_log" >&2
+  grep -E 'error:|failed|target not found|conflicting|invalid' "$_log" 2>/dev/null | head -20 | sed 's/^/[hexciri] pacman: /' >&2 || true
   return 1
 }
 info() { printf '[hexciri] %s\n' "$1"; }
 warn() { printf 'WARN: %s\n' "$1"; }
 die() { printf 'ERROR: %s\n' "$1" >&2; exit 1; }
+# bootstrap.lua integrity (2026-11-24, second emergency-mode breakage):
+# existence is NOT enough. Hyprland dofiles this file first; a 0-byte or
+# truncated copy passes every -f check and still bricks the next boot
+# with no binds. Proven in sim8: a failed write during the patch
+# re-apply left a 0-byte bootstrap.lua that sailed through placement
+# verification into the installed tree. A good file is the upstream
+# 921-byte bootstrap (package.path + HEXCIRI_PATH) plus the preload
+# alias on a patched tree (1399 bytes). Check size AND content.
+bootstrap_ok() {
+  local _f="$1" _n
+  [ -f "$_f" ] || return 1
+  [ -s "$_f" ] || return 1
+  _n="$(wc -c < "$_f" 2>/dev/null | tr -d ' ')"
+  [ "${_n:-0}" -ge 500 ] || return 1
+  grep -q 'package.path' "$_f" 2>/dev/null || return 1
+  grep -q 'HEXCIRI_PATH' "$_f" 2>/dev/null || return 1
+  return 0
+}
 
 # --- Re-run detection (2026-11-24, Devi: every update reset shell/theme) ---
 # A re-run is any install where Hexciri is already installed: the
@@ -470,7 +494,11 @@ APP_PKGS=(
   # NOT in CORE_PKGS despite an old comment saying so), cliphist (v1 want), libqalculate
   # (v1 want, ships the qalc CLI), libreoffice-fresh +
   # gnome-disk-utility (Omarchy default apps), lazygit, yt-dlp, gvfs
-  # (file-manager trash/network backends), qrencode, eject (XF86Eject bind).
+  # (file-manager trash/network backends), qrencode. eject was dropped
+  # 2026-11-24: no eject package in the Arch repos (error: target not
+  # found: eject), and it alone failed the bulk install, which dumped
+  # the whole pacman log. The XF86Eject bind still calls eject;
+  # laptops have no eject key, harmless.
   # REMOVED 2026-11-23, Devi does not want them, and the trim step below
   # removes them if present so they never come back: neovim (launch-editor
   # falls back to nano now, nano ships in Arch base), obsidian (its
@@ -489,7 +517,7 @@ APP_PKGS=(
   mpv zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb
   zed playerctl bottom seahorse fwupd adw-gtk-theme tesseract tesseract-data-eng
   cliphist libqalculate libreoffice-fresh gnome-disk-utility
-  lazygit yt-dlp gvfs zbar qrencode imv eject
+  lazygit yt-dlp gvfs zbar qrencode imv
   gnome-calculator
 )
 if ! run_pacman "Default apps" -S --needed --noconfirm "${APP_PKGS[@]}"; then
@@ -828,8 +856,8 @@ if [ -f "$FORK_CACHE_DIR/upstream-fingerprint" ] && [ -d "$FORK_CACHE_DIR/upstre
   # emergency mode, no binds) while the installer reported success.
   # If the cached upstream tree lacks it, the cache is stale or
   # incomplete: drop it and full re-fork below instead of shipping it.
-  if [ ! -f "$FORK_OUT/default/hypr/bootstrap.lua" ]; then
-    warn "Fork cache invalid: cached upstream tree is missing default/hypr/bootstrap.lua, dropping the cache and full re-forking"
+  if ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua"; then
+    warn "Fork cache invalid: cached upstream tree is missing or corrupt (empty/truncated) default/hypr/bootstrap.lua, dropping the cache and full re-forking"
     rm -rf "$FORK_CACHE_DIR"
     SKIP_UPSTREAM=0
   fi
@@ -853,13 +881,22 @@ if [ "${SKIP_UPSTREAM:-0}" = "1" ] && [ -f "$FORK_CACHE_DIR/patch-fingerprint" ]
   # Same emergency-mode guard for the patched cache: if it lacks
   # bootstrap.lua (or hexciri.lua) it is stale -- drop back to the
   # cached upstream tree and re-apply patches instead of shipping it.
-  if [ ! -f "$FORK_OUT/default/hypr/bootstrap.lua" ] || [ ! -f "$FORK_OUT/default/hypr/hexciri.lua" ]; then
-    warn "Fork cache invalid: cached patched tree is missing default/hypr/bootstrap.lua or hexciri.lua, re-applying patches to the cached upstream tree"
+  if ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua" || [ ! -s "$FORK_OUT/default/hypr/hexciri.lua" ]; then
+    warn "Fork cache invalid: cached patched tree is missing or corrupt (empty/truncated) default/hypr/bootstrap.lua or hexciri.lua, re-applying patches to the cached upstream tree"
     rm -rf "$FORK_CACHE_DIR/fork-out" "$FORK_CACHE_DIR/patch-fingerprint" "$FORK_CACHE_DIR/fork-fingerprint"
     SKIP_PATCHES=0
     SKIP_FORK=0
     rm -rf "$FORK_OUT"
     cp -a "$FORK_CACHE_DIR/upstream-out" "$FORK_OUT"
+    # The fallback tree is only as good as the upstream cache it came
+    # from: if that is corrupt too, patches would run on a broken tree
+    # and the fork-stage guard below is skipped (SKIP_UPSTREAM is still
+    # 1), so check it here and full re-fork instead of shipping it.
+    if ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua"; then
+      warn "Fork cache invalid: cached upstream tree is also missing or corrupt bootstrap.lua, dropping the whole cache and full re-forking"
+      rm -rf "$FORK_CACHE_DIR"
+      SKIP_UPSTREAM=0
+    fi
   fi
 elif [ "${SKIP_UPSTREAM:-0}" = "1" ]; then
   info "Fork cache hit (upstream only): patches changed, re-applying fork patches to the cached upstream tree (no download)"
@@ -1726,16 +1763,26 @@ fi # end upstream fork guard: download/copy/rename/rewrite only
 if [ "${SKIP_UPSTREAM:-0}" = "0" ] && [ -n "${UP_FP:-}" ] && [ -n "${FORK_CACHE_DIR:-}" ]; then
   rm -rf "$FORK_CACHE_DIR/upstream-out"
   mkdir -p "$FORK_CACHE_DIR"
-  cp -a "$FORK_OUT" "$FORK_CACHE_DIR/upstream-out"
-  printf '%s\n' "$UP_FP" > "$FORK_CACHE_DIR/upstream-fingerprint"
-  fork_detail "Upstream fork cache saved: $FORK_CACHE_DIR/upstream-out"
+  # Verify the copy before trusting it: a failed cp -a must not leave a
+  # partial cache behind with a valid fingerprint (sim8, 2026-11-24).
+  # cp -a's exit status is NOT the authority: it fails (EPERM) when it
+  # cannot preserve ownership, even though the content was copied fine.
+  # Content + file count decide; a genuinely partial copy fails those.
+  cp -a "$FORK_OUT" "$FORK_CACHE_DIR/upstream-out" 2>/dev/null || true
+  if bootstrap_ok "$FORK_CACHE_DIR/upstream-out/default/hypr/bootstrap.lua" && [ "$(find "$FORK_OUT" -type f 2>/dev/null | wc -l | tr -d ' ')" = "$(find "$FORK_CACHE_DIR/upstream-out" -type f 2>/dev/null | wc -l | tr -d ' ')" ]; then
+    printf '%s\n' "$UP_FP" > "$FORK_CACHE_DIR/upstream-fingerprint"
+    fork_detail "Upstream fork cache saved: $FORK_CACHE_DIR/upstream-out"
+  else
+    warn "Upstream fork cache copy failed or incomplete, dropping the partial cache (next run full re-forks instead of trusting it)"
+    rm -rf "$FORK_CACHE_DIR/upstream-out" "$FORK_CACHE_DIR/upstream-fingerprint"
+  fi
 fi
 # Emergency-mode guard, 2026-11-24: fail fast if the fork lost
 # bootstrap.lua, before patches run and before placement wipes the
 # last good /usr/share/hexciri. Hyprland dofiles this file first;
 # without it the next boot trips emergency mode with no binds.
-if [ "${SKIP_UPSTREAM:-0}" = "0" ] && [ ! -f "$FORK_OUT/default/hypr/bootstrap.lua" ]; then
-  die "fork lost default/hypr/bootstrap.lua (Hyprland dofiles it first; missing it trips emergency mode). Refusing to continue with a broken fork."
+if [ "${SKIP_PATCHES:-0}" = "0" ] && ! bootstrap_ok "$FORK_OUT/default/hypr/bootstrap.lua"; then
+  die "fork lost default/hypr/bootstrap.lua (missing, empty or truncated; Hyprland dofiles it first, without it the next boot trips emergency mode). Refusing to continue with a broken fork."
 fi
 
 # Patch guard: compat wiring + all fork patches run on the upstream
@@ -1843,7 +1890,7 @@ fi
 BOOTSTRAP_LUA="$FORK_OUT/default/hypr/bootstrap.lua"
 if [ -f "$BOOTSTRAP_LUA" ]; then
   python3 - "$BOOTSTRAP_LUA" <<'PY'
-import sys
+import os, sys
 path = sys.argv[1]
 alias = (
     '\n-- Hexiri compat: legacy module name default.hypr.omarchy resolves to\n'
@@ -1858,19 +1905,30 @@ with open(path) as f:
 if 'package.preload["default.hypr.omarchy"]' in content:
     print("bootstrap.lua: legacy module preload alias already present, skipping")
 else:
-    with open(path, "w") as f:
+    # Atomic write (2026-11-24, second breakage): a plain open(path, "w")
+    # truncates the file first, so any failure mid-write leaves a
+    # 0-byte bootstrap.lua that passes every -f check and bricks the
+    # next boot. Write to a temp file and rename into place instead.
+    tmp = path + ".hexciri-tmp"
+    with open(tmp, "w") as f:
         f.write(content.rstrip("\n") + "\n" + alias)
+    os.replace(tmp, path)
     print("bootstrap.lua: added legacy module preload alias for default.hypr.omarchy")
 PY
+  # Verify the wired file, don't trust the write: a corrupt bootstrap.lua
+  # here ships straight into the installed tree and bricks the next boot.
+  if ! bootstrap_ok "$BOOTSTRAP_LUA" || ! grep -q 'package.preload\["default.hypr.omarchy"\]' "$BOOTSTRAP_LUA"; then
+    die "wired bootstrap.lua is missing, empty or truncated after the preload alias patch, refusing to continue with a broken fork."
+  fi
   if command -v luac5.1 >/dev/null 2>&1; then
-    luac5.1 -p "$BOOTSTRAP_LUA" && info "bootstrap.lua preload alias added (luac5.1 syntax OK)" || warn "luac5.1 syntax check failed on wired bootstrap.lua, continuing anyway, Hyprland will report the real error at boot if this is broken."
+    luac5.1 -p "$BOOTSTRAP_LUA" && info "bootstrap.lua preload alias added (luac5.1 syntax OK)" || die "luac5.1 syntax check failed on wired bootstrap.lua, refusing to ship a broken Hyprland config."
   elif command -v luac >/dev/null 2>&1; then
-    luac -p "$BOOTSTRAP_LUA" && info "bootstrap.lua preload alias added (luac syntax OK)" || warn "luac syntax check failed on wired bootstrap.lua, continuing anyway."
+    luac -p "$BOOTSTRAP_LUA" && info "bootstrap.lua preload alias added (luac syntax OK)" || die "luac syntax check failed on wired bootstrap.lua, refusing to ship a broken Hyprland config."
   else
     info "bootstrap.lua preload alias added, no luac binary to syntax-check it with."
   fi
 else
-  warn "default/hypr/bootstrap.lua not found in fork output, skipping legacy module preload alias. The rewrite fix above is still the primary fix."
+  die "default/hypr/bootstrap.lua not found in fork output, cannot wire the legacy module preload alias. Refusing to continue with a broken fork."
 fi
 
 # --- Patch Hexciri binds and substitute Omarchy-repo-only apps ---
@@ -3519,10 +3577,21 @@ info "  update: hexciri-update patched (eos-update --aur, no snapshot, Hexciri s
 if [ "${SKIP_PATCHES:-0}" = "0" ] && [ -n "${PATCH_FP:-}" ] && [ -n "${FORK_CACHE_DIR:-}" ]; then
   mkdir -p "$FORK_CACHE_DIR"
   rm -rf "$FORK_CACHE_DIR/fork-out"
-  cp -a "$FORK_OUT" "$FORK_CACHE_DIR/fork-out"
-  printf '%s\n' "$PATCH_FP" > "$FORK_CACHE_DIR/patch-fingerprint"
-  [ -n "${FORK_FP:-}" ] && printf '%s\n' "$FORK_FP" > "$FORK_CACHE_DIR/fork-fingerprint"
-  info "Fork cache saved: $FORK_CACHE_DIR/fork-out (reused on the next update unless the fork changes)"
+  # Verify the copy before trusting it: sim8 2026-11-24 showed a failed
+  # cp -a still printing "Fork cache saved" and writing the fingerprint,
+  # so the next update restored a partial tree. Only write the
+  # fingerprint when the saved tree is complete and bootstrap.lua is valid.
+  # cp -a's exit status is NOT the authority (ownership EPERM can fail
+  # it after a good copy); content + file count decide.
+  cp -a "$FORK_OUT" "$FORK_CACHE_DIR/fork-out" 2>/dev/null || true
+  if bootstrap_ok "$FORK_CACHE_DIR/fork-out/default/hypr/bootstrap.lua" && [ -s "$FORK_CACHE_DIR/fork-out/default/hypr/hexciri.lua" ] && [ "$(find "$FORK_OUT" -type f 2>/dev/null | wc -l | tr -d ' ')" = "$(find "$FORK_CACHE_DIR/fork-out" -type f 2>/dev/null | wc -l | tr -d ' ')" ]; then
+    printf '%s\n' "$PATCH_FP" > "$FORK_CACHE_DIR/patch-fingerprint"
+    [ -n "${FORK_FP:-}" ] && printf '%s\n' "$FORK_FP" > "$FORK_CACHE_DIR/fork-fingerprint"
+    info "Fork cache saved: $FORK_CACHE_DIR/fork-out (reused on the next update unless the fork changes)"
+  else
+    warn "Fork cache copy failed or incomplete, dropping the partial cache and its fingerprint (next run re-applies patches instead of trusting it)"
+    rm -rf "$FORK_CACHE_DIR/fork-out" "$FORK_CACHE_DIR/patch-fingerprint" "$FORK_CACHE_DIR/fork-fingerprint"
+  fi
 fi
 
 fi # end patch guard: compat wiring + all fork patches
@@ -3866,7 +3935,7 @@ step "Verifying placement"
 [ -f "$HEXCIRI_PATH/shell/shell.qml" ] || die "missing: $HEXCIRI_PATH/shell/shell.qml"
 [ -f "$HEXCIRI_PATH/default/hypr/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/hexciri.lua"
 [ -f "$HEXCIRI_PATH/default/hypr/hexciri-compat.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/hexciri-compat.lua"
-[ -f "$HEXCIRI_PATH/default/hypr/bootstrap.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/bootstrap.lua (Hyprland dofiles it first; without it Hyprland trips emergency mode with no binds)"
+bootstrap_ok "$HEXCIRI_PATH/default/hypr/bootstrap.lua" || die "missing or corrupt: $HEXCIRI_PATH/default/hypr/bootstrap.lua (empty/truncated; Hyprland dofiles it first, without it the next boot trips emergency mode with no binds)"
 [ -f "$HEXCIRI_PATH/default/hypr/bindings/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/bindings/hexciri.lua (Hexciri custom binds, monocle cycle / Brave incognito / Messenger / screen record)"
 [ -f "$HEXCIRI_PATH/default/hypr/apps/hexciri.lua" ] || die "missing: $HEXCIRI_PATH/default/hypr/apps/hexciri.lua (Hexciri custom window rules, TUI float / mpv+imv opacity)"
 [ -f "$HEXCIRI_PATH/bin/hexciri-compat.sh" ] || die "missing: $HEXCIRI_PATH/bin/hexciri-compat.sh"
@@ -3905,10 +3974,15 @@ info "PASS: no file or dir named omarchy under $HEXCIRI_PATH or ~/.config/hexcir
 # a comment mentioning an omarchy-* command is harmless, a real call is not.
 # Dinner audit: scan QML and the menu jsonc too, not just Lua. The QML
 # menu trigger and menu rows call hexciri-* commands the same way.
-LEFTOVER_OMARCHY_CMDS="$(grep -rInE 'omarchy-[a-z0-9]+' "$HEXCIRI_PATH/default/hypr" "$HOME/.config/hypr" "$HEXCIRI_PATH/shell" "$HEXCIRI_PATH/default/hexciri" 2>/dev/null | grep -v 'omarchy:' || true)"
+# The compat alias map in hexciri-compat.lua intentionally names omarchy-*
+# commands (["omarchy-shell"] = "hexciri-shell"), so it is excluded here;
+# matches go to the fork detail log, screen gets one summary line only
+# (2026-11-24, Devi: 90% of the update output is spam).
+LEFTOVER_OMARCHY_CMDS="$(grep -rInE 'omarchy-[a-z0-9]+' "$HEXCIRI_PATH/default/hypr" "$HOME/.config/hypr" "$HEXCIRI_PATH/shell" "$HEXCIRI_PATH/default/hexciri" 2>/dev/null | grep -v 'omarchy:' | grep -v 'hexciri-compat.lua' || true)"
 if [ -n "$LEFTOVER_OMARCHY_CMDS" ]; then
-  warn "omarchy-* references remain in placed Hyprland Lua / shell / menu (check whether they are real commands or just comments):"
-  printf '%s\n' "$LEFTOVER_OMARCHY_CMDS"
+  _om_count="$(printf '%s\n' "$LEFTOVER_OMARCHY_CMDS" | wc -l | tr -d ' ')"
+  printf '%s\n' "$LEFTOVER_OMARCHY_CMDS" >> "${FORK_LOG:-/tmp/hexciri-install-fork.log}" 2>/dev/null || true
+  warn "omarchy-* references remain in placed Hyprland Lua / shell / menu: $_om_count (full list: ${FORK_LOG:-/tmp/hexciri-install-fork.log})"
 else
   info "PASS: no omarchy-* command references in placed Hyprland Lua / shell / menu"
 fi
@@ -3925,7 +3999,12 @@ unset LEFTOVER_OMARCHY_CMDS
 # install-*/remove-* are NOT excluded any more (2026-11-24): the Install /
 # Remove menu rows are back, so their bins must exist like any other.
 if [ -d "$HEXCIRI_PATH" ]; then
+  _scan_present=0; _scan_missing=0
+  fork_detail "command scan: per-command detail lives here, screen shows one summary line only (2026-11-24, Devi: 90% of the update output is spam)"
   for _cmd in $(grep -rIhoE 'hexciri-[a-z0-9-]+' "$HEXCIRI_PATH/default" "$HEXCIRI_PATH/shell" "$HEXCIRI_PATH/bin" "$HOME/.config/hypr" 2>/dev/null | sort -u); do
+    # Trailing-dash tokens are string fragments from dynamic
+    # concatenations ("hexciri-agent-" .. x in helpers.lua), not commands.
+    case "$_cmd" in *- ) continue ;; esac
     case "$_cmd" in
       hexciri-channel-* | hexciri-mirror-* | hexciri-keyring-* | hexciri-upgrade-*) continue ;;
       hexciri-compat) continue ;;
@@ -3959,12 +4038,20 @@ if [ -d "$HEXCIRI_PATH" ]; then
       hexciri-battlenet-installer | hexciri-extensions | hexciri-tools | hexciri-nyx) continue ;;
     esac
     if [ -x "$HEXCIRI_PATH/bin/$_cmd" ] || command -v "$_cmd" >/dev/null 2>&1; then
-      info "  forked-tree command present: $_cmd"
+      _scan_present=$((_scan_present + 1))
+      fork_detail "  forked-tree command present: $_cmd"
     else
-      warn "  forked tree calls $_cmd but it is not installed, expect a Command not found popup / dead bind"
+      _scan_missing=$((_scan_missing + 1))
+      fork_detail "  forked tree calls $_cmd but it is not installed"
     fi
   done
   unset _cmd
+  if [ "$_scan_missing" -gt 0 ]; then
+    warn "command scan: $_scan_present present, $_scan_missing called-but-not-installed (full list: ${FORK_LOG:-/tmp/hexciri-install-fork.log}; install/remove rows are verified separately by the menu audit)"
+  else
+    info "command scan: $_scan_present present, 0 missing"
+  fi
+  unset _scan_present _scan_missing
 fi
 # Hyprland global shortcuts: without this file every menu/panel bind falls
 # back to a spawned command, which is how Super+Space died on the first boot.
@@ -4347,7 +4434,7 @@ for _boot_loader in $_boot_cands; do
   fi
   grep -q '^timeout 1$' "$_boot_loader" 2>/dev/null && info "systemd-boot timeout verified in $_boot_loader" || warn "systemd-boot timeout is not 1s in $_boot_loader"
 done
-[ "$_boot_found" -eq 0 ] && warn "no systemd-boot loader.conf found (/efi, /boot, /boot/efi), boot timeout unchanged (GRUB or other bootloader?)"
+if [ "$_boot_found" -eq 0 ] && [ ! -d /sys/firmware/efi ]; then warn "no systemd-boot loader.conf found and no EFI firmware, boot timeout cannot be set (GRUB or other bootloader?)"; elif [ "$_boot_found" -eq 0 ]; then info "no systemd-boot loader.conf found (/efi, /boot, /boot/efi), the EFI variable below controls the timeout on this layout"; fi
 # EFI variable overrides loader.conf: read it before, set it, read it back.
 _boot_efi_before=""
 _boot_efi_var=/sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
@@ -5046,6 +5133,14 @@ for _check in "$HEXCIRI_PATH/bin/hexciri-launch-shell" "$HEXCIRI_PATH/bin/hexcir
     HC_FAIL=1
   fi
 done
+# bootstrap.lua needs a content check, not just -e: a 0-byte file passes
+# -e and still bricks the next boot (sim8, 2026-11-24).
+if bootstrap_ok "$HEXCIRI_PATH/default/hypr/bootstrap.lua"; then
+  hc_info "  bootstrap.lua: valid ($(wc -c < "$HEXCIRI_PATH/default/hypr/bootstrap.lua" | tr -d ' ') bytes, package.path + HEXCIRI_PATH present)"
+else
+  warn "  bootstrap.lua: MISSING or corrupt (empty/truncated), next boot trips emergency mode (repair: hexciri update hexciri --force)"
+  HC_FAIL=1
+fi
 if command -v quickshell >/dev/null 2>&1; then
   if quickshell --version >/dev/null 2>&1; then
     QS_VER="$(quickshell --version 2>/dev/null || true)"
@@ -5078,8 +5173,12 @@ else
 fi
 if command -v zathura >/dev/null 2>&1; then hc_info "  pdf: zathura present"; else warn "  pdf: zathura NOT installed"; fi
 if [ -f /etc/pam.d/hexciri-lock-password ]; then hc_info "  lock PAM: /etc/pam.d/hexciri-lock-password present (System > Lock works)"; else warn "  lock PAM: missing, System > Lock returns missing-pam (run: sudo hexciri-apply-lock)"; fi
-if [ -f /etc/sudoers.d/hexciri-theme-browser ]; then hc_info "  browser policy sudoers: present (theme switch repaints Brave)"; else warn "  browser policy sudoers: missing, theme switch reports hexciri-theme-set-browser failed"; fi
-command -v fprintd >/dev/null 2>&1 && hc_info "  fingerprint: fprintd present (Setup > Security > Fingerprint)" || warn "  fingerprint: fprintd NOT installed, Setup > Security > Fingerprint will fail"
+if sudo test -f /etc/sudoers.d/hexciri-theme-browser 2>/dev/null || [ -f /etc/sudoers.d/hexciri-theme-browser ]; then hc_info "  browser policy sudoers: present (theme switch repaints Brave)"; else warn "  browser policy sudoers: missing, theme switch reports hexciri-theme-set-browser failed"; fi
+# (sudo test first: /etc/sudoers.d can be 0750 root, so a plain -f as the
+# user reports a present file as missing.)
+if pacman -Q fprintd >/dev/null 2>&1 || command -v fprintd-enroll >/dev/null 2>&1; then hc_info "  fingerprint: fprintd present (Setup > Security > Fingerprint)"; else warn "  fingerprint: fprintd NOT installed, Setup > Security > Fingerprint will fail"; fi
+# (command -v fprintd is wrong: the daemon lives at /usr/lib/fprintd,
+# the user CLIs are fprintd-enroll/verify/list.)
 if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/dev/null | grep -qE '^[[:space:]]*-[[:space:]]*#[0-9]+:'; then
   if grep -q 'pam_unix.so try_first_pass likeauth nullok' /etc/pam.d/sddm 2>/dev/null && grep -q pam_fprintd.so /etc/pam.d/sddm 2>/dev/null; then
     hc_info "  fingerprint: SDDM login has pam_unix first, then pam_fprintd (password alone logs in)"
@@ -5100,7 +5199,7 @@ if grep -q '^gtk-theme-name=Adwaita$' "$HOME/.config/gtk-4.0/settings.ini" 2>/de
 if command -v dbus-run-session >/dev/null 2>&1; then _gtk_scheme_now="$(dbus-run-session -- gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || echo unknown)"; if [ "$_gtk_scheme_now" = "'prefer-dark'" ]; then hc_info "  gtk picker: dconf color-scheme=prefer-dark (portal dialog reads dconf on Wayland, not settings.ini)"; else warn "  gtk picker: dconf color-scheme=$_gtk_scheme_now, portal file picker may stay light (expected 'prefer-dark' for a dark theme)"; fi; unset _gtk_scheme_now; fi
 [ -x /usr/lib/hexciri/speedtest ] && hc_info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
 command -v btm >/dev/null 2>&1 && hc_info "  activity monitor: btm present (Super+Shift+T)" || warn "  activity monitor: btm NOT installed, Super+Shift+T will fail (package: bottom, binary: btm)"
-_boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do if [ -f "$_f" ]; then _boot_hc_seen=1; grep -q '^timeout 1$' "$_f" 2>/dev/null || _boot_hc_ok=0; fi; done; if [ "$_boot_hc_seen" -eq 1 ] && [ "$_boot_hc_ok" -eq 1 ]; then hc_info "  boot timeout: every loader.conf says timeout 1"; elif [ "$_boot_hc_seen" -eq 0 ]; then warn "  boot timeout: no loader.conf found (GRUB or other bootloader?)"; else warn "  boot timeout: a loader.conf does not say timeout 1 (grep timeout in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf)"; fi; _boot_hc_efi=""; [ -r /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f ] && _boot_hc_efi="$(tail -c +5 /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')"; if [ "$_boot_hc_efi" = "1" ]; then hc_info "  boot timeout EFI: LoaderConfigTimeout=1"; elif [ -n "$_boot_hc_efi" ]; then warn "  boot timeout EFI: LoaderConfigTimeout=$_boot_hc_efi, overrides loader.conf (run: sudo bootctl set-timeout 1)"; else hc_info "  boot timeout EFI: no LoaderConfigTimeout variable, loader.conf controls it"; fi; unset _boot_hc_ok _boot_hc_seen _boot_hc_efi _f
+_boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do if [ -f "$_f" ]; then _boot_hc_seen=1; grep -q '^timeout 1$' "$_f" 2>/dev/null || _boot_hc_ok=0; fi; done; if [ "$_boot_hc_seen" -eq 1 ] && [ "$_boot_hc_ok" -eq 1 ]; then hc_info "  boot timeout: every loader.conf says timeout 1"; elif [ "$_boot_hc_seen" -eq 0 ]; then _boot_hc_noconf=1; else warn "  boot timeout: a loader.conf does not say timeout 1 (grep timeout in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf)"; fi; _boot_hc_efi=""; [ -r /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f ] && _boot_hc_efi="$(tail -c +5 /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')"; if [ "$_boot_hc_efi" = "1" ]; then hc_info "  boot timeout EFI: LoaderConfigTimeout=1"; elif [ -n "$_boot_hc_efi" ]; then warn "  boot timeout EFI: LoaderConfigTimeout=$_boot_hc_efi, overrides loader.conf (run: sudo bootctl set-timeout 1)"; else hc_info "  boot timeout EFI: no LoaderConfigTimeout variable, loader.conf controls it"; fi; if [ "${_boot_hc_noconf:-0}" = "1" ] && [ "$_boot_hc_efi" != "1" ]; then warn "  boot timeout: no loader.conf found and LoaderConfigTimeout is not 1 (GRUB or other bootloader?)"; elif [ "${_boot_hc_noconf:-0}" = "1" ]; then hc_info "  boot timeout: no loader.conf on this ESP layout, EFI LoaderConfigTimeout=1 controls it"; fi; unset _boot_hc_ok _boot_hc_seen _boot_hc_efi _boot_hc_noconf _f
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && hc_info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
 command -v xdg-terminal-exec >/dev/null 2>&1 && hc_info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
 if command -v spotify >/dev/null 2>&1; then hc_info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then hc_info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
