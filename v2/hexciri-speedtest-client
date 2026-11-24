@@ -1,0 +1,81 @@
+#!/bin/bash
+# hexciri-speedtest-client: measure one direction and print live Mbps numbers,
+# one per line, for the speedtest panel (hexciri-network-speedtest execs this
+# at /usr/lib/hexciri/speedtest). Upstream ships this client as the
+# omarchy-speedtest package from Omarchy's own repo, which Hexciri does not
+# use, so this is Hexciri's own client: plain curl against public test
+# endpoints, no extra package, no speed.omarchy.org.
+#
+# Panel protocol: stdout lines are parsed with parseFloat, so ONLY bare
+# numbers may reach stdout; everything else goes to stderr. The panel runs
+# one process per direction (down, then up) with a 20s watchdog per phase,
+# so a phase measures for ~6s and exits 0. If the panel is dismissed it kills
+# this process, and the parent-PID check below also stops it when the panel
+# that started it is gone (the Go client's contract, kept).
+#
+# Usage: hexciri-speedtest-client [down|up]
+
+set -uo pipefail
+
+dir="${1:-}"
+if [[ $dir != down && $dir != up ]]; then
+  echo "Usage: hexciri-speedtest-client [down|up]" >&2
+  exit 2
+fi
+
+command -v curl >/dev/null 2>&1 || { echo "hexciri-speedtest-client: curl is not installed" >&2; exit 1; }
+
+# One chunk, one number: curl reports the average bytes/s for the chunk,
+# converted to Mbit/s. A chunk that fails prints nothing and the loop tries
+# the next endpoint instead of dying on one bad host.
+DOWN_URLS=(
+  "https://speed.cloudflare.com/__down?bytes=25000000"
+  "http://speedtest.tele2.net/100MB.zip"
+)
+UP_URL="https://speed.cloudflare.com/__up"
+MEASURE_SECONDS=6
+CHUNK_MAX_TIME=8
+
+parent_alive() {
+  [[ -z ${HEXCIRI_SPEEDTEST_PARENT_PID:-} ]] || kill -0 "$HEXCIRI_SPEEDTEST_PARENT_PID" 2>/dev/null
+}
+
+print_mbps() {
+  # $1 is bytes/s; empty or non-numeric input prints nothing.
+  [[ ${1:-} =~ ^[0-9]+(\.[0-9]+)?$ ]] || return 0
+  awk -v b="$1" 'BEGIN { printf "%.1f\n", b * 8 / 1000000 }'
+}
+
+start=$SECONDS
+printed_any=0
+# One sample a second: a fast link finishes a chunk in milliseconds, and
+# without the pause the loop would flood the panel with hundreds of lines.
+# A slow chunk can still run up to CHUNK_MAX_TIME, so a phase stays under
+# the panel's 20s watchdog.
+if [[ $dir == down ]]; then
+  url_index=0
+  while parent_alive && (( SECONDS - start < MEASURE_SECONDS )); do
+    url="${DOWN_URLS[$url_index]}"
+    speed=$(curl -s -o /dev/null --max-time "$CHUNK_MAX_TIME" -w "%{speed_download}" "$url" 2>/dev/null || true)
+    print_mbps "$speed"
+    [[ $speed =~ ^[0-9] ]] && printed_any=1
+    # A URL that produced nothing is dead for this run; try the next one.
+    [[ -n $speed ]] || url_index=$(( (url_index + 1) % ${#DOWN_URLS[@]} ))
+    sleep 1
+  done
+else
+  tmp=$(mktemp)
+  trap 'rm -f "$tmp"' EXIT
+  head -c 10000000 /dev/zero >"$tmp" 2>/dev/null || { echo "hexciri-speedtest-client: could not stage upload data" >&2; exit 1; }
+  while parent_alive && (( SECONDS - start < MEASURE_SECONDS )); do
+    speed=$(curl -s -o /dev/null --max-time "$CHUNK_MAX_TIME" -w "%{speed_upload}" --data-binary @"$tmp" "$UP_URL" 2>/dev/null || true)
+    print_mbps "$speed"
+    [[ $speed =~ ^[0-9] ]] && printed_any=1
+    sleep 1
+  done
+fi
+
+# A phase that printed no number at all measured nothing: the panel shows
+# speedtest.failed on a non-zero exit, which is the honest answer then.
+(( printed_any == 1 )) || exit 1
+exit 0

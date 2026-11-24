@@ -208,7 +208,7 @@ CORE_PKGS=(
   pamixer brightnessctl jq bc curl wget git base-devel pacman-contrib socat # checkupdates, for hexciri-update-available (update icon); socat is hexciri-shell's IPC transport (socket fast path), upstream omarchy-base.packages line 145, without it every hexciri-shell call fails "not responding"
   fprintd usbutils # fprintd + usbutils: Setup > Security > Fingerprint needs fprintd-enroll/verify, hw-fingerprint probes USB readers
   imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip libvips ffmpegthumbnailer librsvg zenity # libvips (vipsthumbnail) + ffmpegthumbnailer: hexciri-menu-images needs both to draw image-picker thumbnails (Appearance > Icons, background picker); upstream omarchy-base.packages ships both (lines 82, 46) and the fork lacked them, so every row was dropped and the picker loaded nothing. librsvg (rsvg-convert): hexciri-icons-preview draws set previews with it. zenity: GTK file dialog, LocalSend's file picker falls back to it when the portal is unavailable.
-  ripgrep fd fzf eza bat starship zoxide fastfetch
+  ripgrep fd fzf eza bat starship zoxide fastfetch gum # gum: upstream omarchy-base.packages line 60; forked scripts use it (icons-install custom repo URL, battlenet partial-prefix wipe prompt, xbox-controllers reboot prompt)
   # NOTE 2026-11-23: no btop here, v1 removes it, bottom (in APP_PKGS below)
   # is the Hexciri system monitor instead. fastfetch's Hexciri config is
   # placed in the default apps step below (config/fastfetch/config.jsonc).
@@ -712,8 +712,8 @@ is_allowed_bin() {
       refresh-hyprland | hyprland-reload-guard | notification-send | menu | menu-clipboard | menu-emoji | menu-emoji-insert | menu-file | menu-herdr-keybindings | menu-images | menu-input | menu-keybindings | menu-plugin | menu-region-formats | menu-select | menu-share | menu-timezone | menu-tmux-keybindings | \
       provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | launch-* | \
       cmd-* | default-terminal | action | i18n | notification-wait | software-rendering | toggle-enabled | hyprland-toggle-enabled | hyprland-software-rendering | hw-software-rendering | powerprofiles-init | powerprofiles-set | powerprofiles-floor | powerprofiles-list | hyprland-monitor-watch | hyprland-monitor-clamshell | hyprland-monitor-modeless | hyprland-monitor-external-active | hyprland-monitor-identity | hyprland-monitor-internal | hyprland-monitor-internal-mirror | hyprland-monitor-laptop | hyprland-workspace-layout-current | hyprland-workspace-layout-toggle | hyprland-workspace-layout-default | hw-laptop | hw-clamshell | hw-external-monitors | system-lid-inhibit | restart-hyprctl | \
-      capture-* | system-* | system | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | pkg-add | pkg-missing | cmd-present | reminder | transcode | transcode-* | tray-* | weather-* | tui-* | webapp-* | osd | \
-      dock | dns | state | show-* | setup-* | device-* | apply-lock | sudo-passwordless | security-functions | display-* | monitor-* | network-* | font-* | disk-speedtest | file-select | input-method | git-url-check | kernel | language | locale-session | locale-generate | refresh-shell | refresh-tmux | refresh-hyprsunset | refresh-applications | refresh-config)
+      capture-* | system-* | system | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | pkg-add | pkg-missing | pkg-install | pkg-aur-install | pkg-remove | pkg-drop | sudo-keepalive | cmd-present | reminder | transcode | transcode-* | tray-* | weather-* | tui-* | webapp-* | osd | \
+      dock | dns | state | show-* | setup-* | device-* | apply-lock | sudo-passwordless | security-functions | display-* | monitor-* | network-* | font-* | disk-speedtest | file-select | input-method | git-url-check | kernel | language | locale-session | locale-generate | refresh-shell | refresh-tmux | refresh-hyprsunset | refresh-applications | refresh-config | install-font | install-app | install-and-launch | install-editor-zed | install-gaming-steam | install-gaming-heroic | install-gaming-lutris | install-gaming-retroarch | install-gaming-battlenet | install-gaming-geforce-now | install-gaming-gpu-lib32 | remove-browser | remove-security-fingerprint | remove-gaming-steam | remove-gaming-retroarch | remove-gaming-minecraft | remove-gaming-geforce-now)
       # Dinner audit 2026-11-23: the families above were missing, so binds and
       # menu rows that call them failed with Command not found, exactly like
       # monitor-watch did. capture-* (screenshot/screenrecording/text/region),
@@ -760,12 +760,19 @@ is_allowed_bin() {
       # Dictation rows and the Alt+Space bind. No backend is installed yet
       # (install-dictation-* stays out), so dictation fails gracefully
       # ("No dictation backend configured") until one is picked.
-      # Deliberately still NOT included: install-*, remove-*, channel-*,
-      # mirror-*, keyring-*, upgrade-* (app installers and Omarchy repo
-      # machinery, out of the shell-only Phase 1 scope), and windows-vm
-      # (Docker/KVM VM manager, needs Docker). The whole Install and
-      # Remove menu subtrees are deleted from the forked menu jsonc by the
-      # menu patch step below, so no dead install/remove row can be clicked.
+      # Deliberately still NOT included: install-ai-*, install-service-*,
+      # install-terminal-*, install-dictation-*, install-browser (its tree
+      # pulls install-chromium-*, install-video-decode, install-camera and
+      # config/chromium-flags.conf, none of which the fork copies; Brave
+      # Origin is already installed, so no row needs it), install-windows-vm,
+      # install-preinstalls, install-dev-env, channel-*, mirror-*, keyring-*,
+      # upgrade-* (Omarchy repo machinery, out of the shell-only Phase 1
+      # scope), and windows-vm (Docker/KVM VM manager, needs Docker).
+      # The install-*/remove-* scripts that ARE listed are the bounded set
+      # the menu restore keeps rows for (pkg-*, font, app, and-launch,
+      # editor-zed, gaming, remove-browser/fingerprint/gaming); the menu
+      # patch step below drops every other install/remove row whose backing
+      # script is not in the fork, so no dead row can be clicked.
       return 0
       ;;
     *)
@@ -1811,16 +1818,23 @@ PY
 # Menu audit 2026-11-23 (Devi: "basically super alt space menu needs a full
 # audit"): every menu entry was checked against the forked bin/ allowlist.
 # What this block does, all on the fork output before placement:
-#  1. Deletes menu subtrees whose scripts are deliberately NOT in the fork:
-#     Install + Remove (install-*/remove-*), Update > Channel (Hexciri has
-#     no channels), Update > Hexciri (hexciri-update is Phase 2, not done),
-#     Update > Games / Password (games-*/drive-* out of scope), Update >
-#     Config > Plymouth (plymouth out), System > Screensaver (no
-#     screensaver binary ships in v2), Appearance > Unlock (plymouth),
-#     Learn > Herdr keybindings (Herdr out), Setup > Default Editor >
-#     Neovim (neovim removed), Setup > Security > Sudoless Docker (Docker
-#     out). The upstream jsonc is untouched; Phase 2 can re-add rows with
-#     real installer support behind them.
+#  1. Deletes dead menu rows, and restores Install + Remove where a backing
+#     script exists in the fork (2026-11-24, Devi: install/remove exist in
+#     Hexciri v1 and should come back). A row stays when every hexciri-*
+#     command its action names exists in bin/, so Package / AUR / Web App /
+#     TUI / Style / Gaming and their Remove counterparts come back, while
+#     rows whose script was never copied (AI, services, terminals, windows,
+#     preinstalls, dictation, install-browser) still drop. A when/disabled
+#     guard naming a missing command only hides or mis-guards the row, it
+#     never runs, so only the action decides. Header rows (no action) stay
+#     only while at least one child row under them stays. Still deleted:
+#     Update > Channel (Hexciri has no channels), Update > Hexciri
+#     (hexciri-update is Phase 2, not done), Update > Games / Password
+#     (games-*/drive-* out of scope), Update > Config > Plymouth (plymouth
+#     out), System > Screensaver (no screensaver binary ships in v2),
+#     Appearance > Unlock (plymouth), Learn > Herdr keybindings (Herdr out),
+#     Setup > Default Editor > Neovim (neovim removed), Setup > Security >
+#     Sudoless Docker (Docker out). The upstream jsonc is untouched.
 #  2. Menu "Apps" row + bar trigger call hexciri-shell by absolute path:
 #     both go through Util.execDetached, and a spawned process only finds
 #     hexciri-shell if the shell's env carries /usr/share/hexciri/bin on
@@ -1839,6 +1853,7 @@ PY
 # Idempotent: every replacement checks it is not already applied.
 step "Patching menu audit fixes: dead rows out, shell IPC paths absolute"
 python3 - "$FORK_OUT" <<'PY'
+import os
 import re
 import sys
 
@@ -1849,8 +1864,16 @@ changed = []
 menu = root + "/default/hexciri/hexciri-menu.jsonc"
 with open(menu) as f:
     lines = f.read().splitlines()
-drop = re.compile(
-    r'^\s*"(install(\..*)?|remove(\..*)?|update\.channel(\..*)?|'
+bin_dir = root + "/bin"
+have_bins = set(os.listdir(bin_dir)) if os.path.isdir(bin_dir) else set()
+def _row_key(line):
+    m = re.match(r'^\s*"([^"]+)"\s*:', line)
+    return m.group(1) if m else None
+def _action_tokens(line):
+    m = re.search(r'"action"\s*:\s*"((?:[^"\\]|\\.)*)"', line)
+    return re.findall(r'hexciri-[a-z0-9-]+', m.group(1)) if m else []
+dead = re.compile(
+    r'^\s*"(update\.channel(\..*)?|'
     r'update\.(hexciri|omarchy)|update\.games|update\.password|'
     r'update\.config\.plymouth|system\.screensaver|'
     r'learn\.herdr-keybindings|setup\.default\.editor\.neovim|'
@@ -1858,15 +1881,65 @@ drop = re.compile(
 )
 kept = []
 removed = []
+kept_keys = set()
+# Out of scope even when the action's helper exists: generic helpers
+# (install-and-launch, install-app, launch-floating-terminal) make AI,
+# service, editor and dev-env rows look valid, but those subtrees are
+# Phase 2 / not wanted (vim was removed on purpose, AI agents are out,
+# factory reset is destructive and btrfs-only). Zed is the one editor kept.
+_drop_prefix = (
+    "install.ai.", "install.service.", "install.development.",
+    "install.terminal.", "install.browser.", "install.dictation.",
+    "remove.ai.", "remove.service.", "remove.development.",
+    "remove.dictation.",
+)
+_drop_exact = {
+    "install.windows", "install.preinstalls", "install.dictation",
+    "remove.windows", "remove.preinstalls", "remove.factory-reset",
+    "remove.security.fido2", "remove.security.sshd",
+    "remove.security.sudoless-docker",
+}
 for line in lines:
-    if drop.match(line):
-        removed.append(line.strip()[:60])
-    else:
+    key = _row_key(line)
+    if key is None or not (key == "install" or key == "remove" or key.startswith("install.") or key.startswith("remove.")):
+        if key is not None and dead.match(line):
+            removed.append(line.strip()[:60])
+            continue
         kept.append(line)
+        continue
+    if key in _drop_exact or key.startswith(_drop_prefix) or (key.startswith("install.editor.") and key != "install.editor.zed"):
+        removed.append(line.strip()[:60])
+        continue
+    toks = _action_tokens(line)
+    if toks and any(t not in have_bins for t in toks):
+        removed.append(line.strip()[:60])
+        continue
+    kept.append(line)
+    kept_keys.add(key)
+# Second pass, repeated until stable: drop header rows whose subtree has no
+# kept row left. One pass is not enough, an empty submenu (development /
+# javascript / php / elixir) keeps its parent alive for a round even
+# though the submenu itself drops in the same round.
+while True:
+    final = []
+    dropped_this_round = False
+    for line in kept:
+        key = _row_key(line)
+        if key is not None and _action_tokens(line) == [] and (key == "install" or key == "remove" or key.startswith("install.") or key.startswith("remove.")):
+            prefix = key + "."
+            if not any(k.startswith(prefix) for k in kept_keys):
+                removed.append(line.strip()[:60])
+                dropped_this_round = True
+                continue
+        final.append(line)
+    kept = final
+    kept_keys = {_row_key(l) for l in kept if _row_key(l) is not None}
+    if not dropped_this_round:
+        break
 if removed:
     with open(menu, "w") as f:
         f.write("\n".join(kept) + "\n")
-    changed.append("menu: removed %d dead rows (install/remove subtrees, update channels, update.hexciri, screensaver, unlock, herdr keys, neovim editor, sudoless-docker)" % len(removed))
+    changed.append("menu: removed %d dead rows (kept install/remove rows whose backing bin exists, dropped the rest + update channels, update.hexciri, screensaver, unlock, herdr keys, neovim editor, sudoless-docker)" % len(removed))
     for r in removed[:8]:
         print("  menu removed: " + r)
     if len(removed) > 8:
@@ -2082,15 +2155,19 @@ PY
 # --- Fork-time patches: SDDM fingerprint in setup script, About locale ---
 # 1. hexciri-setup-security-fingerprint: upstream setup_pam_config only
 # configures sudo, polkit and the lock screen, so fingerprint worked for
-# sudo but SDDM always asked for a password. Append the same gate +
-# pam_fprintd lines to /etc/pam.d/sddm, so a later Setup > Security >
-# Fingerprint run (e.g. enrolling another finger) keeps SDDM working.
-# The installer step above does the same thing at install time; this
-# keeps the setup script consistent afterwards.
+# sudo but SDDM always asked for a password. Prepend pam_unix first, then
+# the gate + pam_fprintd, to /etc/pam.d/sddm (ArchWiki either-or order:
+# a correct password logs in at once, an empty/wrong one falls through to
+# the reader), repairing any earlier Hexciri SDDM lines first, so a later
+# Setup > Security > Fingerprint run (e.g. enrolling another finger) keeps
+# SDDM working. The installer step above does the same thing at install
+# time; this keeps the setup script consistent afterwards.
 # 2. hexciri-launch-about: resolve a real UTF-8 locale instead of assuming
 # C.UTF-8. With no UTF-8 locale generated, the wc/awk measurements warn
 # "Invalid multibyte data detected" on the ghost rows and measure wrong.
 python3 - "$FORK_OUT" <<'PY'
+import os
+import re
 import sys
 
 root = sys.argv[1]
@@ -2102,7 +2179,7 @@ with open(fp) as f:
 s_orig = s
 _marker = "# Hexciri: SDDM login unlock"
 _tail = "session   include system-auth\nEOF\n  fi\n}"
-_sddm = "session   include system-auth\nEOF\n  fi\n\n  # Hexciri: SDDM login unlock (2026-11-23). Upstream only configures sudo,\n  # polkit and the lock screen, so fingerprint worked for sudo but SDDM\n  # always asked for a password. SDDM authenticates the user through\n  # /etc/pam.d/sddm, so add the same gate + pam_fprintd lines there.\n  if [[ -f /etc/pam.d/sddm ]] && ! grep -q pam_fprintd.so /etc/pam.d/sddm; then\n    echo \"Configuring SDDM login for fingerprint authentication...\"\n    _sddm_tmp=\"$(mktemp)\"\n    {\n      printf '%s\\n' \"$fprintd_gate\"\n      printf 'auth      sufficient pam_fprintd.so\\n'\n      cat /etc/pam.d/sddm\n    } > \"$_sddm_tmp\"\n    sudo install -Dm644 \"$_sddm_tmp\" /etc/pam.d/sddm && echo \"SDDM login fingerprint configured.\"\n    rm -f \"$_sddm_tmp\"\n  fi\n}"
+_sddm = "session   include system-auth\nEOF\n  fi\n\n  # Hexciri: SDDM login unlock (2026-11-23, fixed 2026-11-24). Upstream only\n  # configures sudo, polkit and the lock screen, so fingerprint worked for\n  # sudo but SDDM always asked for a password. SDDM authenticates the user\n  # through /etc/pam.d/sddm. The order matters, ArchWiki SDDM fingerprint:\n  # pam_unix FIRST, so a correct password logs in at once and fingerprint\n  # is never asked for after it; only an empty/wrong password falls through\n  # to the clamshell gate and then pam_fprintd (press Enter on an empty\n  # password field to touch the reader). The old Hexciri order (gate +\n  # pam_fprintd first) demanded a fingerprint AFTER a correct password.\n  # Repair first: strip any earlier Hexciri SDDM lines, so a rerun fixes a\n  # machine that already has the broken order instead of skipping it.\n  if [[ -f /etc/pam.d/sddm ]]; then\n    echo \"Configuring SDDM login for fingerprint authentication...\"\n    _sddm_tmp=\"$(mktemp)\"\n    sudo sed -e '/pam_fprintd\\.so/d' -e '/hexciri-hw-laptop-closed/d' -e '/try_first_pass likeauth nullok/d' /etc/pam.d/sddm > \"$_sddm_tmp\" 2>/dev/null || cp /etc/pam.d/sddm \"$_sddm_tmp\"\n    _sddm_out=\"$(mktemp)\"\n    {\n      printf 'auth      [success=2 new_authtok_reqd=2 default=ignore] pam_unix.so try_first_pass likeauth nullok\\n'\n      printf '%s\\n' \"$fprintd_gate\"\n      printf 'auth      sufficient pam_fprintd.so\\n'\n      cat \"$_sddm_tmp\"\n    } > \"$_sddm_out\"\n    sudo install -Dm644 \"$_sddm_out\" /etc/pam.d/sddm && echo \"SDDM login fingerprint configured.\"\n    rm -f \"$_sddm_tmp\" \"$_sddm_out\"\n    if [[ -f /usr/share/sddm/themes/hexciri/theme.conf ]]; then\n      sudo sed -i '/^Fingerprint=/d' /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null || true\n      printf 'Fingerprint=true\\n' | sudo tee -a /usr/share/sddm/themes/hexciri/theme.conf >/dev/null 2>&1 || true\n    fi\n  fi\n}"
 if _marker in s:
     print("setup-security-fingerprint SDDM block already present, skipping")
 elif s.count(_tail) == 1:
@@ -2137,6 +2214,101 @@ else:
 if a != a_orig:
     with open(la, "w") as f:
         f.write(a)
+
+# 3. launch-about: export the resolved locale for the whole About process
+#    (2026-11-24). The three LC_ALL= sites only cover the wc/awk
+#    measurements; fastfetch's own command modules run under the session
+#    locale, and a C-locale session warns "Invalid multibyte data detected"
+#    and measures the layout narrower than it renders (wc -L counts
+#    multibyte glyphs as zero width). C.UTF-8 is built into glibc, so it
+#    works even when locale -a does not list it; a name locale -a cannot
+#    confirm is not trusted. Line-based insert, so no quote escaping.
+with open(la) as f:
+    a = f.read()
+a_orig = a
+if 'export LC_ALL="$HEX_ABOUT_LOCALE"' in a:
+    print("launch-about locale export already present, skipping")
+else:
+    _la_lines = a.splitlines()
+    for _i, _ln in enumerate(_la_lines):
+        if _ln.startswith('HEX_ABOUT_LOCALE="'):
+            _la_lines[_i+1:_i+1] = [
+                '# C.UTF-8 is built into glibc, so it works even when locale -a does not',
+                '# list it; a name locale -a cannot confirm is not trusted.',
+                'if ! locale -a 2>/dev/null | grep -qi "^$HEX_ABOUT_LOCALE$"; then HEX_ABOUT_LOCALE="C.UTF-8"; fi',
+                'export LC_ALL="$HEX_ABOUT_LOCALE" LANG="$HEX_ABOUT_LOCALE"',
+            ]
+            a = "\n".join(_la_lines) + "\n"
+            changed.append("launch-about: export LC_ALL/LANG for the whole About process")
+            break
+    else:
+        print("WARN: HEX_ABOUT_LOCALE assignment not found, locale export NOT applied")
+if a != a_orig:
+    with open(la, "w") as f:
+        f.write(a)
+
+# 4. hexciri-install-editor-zed: `omazed` is an Omarchy-repo package that does
+#    not exist on Arch, so `pkg-add zed omazed` fails and the Zed row is dead.
+#    Install plain zed; theming Zed is out of v2 scope.
+zed = root + "/bin/hexciri-install-editor-zed"
+if os.path.isfile(zed):
+    with open(zed) as f:
+        z = f.read()
+    z_orig = z
+    z = z.replace("hexciri-pkg-add zed omazed", "hexciri-pkg-add zed")
+    z = z.replace("omazed setup", "# omazed is Omarchy-repo-only, not installed: skip Zed theme setup")
+    if z != z_orig:
+        with open(zed, "w") as f:
+            f.write(z)
+        changed.append("install-editor-zed: dropped omazed (Omarchy-repo-only)")
+    else:
+        print("install-editor-zed: omazed already gone, skipping")
+else:
+    print("WARN: hexciri-install-editor-zed not in fork, Zed row will drop")
+
+# 5. lifecycle-dispatch is a no-op on x86 (upstream docs/lifecycle-dispatch.md):
+#    only Apple Silicon registers a platform package. The fork never copies
+#    it, so the bare calls in install-browser / install-gaming-steam /
+#    remove-gaming-steam die under set -e. Guard them.
+for _lf in ("hexciri-install-browser", "hexciri-install-gaming-steam", "hexciri-remove-gaming-steam"):
+    _lp = root + "/bin/" + _lf
+    if os.path.isfile(_lp):
+        with open(_lp) as f:
+            _lt = f.read()
+        _lt_orig = _lt
+        _lt = re.sub(r'hexciri-lifecycle-dispatch (post-install|pre-remove) (\S+)', r'command -v hexciri-lifecycle-dispatch >/dev/null 2>&1 && hexciri-lifecycle-dispatch \1 \2 || true', _lt)
+        if _lt != _lt_orig:
+            with open(_lp, "w") as f:
+                f.write(_lt)
+            changed.append(_lf + ": lifecycle-dispatch calls guarded (no-op on x86)")
+        else:
+            print(_lf + ": no lifecycle-dispatch calls found, skipping")
+
+# 6. hexciri-remove-security-fingerprint: upstream removes fingerprint from
+#    sudo, polkit and the lock screen, but never from SDDM, so removing the
+#    finger would leave /etc/pam.d/sddm demanding a touch after the
+#    password. Strip the SDDM lines and the theme.conf Fingerprint key too.
+rfp = root + "/bin/hexciri-remove-security-fingerprint"
+if os.path.isfile(rfp):
+    with open(rfp) as f:
+        r = f.read()
+    r_orig = r
+    _rfp_fn = '\nremove_sddm_fingerprint_pam() {\n  # Hexciri SDDM lines (2026-11-24): removing the finger must also remove\n  # the SDDM fingerprint lines, or SDDM keeps demanding a touch after the\n  # password. Strip the pam_unix-first line too, it belongs to the block.\n  if [[ -f /etc/pam.d/sddm ]] && grep -Eq \'pam_fprintd\\.so|hexciri-hw-laptop-closed|try_first_pass likeauth nullok\' /etc/pam.d/sddm; then\n    echo "Removing fingerprint authentication from SDDM..."\n    sudo sed -i -e \'/pam_fprintd\\.so/d\' -e \'/hexciri-hw-laptop-closed/d\' -e \'/try_first_pass likeauth nullok/d\' /etc/pam.d/sddm\n  fi\n  if [[ -f /usr/share/sddm/themes/hexciri/theme.conf ]]; then\n    sudo sed -i \'/^Fingerprint=/d\' /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null || true\n  fi\n}\n'
+    if "remove_sddm_fingerprint_pam" in r:
+        print("remove-security-fingerprint SDDM strip already present, skipping")
+    elif r.count("\n}\n\nremove_lock_fingerprint_pam()") == 1:
+        r = r.replace("\n}\n\nremove_lock_fingerprint_pam()", "\n}\n" + _rfp_fn + "\nremove_lock_fingerprint_pam()", 1)
+        changed.append("remove-security-fingerprint: SDDM strip function added")
+    else:
+        print("WARN: remove_lock_fingerprint_pam anchor not found, SDDM strip NOT added")
+    if "remove_sddm_fingerprint_pam\nremove_lock_fingerprint_pam" not in r and r.count("remove_pam_config\nremove_lock_fingerprint_pam") == 1:
+        r = r.replace("remove_pam_config\nremove_lock_fingerprint_pam", "remove_pam_config\nremove_sddm_fingerprint_pam\nremove_lock_fingerprint_pam", 1)
+        changed.append("remove-security-fingerprint: SDDM strip called after remove_pam_config")
+    if r != r_orig:
+        with open(rfp, "w") as f:
+            f.write(r)
+else:
+    print("WARN: hexciri-remove-security-fingerprint not in fork, fingerprint row will drop")
 
 for c in changed:
     print("  fork patch: " + c)
@@ -2385,12 +2557,12 @@ unset LEFTOVER_OMARCHY_CMDS
 # bin script is caught here at install time instead of as a popup at login.
 # herdr is deliberately excluded: autostart starts it via systemd-run and a
 # missing herdr fails silently, it is out of Phase 1 scope. install-* /
-# remove-* are also excluded: those menu rows are out of the shell-only
-# scope and are expected to fail if clicked.
+# install-*/remove-* are NOT excluded any more (2026-11-24): the Install /
+# Remove menu rows are back, so their bins must exist like any other.
 if [ -d "$HEXCIRI_PATH" ]; then
   for _cmd in $(grep -rIhoE 'hexciri-[a-z0-9-]+' "$HEXCIRI_PATH/default" "$HEXCIRI_PATH/shell" "$HEXCIRI_PATH/bin" "$HOME/.config/hypr" 2>/dev/null | sort -u); do
     case "$_cmd" in
-      hexciri-install-* | hexciri-remove-* | hexciri-channel-* | hexciri-mirror-* | hexciri-keyring-* | hexciri-upgrade-*) continue ;;
+      hexciri-channel-* | hexciri-mirror-* | hexciri-keyring-* | hexciri-upgrade-*) continue ;;
       hexciri-compat) continue ;;
       # Not commands, so do not warn for them: hexciri-weather is a CLI
       # group (its subcommands are weather-icon/location/status),
@@ -2409,6 +2581,14 @@ if [ -d "$HEXCIRI_PATH" ]; then
       # nothing to add to is_allowed_bin for them.
       hexciri-weather | hexciri-tzupdate | hexciri-wheel | hexciri-webapp-handler | hexciri-windows-vm) continue ;;
       hexciri-theme-set-retint | hexciri-themes-intros | hexciri-themes-loops | hexciri-theme-sync | hexciri-tmp | hexciri-toggle- | hexciri-toprow) continue ;;
+      # lifecycle-dispatch is deliberately not copied: it is a no-op on x86
+      # (upstream docs/lifecycle-dispatch.md, only Apple Silicon registers
+      # a package), and its callers guard it with command -v.
+      hexciri-lifecycle-dispatch) continue ;;
+      # More filename false positives, 2026-11-24: a log filename
+      # (/tmp/hexciri-battlenet-installer.log) and a browser policy JSON
+      # filename (hexciri-extensions.json), neither is a command.
+      hexciri-battlenet-installer | hexciri-extensions) continue ;;
     esac
     if [ -x "$HEXCIRI_PATH/bin/$_cmd" ] || command -v "$_cmd" >/dev/null 2>&1; then
       info "  forked-tree command present: $_cmd"
@@ -2586,28 +2766,47 @@ fi
 # upstream only configures sudo, polkit and the lock screen, so the login
 # screen always asked for a password. SDDM authenticates the user through
 # /etc/pam.d/sddm (sddm-greeter is the greeter's own service, not the
-# login), so add the same gate + pam_fprintd lines there, only when a
-# finger is actually enrolled. Idempotent, best-effort: without an
-# enrolled finger the file is left alone.
+# login), so add fingerprint lines there, only when a finger is actually
+# enrolled. The order is the fix (2026-11-24, ArchWiki SDDM fingerprint):
+# pam_unix FIRST, so a correct password logs in at once and fingerprint
+# is never asked for after it; only an empty/wrong password falls through
+# to the clamshell gate and then pam_fprintd (press Enter on an empty
+# password field to touch the reader). The old Hexciri order (gate +
+# pam_fprintd first) demanded a fingerprint AFTER a correct password.
+# Repair first: strip any earlier Hexciri SDDM lines, so a rerun fixes a
+# machine that already has the broken order instead of skipping it.
+# Idempotent, best-effort: without an enrolled finger the file is left alone.
 step "Configuring SDDM fingerprint (login unlock)"
 if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/dev/null | grep -qE '^[[:space:]]*-[[:space:]]*#[0-9]+:'; then
-  if [ -f /etc/pam.d/sddm ] && ! grep -q pam_fprintd.so /etc/pam.d/sddm; then
+  if [ -f /etc/pam.d/sddm ]; then
     _sddm_tmp="$(mktemp)"
+    sudo sed -e '/pam_fprintd\.so/d' -e '/hexciri-hw-laptop-closed/d' -e '/try_first_pass likeauth nullok/d' /etc/pam.d/sddm > "$_sddm_tmp" 2>/dev/null || cp /etc/pam.d/sddm "$_sddm_tmp"
+    _sddm_out="$(mktemp)"
+    # pam_unix success=2 skips the gate line and pam_fprintd; with no gate
+    # it skips one line instead.
+    _sddm_skip=2
+    _sddm_gate=""
+    if [ -x "$HEXCIRI_PATH/bin/hexciri-hw-laptop-closed" ]; then
+      _sddm_gate="auth      [success=1 default=ignore] pam_exec.so quiet /usr/share/hexciri/bin/hexciri-hw-laptop-closed"
+    else
+      _sddm_skip=1
+    fi
     {
-      [ -x "$HEXCIRI_PATH/bin/hexciri-hw-laptop-closed" ] && printf '%s\n' "auth      [success=1 default=ignore] pam_exec.so quiet /usr/share/hexciri/bin/hexciri-hw-laptop-closed"
+      printf '%s\n' "auth      [success=${_sddm_skip} new_authtok_reqd=${_sddm_skip} default=ignore] pam_unix.so try_first_pass likeauth nullok"
+      [ -n "$_sddm_gate" ] && printf '%s\n' "$_sddm_gate"
       printf 'auth      sufficient pam_fprintd.so\n'
-      cat /etc/pam.d/sddm
-    } > "$_sddm_tmp"
-    if sudo install -Dm644 "$_sddm_tmp" /etc/pam.d/sddm; then
-      info "SDDM fingerprint: pam_fprintd added to /etc/pam.d/sddm (login unlock)"
+      cat "$_sddm_tmp"
+    } > "$_sddm_out"
+    if sudo install -Dm644 "$_sddm_out" /etc/pam.d/sddm; then
+      info "SDDM fingerprint: pam_unix first, then gate + pam_fprintd in /etc/pam.d/sddm (password alone logs in, empty-password Enter uses the reader)"
     else
       warn "could not write /etc/pam.d/sddm, SDDM login stays password-only"
     fi
-    rm -f "$_sddm_tmp"
+    rm -f "$_sddm_tmp" "$_sddm_out"
+    unset _sddm_tmp _sddm_out _sddm_skip _sddm_gate
   else
-    grep -q pam_fprintd.so /etc/pam.d/sddm 2>/dev/null && info "SDDM fingerprint: /etc/pam.d/sddm already has pam_fprintd" || warn "/etc/pam.d/sddm not found, SDDM login stays password-only"
+    warn "/etc/pam.d/sddm not found, SDDM login stays password-only"
   fi
-  unset _sddm_tmp
 else
   info "No fingers enrolled, /etc/pam.d/sddm left alone (enroll one, then re-run the installer or Setup > Security > Fingerprint)"
 fi
@@ -2623,6 +2822,14 @@ if ! locale -a 2>/dev/null | grep -qi '\.utf-8$\|\.utf8$'; then
   if grep -q '^#en_US.UTF-8' /etc/locale.gen 2>/dev/null; then
     if sudo sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && sudo locale-gen en_US.UTF-8 2>/dev/null; then
       info "Generated locale: en_US.UTF-8 (About fitting needs a UTF-8 locale)"
+    else
+      warn "locale-gen en_US.UTF-8 failed, About may warn about multibyte data"
+    fi
+  elif grep -q '^en_US.UTF-8' /etc/locale.gen 2>/dev/null; then
+    # Already enabled in locale.gen but never generated (fresh no-DE install):
+    # locale -a has no UTF-8 locale, so generate it without editing the file.
+    if sudo locale-gen en_US.UTF-8 2>/dev/null; then
+      info "Generated locale: en_US.UTF-8 (was enabled but not generated)"
     else
       warn "locale-gen en_US.UTF-8 failed, About may warn about multibyte data"
     fi
@@ -2670,6 +2877,23 @@ if true; then
     warn "no Hexciri logo image and no fork icon.txt, branding/about.txt not created, About fit will be skipped"
   fi
   unset _logo_img _cand
+fi
+# Verify the logo the fit measures against: it must exist, be non-empty, and
+# fit the fastfetch logo block (65 columns wide). A wider or empty file
+# measures wrong and About renders clipped, which is the live symptom.
+# wc -L counts display columns only in a UTF-8 locale, so force C.UTF-8
+# here: under a C locale the braille glyphs count as zero width.
+if [ -s "$HOME/.config/hexciri/branding/about.txt" ]; then
+  _about_w="$(LC_ALL=C.UTF-8 wc -L < "$HOME/.config/hexciri/branding/about.txt" 2>/dev/null | tr -d ' ' || echo 0)"
+  if (( _about_w > 0 && _about_w <= 65 )); then
+    info "About logo verified: branding/about.txt ${_about_w} columns wide (fastfetch logo block is 65)"
+  else
+    warn "About logo is ${_about_w} columns wide (fastfetch logo block is 65), falling back to fork icon.txt"
+    cp -a "$HEXCIRI_PATH/icon.txt" "$HOME/.config/hexciri/branding/about.txt" 2>/dev/null || true
+  fi
+  unset _about_w
+else
+  warn "branding/about.txt is missing or empty after the logo step, About fit will be skipped"
 fi
 
 # --- Apply a default theme, like v1 does its theme sync ---
@@ -2749,20 +2973,51 @@ unset _gtk_mode _gtk_theme _gtk_dark
 step "Fixing EOS update icon (Kitty override for eos-update)"
 if command -v eos-update >/dev/null 2>&1; then
   mkdir -p "$HOME/.local/share/applications"
+  # Keep the icon EOS ships: the old override's Icon=eos-update was invented
+  # (no such icon exists), so the grid showed a blank. Read the Icon from
+  # the EOS desktop file when it exists (added to eos-bash-shared in 23.8-1),
+  # else the EndeavourOS icon, else the standard freedesktop update icon.
+  _eos_icon=""
+  if [ -f /usr/share/applications/eos-update.desktop ]; then
+    _eos_icon="$(grep -m1 '^Icon=' /usr/share/applications/eos-update.desktop 2>/dev/null | cut -d= -f2- || true)"
+  fi
+  if [ -z "$_eos_icon" ] && [ -f /usr/share/pixmaps/endeavouros-icon.png ]; then
+    _eos_icon="endeavouros-icon"
+  fi
+  [ -n "$_eos_icon" ] || _eos_icon="system-software-update"
   cat > "$HOME/.local/share/applications/eos-update.desktop" <<EOS_EOF
 [Desktop Entry]
 Type=Application
 Name=EOS Update
 Comment=Update EndeavourOS packages (pacman + AUR) in Kitty
-Icon=eos-update
+Icon=$_eos_icon
 Exec=kitty --hold -e eos-update --yay
 Terminal=false
 Categories=System;
 EOS_EOF
+  unset _eos_icon
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
   info "EOS update icon: override launches kitty --hold -e eos-update --yay"
 else
   warn "eos-update not found, EOS update icon left as-is (install eos-bash-shared)"
+fi
+
+# --- Speed test client (Super+Alt+Space > Speed Test > Network, 2026-11-24) ---
+# hexciri-network-speedtest execs ${HEXCIRI_SPEEDTEST_BINARY:-/usr/lib/hexciri/speedtest}
+# and upstream ships that client as the omarchy-speedtest package from their
+# own repo, which Hexciri deliberately does not use. Without the binary the
+# panel shows speedtest.failed. Ship Hexciri's own curl-based client instead
+# (v2/hexciri-speedtest-client): it prints live Mbps numbers, one per line,
+# which is the panel's protocol, against public test endpoints.
+step "Installing Hexciri speed test client (/usr/lib/hexciri/speedtest)"
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-speedtest-client" ]; then
+  if sudo install -Dm755 "$HEXCIRI_REPO_ROOT/v2/hexciri-speedtest-client" /usr/lib/hexciri/speedtest; then
+    info "Speed test client installed: /usr/lib/hexciri/speedtest (curl-based, Cloudflare/Tele2 endpoints)"
+  else
+    warn "could not install /usr/lib/hexciri/speedtest, Speed Test > Network will show speedtest.failed"
+  fi
+else
+  warn "v2/hexciri-speedtest-client not in the installer tree, Speed Test > Network will show speedtest.failed"
 fi
 
 # --- Theme SDDM with the currently applied theme ---
@@ -2830,6 +3085,12 @@ if [ -n "$SDDM_SRC" ]; then
   if [[ "$SDDM_BG" =~ ^#[0-9a-fA-F]{6}$ ]]; then
     TMP_SDDM_CONF="$(mktemp)"
     printf '[General]\nBackground=%s\n' "$SDDM_BG" > "$TMP_SDDM_CONF"
+    # The greeter shows "touch the reader or enter your password" only when
+    # Fingerprint=true is in theme.conf (branding Main.qml reads
+    # config.Fingerprint). Only when a finger is actually enrolled.
+    if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/dev/null | grep -qE '^[[:space:]]*-[[:space:]]*#[0-9]+:'; then
+      printf 'Fingerprint=true\n' >> "$TMP_SDDM_CONF"
+    fi
     if sudo install -Dm644 "$TMP_SDDM_CONF" /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null; then
       info "SDDM theme background set to the ${DEFAULT_THEME:-current} theme background: $SDDM_BG"
     else
@@ -3110,13 +3371,22 @@ if [ -f /etc/pam.d/hexciri-lock-password ]; then info "  lock PAM: /etc/pam.d/he
 if [ -f /etc/sudoers.d/hexciri-theme-browser ]; then info "  browser policy sudoers: present (theme switch repaints Brave)"; else warn "  browser policy sudoers: missing, theme switch reports hexciri-theme-set-browser failed"; fi
 command -v fprintd >/dev/null 2>&1 && info "  fingerprint: fprintd present (Setup > Security > Fingerprint)" || warn "  fingerprint: fprintd NOT installed, Setup > Security > Fingerprint will fail"
 if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/dev/null | grep -qE '^[[:space:]]*-[[:space:]]*#[0-9]+:'; then
-  grep -q pam_fprintd.so /etc/pam.d/sddm 2>/dev/null && info "  fingerprint: SDDM login has pam_fprintd" || warn "  fingerprint: enrolled, but /etc/pam.d/sddm has no pam_fprintd, SDDM login stays password-only"
+  if grep -q 'pam_unix.so try_first_pass likeauth nullok' /etc/pam.d/sddm 2>/dev/null && grep -q pam_fprintd.so /etc/pam.d/sddm 2>/dev/null; then
+    info "  fingerprint: SDDM login has pam_unix first, then pam_fprintd (password alone logs in)"
+  elif grep -q pam_fprintd.so /etc/pam.d/sddm 2>/dev/null; then
+    warn "  fingerprint: /etc/pam.d/sddm has pam_fprintd but no pam_unix-first line (old order: fingerprint demanded after password)"
+  else
+    warn "  fingerprint: enrolled, but /etc/pam.d/sddm has no pam_fprintd, SDDM login stays password-only"
+  fi
 fi
 if command -v mpv >/dev/null 2>&1; then info "  video: mpv present"; else warn "  video: mpv NOT installed"; fi
 if command -v gpu-screen-recorder >/dev/null 2>&1; then info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
 if command -v localsend >/dev/null 2>&1; then info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
 if command -v fastfetch >/dev/null 2>&1; then info "  fastfetch: present"; else warn "  fastfetch: NOT installed"; fi
 if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
+if [ -s "$HOME/.config/hexciri/branding/about.txt" ]; then info "  about logo: branding/about.txt present, $(LC_ALL=C.UTF-8 wc -L < "$HOME/.config/hexciri/branding/about.txt" | tr -d ' ') columns wide (fastfetch logo block is 65)"; else warn "  about logo: branding/about.txt missing or empty, About fit will be skipped"; fi
+[ -x /usr/lib/hexciri/speedtest ] && info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
+grep -q 'export LC_ALL="$HEX_ABOUT_LOCALE"' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && info "  about locale: launch-about exports a UTF-8 locale" || warn "  about locale: launch-about has no UTF-8 locale export, About may warn about multibyte data"
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
 command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
 if command -v spotify >/dev/null 2>&1; then info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
@@ -3158,10 +3428,12 @@ Reboot, then check in order:
 
   17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta, xterm, stoken and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). YAD settings is hidden, yad itself stays (EOS tools depend on it).
 
-  18. Menu audit 2026-11-23: the whole Install and Remove subtrees are gone (install-*/remove-* were never in the fork), Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
+  18. Menu audit 2026-11-23: Install and Remove subtrees were deleted then (install-*/remove-* were never in the fork), restored 2026-11-24 where a backing script exists (see item 21). Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
 
   19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are removed for real this time (trim used sudo -n, which silently failed once the sudo timestamp expired); the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
   20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About fits again (about.txt regenerated every install at the fastfetch logo size 65x35, UTF-8 locale generated when none exists); LocalSend file picker is themed (GTK settings.ini + FileChooser=gtk portal, zenity installed); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
+
+  21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back (Package, AUR, Web App, TUI, Style, Gaming and their Remove counterparts, kept only where the backing script exists in the fork; AI, services, terminals, Windows, preinstalls and dictation stay out, and install-browser stays out because its helper tree is not copied).
 
 If Super+Alt+Space (menu) still does nothing after reboot, run this in a terminal and report what it prints:
   hexciri-shell shell toggle hexciri.menu '{"menu":"root"}'

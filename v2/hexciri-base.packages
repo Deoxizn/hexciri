@@ -57,6 +57,7 @@ unzip
 ripgrep
 fd
 fzf
+gum
 eza
 bat
 starship
