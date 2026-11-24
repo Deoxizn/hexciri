@@ -7,7 +7,9 @@
 #
 # This is the one command, minus the EndeavourOS install itself.
 # It merges the old two Phase 1 scripts into one, in order:
-#   1. Preflight, packages, GPU drivers, Quickshell, Hyprland, SDDM plus uwsm
+#   1. Preflight, packages, GPU drivers, Quickshell, Hyprland, SDDM plus uwsm,
+#      Hexciri default apps (Omarchy defaults + Hexciri replacements, so
+#      binds can be tested: Brave Origin, zathura, imv, zed, Obsidian, mpv)
 #   2. Download omacom/omarchy at the pinned commit as a tarball (no git, no auth),
 #      verify SHA from the tarball top dir, then fork and rename the shell inline
 #   4. Place the forked tree to /usr/share/hexciri, ~/.config/hexciri,
@@ -28,7 +30,7 @@
 #   Limine, snapper, linux-omarchy, Plymouth, LUKS scripts, pacman guard hook
 #   Upstream Omarchy migrations, channel/keyring/mirror scripts
 #   Waybar, Mako, Walker, hyprlock, hypridle, swaybg, hyprpolkitagent
-#   Apps, GUI preinstalls, Docker, AI agents
+#   Apps beyond the Hexciri default apps step below, Docker, AI agents
 #   Noctalia, Niri. Hyprland plus Quickshell only, SDDM like Omarchy.
 #
 # Hard rule: no file named omarchy in the Hexiri repo. Files, paths, and CLI
@@ -205,7 +207,9 @@ CORE_PKGS=(
   polkit rtkit gnome-keyring libsecret
   pamixer brightnessctl jq bc curl wget git base-devel
   imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip
-  ripgrep fd fzf eza bat btop starship zoxide fastfetch
+  ripgrep fd fzf eza bat starship zoxide fastfetch
+  # NOTE 2026-11-23: no btop here, v1 removes it, bottom (in APP_PKGS below)
+  # is the Hexciri system monitor instead.
   python python-gobject lua51 luarocks
   kitty
   udiskie
@@ -240,6 +244,138 @@ fi
 
 step "Updating user directories"
 xdg-user-dirs-update || warn "xdg-user-dirs-update failed, not fatal."
+
+# --- Hexciri default apps ---
+# Devi 2026-11-23: install Hexciri default apps so basic binds can be tested.
+# Base is Omarchy's defaults (install/omarchy-base.packages at the pinned
+# commit), with only Hexciri's few replacements, per v1 main install.sh and
+# bin/hexciri-mime-defaults:
+#   Kitty over Foot (already in CORE_PKGS above)
+#   Strata over Folio (GitHub release, Strata step below)
+#   Brave Origin over Chrome (AUR below, Release channel, free on Linux)
+#   zathura over papers/mupdf (v1 PDF pick), imv as image viewer (v1 pick)
+#   zed as editor (v1 want), bottom over btop (v1 stock removal)
+# NOT installed: google-chrome, foot, folio, btop, plain / omacalc /
+# omawrite / omaview / herdr / cliamp / omasnap (Omarchy-repo-only, no Arch
+# or AUR package exists for them), docker, AI agents (opencode,
+# pi-coding-agent), fuzzel / noctalia (v2 shell is Quickshell, not
+# fuzzel/Noctalia). Screenshot still needs omasnap (Omarchy-repo-only), so
+# the screenshot bind stays broken until that is ported; grim + slurp are
+# already in CORE_PKGS above. Calculator (omacalc), Omawrite and the music
+# TUI (cliamp) are Omarchy-repo-only too, so Super+Shift+Q / Super+Shift+W /
+# Super+Shift+Alt+M have no app yet; libqalculate below at least ships qalc.
+# Pacman step: one bulk call first, per-package best-effort retry if it
+# fails, so one wrong/stale name never aborts the install. AUR/GitHub apps
+# are best-effort, never fatal, same rule as Strata below.
+
+step "Installing Hexciri default apps (Omarchy defaults + Hexciri replacements)"
+
+APP_PKGS=(
+  # Bind/menu-called: neovim (Super+Shift+N, launch-editor falls back to
+  # nvim), tmux (Super+Alt+Return), obsidian (Super+Shift+O),
+  # gpu-screen-recorder + wf-recorder fallback (menu Capture > Screenrecord),
+  # zbar (capture-qr decodes with zbarimg), localsend (menu Share > Receive),
+  # mpv (v1 default video player), zathura + plugins (v1 PDF pick),
+  # imv (v1 image viewer pick), zed (v1 editor pick), playerctl (v1 layer
+  # need, media keys), bottom (v1 pick, replaces btop), seahorse (keyring
+  # GUI), fwupd (menu Update > Firmware), adw-gtk-theme (v1 layer need, GTK
+  # apps unthemed without it), tesseract-data-eng (OCR data, tesseract
+  # itself is already in CORE_PKGS), cliphist (v1 want), libqalculate
+  # (v1 want, ships the qalc CLI), libreoffice-fresh + pinta +
+  # gnome-disk-utility (Omarchy default apps), lazygit, yt-dlp, gvfs
+  # (file-manager trash/network backends), qrencode, eject (XF86Eject bind).
+  neovim tmux obsidian localsend gpu-screen-recorder wf-recorder
+  mpv zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb
+  zed playerctl bottom seahorse fwupd adw-gtk-theme tesseract-data-eng
+  cliphist libqalculate libreoffice-fresh pinta gnome-disk-utility
+  lazygit yt-dlp gvfs zbar qrencode imv eject
+)
+if ! sudo pacman -S --needed --noconfirm "${APP_PKGS[@]}"; then
+  warn "Bulk default-apps install failed, retrying per package (best-effort)."
+  for _pkg in "${APP_PKGS[@]}"; do
+    if sudo pacman -S --needed --noconfirm "$_pkg" 2>/dev/null; then
+      info "  installed: $_pkg"
+    else
+      warn "  NOT installed: $_pkg (install by hand: sudo pacman -S $_pkg)"
+    fi
+  done
+  unset _pkg
+fi
+
+# --- Brave Origin (default browser), AUR, best-effort ---
+# Brave Origin is the version Devi uses (v1 main install.sh: AUR want
+# brave-origin-bin; brave-bin is only a stand-in, removed once Origin is
+# present). Minimalist Brave build (no Leo AI / Rewards / Wallet / VPN),
+# free on Linux (a $59.99 one-time purchase elsewhere), Release channel:
+# NOT brave-origin-beta / brave-beta-bin / brave-nightly, NOT normal
+# brave-bin. Omarchy's own install-browser uses the same package
+# (omarchy-pkg-aur-add brave-origin-bin), and Brave's Linux docs give
+# `yay -Sy brave-origin-bin` as the Arch route. Binary is brave-origin,
+# desktop entry brave-origin.desktop. Do NOT install google-chrome:
+# Brave Origin replaces Omarchy's Chrome.
+step "Installing Brave Origin (default browser, AUR, best-effort)"
+if command -v brave-origin >/dev/null 2>&1; then
+  info "Brave Origin already present"
+elif yay -S --needed --noconfirm brave-origin-bin 2>/dev/null; then
+  info "Brave Origin installed via yay (brave-origin-bin)"
+else
+  warn "Brave Origin install failed (yay/AUR unreachable), browser binds will fail until it is installed. Install by hand: yay -S brave-origin-bin"
+fi
+# v1 behaviour: drop the normal-Brave stand-in once Origin is present.
+if command -v brave-origin >/dev/null 2>&1 && pacman -Q brave-bin >/dev/null 2>&1; then
+  if sudo pacman -Rns --noconfirm brave-bin 2>/dev/null; then
+    info "Removed brave-bin stand-in (Brave Origin is present)"
+  else
+    warn "kept brave-bin (removal failed)"
+  fi
+fi
+
+# --- Pin Hexciri default apps ---
+# Same picks as v1 bin/hexciri-mime-defaults: browser brave-origin, PDF
+# zathura, images imv, editor zed (neovim fallback). Files (Strata) is
+# pinned in the Strata step below, its desktop entry does not exist until
+# Strata is installed. State files live at ~/.local/state/hexciri/defaults/,
+# the same path launch-editor reads (renamed from omarchy by the fork).
+# Do NOT call hexciri-default-browser here: it checks browser extensions
+# via omarchy-install-browser-extensions, which is NOT copied into the fork
+# (install-* scripts are excluded), so it would fail. xdg-settings is what
+# that script itself ends with, and launch-browser reads the same default
+# via omarchy-cmd-default-browser.
+mkdir -p "$HOME/.local/state/hexciri/defaults"
+if command -v brave-origin >/dev/null 2>&1; then
+  printf '%s' "brave-origin" > "$HOME/.local/state/hexciri/defaults/browser"
+  if [ -f /usr/share/applications/brave-origin.desktop ] || [ -f "$HOME/.local/share/applications/brave-origin.desktop" ]; then
+    if xdg-settings set default-web-browser brave-origin.desktop 2>/dev/null; then
+      info "Default browser: Brave Origin (brave-origin.desktop)"
+    else
+      warn "xdg-settings could not set Brave Origin as default browser"
+    fi
+    xdg-mime default brave-origin.desktop x-scheme-handler/http x-scheme-handler/https text/html application/xhtml+xml 2>/dev/null || warn "xdg-mime could not pin Brave Origin handlers"
+  else
+    warn "brave-origin.desktop not found, default browser not pinned (Brave Origin installed but its desktop entry is missing)"
+  fi
+else
+  warn "brave-origin not installed, default browser not set"
+fi
+if command -v zathura >/dev/null 2>&1; then
+  printf '%s' "zathura" > "$HOME/.local/state/hexciri/defaults/pdf"
+  xdg-mime default org.pwmt.zathura.desktop application/pdf application/epub+zip application/postscript image/vnd.djvu 2>/dev/null || warn "xdg-mime could not pin zathura for documents"
+  info "Default PDF reader: zathura"
+fi
+if command -v zeditor >/dev/null 2>&1; then
+  printf '%s' "zeditor" > "$HOME/.local/state/hexciri/defaults/editor"
+  info "Default editor: zed (zeditor)"
+elif command -v zed >/dev/null 2>&1; then
+  printf '%s' "zed" > "$HOME/.local/state/hexciri/defaults/editor"
+  info "Default editor: zed"
+elif command -v nvim >/dev/null 2>&1; then
+  printf '%s' "nvim" > "$HOME/.local/state/hexciri/defaults/editor"
+  info "Default editor: neovim (zed not installed)"
+fi
+if command -v imv >/dev/null 2>&1; then
+  printf '%s' "imv" > "$HOME/.local/state/hexciri/defaults/images"
+  info "Default image viewer: imv"
+fi
 
 # --- Quickshell ---
 
@@ -1359,8 +1495,9 @@ unset SDDM_SRC
 # bin/hexciri-strata-install is a symlink to bin/hexciri-setup and dispatches
 # to its strata subcommand: per-user release binary, sha256-verified,
 # idempotent, installs to ~/.local/bin/strata, needs glibc >= 2.39.
-# Scope note: this is shell/launcher scope (terminal + file manager only),
-# not the full v1 app list. Best-effort, never fatal.
+# Strata is the file-manager part of the default apps step above, not a
+# one-off: the files default is pinned here too, once its desktop entry
+# exists.
 step "Installing Strata (file manager, best-effort)"
 if [ -x "$HEXCIRI_REPO_ROOT/bin/hexciri-strata-install" ]; then
   if bash "$HEXCIRI_REPO_ROOT/bin/hexciri-strata-install"; then
@@ -1377,6 +1514,12 @@ fi
 # IS on the uwsm PATH, so launch-files finds it either way.
 if [ -x "$HOME/.local/bin/strata" ]; then
   sudo ln -sf "$HOME/.local/bin/strata" "$HEXCIRI_PATH/bin/strata" 2>/dev/null && info "Strata linked into hexciri bin PATH: $HEXCIRI_PATH/bin/strata" || warn "could not link strata into $HEXCIRI_PATH/bin, Super+Shift+F relies on ~/.local/bin being on PATH"
+  # Pin Strata as the file manager (v1 mime-defaults pick: strata ->
+  # io.github.lgse.Strata.desktop), now that its desktop entry exists.
+  if [ -f "$HOME/.local/share/applications/io.github.lgse.Strata.desktop" ]; then
+    printf '%s' "strata" > "$HOME/.local/state/hexciri/defaults/files"
+    xdg-mime default io.github.lgse.Strata.desktop inode/directory 2>/dev/null && info "Default file manager: Strata" || warn "xdg-mime could not pin Strata for inode/directory"
+  fi
 else
   warn "strata binary not found at ~/.local/bin/strata after install step, Super+Shift+F will error until it is installed"
 fi
@@ -1430,6 +1573,16 @@ else
 fi
 command -v kitty >/dev/null 2>&1 && info "  terminal: kitty present" || warn "  terminal: kitty NOT installed, terminal binds fall back to xdg-terminal-exec"
 command -v udiskie >/dev/null 2>&1 && info "  udiskie: present" || warn "  udiskie: NOT installed, autostart will pop a Command not found error"
+if command -v brave-origin >/dev/null 2>&1; then
+  info "  browser: Brave Origin present (default: $(xdg-settings get default-web-browser 2>/dev/null || echo unknown))"
+else
+  warn "  browser: Brave Origin NOT installed, Super+Shift+Return / Super+Shift+B will fail"
+fi
+if command -v zathura >/dev/null 2>&1; then info "  pdf: zathura present"; else warn "  pdf: zathura NOT installed"; fi
+if command -v obsidian >/dev/null 2>&1; then info "  notes: obsidian present"; else warn "  notes: obsidian NOT installed, Super+Shift+O will fail"; fi
+if command -v mpv >/dev/null 2>&1; then info "  video: mpv present"; else warn "  video: mpv NOT installed"; fi
+if command -v gpu-screen-recorder >/dev/null 2>&1; then info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
+if command -v localsend >/dev/null 2>&1; then info "  share: localsend present"; else warn "  share: localsend NOT installed, menu Share > Receive will fail"; fi
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
 command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
 if [ "$HC_FAIL" -eq 0 ]; then
@@ -1457,6 +1610,7 @@ Reboot, then check in order:
   11. File manager: Super+Shift+F opens Strata, terminal opens Kitty
   12. Clock popup shows the real month and weekday names, not clock.monthYear / clock.weekShort
   13. Workspace 1 shows 1 / its mode glyph, and SDDM shows the Hexciri emblem, not Omarchy logos
+  14. Default apps: Super+Shift+Return opens Brave Origin (default browser), Super+Shift+N opens Zed, Super+Shift+O opens Obsidian, Super+Alt+Return opens tmux in Kitty, menu Capture > Screenrecord records (gpu-screen-recorder), menu Share > Receive opens LocalSend
 
 If Super+Space still does nothing after reboot, run this in a terminal and report what it prints:
   hexciri-menu toggle root
