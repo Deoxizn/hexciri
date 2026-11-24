@@ -3173,6 +3173,10 @@ must_replace(fork + "/bin/hexciri-theme-install",
     "https://hexciri.org/themes/",
     "https://github.com/Deoxizn/hexciri",
     "hexciri-theme-install hint points at the repo, not hexciri.org/themes")
+must_replace(fork + "/bin/hexciri-theme-set-obsidian",
+    '"authorUrl": "https://hexciri.org"',
+    '"authorUrl": "https://github.com/Deoxizn/hexciri"',
+    "hexciri-theme-set-obsidian manifest authorUrl points at the repo, not hexciri.org")
 must_replace(fork + "/bin/hexciri-launch-manual",
     'exec hexciri-launch-webapp "${site:-https://hexciri.org/}manual/"',
     'exec hexciri-launch-webapp "${site:-https://github.com/Deoxizn/hexciri/}"',

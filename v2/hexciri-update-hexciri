@@ -101,6 +101,18 @@ SYNC_METHOD=""
 OLD_COMMIT="none"
 NEW_COMMIT="none"
 
+# git_retry: one retry after 5s. A transient DNS/WiFi blip (the same
+# outage that makes the tarball fallback fail with curl (6) "Could not
+# resolve host") must not kill the whole update on the first try.
+# stderr goes to the detail log, never /dev/null, so the reason (DNS,
+# timeout, auth) is visible in /tmp/hexciri-update-hexciri.log.
+git_retry() {
+  if "$@" 2>>"$DETAIL_LOG"; then return 0; fi
+  detail "command failed, retrying once in 5s: $*"
+  sleep 5
+  "$@" 2>>"$DETAIL_LOG"
+}
+
 # Git sync, like v1. Returns 0 and sets SOURCE_ROOT on success.
 # Quiet on purpose: sync progress goes to the detail log, the screen
 # only gets the themed header (below) and one short status line.
@@ -113,13 +125,13 @@ git_sync() {
   if [[ -d "$CHECKOUT/.git" ]]; then
     OLD_COMMIT="$(git -C "$CHECKOUT" rev-parse --short HEAD 2>/dev/null || echo none)"
     say_detail "Syncing Hexciri nyx with git: $CHECKOUT"
-    git -C "$CHECKOUT" fetch --quiet origin "$BRANCH" 2>/dev/null || { detail "git fetch failed"; return 1; }
-    git -C "$CHECKOUT" checkout --quiet "$BRANCH" 2>/dev/null || { detail "git checkout $BRANCH failed"; return 1; }
-    git -C "$CHECKOUT" pull --ff-only --quiet origin "$BRANCH" 2>/dev/null || { detail "git pull --ff-only failed"; return 1; }
+    git_retry git -C "$CHECKOUT" fetch --quiet origin "$BRANCH" || { detail "git fetch failed"; return 1; }
+    git -C "$CHECKOUT" checkout --quiet "$BRANCH" 2>>"$DETAIL_LOG" || { detail "git checkout $BRANCH failed"; return 1; }
+    git_retry git -C "$CHECKOUT" pull --ff-only --quiet origin "$BRANCH" || { detail "git pull --ff-only failed"; return 1; }
   else
     say_detail "Cloning Hexciri nyx with git: $CHECKOUT"
     mkdir -p "$(dirname "$CHECKOUT")"
-    git clone --quiet --branch "$BRANCH" "$REPO_URL" "$CHECKOUT" 2>/dev/null || { detail "git clone failed"; return 1; }
+    git clone --quiet --branch "$BRANCH" "$REPO_URL" "$CHECKOUT" 2>>"$DETAIL_LOG" || { detail "git clone failed, retrying once in 5s"; sleep 5; rm -rf "$CHECKOUT"; git clone --quiet --branch "$BRANCH" "$REPO_URL" "$CHECKOUT" 2>>"$DETAIL_LOG"; } || { detail "git clone failed"; return 1; }
   fi
   [ -f "$CHECKOUT/v2/install.sh" ] || { detail "cloned tree has no v2/install.sh"; return 1; }
   NEW_COMMIT="$(git -C "$CHECKOUT" rev-parse --short HEAD 2>/dev/null || echo none)"
@@ -162,8 +174,17 @@ echo -e "$(hexciri-theme-ansi green)\nUpdating Hexciri\e[0m"
 if git_sync; then
   say_detail "Synced with git ($OLD_COMMIT -> $NEW_COMMIT)"
 else
+  detail "DNS check: github.com resolves to: $(getent hosts github.com 2>/dev/null | head -1 || echo UNRESOLVED)"
+  detail "DNS check: codeload.github.com resolves to: $(getent hosts codeload.github.com 2>/dev/null | head -1 || echo UNRESOLVED)"
   echo "Git sync failed, trying tarball download..."
-  tarball_sync || die "Hexciri sync failed (git and tarball both failed). Fix networking, then rerun hexciri update. Details: $DETAIL_LOG"
+  if ! tarball_sync; then
+    if [[ ${HEXCIRI_UPDATE_CONTINUE_ON_SYNC_FAIL:-0} == "1" ]]; then
+      echo "Hexciri sync failed (network/DNS down?), skipping Hexciri self-update this run, system update continues. Details: $DETAIL_LOG"
+      detail "sync failed, continuing with system update (HEXCIRI_UPDATE_CONTINUE_ON_SYNC_FAIL=1)"
+      exit 0
+    fi
+    die "Hexciri sync failed (git and tarball both failed). Fix networking, then rerun hexciri update. Details: $DETAIL_LOG"
+  fi
 fi
 
 NEW_SHA="$(sha256sum "$SOURCE_ROOT/v2/install.sh" | cut -d' ' -f1)"
