@@ -2166,9 +2166,14 @@ PY
 # SDDM working. The installer step above does the same thing at install
 # time; this keeps the setup script consistent afterwards.
 # 2. hexciri-launch-about: replaced wholesale (2026-11-24) with a floating
-# fastfetch window. No about.txt, no fit measurement, no awk locale sizing.
-# The menu row system.about still calls it; the Hyprland rule in
-# default/hypr/apps/system.lua floats org.hexciri.about at 920x480.
+# fastfetch window, fixed 2026-11-24 to a two-mode script. No about.txt,
+# no fit measurement, no awk locale sizing. The menu row system.about
+# still calls it; the Hyprland rule in default/hypr/apps/system.lua floats
+# org.hexciri.about at 920x480. Never pass a bash -c '...' string through
+# launch-or-focus-tui: it builds LAUNCH_COMMAND with unquoted $@ and
+# launch-or-focus re-parses it with eval, so the -c string is split and
+# bash -c receives only `export`, prints the env and exits, which is why
+# About opened and closed instantly. Single-word args (--render) survive.
 python3 - "$FORK_OUT" <<'PY'
 import os
 import re
@@ -2202,20 +2207,43 @@ if s != s_orig:
 #    the Hexciri config at /etc/fastfetch/config.jsonc; the Hyprland rule
 #    in default/hypr/apps/system.lua floats org.hexciri.about at 920x480.
 #    Also fix that rule's stale comment, which still describes the fit.
+# 2. hexciri-launch-about: two-mode script (2026-11-24, fixed same day).
+#    The old script measured the logo with wc/awk, remembered the size in
+#    about.fit, and kept breaking (multibyte width, stale fit, blank logo).
+#    The 2b92c50 replacement passed `bash -c 'export ...; fastfetch; read'`
+#    through hexciri-launch-or-focus-tui, whose unquoted $@ + eval in
+#    hexciri-launch-or-focus split the -c string, so bash -c got only
+#    `export` and the window opened and closed at once. Now the outer call
+#    passes only single-word args (hexciri-launch-about --render), which
+#    survive that chain intact, and --render runs inside the terminal:
+#    fastfetch with the Hexciri config at /etc/fastfetch/config.jsonc,
+#    then read blocks until any key. The Hyprland rule in
+#    default/hypr/apps/system.lua floats org.hexciri.about at 920x480.
+#    Also fix that rule's stale comment, which still describes the fit.
 la = root + "/bin/hexciri-launch-about"
 _about_lines = [
     "#!/bin/bash",
-    "# hexciri-launch-about (2026-11-24): System > About is a floating fastfetch.",
+    "# hexciri-launch-about (2026-11-24, fixed 2026-11-24): System > About is a floating fastfetch.",
     "# No about.txt, no fit measurement, no awk locale sizing. Menu row",
     "# system.about calls this script; it opens a floating terminal running",
     "# fastfetch with the Hexciri config at /etc/fastfetch/config.jsonc.",
     "# Window size comes from the Hyprland rule for org.hexciri.about (920x480).",
-    "exec hexciri-launch-or-focus-tui --app-id=org.hexciri.about bash -c 'export LC_ALL=C.UTF-8 LANG=C.UTF-8; if [ -f /etc/fastfetch/config.jsonc ]; then fastfetch --config /etc/fastfetch/config.jsonc; else fastfetch; fi; echo; read -n1 -s -r -p \"Press any key to close...\"'",
+    "# --render runs INSIDE the terminal. Never pass a bash -c '...' string",
+    "# through launch-or-focus-tui: unquoted $@ + eval splits it, bash -c",
+    "# gets only `export` and exits, so About opens and closes at once.",
+    "if [[ ${1:-} == \"--render\" ]]; then",
+    "  export LC_ALL=C.UTF-8 LANG=C.UTF-8",
+    "  if [ -f /etc/fastfetch/config.jsonc ]; then fastfetch --config /etc/fastfetch/config.jsonc; else fastfetch; fi",
+    "  echo",
+    "  read -n1 -s -r -p \"Press any key to close...\" || true",
+    "  exit 0",
+    "fi",
+    "exec hexciri-launch-or-focus-tui --app-id=org.hexciri.about hexciri-launch-about --render",
 ]
 with open(la, "w") as f:
     f.write("\n".join(_about_lines) + "\n")
 os.chmod(la, 0o755)
-changed.append("launch-about: replaced with floating fastfetch (no about.txt / fit)")
+changed.append("launch-about: two-mode script, --render runs fastfetch + read inside the terminal (bash -c quoting trap fixed)")
 sl = root + "/default/hypr/apps/system.lua"
 with open(sl) as f:
     _sl = f.read()
@@ -2878,27 +2906,70 @@ else
   warn "no /etc/fastfetch/config.jsonc, About logo repoint skipped"
 fi
 
-# --- systemd-boot menu timeout: 1s (2026-11-24) ---
-# EOS no-DE installs systemd-boot; its loader.conf defaults to a 2-3s menu
-# pause and Devi wants 1s. The ESP is /efi on EOS (fallbacks /boot and
-# /boot/efi). Best-effort, never fatal: a GRUB machine has no loader.conf
-# and its timeout is untouched.
+# --- systemd-boot menu timeout: 1s (2026-11-24, fixed 2026-11-24) ---
+# EOS no-DE installs systemd-boot; its loader.conf defaults to timeout 5.
+# Editing loader.conf alone did NOT change it live (still 5s after the
+# 2b92c50 run): loader.conf timeout is overridden by the EFI variable
+# LoaderConfigTimeout, which systemd-boot writes when the timeout is
+# changed in the boot menu (t/T keys) and which bootctl manages
+# (loader.conf(5), bootctl(1) set-timeout). So set BOTH: every loader.conf
+# on the system, and the EFI variable with `bootctl set-timeout 1`.
+# The ESP path comes from bootctl itself first (authoritative, not a
+# guess), then the /efi, /boot, /boot/efi fallbacks; a commented-out
+# #timeout line is replaced too, and duplicate timeout lines all become 1.
+# Best-effort, never fatal: a GRUB machine has no loader.conf and no
+# bootctl timeout to set, and a non-UEFI boot has no EFI variable.
 step "Setting systemd-boot menu timeout to 1s"
-_boot_loader=""
+_boot_esp=""
+if command -v bootctl >/dev/null 2>&1; then
+  _boot_esp="$(bootctl --print-esp-path 2>/dev/null || true)"
+fi
+_boot_cands=""
+[ -n "$_boot_esp" ] && [ -d "$_boot_esp/loader" ] && _boot_cands="$_boot_esp/loader/loader.conf"
 for _cand in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do
-  if [ -f "$_cand" ]; then _boot_loader="$_cand"; break; fi
+  case " $_boot_cands " in *" $_cand "*) ;; *) _boot_cands="$_boot_cands $_cand";; esac
 done
-if [ -n "$_boot_loader" ]; then
-  if grep -q '^timeout' "$_boot_loader" 2>/dev/null; then
-    sudo sed -i 's/^timeout.*/timeout 1/' "$_boot_loader" && info "systemd-boot timeout: 1s in $_boot_loader"
+_boot_found=0
+for _boot_loader in $_boot_cands; do
+  [ -f "$_boot_loader" ] || continue
+  _boot_found=1
+  info "systemd-boot loader.conf: $_boot_loader (timeout lines before: $(grep -E '^[[:space:]]*#?[[:space:]]*timeout[[:space:]]' "$_boot_loader" 2>/dev/null | tr '\n' ' ' || true))"
+  if grep -qE '^[[:space:]]*#?[[:space:]]*timeout[[:space:]]' "$_boot_loader" 2>/dev/null; then
+    sudo sed -i -E 's|^[[:space:]]*#?[[:space:]]*timeout[[:space:]].*|timeout 1|' "$_boot_loader" && info "systemd-boot timeout: 1s in $_boot_loader"
   else
     printf 'timeout 1\n' | sudo tee -a "$_boot_loader" >/dev/null && info "systemd-boot timeout: 1s appended to $_boot_loader"
   fi
-  grep -q '^timeout 1$' "$_boot_loader" 2>/dev/null && info "systemd-boot timeout verified: $(grep '^timeout' "$_boot_loader" | head -1)" || warn "systemd-boot timeout is not 1s in $_boot_loader"
-  unset _boot_loader _cand
+  grep -q '^timeout 1$' "$_boot_loader" 2>/dev/null && info "systemd-boot timeout verified in $_boot_loader" || warn "systemd-boot timeout is not 1s in $_boot_loader"
+done
+[ "$_boot_found" -eq 0 ] && warn "no systemd-boot loader.conf found (/efi, /boot, /boot/efi), boot timeout unchanged (GRUB or other bootloader?)"
+# EFI variable overrides loader.conf: read it before, set it, read it back.
+_boot_efi_before=""
+_boot_efi_var=/sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
+[ -r "$_boot_efi_var" ] && _boot_efi_before="$(tail -c +5 "$_boot_efi_var" 2>/dev/null | tr -d '\0')"
+if [ -n "$_boot_efi_before" ]; then
+  info "systemd-boot EFI timeout before: LoaderConfigTimeout=$_boot_efi_before (this EFI variable overrides loader.conf)"
 else
-  warn "no systemd-boot loader.conf found (/efi, /boot, /boot/efi), boot timeout unchanged (GRUB or other bootloader?)"
+  info "systemd-boot EFI timeout before: no LoaderConfigTimeout variable set"
 fi
+if [ -d /sys/firmware/efi ] && command -v bootctl >/dev/null 2>&1; then
+  if sudo bootctl set-timeout 1 2>/dev/null; then
+    info "systemd-boot EFI timeout: bootctl set-timeout 1 done (LoaderConfigTimeout=1)"
+  else
+    warn "bootctl set-timeout 1 failed, the EFI variable may still override loader.conf (check: bootctl status; /sys/firmware/efi/efivars/LoaderConfigTimeout-*)"
+  fi
+  _boot_efi_after=""
+  [ -r "$_boot_efi_var" ] && _boot_efi_after="$(tail -c +5 "$_boot_efi_var" 2>/dev/null | tr -d '\0')"
+  if [ "$_boot_efi_after" = "1" ]; then
+    info "systemd-boot EFI timeout verified: LoaderConfigTimeout=1"
+  elif [ -n "$_boot_efi_after" ]; then
+    warn "systemd-boot EFI timeout is still LoaderConfigTimeout=$_boot_efi_after, not 1 (loader.conf alone will not fix this)"
+  else
+    warn "systemd-boot EFI timeout: LoaderConfigTimeout variable not readable after set-timeout, verify with: bootctl status"
+  fi
+else
+  warn "not an EFI boot or no bootctl, EFI timeout variable left alone (loader.conf is the only control here)"
+fi
+unset _boot_esp _boot_cands _boot_found _boot_loader _cand _boot_efi_before _boot_efi_after _boot_efi_var
 
 # --- Apply a default theme, like v1 does its theme sync ---
 # v1 finishes with a theme applied, not just themes installed. Pick the
@@ -3388,11 +3459,11 @@ if command -v gpu-screen-recorder >/dev/null 2>&1; then info "  screenrecord: gp
 if command -v localsend >/dev/null 2>&1; then info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
 if command -v fastfetch >/dev/null 2>&1; then info "  fastfetch: present"; else warn "  fastfetch: NOT installed"; fi
 if [ -f "$HOME/.config/fastfetch/config.jsonc" ]; then info "  fastfetch config: ~/.config/fastfetch/config.jsonc present"; else warn "  fastfetch config: not placed, stock config in use"; fi
-grep -q 'hexciri-launch-or-focus-tui --app-id=org.hexciri.about' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && info "  about: launch-about is the floating fastfetch (no about.txt fit)" || warn "  about: launch-about is not the floating fastfetch, System > About may still use the old fit path"
+grep -q 'hexciri-launch-about --render' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && grep -q 'hexciri-launch-or-focus-tui --app-id=org.hexciri.about' "$HEXCIRI_PATH/bin/hexciri-launch-about" 2>/dev/null && info "  about: launch-about is the two-mode fastfetch (--render runs inside the terminal, no bash -c quoting trap)" || warn "  about: launch-about is not the two-mode --render script, System > About may open and close at once"
 grep -q 'icon.txt' /etc/fastfetch/config.jsonc 2>/dev/null && info "  about logo: fastfetch config logo points at icon.txt" || warn "  about logo: fastfetch config logo does not point at icon.txt, About may render a blank logo column"
 [ -x /usr/lib/hexciri/speedtest ] && info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
 command -v btm >/dev/null 2>&1 && info "  activity monitor: btm present (Super+Shift+T)" || warn "  activity monitor: btm NOT installed, Super+Shift+T will fail (package: bottom, binary: btm)"
-grep -q '^timeout 1$' /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf 2>/dev/null && info "  boot timeout: systemd-boot timeout is 1s" || warn "  boot timeout: systemd-boot loader.conf has no timeout 1 (check /efi/loader/loader.conf)"
+_boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do if [ -f "$_f" ]; then _boot_hc_seen=1; grep -q '^timeout 1$' "$_f" 2>/dev/null || _boot_hc_ok=0; fi; done; if [ "$_boot_hc_seen" -eq 1 ] && [ "$_boot_hc_ok" -eq 1 ]; then info "  boot timeout: every loader.conf says timeout 1"; elif [ "$_boot_hc_seen" -eq 0 ]; then warn "  boot timeout: no loader.conf found (GRUB or other bootloader?)"; else warn "  boot timeout: a loader.conf does not say timeout 1 (grep timeout in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf)"; fi; _boot_hc_efi=""; [ -r /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f ] && _boot_hc_efi="$(tail -c +5 /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')"; if [ "$_boot_hc_efi" = "1" ]; then info "  boot timeout EFI: LoaderConfigTimeout=1"; elif [ -n "$_boot_hc_efi" ]; then warn "  boot timeout EFI: LoaderConfigTimeout=$_boot_hc_efi, overrides loader.conf (run: sudo bootctl set-timeout 1)"; else info "  boot timeout EFI: no LoaderConfigTimeout variable, loader.conf controls it"; fi; unset _boot_hc_ok _boot_hc_seen _boot_hc_efi _f
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
 command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
 if command -v spotify >/dev/null 2>&1; then info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
@@ -3437,7 +3508,7 @@ Reboot, then check in order:
   18. Menu audit 2026-11-23: Install and Remove subtrees were deleted then (install-*/remove-* were never in the fork), restored 2026-11-24 where a backing script exists (see item 21). Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
 
   19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are removed for real this time (trim used sudo -n, which silently failed once the sudo timestamp expired); the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
-  20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now (no about.txt / fit logic, logo from /usr/share/hexciri/icon.txt); systemd-boot timeout 1s; Super+Shift+T runs btm (bottom package binary); LocalSend file picker is themed (GTK settings.ini + FileChooser=gtk portal, zenity installed); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
+  20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now (two-mode launch-about, --render runs fastfetch + read inside the terminal, no bash -c quoting trap that made it open and close at once); systemd-boot timeout 1s in every loader.conf AND the LoaderConfigTimeout EFI variable (bootctl set-timeout 1, the variable overrides loader.conf); Super+Shift+T runs btm (bottom package binary); LocalSend file picker is themed (GTK settings.ini + FileChooser=gtk portal, zenity installed); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
 
   21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back (Package, AUR, Web App, TUI, Style, Gaming and their Remove counterparts, kept only where the backing script exists in the fork; AI, services, terminals, Windows, preinstalls and dictation stay out, and install-browser stays out because its helper tree is not copied).
 
