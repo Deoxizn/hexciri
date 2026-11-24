@@ -83,12 +83,12 @@ terminus-font
 # Arch substitutes for Omarchy-repo-only apps (2026-11-23, v2/install.sh
 # patch step). Do NOT install the Omarchy-repo-only ones, they have no
 # Arch or AUR package: omasnap -> grim + slurp (above), omacalc ->
-# gnome-calculator, cliamp -> ncspot, omawrite -> ghostwriter, herdr bind
-# removed (AI agent, out of v2 scope), omaview -> imv.
+# gnome-calculator, omaview -> imv. cliamp, omawrite and Obsidian binds
+# are REMOVED, not substituted: Devi 2026-11-23 does not want ncspot,
+# ghostwriter or obsidian, so there is no substitute to install. Herdr
+# bind removed (AI agent, out of v2 scope).
 # Spotify is AUR, not pacman: yay -S spotify (fallback: pacman
 # spotify-launcher, plus a spotify wrapper in /usr/share/hexciri/bin/).
 # spicetify-cli is AUR too: yay -S spicetify-cli.
 gnome-calculator
-ncspot
-ghostwriter
 tesseract

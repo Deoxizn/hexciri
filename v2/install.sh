@@ -206,6 +206,7 @@ CORE_PKGS=(
   qt6-base qt6-declarative qt6-wayland qt6-svg qt6-5compat qt6-multimedia qt6-imageformats
   polkit rtkit gnome-keyring libsecret
   pamixer brightnessctl jq bc curl wget git base-devel pacman-contrib # checkupdates, for hexciri-update-available (update icon)
+  fprintd usbutils # fprintd + usbutils: Setup > Security > Fingerprint needs fprintd-enroll/verify, hw-fingerprint probes USB readers
   imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip
   ripgrep fd fzf eza bat starship zoxide fastfetch
   # NOTE 2026-11-23: no btop here, v1 removes it, bottom (in APP_PKGS below)
@@ -263,9 +264,10 @@ xdg-user-dirs-update || warn "xdg-user-dirs-update failed, not fatal."
 #     fork patch step below rewrites hexciri-capture-screenshot to use
 #     them (capture-text and capture-qr already used grim/slurp directly).
 #   omacalc (SUPER+SHIFT+Q, XF86Calculator) -> gnome-calculator.
-#   cliamp (Music TUI, SUPER+SHIFT+ALT+M) -> ncspot (Spotify TUI).
-#   omawrite (SUPER+SHIFT+W) -> ghostwriter (writing app, Qt6, no Haskell).
-#   herdr (SUPER+CTRL+RETURN, Omarchy AI-agent terminal) -> bind removed,
+#   cliamp (Music TUI, SUPER+SHIFT+ALT+M) and omawrite (SUPER+SHIFT+W)
+#     binds are REMOVED, not substituted: Devi 2026-11-23 does not want
+#     ncspot or ghostwriter, and neither app is installed. herdr
+#     (SUPER+CTRL+RETURN, Omarchy AI-agent terminal) -> bind removed,
 #     herdr is an AI agent and AI agents are out of v2 scope; tmux is
 #     already on Super+Alt+Return. omaview -> imv (already the v1 image
 #     viewer pick). Editor is zed already, no substitute needed.
@@ -278,8 +280,7 @@ xdg-user-dirs-update || warn "xdg-user-dirs-update failed, not fatal."
 step "Installing Hexciri default apps (Omarchy defaults + Hexciri replacements)"
 
 APP_PKGS=(
-  # Bind/menu-called: neovim (Super+Shift+N, launch-editor falls back to
-  # nvim), tmux (Super+Alt+Return), obsidian (Super+Shift+O),
+  # Bind/menu-called: tmux (Super+Alt+Return),
   # gpu-screen-recorder + wf-recorder fallback (menu Capture > Screenrecord),
   # zbar (capture-qr decodes with zbarimg), localsend is AUR localsend-bin (own step below, menu Share > Receive),
   # mpv (v1 default video player), zathura + plugins (v1 PDF pick),
@@ -289,24 +290,29 @@ APP_PKGS=(
   # apps unthemed without it), tesseract-data-eng (OCR data) + tesseract
   # itself (capture-text OCR, SUPER+CTRL+PRINT, needs the binary, it was
   # NOT in CORE_PKGS despite an old comment saying so), cliphist (v1 want), libqalculate
-  # (v1 want, ships the qalc CLI), libreoffice-fresh + pinta +
+  # (v1 want, ships the qalc CLI), libreoffice-fresh +
   # gnome-disk-utility (Omarchy default apps), lazygit, yt-dlp, gvfs
   # (file-manager trash/network backends), qrencode, eject (XF86Eject bind).
+  # REMOVED 2026-11-23, Devi does not want them, and the trim step below
+  # removes them if present so they never come back: neovim (launch-editor
+  # falls back to nano now, nano ships in Arch base), obsidian (its
+  # Super+Shift+O bind is removed with it), pinta, ncspot (cliamp Music
+  # TUI substitute, bind removed), ghostwriter (omawrite substitute, bind
+  # removed). meld, xterm/uxterm and stoken (Software Token) were never in
+  # this list (EndeavourOS base / deps) and are removed by the trim step.
   # Arch substitutes for Omarchy-repo-only apps (2026-11-23, Devi: most
   # Omarchy apps can just substitute with Arch defaults/alternatives, do
   # NOT try to install the Omarchy-repo-only ones): gnome-calculator for
-  # omacalc (SUPER+SHIFT+Q, XF86Calculator), ncspot for cliamp (Music TUI,
-  # SUPER+SHIFT+ALT+M, a Spotify TUI, Arch extra), ghostwriter for omawrite
-  # (SUPER+SHIFT+W, a writing app, Arch extra). Screenshot (omasnap) is
+  # omacalc (SUPER+SHIFT+Q, XF86Calculator). Screenshot (omasnap) is
   # substituted in the fork patch step below: hexciri-capture-screenshot is
   # rewritten to grim + slurp, both already in CORE_PKGS. Spotify is NOT
   # here, it is AUR (yay -S spotify) in its own step below.
-  neovim tmux obsidian gpu-screen-recorder wf-recorder
+  tmux gpu-screen-recorder wf-recorder
   mpv zathura zathura-pdf-mupdf zathura-ps zathura-djvu zathura-cb
   zed playerctl bottom seahorse fwupd adw-gtk-theme tesseract tesseract-data-eng
-  cliphist libqalculate libreoffice-fresh pinta gnome-disk-utility
+  cliphist libqalculate libreoffice-fresh gnome-disk-utility
   lazygit yt-dlp gvfs zbar qrencode imv eject
-  gnome-calculator ncspot ghostwriter
+  gnome-calculator
 )
 if ! sudo pacman -S --needed --noconfirm "${APP_PKGS[@]}"; then
   warn "Bulk default-apps install failed, retrying per package (best-effort)."
@@ -367,7 +373,7 @@ fi
 # Devi 2026-11-23: "shift + super m is usually spotify." Upstream Omarchy
 # has NO Super+Shift+M bind at all: its only music bind is
 # Super+Shift+Alt+M = cliamp (Music TUI, Omarchy-repo-only), which the fork
-# patch step below repoints at ncspot. Super+Shift+M = Spotify is Devi's
+# patch step below REMOVES (ncspot not wanted, Devi 2026-11-23). Super+Shift+M = Spotify is Devi's
 # own bind, added by that same patch step.
 # Install method: v1 main install.sh installs no Spotify itself, but v1's
 # bin/hexciri-setup spotify subcommand expects a Spotify bundle at
@@ -404,7 +410,7 @@ fi
 
 # --- Pin Hexciri default apps ---
 # Same picks as v1 bin/hexciri-mime-defaults: browser brave-origin, PDF
-# zathura, images imv, editor zed (neovim fallback). Files (Strata) is
+# zathura, images imv, editor zed (nano fallback, neovim removed 2026-11-23). Files (Strata) is
 # pinned in the Strata step below, its desktop entry does not exist until
 # Strata is installed. State files live at ~/.local/state/hexciri/defaults/,
 # the same path launch-editor reads (renamed from omarchy by the fork).
@@ -440,9 +446,9 @@ if command -v zeditor >/dev/null 2>&1; then
 elif command -v zed >/dev/null 2>&1; then
   printf '%s' "zed" > "$HOME/.local/state/hexciri/defaults/editor"
   info "Default editor: zed"
-elif command -v nvim >/dev/null 2>&1; then
-  printf '%s' "nvim" > "$HOME/.local/state/hexciri/defaults/editor"
-  info "Default editor: neovim (zed not installed)"
+elif command -v nano >/dev/null 2>&1; then
+  printf '%s' "nano" > "$HOME/.local/state/hexciri/defaults/editor"
+  info "Default editor: nano (zed not installed, neovim removed 2026-11-23)"
 fi
 if command -v imv >/dev/null 2>&1; then
   printf '%s' "imv" > "$HOME/.local/state/hexciri/defaults/images"
@@ -690,11 +696,12 @@ copy_optional_path() {
 is_allowed_bin() {
   local name="$1"
   case "$name" in
-    launch-shell | omarchy | done | restart-* | theme-set | theme-set-templates | plugin-add | plugin-catalog | plugin-clone | plugin-disable | plugin-enable | plugin-list | plugin-remove | plugin-update | plugin-validate | bar | bar-text-color | shell | shell-config | migrate | migrate-notify | hook | hook-install | \
+    launch-shell | omarchy | done | toggle | dictation | default-dictation | dictation-* | restart-* | theme-set | theme-set-templates | plugin-add | plugin-catalog | plugin-clone | plugin-disable | plugin-enable | plugin-list | plugin-remove | plugin-update | plugin-validate | bar | bar-text-color | shell | shell-config | migrate | migrate-notify | hook | hook-install | \
       refresh-hyprland | hyprland-reload-guard | notification-send | menu | menu-clipboard | menu-emoji | menu-emoji-insert | menu-file | menu-herdr-keybindings | menu-images | menu-input | menu-keybindings | menu-plugin | menu-region-formats | menu-select | menu-share | menu-timezone | menu-tmux-keybindings | \
       provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | launch-* | \
       cmd-* | default-terminal | action | i18n | notification-wait | software-rendering | toggle-enabled | hyprland-toggle-enabled | hyprland-software-rendering | hw-software-rendering | powerprofiles-init | powerprofiles-set | powerprofiles-floor | powerprofiles-list | hyprland-monitor-watch | hyprland-monitor-clamshell | hyprland-monitor-modeless | hyprland-monitor-external-active | hyprland-monitor-identity | hyprland-monitor-internal | hyprland-monitor-internal-mirror | hyprland-monitor-laptop | hyprland-workspace-layout-current | hyprland-workspace-layout-toggle | hyprland-workspace-layout-default | hw-laptop | hw-clamshell | hw-external-monitors | system-lid-inhibit | restart-hyprctl | \
-      capture-* | system-* | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | cmd-present | reminder | transcode | transcode-* | tray-* | weather-* | tui-* | webapp-* | osd)
+      capture-* | system-* | system | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | pkg-add | pkg-missing | cmd-present | reminder | transcode | transcode-* | tray-* | weather-* | tui-* | webapp-* | osd | \
+      dock | dns | state | show-* | setup-* | device-* | apply-lock | sudo-passwordless | security-functions | display-* | monitor-* | network-* | font-* | disk-speedtest | file-select | input-method | git-url-check | kernel | language | locale-session | locale-generate | refresh-shell | refresh-tmux | refresh-hyprsunset | refresh-applications | refresh-config)
       # Dinner audit 2026-11-23: the families above were missing, so binds and
       # menu rows that call them failed with Command not found, exactly like
       # monitor-watch did. capture-* (screenshot/screenrecording/text/region),
@@ -711,13 +718,42 @@ is_allowed_bin() {
       # (weather panel calls weather-status/location/icon), tui-* and
       # webapp-* (menu Install/Remove rows call tui/webapp-install/remove,
       # which only create local .desktop launchers, no Omarchy repo).
+      # Menu audit 2026-11-23: bare names need listing too, a "system-*"
+      # pattern does NOT match bare "system" (and the same for dock, dns,
+      # state, region). Those four were never copied, which is why System >
+      # Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS
+      # and omarchy-system's own omarchy-state call all failed at once.
+      # Added families, each proved by a caller in the fork: setup-* (Setup
+      # wizards: git/hostname/keyboard/input/fingerprint/fido2/sshd/
+      # ssh-agent/passwordless-sudo), device-* (Trigger > Hardware touchpad
+      # / touchscreen / hybrid GPU), pkg-add + pkg-missing (trivial pacman
+      # wrappers the setup wizards call; NOT the install-* app machinery),
+      # apply-lock (writes /etc/pam.d/hexciri-lock-password, System > Lock
+      # needs it), sudo-passwordless + security-functions (its source),
+      # display-* + monitor-* (display panel: scale comes from
+      # monitor-state, text size from display-text-size), network-*
+      # (network panel: status/band/captive-portal/wifi-connected),
+      # font-* (fonts provider + display-text-size), disk-speedtest
+      # (disk-speedtest panel), file-select (branding pickers, menu-share),
+      # input-method (Super+I binds), git-url-check (plugin-add),
+      # kernel (kernels provider, Update > Kernel), language +
+      # locale-session + locale-generate (languages provider, Setup >
+      # Region > Language), refresh-shell/tmux/hyprsunset/applications/
+      # config (Update > Config rows; refresh-chromium/sddm/pacman/
+      # plymouth/limine/herdr stay out, they call install-*/plymouth).
+      # toggle (bare): hexciri-toggle-bar/crash-capture/screensaver/suspend/
+      # theme-sync all call it, it is a trivial flag-file script, and the
+      # sim proved it was missing (Hide/Show Bar menu rows failed on it).
+      # dictation + default-dictation + dictation-*: Setup > Defaults >
+      # Dictation rows and the Alt+Space bind. No backend is installed yet
+      # (install-dictation-* stays out), so dictation fails gracefully
+      # ("No dictation backend configured") until one is picked.
       # Deliberately still NOT included: install-*, remove-*, channel-*,
       # mirror-*, keyring-*, upgrade-* (app installers and Omarchy repo
       # machinery, out of the shell-only Phase 1 scope), and windows-vm
-      # (Docker/KVM VM manager, needs Docker; its menu row will fail if
-      # clicked, like the install/remove rows). Menu install/remove rows
-      # will fail if clicked, that is intended; their when/disabled checks use
-      # pkg-present, which IS included, so they still read as not installed.
+      # (Docker/KVM VM manager, needs Docker). The whole Install and
+      # Remove menu subtrees are deleted from the forked menu jsonc by the
+      # menu patch step below, so no dead install/remove row can be clicked.
       return 0
       ;;
     *)
@@ -806,6 +842,35 @@ copy_subsets() {
   if ! copy_optional_path "$OMARCHY_SRC/default/sddm" "$FORK_OUT/default/sddm" "default/sddm/"; then
     warn "default/sddm/ not found in source, SDDM will keep the EndeavourOS default theme."
   fi
+
+  # install/helpers: browser-policy.sh + as-root.sh, sourced by
+  # hexciri-theme-set-browser via $HEXCIRI_PATH/install/helpers/. This copy
+  # was missing, so every theme switch failed with
+  # "hexciri-theme-set-browser failed": the source died before the policy
+  # writer ever ran. Placement copies $FORK_OUT/install too (see below).
+  copy_optional_path "$OMARCHY_SRC/install/helpers" "$FORK_OUT/install/helpers" "install/helpers/" || warn "install/helpers/ not found in source, theme-set-browser will fail on every theme switch."
+  # etc/sudoers.d/omarchy-theme-browser: the passwordless rule for the
+  # privileged browser-policy writer. rename_files renames it to
+  # hexciri-theme-browser, rewrite_contents fixes its /usr/bin path (see
+  # the PACKAGED_PATH rule below). Installed to /etc/sudoers.d by the
+  # theme-browser step after placement, validated with visudo -cf.
+  mkdir -p "$FORK_OUT/etc/sudoers.d"
+  copy_optional_file "$OMARCHY_SRC/etc/sudoers.d/omarchy-theme-browser" "$FORK_OUT/etc/sudoers.d/omarchy-theme-browser" "etc/sudoers.d/omarchy-theme-browser" || warn "etc/sudoers.d/omarchy-theme-browser not found in source, theme-set-browser will fall back to pkexec and fail detached."
+  # Browser + terminal desktop entries for the dock pins (see placement):
+  # upstream applications/omarchy-browser.desktop + omarchy-terminal.desktop.
+  # rename_files turns them into hexciri-*.desktop, rewrite_contents fixes
+  # their Exec= lines to hexciri-launch-*. Only these two: the rest of
+  # applications/ is Omarchy web apps (ChatGPT, Herdr, ...), out of scope.
+  mkdir -p "$FORK_OUT/applications"
+  copy_optional_file "$OMARCHY_SRC/applications/omarchy-browser.desktop" "$FORK_OUT/applications/omarchy-browser.desktop" "applications/omarchy-browser.desktop" || warn "applications/omarchy-browser.desktop not found in source, dock Browser pin will not resolve."
+  copy_optional_file "$OMARCHY_SRC/applications/omarchy-terminal.desktop" "$FORK_OUT/applications/omarchy-terminal.desktop" "applications/omarchy-terminal.desktop" || warn "applications/omarchy-terminal.desktop not found in source, dock Terminal pin will not resolve."
+  # The two systemd files hexciri-apply-lock installs when fingers are
+  # enrolled (fprintd resume hook + stop-timeout override). Only these
+  # two: default/systemd/ as a whole is device-specific sleep hooks and
+  # services, out of scope.
+  mkdir -p "$FORK_OUT/default/systemd/system-sleep" "$FORK_OUT/default/systemd/system/fprintd.service.d"
+  copy_optional_file "$OMARCHY_SRC/default/systemd/system-sleep/fprintd-resume" "$FORK_OUT/default/systemd/system-sleep/fprintd-resume" "default/systemd/system-sleep/fprintd-resume" || warn "fprintd-resume hook not found in source, fingerprint resume may wedge fprintd after suspend."
+  copy_optional_file "$OMARCHY_SRC/default/systemd/system/fprintd.service.d/10-stop-timeout.conf" "$FORK_OUT/default/systemd/system/fprintd.service.d/10-stop-timeout.conf" "default/systemd/system/fprintd.service.d/10-stop-timeout.conf" || warn "fprintd stop-timeout override not found in source."
 
   # Bash env bootstrap and envs, renamed by the rename step below
   if ! copy_optional_path "$OMARCHY_SRC/default/bash/env-bootstrap" "$FORK_OUT/default/bash/env-bootstrap" "default/bash/env-bootstrap"; then
@@ -926,6 +991,22 @@ replacements = [
     # not: Lua identifiers cannot contain hyphens, so _G.omarchy_default_bindings
     # and table keys like value.omarchy are untouched by this rule.
     (b"omarchy-", b"hexciri-"),
+    # Fixed paths the generic hyphen rule gets wrong: these two start life
+    # as /usr/bin/omarchy-*, which the rule above turns into
+    # /usr/bin/hexciri-*, but Hexciri bins live in /usr/share/hexciri/bin,
+    # never /usr/bin. Both must be fixed AFTER the generic rule runs.
+    # theme-set-browser-policy: PACKAGED_PATH is the path the sudoers rule
+    # names; a wrong path here means require_root execs a nonexistent file
+    # and every theme switch reports hexciri-theme-set-browser failed.
+    (b"/usr/bin/hexciri-theme-set-browser-policy", b"/usr/share/hexciri/bin/hexciri-theme-set-browser-policy"),
+    # Fingerprint PAM clamshell gate: pam_exec needs a literal absolute
+    # path, and the gate binary is hexciri-hw-laptop-closed in the fork bin.
+    (b"/usr/bin/hexciri-hw-laptop-closed", b"/usr/share/hexciri/bin/hexciri-hw-laptop-closed"),
+    # Fingerprint packages: libfprint-git is an AUR package Omarchy builds
+    # with its own patches; the Framework 13 Goodix reader (27c6) is driven
+    # by stock libfprint, so install the Arch extra package instead. The
+    # script's own guard keeps a TOD-stack libfprint owner untouched.
+    (b"packages=(libfprint-git fprintd usbutils)", b"packages=(libfprint fprintd usbutils)"),
     # File manager: Devi's default is Strata (GitHub release, installed by
     # bin/hexciri-strata-install), not Omarchy's Folio. Targeted to the
     # uwsm-app invocation only: window-class rules in windows.lua/system.lua
@@ -1193,6 +1274,15 @@ fi
 export HEXCIRI_PATH
 export OMARCHY_PATH="$HEXCIRI_PATH"
 
+# PATH for the shell process itself: hexciri-launch-shell sources this file,
+# so Quickshell and everything it spawns (bar trigger, menu rows via
+# Util.execDetached, panel Processes) find hexciri-* even when the uwsm
+# session env did not carry /usr/share/hexciri/bin. Idempotent.
+case ":$PATH:" in
+  *:/usr/share/hexciri/bin:*) ;;
+  *) export PATH="/usr/share/hexciri/bin:$PATH" ;;
+esac
+
 declare -A HEXCIRI_PLUGIN_ALIASES=(
   [omarchy.bar]=hexciri.bar
   [omarchy.menu]=hexciri.menu
@@ -1422,12 +1512,12 @@ fi
 #    Upstream has them reversed (Super+Space = menu root,
 #    Super+Alt+Space = dock apps); swap the two chords in
 #    utilities.lua, keeping each bind's target with its line.
-# 2. Omarchy-repo-only apps are substituted with Arch defaults, per Devi
-#    2026-11-23 ("most omarchy apps we can just substitute with arch
-#    defaults/alternatives"), instead of leaving dead binds:
-#      omacalc -> gnome-calculator, cliamp -> ncspot, omawrite -> ghostwriter,
-#      herdr bind removed (AI agent, out of v2 scope; tmux is on
-#      Super+Alt+Return), omasnap -> grim + slurp in the capture script.
+# 2. Omarchy-repo-only apps: omacalc -> gnome-calculator (Arch extra).
+#    cliamp, omawrite and Obsidian binds are REMOVED, not substituted:
+#    Devi 2026-11-23 does not want ncspot, ghostwriter or obsidian, so
+#    there is no substitute to point those binds at. Herdr bind removed
+#    (AI agent, out of v2 scope; tmux is on Super+Alt+Return), omasnap ->
+#    grim + slurp in the capture script.
 # This is a small dead-bind fix, not the Phase 2 Hexciri Lua merge: no
 # windowrules, workspaces, or opacity edits live here.
 # Idempotent: every replacement checks it is not already applied, so a
@@ -1461,17 +1551,30 @@ if '"omacalc"' in s:
     s = s.replace('"omacalc"', '"gnome-calculator"')
     changed.append("omacalc -> gnome-calculator (Super+Shift+Q, XF86Calculator)")
 
-# 3. Music TUI: cliamp (Omarchy-repo-only) -> ncspot (Arch extra, Spotify TUI).
-if '{ tui = "cliamp", focus = true }' in s:
-    s = s.replace('{ tui = "cliamp", focus = true }', '{ tui = "ncspot", focus = true }')
-    changed.append("cliamp -> ncspot (Super+Shift+Alt+M Music TUI)")
+# 3. Music TUI: cliamp bind REMOVED, not repointed at ncspot: Devi
+#    2026-11-23 does not want ncspot, Super+Shift+Alt+M is unbound now.
+_old_music = '  o.bind("SUPER + SHIFT + ALT + M", "Music TUI", { tui = "cliamp", focus = true })'
+if _old_music in s:
+    s = s.replace(_old_music + "\n", "", 1)
+    changed.append("cliamp Music TUI bind removed (ncspot not wanted)")
+elif '{ tui = "cliamp", focus = true }' in s:
+    print("WARN: cliamp bind line shape changed, Music TUI bind NOT removed")
 
-# 4. Writing app: omawrite (Omarchy-repo-only) -> ghostwriter (Arch extra, Qt6, no pandoc/Haskell).
-old_write = 'o.bind("SUPER + SHIFT + W", "Omawrite", { launch = "omawrite" })'
-new_write = 'o.bind("SUPER + SHIFT + W", "Writing (Ghostwriter)", { launch = "ghostwriter", focus = "^ghostwriter$" })'
-if old_write in s:
-    s = s.replace(old_write, new_write)
-    changed.append("omawrite -> ghostwriter (Super+Shift+W)")
+# 4. Writing app: omawrite bind REMOVED, not repointed at ghostwriter:
+#    Devi 2026-11-23 does not want ghostwriter, Super+Shift+W is unbound.
+_old_write = '  o.bind("SUPER + SHIFT + W", "Omawrite", { launch = "omawrite" })'
+if _old_write in s:
+    s = s.replace(_old_write + "\n", "", 1)
+    changed.append("omawrite bind removed (ghostwriter not wanted)")
+elif '"omawrite"' in s:
+    print("WARN: omawrite bind line shape changed, bind NOT removed")
+
+# 4b. Obsidian: bind REMOVED, Devi 2026-11-23 does not want obsidian.
+# Runs AFTER the Spotify insert above, which anchors on this very line.
+_old_obsidian = '  o.bind("SUPER + SHIFT + O", "Obsidian", { launch = "obsidian", focus = "^obsidian$" })'
+if _old_obsidian in s:
+    s = s.replace(_old_obsidian + "\n", "", 1)
+    changed.append("Obsidian bind removed (obsidian not wanted, Super+Shift+O unbound)")
 
 # 5. Herdr: Omarchy AI-agent terminal, not installed in v2 (AI agents are
 # out of scope). Remove the bind instead of leaving a terminal that errors
@@ -1652,6 +1755,219 @@ fi
 else:
     print("bin/hexciri-capture-screenshot: already rewritten, skipping")
 PY
+# --- Patch menu audit fixes: dead rows out, shell IPC paths absolute ---
+# Menu audit 2026-11-23 (Devi: "basically super alt space menu needs a full
+# audit"): every menu entry was checked against the forked bin/ allowlist.
+# What this block does, all on the fork output before placement:
+#  1. Deletes menu subtrees whose scripts are deliberately NOT in the fork:
+#     Install + Remove (install-*/remove-*), Update > Channel (Hexciri has
+#     no channels), Update > Hexciri (hexciri-update is Phase 2, not done),
+#     Update > Games / Password (games-*/drive-* out of scope), Update >
+#     Config > Plymouth (plymouth out), System > Screensaver (no
+#     screensaver binary ships in v2), Appearance > Unlock (plymouth),
+#     Learn > Herdr keybindings (Herdr out), Setup > Default Editor >
+#     Neovim (neovim removed), Setup > Security > Sudoless Docker (Docker
+#     out). The upstream jsonc is untouched; Phase 2 can re-add rows with
+#     real installer support behind them.
+#  2. Menu "Apps" row + bar trigger call hexciri-shell by absolute path:
+#     both go through Util.execDetached, and a spawned process only finds
+#     hexciri-shell if the shell's env carries /usr/share/hexciri/bin on
+#     PATH. Super+Alt+Space works (Hyprland global shortcut, in-process)
+#     while the bar Arch icon and the menu Apps click do nothing: same
+#     spawn path, same missing lookup. Absolute path + the hexciri-shell
+#     HEXCIRI_PATH default below make both independent of that env.
+#  3. hexciri-shell defaults HEXCIRI_PATH to /usr/share/hexciri when unset
+#     instead of failing: it is the fixed install path, and compat.sh
+#     already applies the same default for the shell process itself.
+#  4. shell.qml + Menu.qml execArgv call sites for hexciri-shell /
+#     hexciri-menu-keybindings go absolute for the same reason.
+#  5. launch-editor falls back to nano (was nvim); default-editor loses
+#     its nvim choice (neovim removed, and its branch called the missing
+#     hexciri-pkg-add).
+# Idempotent: every replacement checks it is not already applied.
+step "Patching menu audit fixes: dead rows out, shell IPC paths absolute"
+python3 - "$FORK_OUT" <<'PY'
+import re
+import sys
+
+root = sys.argv[1]
+changed = []
+
+# 1. Delete dead menu rows, one entry per line in the jsonc.
+menu = root + "/default/hexciri/hexciri-menu.jsonc"
+with open(menu) as f:
+    lines = f.read().splitlines()
+drop = re.compile(
+    r'^\s*"(install(\..*)?|remove(\..*)?|update\.channel(\..*)?|'
+    r'update\.(hexciri|omarchy)|update\.games|update\.password|'
+    r'update\.config\.plymouth|system\.screensaver|'
+    r'learn\.herdr-keybindings|setup\.default\.editor\.neovim|'
+    r'setup\.security\.sudoless-docker|appearance\.unlock)"\s*:'
+)
+kept = []
+removed = []
+for line in lines:
+    if drop.match(line):
+        removed.append(line.strip()[:60])
+    else:
+        kept.append(line)
+if removed:
+    with open(menu, "w") as f:
+        f.write("\n".join(kept) + "\n")
+    changed.append("menu: removed %d dead rows (install/remove subtrees, update channels, update.hexciri, screensaver, unlock, herdr keys, neovim editor, sudoless-docker)" % len(removed))
+    for r in removed[:8]:
+        print("  menu removed: " + r)
+    if len(removed) > 8:
+        print("  menu removed: ... and %d more" % (len(removed) - 8))
+else:
+    print("menu: no dead rows found (already patched?)")
+
+with open(menu) as f:
+    m = f.read()
+m_orig = m
+# 2. Menu Apps row: absolute hexciri-shell path.
+if '"action":"hexciri-shell hexciri.dock apps"' in m:
+    m = m.replace('"action":"hexciri-shell hexciri.dock apps"', '"action":"/usr/share/hexciri/bin/hexciri-shell hexciri.dock apps"')
+    changed.append("menu apps row: hexciri-shell by absolute path")
+elif "/usr/share/hexciri/bin/hexciri-shell hexciri.dock apps" in m:
+    print("menu apps row already absolute, skipping")
+else:
+    print("WARN: menu apps action not found, apps row NOT patched")
+
+if m != m_orig:
+    with open(menu, "w") as f:
+        f.write(m)
+
+# 3. hexciri-shell: default HEXCIRI_PATH instead of failing when unset.
+sh = root + "/bin/hexciri-shell"
+with open(sh) as f:
+    shs = f.read()
+sh_orig = shs
+_old_fail = '[[ -n ${HEXCIRI_PATH:-} ]] || fail "HEXCIRI_PATH is not set"'
+_new_def = '[[ -n ${HEXCIRI_PATH:-} ]] || HEXCIRI_PATH="/usr/share/hexciri"'
+if _old_fail in shs:
+    shs = shs.replace(_old_fail, _new_def, 1)
+    changed.append("hexciri-shell: HEXCIRI_PATH defaults to /usr/share/hexciri when unset")
+elif _new_def in shs:
+    print("hexciri-shell default already present, skipping")
+else:
+    print("WARN: hexciri-shell HEXCIRI_PATH check not found, default NOT applied")
+if shs != sh_orig:
+    with open(sh, "w") as f:
+        f.write(shs)
+
+# 4. Bar trigger + shell/menu execArgv call sites: absolute hexciri-shell.
+bw = root + "/shell/plugins/menu/BarWidget.qml"
+with open(bw) as f:
+    b = f.read()
+b_orig = b
+if 'root.bar.run("hexciri-shell shell toggle hexciri.menu' in b:
+    b = b.replace('root.bar.run("hexciri-shell shell toggle hexciri.menu', 'root.bar.run("/usr/share/hexciri/bin/hexciri-shell shell toggle hexciri.menu', 1)
+    changed.append("bar trigger: hexciri-shell by absolute path")
+elif "/usr/share/hexciri/bin/hexciri-shell shell toggle hexciri.menu" in b:
+    print("bar trigger already absolute, skipping")
+else:
+    print("WARN: bar trigger hexciri-shell call not found, trigger NOT patched")
+if b != b_orig:
+    with open(bw, "w") as f:
+        f.write(b)
+
+sq = root + "/shell/shell.qml"
+with open(sq) as f:
+    q = f.read()
+q_orig = q
+if 'Util.execArgv(["hexciri-shell", target, method])' in q:
+    q = q.replace('Util.execArgv(["hexciri-shell", target, method])', 'Util.execArgv(["/usr/share/hexciri/bin/hexciri-shell", target, method])', 1)
+    changed.append("shell.qml: hexciri-shell execArgv by absolute path")
+elif 'Util.execArgv(["/usr/share/hexciri/bin/hexciri-shell", target, method])' in q:
+    print("shell.qml execArgv already absolute, skipping")
+else:
+    print("WARN: shell.qml hexciri-shell execArgv not found, NOT patched")
+if q != q_orig:
+    with open(sq, "w") as f:
+        f.write(q)
+
+mq = root + "/shell/plugins/menu/Menu.qml"
+with open(mq) as f:
+    mq_s = f.read()
+mq_orig = mq_s
+if 'Util.execArgv(["hexciri-menu-keybindings", "--dispatch", kbEntry.dispatcher, kbEntry.arg])' in mq_s:
+    mq_s = mq_s.replace('Util.execArgv(["hexciri-menu-keybindings", "--dispatch", kbEntry.dispatcher, kbEntry.arg])', 'Util.execArgv(["/usr/share/hexciri/bin/hexciri-menu-keybindings", "--dispatch", kbEntry.dispatcher, kbEntry.arg])', 1)
+    changed.append("Menu.qml: hexciri-menu-keybindings execArgv by absolute path")
+elif "/usr/share/hexciri/bin/hexciri-menu-keybindings" in mq_s:
+    print("Menu.qml execArgv already absolute, skipping")
+else:
+    print("WARN: Menu.qml hexciri-menu-keybindings execArgv not found, NOT patched")
+if mq_s != mq_orig:
+    with open(mq, "w") as f:
+        f.write(mq_s)
+
+# 5. Editor fallbacks: launch-editor nvim -> nano, default-editor nvim out.
+le = root + "/bin/hexciri-launch-editor"
+with open(le) as f:
+    le_s = f.read()
+le_orig = le_s
+if '|| editor="nvim"' in le_s:
+    le_s = le_s.replace('|| editor="nvim"', '|| editor="nano"', 1)
+    changed.append("launch-editor fallback nvim -> nano")
+elif '|| editor="nano"' in le_s:
+    print("launch-editor fallback already nano, skipping")
+else:
+    print("WARN: launch-editor nvim fallback not found, NOT patched")
+if le_s != le_orig:
+    with open(le, "w") as f:
+        f.write(le_s)
+
+de = root + "/bin/hexciri-default-editor"
+with open(de) as f:
+    de_s = f.read()
+de_orig = de_s
+de_s = re.sub(r'^nvim\) selection="nvim"; editor="nvim"; name="Neovim"; glyph=.*$\n', "", de_s, flags=re.M)
+de_s = re.sub(r'^\s*nvim\) hexciri-pkg-add neovim ;;$\n', "", de_s, flags=re.M)
+de_s = de_s.replace("<plain|code|cursor|zed|sublime_text|helix|vim|emacs|nvim>", "<plain|code|cursor|zed|sublime_text|helix|vim|emacs>")
+if de_s != de_orig:
+    with open(de, "w") as f:
+        f.write(de_s)
+    changed.append("default-editor: nvim choice removed (neovim not installed)")
+else:
+    print("default-editor: nvim choice already gone, skipping")
+
+# 6. Herdr autostart: default/hypr/autostart.lua unconditionally starts a
+#    Herdr server on every boot (systemd-run ... herdr server). Herdr is
+#    deliberately out of v2 (bind removed, AI agents out of scope), so the
+#    unit fails quietly on every boot. Remove the block, comments and all.
+auto = root + "/default/hypr/autostart.lua"
+with open(auto) as f:
+    a_lines = f.read().splitlines()
+a_start = None
+for i, l in enumerate(a_lines):
+    if "-- Start the herdr server inside the graphical session" in l:
+        a_start = i
+        break
+if a_start is not None:
+    a_end = None
+    for j in range(a_start, len(a_lines)):
+        if a_lines[j] == "  )":
+            a_end = j + 1
+            break
+    if a_end is not None:
+        del a_lines[a_start:a_end]
+        if a_start < len(a_lines) and a_lines[a_start] == "":
+            del a_lines[a_start]
+        with open(auto, "w") as f:
+            f.write("\n".join(a_lines) + "\n")
+        changed.append("autostart: Herdr server block removed (Herdr out of v2 scope)")
+    else:
+        print("menu audit: herdr autostart block end not found, skipping")
+else:
+    print("menu audit: herdr autostart block already gone, skipping")
+
+for c in changed:
+    print("menu audit: " + c)
+if not changed:
+    print("menu audit: no changes needed")
+PY
+
 # Syntax-check the patched Lua at install time, like the hexciri.lua check
 # above: a bad bind would otherwise only surface as a Hyprland error at boot.
 if command -v luac5.1 >/dev/null 2>&1; then
@@ -1667,7 +1983,7 @@ elif command -v luac >/dev/null 2>&1; then
   luac -p "$FORK_OUT/default/hypr/bindings/utilities.lua" && info "utilities.lua patch OK (luac syntax OK)" || warn "luac syntax check failed on patched utilities.lua, Hyprland will report the real error at boot if this is broken."
 fi
 bash -n "$FORK_OUT/bin/hexciri-capture-screenshot" || die "bash -n failed on rewritten $FORK_OUT/bin/hexciri-capture-screenshot"
-info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, ncspot, ghostwriter, bottom, Herdr removed, screenshot via grim+slurp, touchpad bottom-right = right click"
+info "Bind patch done: Super+Space apps / Super+Alt+Space menu swap, Super+Shift+M Spotify, gnome-calculator, bottom, Herdr removed, cliamp/omawrite/Obsidian binds removed (ncspot/ghostwriter/obsidian not wanted), screenshot via grim+slurp, touchpad bottom-right = right click"
 
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
@@ -1677,9 +1993,9 @@ step "Placing forked tree: /usr/share/hexciri (sudo), ~/.config, ~/.local/state"
 
 sudo rm -rf "$HEXCIRI_PATH"
 sudo mkdir -p "$HEXCIRI_PATH"
-sudo cp -a "$FORK_OUT/shell" "$FORK_OUT/default" "$FORK_OUT/themes" "$FORK_OUT/bin" "$HEXCIRI_PATH/"
+sudo cp -a "$FORK_OUT/shell" "$FORK_OUT/default" "$FORK_OUT/themes" "$FORK_OUT/bin" "$FORK_OUT/install" "$HEXCIRI_PATH/"
 sudo chmod +x "$HEXCIRI_PATH"/bin/* 2>/dev/null || true
-info "Installed: $HEXCIRI_PATH/shell, $HEXCIRI_PATH/default, $HEXCIRI_PATH/themes, $HEXCIRI_PATH/bin"
+info "Installed: $HEXCIRI_PATH/shell, $HEXCIRI_PATH/default, $HEXCIRI_PATH/themes, $HEXCIRI_PATH/bin, $HEXCIRI_PATH/install (browser-policy helpers)"
 
 mkdir -p "$HOME/.config/hypr" "$HOME/.config/hexciri" \
   "$HOME/.local/state/hexciri/current" "$HOME/.local/state/hexciri/toggles/hypr" \
@@ -1721,6 +2037,21 @@ for bin_file in "$HEXCIRI_PATH"/bin/hexciri-*; do
   ln -sf "$bin_file" "$HOME/.local/bin/$(basename "$bin_file")"
 done
 info "Linked: $HEXCIRI_PATH/bin/hexciri-* into ~/.local/bin/"
+
+# Browser + terminal desktop entries: upstream applications/ ships
+# omarchy-browser.desktop and omarchy-terminal.desktop, renamed to
+# hexciri-*.desktop by the fork. The dock filters its pinned list by
+# DesktopEntries.byId(id), so without these files in
+# ~/.local/share/applications the Browser and Terminal pins resolve to
+# nothing and the dock shows no pinned apps at all. Only these two are
+# placed: the other applications/*.desktop files are Omarchy web apps
+# (ChatGPT, Herdr, Discord, ...) and AI/out-of-scope entries.
+mkdir -p "$HOME/.local/share/applications"
+for desk_file in "$FORK_OUT"/applications/*.desktop; do
+  [ -e "$desk_file" ] || continue
+  cp -a "$desk_file" "$HOME/.local/share/applications/$(basename "$desk_file")"
+  info "Placed desktop entry: $HOME/.local/share/applications/$(basename "$desk_file")"
+done
 
 # hexciri CLI on PATH everywhere, not just login shells: /usr/local/bin is
 # on the default PATH for login and non-login shells alike, and Kitty runs
@@ -1924,6 +2255,32 @@ for _bin in hexciri hexciri-menu hexciri-shell hexciri-launch-terminal hexciri-l
   [ -x "$HEXCIRI_PATH/bin/$_bin" ] || die "missing bin (Super+Space apps / Super+Alt+Space menu / update will fail): $_bin"
 done
 unset _bin
+# Menu audit 2026-11-23: every bin a kept menu row / panel calls must exist.
+# Bare "system" (not system-*) was the System power rows' failure, "dock"
+# the Appearance > Dock rows', "dns" the Setup > Network > DNS rows',
+# "state" is called by hexciri-system itself, monitor-state + display-
+# text-size feed the display panel's scale, network-* feeds the network
+# panel, apply-lock writes the lock PAM file, setup-* are the Setup
+# wizards, pkg-add/pkg-missing are their pacman primitives.
+for _bin in hexciri-system hexciri-dock hexciri-dns hexciri-state hexciri-setup-git hexciri-setup-hostname hexciri-setup-keyboard hexciri-setup-input hexciri-setup-security-fingerprint hexciri-setup-security-fido2 hexciri-setup-security-sshd hexciri-setup-security-ssh-agent hexciri-sudo-passwordless hexciri-security-functions hexciri-apply-lock hexciri-pkg-add hexciri-pkg-missing hexciri-monitor-state hexciri-display-text-size hexciri-network-status hexciri-network-band hexciri-network-wifi-connected hexciri-network-captive-portal hexciri-network-password hexciri-network-qr hexciri-network-speedtest hexciri-region hexciri-font-list hexciri-font-current hexciri-font-set hexciri-show-logo hexciri-show-done hexciri-file-select hexciri-input-method hexciri-git-url-check hexciri-disk-speedtest hexciri-kernel hexciri-language hexciri-locale-session hexciri-locale-generate hexciri-refresh-shell hexciri-refresh-tmux hexciri-refresh-hyprsunset hexciri-refresh-applications hexciri-refresh-config hexciri-device-touchpad hexciri-device-touchscreen hexciri-theme-set-browser-policy hexciri-toggle hexciri-dictation hexciri-default-dictation; do
+  [ -x "$HEXCIRI_PATH/bin/$_bin" ] || die "missing bin (menu audit 2026-11-23, a kept menu row or panel calls it): $_bin"
+done
+unset _bin
+[ -f "$HEXCIRI_PATH/install/helpers/browser-policy.sh" ] || die "missing: install/helpers/browser-policy.sh, theme-set-browser fails on every theme switch"
+[ -f "$HEXCIRI_PATH/install/helpers/as-root.sh" ] || die "missing: install/helpers/as-root.sh, theme-set-browser fails on every theme switch"
+[ -f "$FORK_OUT/etc/sudoers.d/hexciri-theme-browser" ] || die "missing: fork etc/sudoers.d/hexciri-theme-browser, theme-set-browser falls back to pkexec"
+grep -q '/usr/share/hexciri/bin/hexciri-theme-set-browser-policy' "$FORK_OUT/etc/sudoers.d/hexciri-theme-browser" || die "sudoers hexciri-theme-browser does not name /usr/share/hexciri/bin/hexciri-theme-set-browser-policy"
+grep -q 'HEXCIRI_PATH="/usr/share/hexciri"' "$HEXCIRI_PATH/bin/hexciri-shell" || die "hexciri-shell does not default HEXCIRI_PATH, bar trigger and menu Apps click depend on session env"
+grep -q '/usr/share/hexciri/bin/hexciri-shell shell toggle hexciri.menu' "$HEXCIRI_PATH/shell/plugins/menu/BarWidget.qml" || die "bar trigger does not call hexciri-shell by absolute path"
+grep -q '/usr/share/hexciri/bin/hexciri-shell hexciri.dock apps' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu apps row does not call hexciri-shell by absolute path"
+# Dead menu rows must be gone from the forked jsonc, not just uncallable.
+for _dead in '"install.' '"remove.' '"update.channel' '"update.hexciri"' '"update.omarchy"' '"system.screensaver"' '"learn.herdr-keybindings"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
+  if grep -q "$_dead" "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc"; then
+    die "dead menu row still present in hexciri-menu.jsonc: $_dead"
+  fi
+done
+unset _dead
+info "PASS: menu audit verified (dead rows gone, audit bins present, shell IPC paths absolute)"
 [ -f "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" ] || die "missing: default/hexciri/hexciri-menu.jsonc, Super+Alt+Space menu has no routes"
 if ! grep -rl 'hexciri.menu' "$HEXCIRI_PATH/shell/plugins" --include='manifest.json' >/dev/null 2>&1; then
   warn "no plugin manifest registers hexciri.menu, Super+Alt+Space menu will do nothing"
@@ -1932,6 +2289,59 @@ if ! grep -rl 'hexciri.dock' "$HEXCIRI_PATH/shell/plugins" --include='manifest.j
   warn "no plugin manifest registers hexciri.dock, Super+Space apps will do nothing"
 fi
 info "PASS: placement verified"
+
+# --- Browser policy for theme-set-browser + lock PAM ---
+# Two post-placement fixes, both best-effort except the sudoers validation:
+#  1. hexciri-theme-set-browser failed on every theme switch for four
+#     stacked reasons, all fixed here: install/helpers/ was never copied
+#     (copy_subsets now copies it), the privileged writer's PACKAGED_PATH
+#     still pointed at /usr/bin (rewrite rule now points it at
+#     /usr/share/hexciri/bin), the passwordless sudoers rule was never
+#     installed (installed below, validated with visudo -cf), and
+#     /etc/brave/policies/managed did not exist (the writer only touches
+#     dirs that exist, so Brave Origin never got a color.json). The writer
+#     runs detached with no TTY, so without the sudoers rule require_root
+#     falls through to pkexec and fails silently.
+#  2. System > Lock did nothing: the lock plugin needs
+#     /etc/pam.d/hexciri-lock-password to exist (passwordPamConfigured is
+#     false until it loads, and lock returns "missing-pam"). Omarchy's
+#     package installs it; the fork never did. hexciri-apply-lock writes
+#     it (plus the fingerprint PAM file when fingers are enrolled).
+
+step "Installing browser-policy sudoers + Brave policy dir (theme-set-browser)"
+if [ -f "$FORK_OUT/etc/sudoers.d/hexciri-theme-browser" ]; then
+  TMP_SUDOERS="$(mktemp)"
+  cp -a "$FORK_OUT/etc/sudoers.d/hexciri-theme-browser" "$TMP_SUDOERS"
+  if visudo -cf "$TMP_SUDOERS" >/dev/null 2>&1; then
+    sudo install -Dm440 "$TMP_SUDOERS" /etc/sudoers.d/hexciri-theme-browser && info "Installed: /etc/sudoers.d/hexciri-theme-browser (passwordless browser-policy write)" || warn "could not install /etc/sudoers.d/hexciri-theme-browser, theme switch falls back to pkexec"
+  else
+    warn "sudoers hexciri-theme-browser failed visudo -cf, NOT installed (theme switch falls back to pkexec)"
+  fi
+  rm -f "$TMP_SUDOERS"
+else
+  warn "fork etc/sudoers.d/hexciri-theme-browser not found, theme switch falls back to pkexec"
+fi
+if command -v brave-origin >/dev/null 2>&1; then
+  sudo install -d -m 0755 -o root -g root /etc/brave /etc/brave/policies /etc/brave/policies/managed 2>/dev/null && info "Created: /etc/brave/policies/managed (Brave Origin theme color.json goes here)" || warn "could not create /etc/brave/policies/managed, theme-set-browser will skip Brave Origin"
+else
+  warn "Brave Origin not installed yet, /etc/brave/policies/managed not created (theme-set-browser skips Brave until it is)"
+fi
+
+step "Configuring lock screen PAM (System > Lock)"
+if [ -x "$HEXCIRI_PATH/bin/hexciri-apply-lock" ]; then
+  if sudo "$HEXCIRI_PATH/bin/hexciri-apply-lock" 2>/dev/null; then
+    info "Lock PAM configured: /etc/pam.d/hexciri-lock-password"
+  else
+    warn "hexciri-apply-lock failed (not fatal), System > Lock may return missing-pam until it runs. Run by hand: sudo hexciri-apply-lock"
+  fi
+else
+  warn "hexciri-apply-lock not found, System > Lock will return missing-pam"
+fi
+# System > About measured its floating size against the old fastfetch
+# config/logo once and remembered it in about.fit; the Hexciri config and
+# logo changed since, so the remembered size is wrong. Delete it and the
+# next About launch re-measures.
+rm -f "$HOME/.local/state/hexciri/windows/about.fit" 2>/dev/null || true
 
 # --- Apply a default theme, like v1 does its theme sync ---
 # v1 finishes with a theme applied, not just themes installed. Pick the
@@ -2072,6 +2482,32 @@ if [ -x "$HOME/.local/bin/strata" ]; then
 else
   warn "strata binary not found at ~/.local/bin/strata after install step, Super+Shift+F will error until it is installed"
 fi
+# Strata "Follow Omarchy" reads ~/.local/state/omarchy/current/theme/
+# colors.toml. v2 stages themes at ~/.local/state/hexciri/current/theme/,
+# so Strata sees nothing there and never follows a theme switch. v1
+# fixed this with per-file symlinks in theme_set(); recreate them here
+# and on every theme switch via a theme-set.d hook (theme-set calls
+# hexciri-hook theme-set at the end of every switch). The whole-dir
+# symlink guard mirrors v1 theme_ensure(): if
+# ~/.local/state/omarchy/current is itself a symlink (older variant of
+# the trick), remove it first so the per-file links land on real dirs.
+mkdir -p "$HOME/.config/hexciri/hooks/theme-set.d"
+cat > "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-strata-theme" <<'STRATA_HOOK_EOF'
+#!/bin/bash
+# Hexciri: Strata Follow-Omarchy compat. Point Strata's Omarchy theme
+# state at Hexciri's live theme files, so Strata recolors on theme switch.
+# Runs on every theme switch (theme-set hook) and once at install.
+if [ -L "$HOME/.local/state/omarchy/current" ]; then
+  rm -f "$HOME/.local/state/omarchy/current"
+fi
+if command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ]; then
+  mkdir -p "$HOME/.local/state/omarchy/current/theme"
+  ln -sfn "$HOME/.local/state/hexciri/current/theme.name" "$HOME/.local/state/omarchy/current/theme.name"
+  ln -sfn "$HOME/.local/state/hexciri/current/theme/colors.toml" "$HOME/.local/state/omarchy/current/theme/colors.toml"
+fi
+STRATA_HOOK_EOF
+chmod +x "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-strata-theme"
+bash "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-strata-theme" 2>/dev/null && info "Installed: Strata Follow-Omarchy theme symlinks (theme-set.d hook + applied now)" || warn "Strata theme symlink hook failed, Strata will not follow live theme changes"
 
 # --- Spotify fallback wrapper (post-placement) ---
 # The Super+Shift+M bind calls `spotify`. The AUR `spotify` package
@@ -2093,25 +2529,38 @@ fi
 # --- Trim bloat, and keep it trimmed on updates ---
 # Devi 2026-11-23: 1322 packages is a bit much. The Haskell tree came from
 # apostrophe -> python-pypandoc -> pandoc-cli -> ghc-libs + ~200 haskell-*
-# packages; apostrophe is replaced by ghostwriter (Qt6, no pandoc), so the
-# tree is removed here and never installed again (apostrophe is out of
-# APP_PKGS, ghostwriter is in). foot and btop were never installed by this
+# packages; apostrophe is out of APP_PKGS and its tree is removed here and
+# never installed again. foot and btop were never installed by this
 # installer (Kitty over Foot, bottom over btop) but were left over from the
 # EndeavourOS base / an earlier install, so they are removed here too.
+# 2026-11-23: ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta,
+# xterm and stoken join the trim list (Devi does not want them, see the
+# trim script comment for what each one was). They are out of every
+# package list too, so they cannot come back through an install.
 # Reinstall is prevented three ways: the packages are out of every list
 # (CORE_PKGS / APP_PKGS here, v2/hexciri-base.packages), this step removes
 # them if present, and a post-update hook (below) re-runs the trim on every
 # hexciri-update, so a future -Syu that would pull one back as a dependency
 # gets it removed again right after. pacman -Syu itself never installs new
 # packages, so the hook is the backstop, not the mechanism.
-step "Trimming bloat: foot, btop, apostrophe, pandoc-cli / Haskell"
+step "Trimming bloat: foot, btop, apostrophe, pandoc-cli / Haskell, ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta, xterm, stoken"
 cat > "$HOME/.local/bin/hexciri-trim-bloat" <<'TRIM_EOF'
 #!/bin/bash
 # Hexciri 2.0: remove packages Devi does not want, best-effort, idempotent.
 # Runs at install time and from the post-update hook, so an update can never
 # leave them installed again. pacman -Rns refuses if something still depends
 # on a package, so a removal here is always safe. sudo -n never prompts.
-for _pkg in foot btop apostrophe pandoc-cli; do
+# 2026-11-23 removals, Devi does not want them: ghostwriter (markdown
+# editor, was the omawrite substitute), meld (diff/merge tool), ncspot
+# (Spotify TUI, was the cliamp substitute), neovim + vim (nano ships in
+# Arch base and is the editor fallback now; vim is in the Arch base group,
+# -Rns refuses if anything actually depends on it), obsidian (notes),
+# pinta (image editor), xterm (provides xterm AND uxterm, both entries
+# gone with the one package), stoken (Software Token + Software Token
+# (small): RSA SecurID-compatible software token, CLI + GTK GUI, one
+# package behind both desktop entries). yad is deliberately NOT here:
+# eos-bash-shared depends on it, its entry is hidden instead (above).
+for _pkg in foot btop apostrophe pandoc-cli ghostwriter meld ncspot neovim vim obsidian pinta xterm stoken; do
   if pacman -Q "$_pkg" >/dev/null 2>&1; then
     if sudo -n pacman -Rns --noconfirm "$_pkg" 2>/dev/null; then
       echo "trim-bloat: removed $_pkg"
@@ -2137,6 +2586,26 @@ TRIM_EOF
 chmod +x "$HOME/.local/bin/hexciri-trim-bloat"
 sudo ln -sf "$HOME/.local/bin/hexciri-trim-bloat" "$HEXCIRI_PATH/bin/hexciri-trim-bloat" 2>/dev/null || warn "could not link hexciri-trim-bloat into $HEXCIRI_PATH/bin"
 "$HOME/.local/bin/hexciri-trim-bloat" || warn "trim-bloat run failed, not fatal"
+# YAD settings: Devi does not want the "YAD settings" app entry. yad
+# itself CANNOT be removed: eos-bash-shared depends on yad, and
+# eos-bash-shared is required by welcome, eos-log-tool, eos-rankmirrors,
+# reflector-simple, eos-apps-info, eos-update-notifier and akm, several of
+# which Devi keeps (Welcome, Reflector Simple, EOS apps info, EOS log
+# tool are in his apps grid). pacman -Rns yad is refused anyway. Hide
+# just the yad-settings desktop entry with a NoDisplay override instead;
+# the Icon Browser entry (yad-icon-browser, same package) is untouched,
+# Devi did not ask to remove it.
+mkdir -p "$HOME/.local/share/applications"
+if [ -f /usr/share/applications/yad-settings.desktop ]; then
+  cp -a /usr/share/applications/yad-settings.desktop "$HOME/.local/share/applications/yad-settings.desktop"
+  if ! grep -q '^NoDisplay=' "$HOME/.local/share/applications/yad-settings.desktop"; then
+    printf 'NoDisplay=true\n' >> "$HOME/.local/share/applications/yad-settings.desktop"
+  fi
+  info "Hidden: YAD settings app entry (NoDisplay override, yad package kept for EOS tools)"
+else
+  warn "yad-settings.desktop not found, nothing to hide"
+fi
+
 # Post-update hook: hexciri-update runs `hexciri-hook post-update` at the end
 # of every update, and the hook runner executes every script in
 # ~/.config/hexciri/hooks/post-update.d/. This one re-runs the trim, so the
@@ -2150,7 +2619,7 @@ cat > "$HOME/.config/hexciri/hooks/post-update.d/10-hexciri-trim-bloat" <<'HOOK_
 hexciri-trim-bloat 2>/dev/null || "$HOME/.local/bin/hexciri-trim-bloat" 2>/dev/null || true
 HOOK_EOF
 chmod +x "$HOME/.config/hexciri/hooks/post-update.d/10-hexciri-trim-bloat"
-info "Installed: hexciri-trim-bloat + post-update hook (foot/btop/apostrophe/pandoc-cli stay removed)"
+info "Installed: hexciri-trim-bloat + post-update hook (foot/btop/apostrophe/pandoc-cli/ghostwriter/meld/ncspot/neovim/vim/obsidian/pinta/xterm/stoken stay removed)"
 # First-update marker: the install itself is the first update, so mark it.
 # Without this, hexciri-update-available counts every pending pacman update
 # on first boot and the update icon never clears.
@@ -2213,7 +2682,9 @@ else
   warn "  browser: Brave Origin NOT installed, Super+Shift+Return / Super+Shift+B will fail"
 fi
 if command -v zathura >/dev/null 2>&1; then info "  pdf: zathura present"; else warn "  pdf: zathura NOT installed"; fi
-if command -v obsidian >/dev/null 2>&1; then info "  notes: obsidian present"; else warn "  notes: obsidian NOT installed, Super+Shift+O will fail"; fi
+if [ -f /etc/pam.d/hexciri-lock-password ]; then info "  lock PAM: /etc/pam.d/hexciri-lock-password present (System > Lock works)"; else warn "  lock PAM: missing, System > Lock returns missing-pam (run: sudo hexciri-apply-lock)"; fi
+if [ -f /etc/sudoers.d/hexciri-theme-browser ]; then info "  browser policy sudoers: present (theme switch repaints Brave)"; else warn "  browser policy sudoers: missing, theme switch reports hexciri-theme-set-browser failed"; fi
+command -v fprintd >/dev/null 2>&1 && info "  fingerprint: fprintd present (Setup > Security > Fingerprint)" || warn "  fingerprint: fprintd NOT installed, Setup > Security > Fingerprint will fail"
 if command -v mpv >/dev/null 2>&1; then info "  video: mpv present"; else warn "  video: mpv NOT installed"; fi
 if command -v gpu-screen-recorder >/dev/null 2>&1; then info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
 if command -v localsend >/dev/null 2>&1; then info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
@@ -2223,8 +2694,6 @@ command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$
 command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
 if command -v spotify >/dev/null 2>&1; then info "  music: spotify present (Super+Shift+M)"; elif command -v spotify-launcher >/dev/null 2>&1; then info "  music: spotify-launcher present (Super+Shift+M via wrapper)"; else warn "  music: Spotify NOT installed, Super+Shift+M will fail"; fi
 command -v gnome-calculator >/dev/null 2>&1 && info "  calculator: gnome-calculator present (Super+Shift+Q)" || warn "  calculator: gnome-calculator NOT installed, Super+Shift+Q will fail"
-command -v ncspot >/dev/null 2>&1 && info "  music TUI: ncspot present (Super+Shift+Alt+M)" || warn "  music TUI: ncspot NOT installed, Super+Shift+Alt+M will fail"
-command -v ghostwriter >/dev/null 2>&1 && info "  writing: ghostwriter present (Super+Shift+W)" || warn "  writing: ghostwriter NOT installed, Super+Shift+W will fail"
 command -v hexciri >/dev/null 2>&1 && info "  cli: hexciri present" || warn "  cli: hexciri NOT on PATH, hexciri plugin list will fail"
 command -v checkupdates >/dev/null 2>&1 && info "  update check: checkupdates present (update icon)" || warn "  update check: checkupdates NOT installed, update icon never shows"
 [ -f "$HOME/.config/kitty/kitty.conf" ] && info "  kitty config: ~/.config/kitty/kitty.conf present (theme include)" || warn "  kitty config: not placed, Kitty will not load theme colours"
@@ -2252,21 +2721,35 @@ Reboot, then check in order:
   7. Bluetooth works if needed: `bluetoothctl devices`
   8. Theme: `hexciri-theme-set` with a stock theme, check bar and menu recolor
   9. Plugin: install a stock plugin, check it loads, check the alias resolves omarchy.bar to hexciri.bar
-  10. Apps / menu: Super+Space opens the apps (dock apps), Super+Alt+Space opens the menu (Arch logo at the bar's left end). These now go through Hyprland global shortcuts (default/hexciri/shortcuts), not spawned commands, so they should work even if PATH is off.
+  10. Apps / menu: Super+Space opens the apps (dock apps), Super+Alt+Space opens the menu. Clicking the Arch logo at the bar's left end opens the menu too (bar trigger now calls hexciri-shell by absolute path), and clicking Apps inside the menu opens the app grid the same way. Both go through Hyprland global shortcuts for the keys, spawned hexciri-shell for the clicks.
   11. File manager: Super+Shift+F opens Strata, terminal opens Kitty
   12. Clock popup shows the real month and weekday names, not clock.monthYear / clock.weekShort
   13. Workspace 1 shows 1 / its mode glyph, and SDDM shows the Hexciri emblem, not Omarchy logos
-  14. Default apps: Super+Shift+Return opens Brave Origin (default browser), Super+Shift+N opens Zed, Super+Shift+O opens Obsidian, Super+Alt+Return opens tmux in Kitty, menu Capture > Screenrecord records (gpu-screen-recorder), menu Share > Receive opens LocalSend
+  14. Default apps: Super+Shift+Return opens Brave Origin (default browser), Super+Shift+N opens Zed (nano is the fallback now, neovim removed), Super+Alt+Return opens tmux in Kitty, menu Capture > Screenrecord records (gpu-screen-recorder), menu Share > Receive opens LocalSend. Super+Shift+O (Obsidian), Super+Shift+Alt+M (ncspot) and Super+Shift+W (Ghostwriter) are unbound now, those apps were removed 2026-11-23.
   15. fastfetch: run `fastfetch` in Kitty, Hexciri logo + layout, not stock, WM shows Hyprland | Quickshell, not Niri | Noctalia
-  16. Spotify + Arch substitutes: Super+Shift+M opens Spotify, Super+Shift+Q opens the calculator (gnome-calculator), PRINT takes a screenshot (grim + slurp, saved to ~/Pictures/Screenshots), Super+Shift+Alt+M opens the music TUI (ncspot), Super+Shift+W opens the writing app (Ghostwriter). Super+Ctrl+Return (Herdr) is deliberately unbound, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.
+  16. Spotify + Arch substitutes: Super+Shift+M opens Spotify, Super+Shift+Q opens the calculator (gnome-calculator), PRINT takes a screenshot (grim + slurp, saved to ~/Pictures/Screenshots). Super+Ctrl+Return (Herdr) is deliberately unbound, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.
 
-  17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update. foot, btop, apostrophe and the Haskell tree are removed and stay removed (post-update hook re-trims on every update).
+  17. hexciri CLI: `hexciri plugin list` works in a terminal, and `hexciri update` runs the Hexciri update. foot, btop, apostrophe, ghostwriter, meld, ncspot, neovim, vim, obsidian, pinta, xterm, stoken and the Haskell tree are removed and stay removed (post-update hook re-trims on every update). YAD settings is hidden, yad itself stays (EOS tools depend on it).
+
+  18. Menu audit 2026-11-23: the whole Install and Remove subtrees are gone (install-*/remove-* were never in the fork), Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock Browser/Terminal pins resolve now (their desktop entries are placed in ~/.local/share/applications); the other pinned ids (folio, omacalc, omawrite, hype, monologue, cliamp) are dead Omarchy app names and stay filtered out until Devi picks replacements.
+
+If Super+Alt+Space (menu) still does nothing after reboot, run this in a terminal and report what it prints:
+  hexciri-shell shell toggle hexciri.menu '{"menu":"root"}'
+If the bar Arch icon still does nothing but that command opens the menu, the bar trigger spawn is at fault, not the menu plugin. If Setup > Plugin options show nothing, run:
+  hexciri-shell shell listPlugins | head -c 500
+If the display panel still shows no scale, run:
+  hexciri-monitor-state; echo $?
+If the network panel still shows no data, run:
+  hexciri-network-status --verbose | head -20
 
 If Super+Alt+Space (menu) still does nothing after reboot, run this in a terminal and report what it prints:
   hexciri-menu toggle root
 If Super+Space (apps) still does nothing, run this instead:
   hexciri-shell "hexciri.dock" "apps"
 That tells whether the menu command is missing (PATH), the shell IPC is unreachable, or the menu plugin did not load.
+If the menu opens from the keys but the bar Arch icon does nothing, run:
+  hexciri-shell shell toggle hexciri.menu '{"menu":"root"}'
+If that opens the menu, the menu plugin and shell IPC are fine and only the bar trigger spawn is at fault.
 
 Installed locations:
   /usr/share/hexciri/  (shell, default, themes, bin)
