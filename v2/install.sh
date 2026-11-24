@@ -694,7 +694,7 @@ is_allowed_bin() {
       refresh-hyprland | hyprland-reload-guard | notification-send | menu | menu-clipboard | menu-emoji | menu-emoji-insert | menu-file | menu-herdr-keybindings | menu-images | menu-input | menu-keybindings | menu-plugin | menu-region-formats | menu-select | menu-share | menu-timezone | menu-tmux-keybindings | \
       provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | launch-* | \
       cmd-* | default-terminal | action | i18n | notification-wait | software-rendering | toggle-enabled | hyprland-toggle-enabled | hyprland-software-rendering | hw-software-rendering | powerprofiles-init | powerprofiles-set | powerprofiles-floor | powerprofiles-list | hyprland-monitor-watch | hyprland-monitor-clamshell | hyprland-monitor-modeless | hyprland-monitor-external-active | hyprland-monitor-identity | hyprland-monitor-internal | hyprland-monitor-internal-mirror | hyprland-monitor-laptop | hyprland-workspace-layout-current | hyprland-workspace-layout-toggle | hyprland-workspace-layout-default | hw-laptop | hw-clamshell | hw-external-monitors | system-lid-inhibit | restart-hyprctl | \
-      capture-* | system-* | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | cmd-present | reminder | transcode | osd)
+      capture-* | system-* | hyprland-* | notification-* | toggle-* | icons-* | hw-* | region-* | hibernation-* | sleep-* | audio-* | battery-* | bluetooth-* | brightness-* | clipboard-* | branding-* | default-* | theme-* | agent | agent-* | pkg-present | cmd-present | reminder | transcode | transcode-* | tray-* | weather-* | tui-* | webapp-* | osd)
       # Dinner audit 2026-11-23: the families above were missing, so binds and
       # menu rows that call them failed with Command not found, exactly like
       # monitor-watch did. capture-* (screenshot/screenrecording/text/region),
@@ -705,11 +705,18 @@ is_allowed_bin() {
       # audio-*, battery-*, bluetooth-*, brightness-*, clipboard-*, branding-*,
       # default-* (editor/browser/terminal), theme-*, agent / agent-* (shell
       # AI-agent helpers, not apps), pkg-present / cmd-present (menu when/
-      # disabled checks), reminder, transcode, osd. Deliberately still NOT
-      # included: install-*, remove-*, channel-*, mirror-*, keyring-*,
-      # upgrade-* (app installers and Omarchy repo machinery, out of the
-      # shell-only Phase 1 scope). Menu install/remove rows will fail if
-      # clicked, that is intended; their when/disabled checks use
+      # disabled checks), reminder, transcode, osd. 2026-11-23 helpers.lua:110
+      # fix: transcode-* (branding-about/screensaver call transcode-ascii),
+      # tray-* (Tray.qml right-click calls tray-context-menu), weather-*
+      # (weather panel calls weather-status/location/icon), tui-* and
+      # webapp-* (menu Install/Remove rows call tui/webapp-install/remove,
+      # which only create local .desktop launchers, no Omarchy repo).
+      # Deliberately still NOT included: install-*, remove-*, channel-*,
+      # mirror-*, keyring-*, upgrade-* (app installers and Omarchy repo
+      # machinery, out of the shell-only Phase 1 scope), and windows-vm
+      # (Docker/KVM VM manager, needs Docker; its menu row will fail if
+      # clicked, like the install/remove rows). Menu install/remove rows
+      # will fail if clicked, that is intended; their when/disabled checks use
       # pkg-present, which IS included, so they still read as not installed.
       return 0
       ;;
@@ -821,7 +828,16 @@ copy_subsets() {
     stripped="${base#omarchy-}"
     stripped="${stripped#omarchy_}"
     if is_allowed_bin "$stripped"; then
-      dest_name="hexciri-$stripped"
+      # Main dispatcher: bin/omarchy has no suffix, so the generic
+      # hexciri-$stripped form would copy it to bin/hexciri-omarchy
+      # (then rename_files would turn it into bin/hexciri-hexciri),
+      # and bin/hexciri would not exist at all: verification dies
+      # "missing bin: hexciri" and `hexciri plugin list` is not found.
+      if [ "$base" = "omarchy" ]; then
+        dest_name="hexciri"
+      else
+        dest_name="hexciri-$stripped"
+      fi
       cp -a "$src_file" "$FORK_OUT/bin/$dest_name"
       copied_bin=$((copied_bin + 1))
       info "Copied bin: $base -> bin/$dest_name"
@@ -889,6 +905,18 @@ replacements = [
     (b"omarchy-shell", b"hexciri-shell"),
     (b"omarchy-theme-set", b"hexciri-theme-set"),
     (b"omarchy-launch-", b"hexciri-launch-"),
+    # Lua table key value.omarchy in helpers.lua command_from(): the check
+    # `if value.omarchy then` is followed by a space, so the "omarchy "
+    # rule below renames it to value.hexciri, but the concatenation
+    # `"omarchy-launch-" .. value.omarchy` is at end-of-line and matches
+    # NO rule below, so it stayed value.omarchy (nil, bindings now use
+    # the hexciri key) and Hyprland died at helpers.lua:110 with
+    # "attempt to concatenate a nil value (field 'omarchy')", breaking
+    # every { omarchy = ... } bind in applications.lua (browser, files,
+    # editor, Spotify, tmux). Rename the field explicitly, before the
+    # "omarchy " rule can split the two sides. paths.omarchy_path is
+    # deliberately NOT touched by this rule (different field name).
+    (b"value.omarchy", b"value.hexciri"),
     # Generic hyphen rule: autostart.lua calls omarchy-hyprland-monitor-watch,
     # omarchy-powerprofiles-init, omarchy-hyprland-software-rendering and
     # omarchy-provision-first-run, and none of those matched any rule above
@@ -1044,6 +1072,26 @@ for dirpath, dirnames, filenames in os.walk(root):
                     f.write(new_data)
                 repaired += 1
 print("Manifest repair pass: %d files repaired" % repaired)
+# Defence in depth for the helpers.lua:110 split (see value.omarchy rule
+# above): if any Lua file still reads value.omarchy, its check was renamed
+# to value.hexciri while its concatenation was not, and Hyprland dies
+# concatenating nil. paths.omarchy_path is a different field and is not
+# touched here.
+for dirpath, dirnames, filenames in os.walk(root):
+    for name in filenames:
+        if not name.endswith(".lua"):
+            continue
+        path = os.path.join(dirpath, name)
+        with open(path, "rb") as f:
+            data = f.read()
+        if b"\x00" in data:
+            continue
+        new_data = data.replace(b"value.omarchy", b"value.hexciri")
+        if new_data != data:
+            with open(path, "wb") as f:
+                f.write(new_data)
+            repaired += 1
+            print("Lua repair pass: %s value.omarchy -> value.hexciri" % path)
 print("Content rewrite: %d files scanned, %d files changed" % (total_files, changed_files))
 PY
   info "Content rewrite complete"
@@ -1397,8 +1445,14 @@ if old_write in s:
 # out of scope). Remove the bind instead of leaving a terminal that errors
 # with "herdr: command not found". Tmux is already on Super+Alt+Return.
 old_herdr = '  o.bind("SUPER + CTRL + RETURN", "Herdr", { omarchy = "terminal-herdr" })'
+old_herdr_hex = '  o.bind("SUPER + CTRL + RETURN", "Herdr", { hexciri = "terminal-herdr" })'
+# Patch runs after the rename map, so the live line is the hexciri form;
+# accept both, so the removal does not silently no-op like it did before.
 if old_herdr in s:
     s = s.replace(old_herdr, '  -- Hexciri: Herdr bind removed, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.')
+    changed.append("Herdr bind removed (AI agent, out of v2 scope)")
+elif old_herdr_hex in s:
+    s = s.replace(old_herdr_hex, '  -- Hexciri: Herdr bind removed, herdr is an Omarchy AI-agent app not installed in v2, use Super+Alt+Return for tmux.')
     changed.append("Herdr bind removed (AI agent, out of v2 scope)")
 
 # 5b. Activity TUI: btop (removed, v1 stock removal, never installed) ->
@@ -1789,6 +1843,13 @@ if [ -d "$HEXCIRI_PATH" ]; then
     case "$_cmd" in
       hexciri-install-* | hexciri-remove-* | hexciri-channel-* | hexciri-mirror-* | hexciri-keyring-* | hexciri-upgrade-*) continue ;;
       hexciri-compat) continue ;;
+      # Not commands, so do not warn for them: hexciri-weather is a CLI
+      # group (its subcommands are weather-icon/location/status),
+      # hexciri-tzupdate and hexciri-wheel are sudoers filenames in
+      # comments, hexciri-webapp-handler bare is a regex pattern in the
+      # menu jsonc (real handlers are -hey/-zoom), hexciri-windows-vm
+      # is the Docker/KVM VM manager, out of Phase 1 scope.
+      hexciri-weather | hexciri-tzupdate | hexciri-wheel | hexciri-webapp-handler | hexciri-windows-vm) continue ;;
     esac
     if [ -x "$HEXCIRI_PATH/bin/$_cmd" ] || command -v "$_cmd" >/dev/null 2>&1; then
       info "  forked-tree command present: $_cmd"
