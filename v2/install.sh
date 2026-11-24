@@ -4964,6 +4964,89 @@ if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/d
 else
   info "No fingers enrolled, /etc/pam.d/sddm left alone (enroll one, then re-run the installer or Setup > Security > Fingerprint)"
 fi
+# --- SDDM keyring auto-unlock (Brave password prompt, 2026-11-24) ---
+# Root cause: gnome-keyring was installed (CORE_PKGS) and Seahorse with
+# it, but nothing ever unlocked the keyring at login. Brave Origin stores
+# its "Brave Safe Storage" key in the Login keyring via libsecret /
+# Secret Service, and with the keyring locked it prompts for the keyring
+# password on every launch. SDDM is the login manager, so the unlock
+# belongs in /etc/pam.d/sddm (ArchWiki GNOME/Keyring: auth line at the
+# end of the auth section, session line at the end of the session
+# section). pam_gnome_keyring.so auto_start starts the daemon and
+# unlocks the Login keyring with the login password, so Brave finds it
+# already unlocked. No --password-store flag, no plaintext storage:
+# Brave keeps using gnome-libsecret, it just stops being locked.
+# Placement matters vs the fingerprint block above: the fingerprint
+# pam_unix line has success=2, skipping the next two lines (gate +
+# pam_fprintd). The keyring auth line goes after the LAST auth line in
+# the file, never between pam_unix and pam_fprintd, so a password login
+# still reaches it. Idempotent: earlier keyring lines are stripped
+# first, so a re-run repairs a half-done file instead of duplicating.
+# Two limits, by design: (1) a fingerprint login carries no password,
+# so the keyring stays locked and Brave prompts once that session;
+# log in with the password to unlock it. (2) the Login keyring password
+# must match the login password. If Brave already created a Login
+# keyring with a different password, PAM cannot unlock it: open
+# Seahorse, right-click Login, Change Password, set it to the login
+# password. Do NOT delete login.keyring, that destroys the stored
+# secrets (including Brave's Safe Storage key).
+# Also syncs future password changes: password optional
+# pam_gnome_keyring.so in /etc/pam.d/passwd.
+step "Configuring SDDM keyring auto-unlock (Brave password prompt)"
+if [ -f /usr/lib/security/pam_gnome_keyring.so ] || command -v gnome-keyring-daemon >/dev/null 2>&1; then
+  if [ -f /etc/pam.d/sddm ]; then
+    _kr_tmp="$(mktemp)"
+    sudo sed -e '/pam_gnome_keyring\.so/d' /etc/pam.d/sddm > "$_kr_tmp" 2>/dev/null || cp /etc/pam.d/sddm "$_kr_tmp"
+    python3 - "$_kr_tmp" <<'KEYRING_PYEOF'
+import sys
+p = sys.argv[1]
+lines = open(p).read().splitlines()
+auth = "auth        optional    pam_gnome_keyring.so"
+sess = "session     optional    pam_gnome_keyring.so auto_start"
+def last_idx(kind):
+    idx = -1
+    for i, l in enumerate(lines):
+        s = l.strip()
+        if s and not s.startswith("#") and s.split()[0] == kind:
+            idx = i
+    return idx
+ai = last_idx("auth")
+if ai >= 0:
+    lines.insert(ai + 1, auth)
+else:
+    lines.insert(0, auth)
+si = last_idx("session")
+if si >= 0:
+    lines.insert(si + 1, sess)
+else:
+    lines.append(sess)
+open(p, "w").write("\n".join(lines) + "\n")
+KEYRING_PYEOF
+    if sudo install -Dm644 "$_kr_tmp" /etc/pam.d/sddm; then
+      info "SDDM keyring: pam_gnome_keyring.so in /etc/pam.d/sddm (auth + session auto_start, Brave launches with no keyring prompt)"
+    else
+      warn "could not write /etc/pam.d/sddm, Brave will keep asking for the keyring password on launch"
+    fi
+    rm -f "$_kr_tmp"
+    unset _kr_tmp
+  else
+    warn "/etc/pam.d/sddm not found, keyring auto-unlock not configured (Brave will keep asking for the keyring password)"
+  fi
+  if [ -f /etc/pam.d/passwd ] && ! grep -q 'pam_gnome_keyring\.so' /etc/pam.d/passwd; then
+    _kr_pw_tmp="$(mktemp)"
+    cp /etc/pam.d/passwd "$_kr_pw_tmp" 2>/dev/null || sudo cat /etc/pam.d/passwd > "$_kr_pw_tmp" 2>/dev/null || true
+    printf '%s\n' "password    optional    pam_gnome_keyring.so" >> "$_kr_pw_tmp"
+    if sudo install -Dm644 "$_kr_pw_tmp" /etc/pam.d/passwd; then
+      info "Keyring password sync: pam_gnome_keyring.so in /etc/pam.d/passwd (changing the login password updates the keyring password)"
+    else
+      warn "could not write /etc/pam.d/passwd, keyring password will not follow login password changes"
+    fi
+    rm -f "$_kr_pw_tmp"
+    unset _kr_pw_tmp
+  fi
+else
+  warn "gnome-keyring not installed, keyring auto-unlock skipped (Brave will keep asking for the keyring password)"
+fi
 # --- UTF-8 locale (System > About awk warning, 2026-11-23) ---
 # fastfetch renders multibyte glyphs: with no UTF-8 locale on the system
 # the About output can warn "Invalid multibyte data detected". EOS no-DE
@@ -5867,6 +5950,8 @@ if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/d
     warn "  fingerprint: enrolled, but /etc/pam.d/sddm has no pam_fprintd, SDDM login stays password-only"
   fi
 fi
+if grep -q 'pam_gnome_keyring.so' /etc/pam.d/sddm 2>/dev/null && grep -q 'pam_gnome_keyring.so auto_start' /etc/pam.d/sddm 2>/dev/null; then hc_info "  keyring: SDDM PAM unlocks gnome-keyring at login (Brave launches with no password prompt)"; else warn "  keyring: /etc/pam.d/sddm has no pam_gnome_keyring.so, Brave asks for the keyring password on every launch (re-run the installer)"; fi
+command -v gnome-keyring-daemon >/dev/null 2>&1 && hc_info "  keyring daemon: gnome-keyring-daemon present" || warn "  keyring daemon: gnome-keyring-daemon NOT installed, Brave has no Secret Service backend"
 if command -v mpv >/dev/null 2>&1; then hc_info "  video: mpv present"; else warn "  video: mpv NOT installed"; fi
 if command -v gpu-screen-recorder >/dev/null 2>&1; then hc_info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
 if command -v localsend >/dev/null 2>&1; then hc_info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
@@ -5966,6 +6051,8 @@ Reboot, then check in order:
   20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About is a floating fastfetch window now, fitted to the rendered content at launch (two-mode launch-about, --render measures logo + modules and resizes the window, no fixed 920x480); systemd-boot timeout 1s in every loader.conf AND the LoaderConfigTimeout EFI variable (bootctl set-timeout 1, the variable overrides loader.conf); Super+Shift+T runs btm (bottom package binary); LocalSend file picker is dark (theme name Adwaita in gtk-3.0/gtk-4.0 settings.ini, dconf color-scheme prefer-dark via dbus-run-session, FileChooser=gtk portal; Adwaita-dark is not a theme name); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
 
   21. Remaining fixes 2026-11-24: SDDM fingerprint is password-first now (pam_unix before the gate + pam_fprintd, so a correct password logs in at once and an empty-password Enter uses the reader; the old order demanded a fingerprint after the password, and rerunning the installer repairs a machine that already has the old order); System > About exports a UTF-8 locale for the whole About process (a C-locale session made wc/awk count multibyte glyphs as zero width, so the window came out narrower than the layout); EOS update keeps its icon (read from the EOS desktop file, endeavouros-icon, or system-software-update, instead of the invented eos-update name); Speed Test > Network measures with Hexciri's own curl client at /usr/lib/hexciri/speedtest (the Omarchy speedtest package comes from Omarchy's repo, which Hexciri does not use); Install and Remove menu entries are back (Package, AUR, Web App, TUI, Style, Gaming and their Remove counterparts, kept only where the backing script exists in the fork; AI, services, terminals, Windows, preinstalls and dictation stay out, and install-browser stays out because its helper tree is not copied).
+
+  22. Keyring auto-unlock 2026-11-24: Brave Origin asked for the keyring password on every launch because gnome-keyring was installed but nothing unlocked it at login. SDDM PAM now has pam_gnome_keyring.so (auth at the end of the auth section, session auto_start at the end of the session section, placed after the fingerprint block so the pam_unix success=2 skip still lands on the gate + pam_fprintd), plus password sync in /etc/pam.d/passwd so a future login-password change updates the keyring password. Brave keeps using gnome-libsecret, no --password-store flag, no plaintext storage. Two limits: a fingerprint login carries no password so the keyring stays locked that session, log in with the password to unlock it; and the Login keyring password must match the login password, if it does not, change it in Seahorse (right-click Login, Change Password), do NOT delete login.keyring, that destroys the stored secrets including Brave's Safe Storage key.
 
 If Super+Alt+Space (menu) still does nothing after reboot, run this in a terminal and report what it prints:
   hexciri-shell shell toggle hexciri.menu '{"menu":"root"}'
