@@ -2645,16 +2645,22 @@ for _line in _mlines:
         _lean_removed += 1
         continue
     _kept2.append(_line)
-_settings_row = '  "settings": {"icon":"","label":"Settings","action":"hexciri-launch-settings"},'
-if not any(_row_key(_l) == "settings" for _l in _kept2):
-    for _i, _l in enumerate(_kept2):
-        if _row_key(_l) == "system":
-            _kept2.insert(_i + 1, _settings_row)
-            break
-if _lean_removed or not any(_row_key(_l) == "settings" for _l in _mlines):
+# 2026-11-24, Devi: no top-level Settings row in Super+Alt+Space.
+# Settings opens via Super+Ctrl+S / launcher only. Any "settings"
+# row left in the forked menu (added by the old lean patch) is
+# removed here, so the next installer re-run drops it.
+_settings_removed = 0
+_kept3 = []
+for _line in _kept2:
+    if _row_key(_line) == "settings" and "hexciri-launch-settings" in _line:
+        _settings_removed += 1
+        continue
+    _kept3.append(_line)
+_kept2 = _kept3
+if _lean_removed or _settings_removed or any(_row_key(_l) == "settings" for _l in _mlines):
     with open(menu, "w") as _mf:
         _mf.write("\n".join(_kept2) + "\n")
-    changed.append("menu lean: removed %d settings rows now in Hexciri Settings, added top-level Settings row" % _lean_removed)
+    changed.append("menu lean: removed %d settings rows now in Hexciri Settings, removed top-level Settings row (%d)" % (_lean_removed, _settings_removed))
 
 with open(menu) as f:
     m = f.read()
@@ -3255,7 +3261,7 @@ else
   die "v2/hexciri-settings-tabs not in the installer tree, Hexciri Settings extra panes cannot be registered"
 fi
 # hexciri-launch-settings (repo file v2/hexciri-launch-settings):
-# Super+Ctrl+S / menu Settings launcher. Opens hexciri-settings
+# Super+Ctrl+S Settings launcher. Opens hexciri-settings
 # when built; when the binary is missing it notifies with the
 # rebuild command instead of silently doing nothing (2026-11-24).
 if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings" ]; then
@@ -5063,6 +5069,7 @@ grep -q 'kitty.desktop) echo "kitty"' "$HEXCIRI_PATH/bin/hexciri-default-termina
 [ -L "$HOME/.local/bin/hexciri" ] || die "missing symlink ~/.local/bin/hexciri, hexciri will be command not found in terminals"
 bash -lc 'command -v hexciri' >/dev/null 2>&1 || warn "hexciri not on PATH in a fresh login shell, check ~/.bashrc / fish conf.d PATH lines"
 grep -q '"update.hexciri"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu Update > Hexciri row missing (Phase 2 update)"
+grep -q '"settings".*hexciri-launch-settings' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" && die "menu Settings row still present in hexciri-menu.jsonc (removed 2026-11-24, Settings opens via Super+Ctrl+S / launcher only)"
 grep '"update.hexciri"' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" | grep -q 'hexciri-update' || die "menu Update > Hexciri row does not call hexciri-update"
 grep -q 'eos-update --aur' "$HEXCIRI_PATH/bin/hexciri-update-system-pkgs" || die "hexciri-update-system-pkgs does not call eos-update --aur"
 grep -q 'hexciri-update-hexciri' "$HEXCIRI_PATH/bin/hexciri-update" || die "hexciri-update does not call hexciri-update-hexciri"
@@ -5861,6 +5868,15 @@ if [ -f "$SETTINGS_PLUGIN_DIR/plugin/install" ]; then
   fi
 else
   warn "  Hexciri Settings plugin install script missing, app not built"
+fi
+# 2026-11-24, Devi: no Settings row in the main menu. If the old row
+# ever landed in the user menu extensions file, drop that exact line
+# (scoped to the hexciri-launch-settings action, nothing else).
+# Super+Ctrl+S / launcher still open Settings.
+_user_menu="$HOME/.config/hexciri/extensions/hexciri-menu.jsonc"
+if [[ -f $_user_menu ]] && grep -q '"settings".*hexciri-launch-settings' "$_user_menu"; then
+  sed -i '/"settings".*hexciri-launch-settings/d' "$_user_menu"
+  info "  menu: removed Settings row from user menu extensions (Super+Ctrl+S / launcher only)"
 fi
 unset SETTINGS_PLUGIN_ID SETTINGS_PLUGIN_DIR SETTINGS_PLUGIN_URL _HEXCIRI_CLI _HEXCIRI_VALIDATE
 
