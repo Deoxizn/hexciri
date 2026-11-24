@@ -49,6 +49,10 @@ wl-clipboard
 hyprpicker
 hyprsunset
 ffmpeg
+libvips
+ffmpegthumbnailer
+librsvg
+zenity
 unzip
 ripgrep
 fd

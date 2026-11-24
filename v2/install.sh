@@ -207,7 +207,7 @@ CORE_PKGS=(
   polkit rtkit gnome-keyring libsecret
   pamixer brightnessctl jq bc curl wget git base-devel pacman-contrib socat # checkupdates, for hexciri-update-available (update icon); socat is hexciri-shell's IPC transport (socket fast path), upstream omarchy-base.packages line 145, without it every hexciri-shell call fails "not responding"
   fprintd usbutils # fprintd + usbutils: Setup > Security > Fingerprint needs fprintd-enroll/verify, hw-fingerprint probes USB readers
-  imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip
+  imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip libvips ffmpegthumbnailer librsvg zenity # libvips (vipsthumbnail) + ffmpegthumbnailer: hexciri-menu-images needs both to draw image-picker thumbnails (Appearance > Icons, background picker); upstream omarchy-base.packages ships both (lines 82, 46) and the fork lacked them, so every row was dropped and the picker loaded nothing. librsvg (rsvg-convert): hexciri-icons-preview draws set previews with it. zenity: GTK file dialog, LocalSend's file picker falls back to it when the portal is unavailable.
   ripgrep fd fzf eza bat starship zoxide fastfetch
   # NOTE 2026-11-23: no btop here, v1 removes it, bottom (in APP_PKGS below)
   # is the Hexciri system monitor instead. fastfetch's Hexciri config is
@@ -2079,6 +2079,69 @@ else:
     print('dock pinned list set: ' + ', '.join(pins))
 PY
 
+# --- Fork-time patches: SDDM fingerprint in setup script, About locale ---
+# 1. hexciri-setup-security-fingerprint: upstream setup_pam_config only
+# configures sudo, polkit and the lock screen, so fingerprint worked for
+# sudo but SDDM always asked for a password. Append the same gate +
+# pam_fprintd lines to /etc/pam.d/sddm, so a later Setup > Security >
+# Fingerprint run (e.g. enrolling another finger) keeps SDDM working.
+# The installer step above does the same thing at install time; this
+# keeps the setup script consistent afterwards.
+# 2. hexciri-launch-about: resolve a real UTF-8 locale instead of assuming
+# C.UTF-8. With no UTF-8 locale generated, the wc/awk measurements warn
+# "Invalid multibyte data detected" on the ghost rows and measure wrong.
+python3 - "$FORK_OUT" <<'PY'
+import sys
+
+root = sys.argv[1]
+changed = []
+
+fp = root + "/bin/hexciri-setup-security-fingerprint"
+with open(fp) as f:
+    s = f.read()
+s_orig = s
+_marker = "# Hexciri: SDDM login unlock"
+_tail = "session   include system-auth\nEOF\n  fi\n}"
+_sddm = "session   include system-auth\nEOF\n  fi\n\n  # Hexciri: SDDM login unlock (2026-11-23). Upstream only configures sudo,\n  # polkit and the lock screen, so fingerprint worked for sudo but SDDM\n  # always asked for a password. SDDM authenticates the user through\n  # /etc/pam.d/sddm, so add the same gate + pam_fprintd lines there.\n  if [[ -f /etc/pam.d/sddm ]] && ! grep -q pam_fprintd.so /etc/pam.d/sddm; then\n    echo \"Configuring SDDM login for fingerprint authentication...\"\n    _sddm_tmp=\"$(mktemp)\"\n    {\n      printf '%s\\n' \"$fprintd_gate\"\n      printf 'auth      sufficient pam_fprintd.so\\n'\n      cat /etc/pam.d/sddm\n    } > \"$_sddm_tmp\"\n    sudo install -Dm644 \"$_sddm_tmp\" /etc/pam.d/sddm && echo \"SDDM login fingerprint configured.\"\n    rm -f \"$_sddm_tmp\"\n  fi\n}"
+if _marker in s:
+    print("setup-security-fingerprint SDDM block already present, skipping")
+elif s.count(_tail) == 1:
+    s = s.replace(_tail, _sddm, 1)
+    changed.append("setup-security-fingerprint: SDDM PAM block in setup_pam_config")
+else:
+    print("WARN: setup_pam_config polkit tail not found (%d), SDDM block NOT applied" % s.count(_tail))
+if s != s_orig:
+    with open(fp, "w") as f:
+        f.write(s)
+
+la = root + "/bin/hexciri-launch-about"
+with open(la) as f:
+    a = f.read()
+a_orig = a
+_anchor = "LOGO_PAD_RIGHT=6"
+_locale = "LOGO_PAD_RIGHT=6\n# UTF-8 locale for the wc/awk measurements below (2026-11-23): C.UTF-8 is\n# built into glibc on Arch, but a session whose locale was never generated\n# falls back to C and awk warns \"Invalid multibyte data detected\" on the\n# ghost rows. Prefer a generated UTF-8 locale when one exists.\nHEX_ABOUT_LOCALE=\"$(locale -a 2>/dev/null | grep -i -m1 -E '^(C\\.utf-?8|en_US\\.utf-?8)$' || echo C.UTF-8)\""
+if "HEX_ABOUT_LOCALE=" in a:
+    print("launch-about locale resolution already present, skipping")
+elif a.count(_anchor) == 1:
+    a = a.replace(_anchor, _locale, 1)
+    changed.append("launch-about: HEX_ABOUT_LOCALE resolution after LOGO_PAD_RIGHT")
+else:
+    print("WARN: LOGO_PAD_RIGHT anchor not found (%d), locale fix NOT applied" % a.count(_anchor))
+if a.count("LC_ALL=C.UTF-8") == 3:
+    a = a.replace("LC_ALL=C.UTF-8", "LC_ALL=$HEX_ABOUT_LOCALE")
+    changed.append("launch-about: LC_ALL=C.UTF-8 -> LC_ALL=$HEX_ABOUT_LOCALE (3 sites)")
+elif "LC_ALL=$HEX_ABOUT_LOCALE" in a:
+    print("launch-about LC_ALL already resolved, skipping")
+else:
+    print("WARN: LC_ALL=C.UTF-8 found %d times (expected 3), locale fix NOT applied" % a.count("LC_ALL=C.UTF-8"))
+if a != a_orig:
+    with open(la, "w") as f:
+        f.write(a)
+
+for c in changed:
+    print("  fork patch: " + c)
+PY
+
 # --- Place the forked tree to its install targets ---
 # sudo is used ONLY for the /usr/share and /etc steps below. Everything else
 # runs as the normal user.
@@ -2421,6 +2484,24 @@ unset _dead
 # shows Foot when Kitty is the default.
 command -v socat >/dev/null 2>&1 || die "socat not installed, hexciri-shell IPC (menu Apps, bar trigger, theme-set applyTheme, lock, background picker) fails without it"
 [ -d "$HEXCIRI_PATH/icons" ] || die "missing: icons/, Appearance > Icons has no sets and theme-set-icons draws nothing"
+# Image-picker runtime deps (2026-11-23): hexciri-menu-images draws every
+# image-picker thumbnail with vipsthumbnail (libvips) and ffmpegthumbnailer
+# for videos, and hexciri-icons-preview draws set previews with rsvg-convert
+# (librsvg). All three are runtime invariants; without them the picker
+# opens with zero rows and Appearance > Icons loads nothing.
+for _pickdep in vipsthumbnail ffmpegthumbnailer rsvg-convert; do
+  command -v "$_pickdep" >/dev/null 2>&1 || die "missing: $_pickdep, image picker (Appearance > Icons, background picker) draws no thumbnails without it"
+done
+unset _pickdep
+# icons-list must actually list the three built-in sets, not just have the
+# directory present: run it for real. A list that prints only Original
+# means the fork path is wrong and the switcher has nothing to offer.
+_icons_list="$(HEXCIRI_PATH="$HEXCIRI_PATH" "$HEXCIRI_PATH/bin/hexciri-icons-list" 2>/dev/null || true)"
+for _set in Arcade Original Papercraft; do
+  printf '%s\n' "$_icons_list" | grep -qx "$_set" || die "hexciri-icons-list does not list $_set (got: $_icons_list), Appearance > Icons will load nothing"
+  [ -f "$HEXCIRI_PATH/icons/$(printf '%s' "$_set" | tr '[:upper:]' '[:lower:]')/preview.png" ] || warn "icons/$_set has no preview.png, the picker draws it instead (needs rsvg-convert)"
+done
+unset _icons_list _set
 [ -f "$HEXCIRI_PATH/logo.txt" ] || die "missing: logo.txt, hexciri-show-logo fails"
 [ -f "$HEXCIRI_PATH/icon.txt" ] || die "missing: icon.txt, About branding reset fails"
 grep -q 'foot.desktop) echo "foot"' "$HEXCIRI_PATH/bin/hexciri-default-terminal" || die "hexciri-default-terminal getter still corrupted, settings show Foot for Kitty"
@@ -2499,6 +2580,56 @@ else
   warn "hexciri-apply-lock not found, System > Lock will return missing-pam"
 fi
 [ -f /etc/pam.d/hexciri-lock-password ] || warn "Lock PAM file /etc/pam.d/hexciri-lock-password still missing after apply-lock, System > Lock will return missing-pam until it exists. Run by hand: sudo hexciri-apply-lock"
+# --- SDDM fingerprint (login unlock, 2026-11-23) ---
+# Fingerprint works for sudo because setup-security-fingerprint writes
+# /etc/pam.d/sudo and /etc/pam.d/polkit-1, but it never touched SDDM:
+# upstream only configures sudo, polkit and the lock screen, so the login
+# screen always asked for a password. SDDM authenticates the user through
+# /etc/pam.d/sddm (sddm-greeter is the greeter's own service, not the
+# login), so add the same gate + pam_fprintd lines there, only when a
+# finger is actually enrolled. Idempotent, best-effort: without an
+# enrolled finger the file is left alone.
+step "Configuring SDDM fingerprint (login unlock)"
+if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/dev/null | grep -qE '^[[:space:]]*-[[:space:]]*#[0-9]+:'; then
+  if [ -f /etc/pam.d/sddm ] && ! grep -q pam_fprintd.so /etc/pam.d/sddm; then
+    _sddm_tmp="$(mktemp)"
+    {
+      [ -x "$HEXCIRI_PATH/bin/hexciri-hw-laptop-closed" ] && printf '%s\n' "auth      [success=1 default=ignore] pam_exec.so quiet /usr/share/hexciri/bin/hexciri-hw-laptop-closed"
+      printf 'auth      sufficient pam_fprintd.so\n'
+      cat /etc/pam.d/sddm
+    } > "$_sddm_tmp"
+    if sudo install -Dm644 "$_sddm_tmp" /etc/pam.d/sddm; then
+      info "SDDM fingerprint: pam_fprintd added to /etc/pam.d/sddm (login unlock)"
+    else
+      warn "could not write /etc/pam.d/sddm, SDDM login stays password-only"
+    fi
+    rm -f "$_sddm_tmp"
+  else
+    grep -q pam_fprintd.so /etc/pam.d/sddm 2>/dev/null && info "SDDM fingerprint: /etc/pam.d/sddm already has pam_fprintd" || warn "/etc/pam.d/sddm not found, SDDM login stays password-only"
+  fi
+  unset _sddm_tmp
+else
+  info "No fingers enrolled, /etc/pam.d/sddm left alone (enroll one, then re-run the installer or Setup > Security > Fingerprint)"
+fi
+# --- UTF-8 locale (System > About awk warning, 2026-11-23) ---
+# launch-about measures the logo with LC_ALL=C.UTF-8 wc/awk, and the
+# fastfetch ghost rows are multibyte: with no UTF-8 locale on the system
+# awk warns "Invalid multibyte data detected" and measures wrong, so the
+# About window is sized for a narrower layout than it renders. EOS no-DE
+# does not guarantee en_US.UTF-8 is generated, so generate it if no
+# UTF-8 locale exists at all. Best-effort: a missing locale only breaks
+# About fitting, never the install.
+if ! locale -a 2>/dev/null | grep -qi '\.utf-8$\|\.utf8$'; then
+  if grep -q '^#en_US.UTF-8' /etc/locale.gen 2>/dev/null; then
+    if sudo sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && sudo locale-gen en_US.UTF-8 2>/dev/null; then
+      info "Generated locale: en_US.UTF-8 (About fitting needs a UTF-8 locale)"
+    else
+      warn "locale-gen en_US.UTF-8 failed, About may warn about multibyte data"
+    fi
+  else
+    warn "no UTF-8 locale and /etc/locale.gen has no en_US.UTF-8 line to enable, About fitting may warn about multibyte data"
+  fi
+fi
 # System > About measured its floating size against the old fastfetch
 # config/logo once and remembered it in about.fit; the Hexciri config and
 # logo changed since, so the remembered size is wrong. Delete it and the
@@ -2513,13 +2644,20 @@ rm -f "$HOME/.local/state/hexciri/windows/about.fit" 2>/dev/null || true
 # the fork's icon.txt (upstream ASCII art, works as a logo until a
 # Hexciri ASCII logo is authored).
 mkdir -p "$HOME/.config/hexciri/branding"
-if [ ! -f "$HOME/.config/hexciri/branding/about.txt" ]; then
+# Regenerate on EVERY install (2026-11-23): the old guard skipped this
+# when about.txt already existed, so a stale/empty file from an earlier
+# broken transcode persisted forever and About rendered with a blank logo
+# column and a wrong fit. Transcode at 65x35, the fastfetch config logo
+# block (config/fastfetch/config.jsonc: width 65, height 35), so the
+# window launch-about fits from about.txt matches what fastfetch renders.
+rm -f "$HOME/.config/hexciri/branding/about.txt"
+if true; then
   _logo_img=""
   for _cand in "$HEXCIRI_REPO_ROOT/branding/sddm/logo.png" "$HEXCIRI_REPO_ROOT/branding/hexciri-nb.png" "$HEXCIRI_REPO_ROOT/branding/sddm/logo.svg"; do
     if [ -f "$_cand" ]; then _logo_img="$_cand"; break; fi
   done
   if [ -n "$_logo_img" ] && [ -x "$HEXCIRI_PATH/bin/hexciri-transcode-ascii" ]; then
-    if "$HEXCIRI_PATH/bin/hexciri-transcode-ascii" "$_logo_img" "$HOME/.config/hexciri/branding/about.txt" --width 54 --height 26 2>/dev/null; then
+    if "$HEXCIRI_PATH/bin/hexciri-transcode-ascii" "$_logo_img" "$HOME/.config/hexciri/branding/about.txt" --width 65 --height 35 2>/dev/null; then
       info "About logo: transcoded $_logo_img to branding/about.txt"
     elif [ -f "$HEXCIRI_PATH/icon.txt" ]; then
       cp -a "$HEXCIRI_PATH/icon.txt" "$HOME/.config/hexciri/branding/about.txt" && info "About logo: branding/about.txt from fork icon.txt (transcode failed)"
@@ -2556,6 +2694,75 @@ if [ "${#THEME_DIRS[@]}" -ge 1 ] && [ -d "${THEME_DIRS[0]}" ]; then
   fi
 else
   warn "No themes found to apply, skipping theme apply."
+fi
+
+# --- GTK settings + portal FileChooser (LocalSend file picker, 2026-11-23) ---
+# LocalSend's file picker is the xdg-desktop-portal FileChooser dialog
+# (GTK, via xdg-desktop-portal-gtk). It was unthemed because nothing ever
+# wrote GTK settings: theme-set-gnome only runs gsettings, and it exits
+# silently with no session bus (which is exactly the install-time theme
+# apply), so no gtk-theme was ever set for the portal dialog. Write
+# gtk-3.0/gtk-4.0 settings.ini from the applied theme's mode and set
+# gsettings too when a bus is present, and pin the FileChooser portal to
+# gtk in portals.conf (hyprland's portal implements no FileChooser).
+step "Writing GTK settings + portal FileChooser (LocalSend picker theming)"
+_gtk_mode="$(HEXCIRI_PATH="$HEXCIRI_PATH" "$HEXCIRI_PATH/bin/hexciri-theme-color" --file "$HOME/.local/state/hexciri/current/theme/colors.toml" mode 2>/dev/null || echo dark)"
+if [[ "$_gtk_mode" == "light" ]]; then _gtk_theme="Adwaita"; _gtk_dark="false"; else _gtk_theme="Adwaita-dark"; _gtk_dark="true"; fi
+mkdir -p "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"
+for _gtk_ver in 3.0 4.0; do
+  cat > "$HOME/.config/gtk-$_gtk_ver/settings.ini" <<GTK_EOF
+[Settings]
+gtk-theme-name=$_gtk_theme
+gtk-icon-theme-name=Adwaita
+gtk-application-prefer-dark-theme=$_gtk_dark
+gtk-font-name=Noto Sans 11
+GTK_EOF
+done
+unset _gtk_ver
+info "GTK settings: theme=$_gtk_theme (mode=$_gtk_mode) in gtk-3.0/gtk-4.0 settings.ini"
+if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v gsettings >/dev/null 2>&1; then
+  gsettings set org.gnome.desktop.interface gtk-theme "$_gtk_theme" 2>/dev/null || true
+  gsettings set org.gnome.desktop.interface color-scheme "prefer-$([ "$_gtk_mode" == light ] && echo light || echo dark)" 2>/dev/null || true
+  gsettings set org.gnome.desktop.interface icon-theme "Adwaita" 2>/dev/null || true
+fi
+mkdir -p "$HOME/.config/xdg-desktop-portal"
+cat > "$HOME/.config/xdg-desktop-portal/portals.conf" <<PORTAL_EOF
+[preferred]
+default=hyprland;gtk
+org.freedesktop.impl.portal.FileChooser=gtk
+org.freedesktop.impl.portal.Secret=gnome-keyring
+PORTAL_EOF
+info "Portal config: FileChooser=gtk in ~/.config/xdg-desktop-portal/portals.conf"
+systemctl --user try-restart xdg-desktop-portal-gtk.service 2>/dev/null || true
+unset _gtk_mode _gtk_theme _gtk_dark
+
+# --- EOS update icon (Terminal=true launch, 2026-11-23) ---
+# The eos-update grid icon is /usr/share/applications/eos-update.desktop
+# from eos-bash-shared: Exec=eos-update, Terminal=true. Terminal=true
+# entries launch through xdg-terminal-exec, and under the Quickshell grid
+# that path silently does nothing. eos-update itself never calls
+# hexciri-update (Devi's theory checked: it is EOS's own pacman/yay
+# updater; hexciri-update exists in the fork, it is just not reworked for
+# EOS yet in Phase 2), so the fix is a user override that launches it in
+# Kitty directly, with --hold so a failure stays visible instead of a
+# window that flashes and closes.
+step "Fixing EOS update icon (Kitty override for eos-update)"
+if command -v eos-update >/dev/null 2>&1; then
+  mkdir -p "$HOME/.local/share/applications"
+  cat > "$HOME/.local/share/applications/eos-update.desktop" <<EOS_EOF
+[Desktop Entry]
+Type=Application
+Name=EOS Update
+Comment=Update EndeavourOS packages (pacman + AUR) in Kitty
+Icon=eos-update
+Exec=kitty --hold -e eos-update --yay
+Terminal=false
+Categories=System;
+EOS_EOF
+  command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+  info "EOS update icon: override launches kitty --hold -e eos-update --yay"
+else
+  warn "eos-update not found, EOS update icon left as-is (install eos-bash-shared)"
 fi
 
 # --- Theme SDDM with the currently applied theme ---
@@ -2753,7 +2960,10 @@ cat > "$HOME/.local/bin/hexciri-trim-bloat" <<'TRIM_EOF'
 # pinta (image editor), xterm (provides xterm AND uxterm, both entries
 # gone with the one package), stoken (Software Token + Software Token
 # (small): RSA SecurID-compatible software token, CLI + GTK GUI, one
-# package behind both desktop entries). yad is deliberately NOT here:
+# package behind both desktop entries). stoken is a dependency of
+# openconnect, so pacman -Rns refuses the removal and the trim only
+# ever "kept" it; the NoDisplay hide below is what actually removes
+# both entries from the grid. yad is deliberately NOT here:
 # eos-bash-shared depends on it, its entry is hidden instead (above).
 for _pkg in foot btop apostrophe pandoc-cli ghostwriter meld ncspot neovim vim obsidian pinta xterm stoken; do
   if pacman -Q "$_pkg" >/dev/null 2>&1; then
@@ -2784,8 +2994,12 @@ sudo -v || warn "sudo timestamp refresh failed, trim-bloat removals may be refus
 "$HOME/.local/bin/hexciri-trim-bloat" || warn "trim-bloat run failed, not fatal"
 # Hide fallback, 2026-11-23: if a trim package still cannot be removed (a
 # dependency holds it), its app entry must still not show in the grid.
-# vim ships vim.desktop, stoken ships stoken-gui.desktop + stoken-small.
-for _hide_desk in vim.desktop stoken-gui.desktop stoken-small.desktop; do
+# vim ships vim.desktop, stoken ships stoken-gui.desktop +
+# stoken-gui-small.desktop (the small-window entry is stoken-gui-small,
+# NOT stoken-small, which is why the hide missed it and Software Token
+# (small) persisted). stoken is a dependency of openconnect, so pacman
+# -Rns refuses to remove it; the NoDisplay hide below is the real removal.
+for _hide_desk in vim.desktop stoken-gui.desktop stoken-gui-small.desktop; do
   if [ -f "/usr/share/applications/$_hide_desk" ] && [ ! -f "$HOME/.local/share/applications/$_hide_desk" ]; then
     cp -a "/usr/share/applications/$_hide_desk" "$HOME/.local/share/applications/$_hide_desk"
     printf 'NoDisplay=true\n' >> "$HOME/.local/share/applications/$_hide_desk"
@@ -2895,6 +3109,9 @@ if command -v zathura >/dev/null 2>&1; then info "  pdf: zathura present"; else 
 if [ -f /etc/pam.d/hexciri-lock-password ]; then info "  lock PAM: /etc/pam.d/hexciri-lock-password present (System > Lock works)"; else warn "  lock PAM: missing, System > Lock returns missing-pam (run: sudo hexciri-apply-lock)"; fi
 if [ -f /etc/sudoers.d/hexciri-theme-browser ]; then info "  browser policy sudoers: present (theme switch repaints Brave)"; else warn "  browser policy sudoers: missing, theme switch reports hexciri-theme-set-browser failed"; fi
 command -v fprintd >/dev/null 2>&1 && info "  fingerprint: fprintd present (Setup > Security > Fingerprint)" || warn "  fingerprint: fprintd NOT installed, Setup > Security > Fingerprint will fail"
+if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/dev/null | grep -qE '^[[:space:]]*-[[:space:]]*#[0-9]+:'; then
+  grep -q pam_fprintd.so /etc/pam.d/sddm 2>/dev/null && info "  fingerprint: SDDM login has pam_fprintd" || warn "  fingerprint: enrolled, but /etc/pam.d/sddm has no pam_fprintd, SDDM login stays password-only"
+fi
 if command -v mpv >/dev/null 2>&1; then info "  video: mpv present"; else warn "  video: mpv NOT installed"; fi
 if command -v gpu-screen-recorder >/dev/null 2>&1; then info "  screenrecord: gpu-screen-recorder present"; else warn "  screenrecord: gpu-screen-recorder NOT installed, menu Capture > Screenrecord will fail"; fi
 if command -v localsend >/dev/null 2>&1; then info "  share: localsend present (localsend-bin)"; else warn "  share: localsend NOT installed, menu Share > Receive will fail (yay -S localsend-bin)"; fi
@@ -2944,6 +3161,7 @@ Reboot, then check in order:
   18. Menu audit 2026-11-23: the whole Install and Remove subtrees are gone (install-*/remove-* were never in the fork), Update > Channel is gone (Hexciri has no channels), Update > Hexciri is gone (hexciri-update is Phase 2, not done yet, do not chase it), System > Screensaver is gone (no screensaver binary in v2). Setup > Security > Fingerprint, Setup > Plugin options, System > Lock, System > Logout/Reboot/Shutdown, Appearance > Dock, Setup > Network > DNS, display scale and network data should all work now; the missing bins that broke them are copied. AI menu options are still out on purpose (mise / AI agents are Phase 2, Herdr stays removed). Hide/Show Bar works (bare hexciri-toggle was missing in the sim, now copied). Setup > Defaults > Dictation rows work (no backend installed yet, pick one first). The dock pinned list is Strata, Spotify, Brave Origin, Zed, Kitty (Devi 2026-11-23); hexciri-browser / hexciri-terminal are not pinned, they are wrappers for Brave Origin / Kitty and would duplicate them.
 
   19. Regression fixes 2026-11-23: socat is installed now (hexciri-shell IPC was failing without it, which broke menu Apps, the bar Arch trigger, theme switching past the background, the background picker, and lock, all at once); Appearance > Icons has the stock icon sets; default terminal reports Kitty, not Foot; vim and stoken are removed for real this time (trim used sudo -n, which silently failed once the sudo timestamp expired); the app grid no longer shows Browser/Terminal wrappers next to Brave Origin/Kitty; `hexciri` works in a terminal (bare dispatcher was never linked into ~/.local/bin); About fits its window again (fastfetch config moved to /etc/fastfetch, About logo file created). Display and network plugins were working and were not touched.
+  20. Remaining fixes 2026-11-23: SDDM login accepts fingerprint (pam_fprintd in /etc/pam.d/sddm, only when a finger is enrolled); Appearance > Icons lists Arcade/Original/Papercraft (vipsthumbnail, ffmpegthumbnailer, rsvg-convert installed, picker thumbnails work); Software Token (small) hidden for real (entry is stoken-gui-small.desktop, and stoken cannot be removed, openconnect depends on it); About fits again (about.txt regenerated every install at the fastfetch logo size 65x35, UTF-8 locale generated when none exists); LocalSend file picker is themed (GTK settings.ini + FileChooser=gtk portal, zenity installed); EOS update icon launches kitty --hold -e eos-update --yay (eos-update never called hexciri-update, the Terminal=true launch path was the break).
 
 If Super+Alt+Space (menu) still does nothing after reboot, run this in a terminal and report what it prints:
   hexciri-shell shell toggle hexciri.menu '{"menu":"root"}'
