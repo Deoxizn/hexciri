@@ -132,7 +132,8 @@ CORE_PKGS=(
   imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip
   ripgrep fd fzf eza bat btop starship zoxide fastfetch
   python python-gobject lua51 luarocks
-  foot
+  kitty
+  udiskie
   noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-jetbrains-mono-nerd woff2-font-awesome terminus-font
 )
 

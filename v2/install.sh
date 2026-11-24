@@ -85,6 +85,14 @@ HEXCIRI_PATH="/usr/share/hexciri"
 TMP_WORK=""
 FORK_OUT=""
 
+# Repo root of the Hexciri checkout the bootstrap extracted: install.sh runs
+# from <root>/v2/, so its parent dir is the root. branding/sddm/ and
+# bin/hexciri-strata-install live here. If install.sh was downloaded alone,
+# this is just its parent dir and those optional sources are skipped with a
+# warning instead of dying.
+INSTALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+HEXCIRI_REPO_ROOT="$(dirname "$INSTALLER_DIR")"
+
 step() { printf '\n==> %s\n' "$1"; }
 info() { printf '[hexciri] %s\n' "$1"; }
 warn() { printf 'WARN: %s\n' "$1"; }
@@ -199,8 +207,14 @@ CORE_PKGS=(
   imagemagick inotify-tools grim slurp wl-clipboard hyprpicker hyprsunset ffmpeg unzip
   ripgrep fd fzf eza bat btop starship zoxide fastfetch
   python python-gobject lua51 luarocks
-  foot
+  kitty
+  udiskie
   noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-jetbrains-mono-nerd woff2-font-awesome terminus-font
+  # NOTE 2026-11-23: kitty, not foot: Devi chose Kitty as the default
+  # terminal (Omarchy's default is Foot). ttf-jetbrains-mono-nerd is the
+  # Nerd Font that provides the Arch logo glyph U+F303 used for the menu
+  # trigger icon. udiskie is Arch extra: autostart runs it via uwsm-app,
+  # and its absence showed as "App failure, Command not found: udiskie".
   # NOTE 2026-11-23: noto-fonts-cjk-vf and ttf-jetbrains-mono-nerd-basic are
   # Omarchy-repo-only names (Omarchy edge channel / omarchy pkg), NOT Arch.
   # pacman on plain Arch/EndeavourOS fails with "target not found" on both.
@@ -208,6 +222,21 @@ CORE_PKGS=(
 )
 
 sudo pacman -S --needed --noconfirm "${CORE_PKGS[@]}"
+
+# xdg-terminal-exec is NOT in stable extra (extra-testing 0.14.4-1 / AUR),
+# so it must never go in the pacman CORE_PKGS call above: a missing target
+# aborts the whole transaction. Install it best-effort via yay instead.
+# launch-terminal's fast path (xdg-terminals.list, kitty first) works
+# without it, but floating/presentation terminals and the menu trigger's
+# right-click call the binary directly, and its absence showed as
+# "App failure, Command not found: xdg-terminal-exec".
+if ! command -v xdg-terminal-exec >/dev/null 2>&1; then
+  if yay -S --needed --noconfirm xdg-terminal-exec 2>/dev/null; then
+    info "xdg-terminal-exec installed via yay"
+  else
+    warn "xdg-terminal-exec not installed (yay failed or AUR unreachable), terminal launches use the xdg-terminals.list fast path only. Install later: yay -S xdg-terminal-exec"
+  fi
+fi
 
 step "Updating user directories"
 xdg-user-dirs-update || warn "xdg-user-dirs-update failed, not fatal."
@@ -429,7 +458,8 @@ is_allowed_bin() {
   case "$name" in
     launch-shell | theme-set | theme-set-templates | plugin-add | plugin-catalog | plugin-clone | plugin-disable | plugin-enable | plugin-list | plugin-remove | plugin-update | plugin-validate | bar | bar-text-color | shell | shell-config | migrate | migrate-notify | hook | hook-install | \
       refresh-hyprland | hyprland-reload-guard | notification-send | menu | menu-clipboard | menu-emoji | menu-emoji-insert | menu-file | menu-herdr-keybindings | menu-images | menu-input | menu-keybindings | menu-plugin | menu-region-formats | menu-select | menu-share | menu-timezone | menu-tmux-keybindings | \
-      provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | launch-*)
+      provision-user | provision-first-run | provision-hardware | provision-owner | reinstall-configs | reinstall | reinstall-pkgs | version | version-branch | version-channel | version-pkgs | update | update-* | launch-* | \
+      cmd-* | default-terminal | action | i18n | notification-wait | software-rendering | toggle-enabled | hyprland-toggle-enabled | hyprland-software-rendering | hw-software-rendering | powerprofiles-init | powerprofiles-set | powerprofiles-floor | powerprofiles-list | hyprland-monitor-watch | hyprland-monitor-clamshell | hyprland-monitor-modeless | hyprland-monitor-external-active | hyprland-monitor-identity | hyprland-monitor-internal | hyprland-monitor-internal-mirror | hyprland-monitor-laptop | hyprland-workspace-layout-current | hyprland-workspace-layout-toggle | hyprland-workspace-layout-default | hw-laptop | hw-clamshell | hw-external-monitors | system-lid-inhibit | restart-hyprctl)
       return 0
       ;;
     *)
@@ -473,8 +503,22 @@ copy_subsets() {
   # All themes, colors.toml + shell.toml, verbatim except path renames applied later. 23 themes at pinned commit.
   copy_subset "$OMARCHY_SRC/themes" "$FORK_OUT/themes" "themes/"
 
-  # SDDM greeter theme and greeter Hyprland config, renamed omarchy -> hexciri
-  # by the rename step below (default/sddm/omarchy -> default/sddm/hexciri).
+  # i18n catalogs, required: the shell's I18n service reads
+  # default/i18n/<code>/shell.json layered over English. Without this copy
+  # every lookup returns the literal key, so the clock panel showed
+  # "clock.monthYear" / "clock.weekShortSUN" instead of real dates.
+  copy_subset "$OMARCHY_SRC/default/i18n" "$FORK_OUT/default/i18n" "default/i18n/"
+
+  # Terminal preference list: launch-terminal's fast path reads
+  # xdg-terminals.list (kitty.desktop after the rename map) instead of
+  # calling xdg-terminal-exec. Optional: falls back to xdg-terminal-exec.
+  copy_optional_path "$OMARCHY_SRC/default/xdg-terminal-exec" "$FORK_OUT/default/xdg-terminal-exec" "default/xdg-terminal-exec/" || warn "default/xdg-terminal-exec/ not found in source, terminal launches fall back to xdg-terminal-exec."
+
+  # SDDM greeter Hyprland config, renamed omarchy -> hexciri by the rename
+  # step below (default/sddm/omarchy -> default/sddm/hexciri). The greeter
+  # theme itself is NOT taken from here anymore: the SDDM theming step uses
+  # Hexciri's own branding/sddm/ from the repo tree, because Omarchy's theme
+  # ships Omarchy logos. This copy is kept for hyprland.lua only.
   # Optional: if upstream moves it, the SDDM theming step later warns and
   # continues with the EndeavourOS default theme instead of dying here.
   if ! copy_optional_path "$OMARCHY_SRC/default/sddm" "$FORK_OUT/default/sddm" "default/sddm/"; then
@@ -570,6 +614,36 @@ replacements = [
     (b"omarchy-shell", b"hexciri-shell"),
     (b"omarchy-theme-set", b"hexciri-theme-set"),
     (b"omarchy-launch-", b"hexciri-launch-"),
+    # Generic hyphen rule: autostart.lua calls omarchy-hyprland-monitor-watch,
+    # omarchy-powerprofiles-init, omarchy-hyprland-software-rendering and
+    # omarchy-provision-first-run, and none of those matched any rule above
+    # (they are not omarchy-shell/-menu/-launch-/-theme-set), so they survived
+    # the rename while bin/ renamed them to hexciri-*, and uwsm-app reported
+    # "Command not found" at login. Safe where a bare omarchy catch-all is
+    # not: Lua identifiers cannot contain hyphens, so _G.omarchy_default_bindings
+    # and table keys like value.omarchy are untouched by this rule.
+    (b"omarchy-", b"hexciri-"),
+    # File manager: Devi's default is Strata (GitHub release, installed by
+    # bin/hexciri-strata-install), not Omarchy's Folio. Targeted to the
+    # uwsm-app invocation only: window-class rules in windows.lua/system.lua
+    # match the class name, and Strata's app ID was not verified, so a global
+    # folio -> strata rename would break those rules.
+    (b"-- folio", b"-- strata"),
+    # Terminal: Devi chose Kitty over Omarchy's default Foot. The terminals
+    # list (default/xdg-terminal-exec/hyprland-xdg-terminals.list) names
+    # foot.desktop; rename it so launch-terminal's fast path opens Kitty.
+    (b"foot.desktop", b"kitty.desktop"),
+    # Menu trigger icon: shell/plugins/menu/BarWidget.qml draws text "\ue900"
+    # in fontFamily "omarchy", the Omarchy logo glyph (U+E900) from Omarchy's
+    # private-use icon font default/fonts/omarchy/omarchy.ttf, which v2 never
+    # installs, so the trigger rendered blank / a white square. Default it to
+    # the Arch logo from Nerd Fonts, nf-linux-archlinux U+F303, in the
+    # JetBrains Mono Nerd Font the installer already ships
+    # (ttf-jetbrains-mono-nerd). U+E900 is only the Omarchy logo (the other
+    # omarchy-font glyphs are U+E901+ brand marks for menu entries), so this
+    # replacement touches the logo and nothing else.
+    (b"\\ue900", b"\\uf303"),
+    (b'fontFamily: "omarchy"', b'fontFamily: "JetBrainsMono Nerd Font"'),
     (b"omarchy-menu", b"hexciri-menu"),
     (b"omarchy.lua", b"hexciri.lua"),
     # Root cause of the Hyprland emergency mode on the first live boot:
@@ -642,7 +716,7 @@ for dirpath, dirnames, filenames in os.walk(root):
 print("Content rewrite: %d files scanned, %d files changed" % (total_files, changed_files))
 PY
   info "Content rewrite complete"
-  info "Renames applied: /usr/share/omarchy -> /usr/share/hexciri, ~/.config/omarchy -> ~/.config/hexciri, ~/.local/state/omarchy -> ~/.local/state/hexciri, ~/.local/share/omarchy -> ~/.local/share/hexciri, OMARCHY_PATH -> HEXCIRI_PATH, omarchy.bar etc -> hexciri.bar etc, omarchy-shell -> hexciri-shell, omarchy-theme-set -> hexciri-theme-set, omarchy-launch-* -> hexciri-launch-*, default/hypr/omarchy.lua -> default/hypr/hexciri.lua, config/hypr/hyprland.lua env fallback updated by the same map"
+  info "Renames applied: /usr/share/omarchy -> /usr/share/hexciri, ~/.config/omarchy -> ~/.config/hexciri, ~/.local/state/omarchy -> ~/.local/state/hexciri, ~/.local/share/omarchy -> ~/.local/share/hexciri, OMARCHY_PATH -> HEXCIRI_PATH, omarchy.bar etc -> hexciri.bar etc, omarchy-shell -> hexciri-shell, omarchy-theme-set -> hexciri-theme-set, omarchy-launch-* -> hexciri-launch-*, default/hypr/omarchy.lua -> default/hypr/hexciri.lua, config/hypr/hyprland.lua env fallback updated by the same map, omarchy-* commands -> hexciri-* (generic hyphen rule), folio -> strata (launch-files only), foot.desktop -> kitty.desktop, menu trigger Omarchy logo glyph -> Arch Nerd Font glyph U+F303"
 }
 
 generate_compat() {
@@ -983,6 +1057,19 @@ for bin_file in "$HEXCIRI_PATH"/bin/hexciri-*; do
 done
 info "Linked: $HEXCIRI_PATH/bin/hexciri-* into ~/.local/bin/"
 
+# Terminal preference list: launch-terminal's fast path reads
+# ~/.config/xdg-terminals.list (and hyprland-xdg-terminals.list) first and
+# opens kitty.desktop from it, instead of calling xdg-terminal-exec.
+# Without these files every terminal launch falls through to xdg-terminal-exec.
+if [ -f "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" ]; then
+  mkdir -p "$HOME/.config/xdg-terminal-exec"
+  cp -a "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" "$HOME/.config/xdg-terminal-exec/hyprland-xdg-terminals.list"
+  cp -a "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" "$HOME/.config/xdg-terminals.list"
+  info "Placed: ~/.config/xdg-terminals.list and ~/.config/xdg-terminal-exec/hyprland-xdg-terminals.list (kitty.desktop)"
+else
+  warn "xdg-terminals.list not found in fork, terminal launches fall back to xdg-terminal-exec."
+fi
+
 # Env files: HEXCIRI_PATH and PATH, for logins and uwsm sessions (sudo steps)
 TMP_PROFILE="$(mktemp)"
 cat > "$TMP_PROFILE" <<'EOF'
@@ -998,11 +1085,16 @@ sudo install -Dm644 "$TMP_PROFILE" /etc/profile.d/hexciri.sh
 rm -f "$TMP_PROFILE"
 info "Installed: /etc/profile.d/hexciri.sh"
 
+# PATH for the uwsm session itself: /etc/profile.d is only sourced by login
+# shells, and Hyprland exec (Super+Space menu, Super+Alt+Space dock) runs
+# with the compositor's environment. Bake the install-time PATH in literally
+# so hexciri-* is findable there even when profile.d is not sourced.
 TMP_UWSM="$(mktemp)"
-cat > "$TMP_UWSM" <<'EOF'
-HEXCIRI_PATH=/usr/share/hexciri
-OMARCHY_PATH=/usr/share/hexciri
-EOF
+{
+  printf 'HEXCIRI_PATH=/usr/share/hexciri\n'
+  printf 'OMARCHY_PATH=/usr/share/hexciri\n'
+  printf 'PATH=/usr/share/hexciri/bin:%s\n' "$PATH"
+} > "$TMP_UWSM"
 sudo install -Dm644 "$TMP_UWSM" /usr/share/uwsm/env.d/10-hexciri
 rm -f "$TMP_UWSM"
 info "Installed: /usr/share/uwsm/env.d/10-hexciri"
@@ -1043,6 +1135,48 @@ if [ -n "$PLACED_BAD" ]; then
   exit 1
 fi
 info "PASS: no file or dir named omarchy under $HEXCIRI_PATH or ~/.config/hexciri"
+
+# No leftover omarchy-* command references in the placed Hyprland Lua: the
+# first live boot showed autostart calling omarchy-hyprland-monitor-watch
+# after the rename, because no rule matched omarchy-*. Warn, do not die:
+# a comment mentioning an omarchy-* command is harmless, a real call is not.
+LEFTOVER_OMARCHY_CMDS="$(grep -rInE 'omarchy-[a-z0-9]+' "$HEXCIRI_PATH/default/hypr" "$HOME/.config/hypr" 2>/dev/null || true)"
+if [ -n "$LEFTOVER_OMARCHY_CMDS" ]; then
+  warn "omarchy-* references remain in placed Hyprland Lua (check whether they are real commands or just comments):"
+  printf '%s\n' "$LEFTOVER_OMARCHY_CMDS"
+else
+  info "PASS: no omarchy-* command references in placed Hyprland Lua"
+fi
+unset LEFTOVER_OMARCHY_CMDS
+
+# Every hexciri-* command autostart tries to run must exist in the installed
+# bin/ or on PATH, or login shows "App failure, Command not found" popups
+# from uwsm-app. herdr is deliberately excluded: autostart starts it via
+# systemd-run and a missing herdr fails silently, it is out of Phase 1 scope.
+if [ -f "$HEXCIRI_PATH/default/hypr/autostart.lua" ]; then
+  for _cmd in $(grep -oE 'hexciri-[a-z0-9-]+' "$HEXCIRI_PATH/default/hypr/autostart.lua" 2>/dev/null | sort -u); do
+    if [ -x "$HEXCIRI_PATH/bin/$_cmd" ] || command -v "$_cmd" >/dev/null 2>&1; then
+      info "  autostart command present: $_cmd"
+    else
+      warn "  autostart calls $_cmd but it is not installed, expect a Command not found popup at login"
+    fi
+  done
+  unset _cmd
+fi
+
+# Menu / dock / terminal / file manager essentials: Super+Space, Super+Alt+Space,
+# Super+Return and Super+Shift+F all go through these.
+for _bin in hexciri-menu hexciri-shell hexciri-launch-terminal hexciri-launch-files hexciri-launch-files-cwd; do
+  [ -x "$HEXCIRI_PATH/bin/$_bin" ] || warn "MISSING bin (menu/terminal/file manager will fail): $_bin"
+done
+unset _bin
+[ -f "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" ] || warn "MISSING: default/hexciri/hexciri-menu.jsonc, Super+Space menu has no routes"
+if ! grep -rl 'hexciri.menu' "$HEXCIRI_PATH/shell/plugins" --include='manifest.json' >/dev/null 2>&1; then
+  warn "no plugin manifest registers hexciri.menu, Super+Space will do nothing"
+fi
+if ! grep -rl 'hexciri.dock' "$HEXCIRI_PATH/shell/plugins" --include='manifest.json' >/dev/null 2>&1; then
+  warn "no plugin manifest registers hexciri.dock, Super+Alt+Space will do nothing"
+fi
 info "PASS: placement verified"
 
 # --- Apply a default theme, like v1 does its theme sync ---
@@ -1072,13 +1206,18 @@ fi
 # --- Theme SDDM with the currently applied theme ---
 # The EndeavourOS default SDDM theme is ugly as all hell, and the installer
 # previously never touched SDDM theming at all: it only enabled the service.
-# Omarchy ships its own minimal terminal-style SDDM theme in
-# default/sddm/omarchy/ (Main.qml, logo/lock/entry/bullet images,
-# metadata.desktop), renamed here to hexciri. Install that theme, select
-# it, and recolor its solid background to the currently applied Hexiri
-# theme's background colour, read from the theme's colors.toml, never a
-# guessed theme name: DEFAULT_THEME above is the first theme dir, and
-# theme-set will already have staged it at ~/.local/state/hexciri/current.
+# The theme comes from Hexciri's own branding/sddm/ in the repo tree (the
+# Hexciri emblem logo, Name=Hexciri), NOT from Omarchy's default/sddm/omarchy/:
+# that theme ships Omarchy's logo.png wordmark, and the last live boot showed
+# Omarchy logos at the login screen. The greeter compositor config still comes
+# from the Omarchy fork ($HEXCIRI_PATH/default/sddm/hyprland.lua).
+# The applied theme's background colour is written into the SDDM theme's
+# theme.conf (Background=), because branding Main.qml reads its colours from
+# theme.conf (root.bgColor), not from a literal colour in the QML: the old
+# sed recolor of Main.qml could not work here. Colour is read from the
+# theme's colors.toml, never a guessed theme name: DEFAULT_THEME above is
+# the first theme dir, and theme-set will already have staged it at
+# ~/.local/state/hexciri/current.
 # Best-effort, never fatal: if the SDDM theme source is missing, SDDM
 # keeps the EndeavourOS default and login still works. Runs from tty,
 # no GUI needed. DisplayServer is deliberately NOT forced to Wayland
@@ -1086,11 +1225,19 @@ fi
 # greeter compositor.
 
 step "Theming SDDM with the current theme"
-if [ -d "$HEXCIRI_PATH/default/sddm/hexciri" ]; then
+SDDM_SRC=""
+if [ -d "$HEXCIRI_REPO_ROOT/branding/sddm" ]; then
+  SDDM_SRC="$HEXCIRI_REPO_ROOT/branding/sddm"
+  info "SDDM theme source: Hexciri branding/sddm/ from the installer tree"
+elif [ -d "$HEXCIRI_PATH/default/sddm/hexciri" ]; then
+  warn "branding/sddm/ not found in the installer tree, falling back to the forked Omarchy SDDM theme (may still show Omarchy logos)."
+  SDDM_SRC="$HEXCIRI_PATH/default/sddm/hexciri"
+fi
+if [ -n "$SDDM_SRC" ]; then
   sudo mkdir -p /usr/share/sddm/themes || warn "could not create /usr/share/sddm/themes, SDDM theming skipped."
   if [ -d /usr/share/sddm/themes ]; then
     sudo rm -rf /usr/share/sddm/themes/hexciri
-    if sudo cp -a "$HEXCIRI_PATH/default/sddm/hexciri" /usr/share/sddm/themes/hexciri; then
+    if sudo cp -a "$SDDM_SRC" /usr/share/sddm/themes/hexciri; then
       info "Installed SDDM theme: /usr/share/sddm/themes/hexciri"
     else
       warn "could not copy SDDM theme to /usr/share/sddm/themes/hexciri, keeping the EndeavourOS default theme."
@@ -1107,7 +1254,9 @@ if [ -d "$HEXCIRI_PATH/default/sddm/hexciri" ]; then
   printf '[Theme]\nCurrent=hexciri\n' > "$TMP_SDDM_THEME"
   sudo install -Dm644 "$TMP_SDDM_THEME" /etc/sddm.conf.d/20-hexciri-theme.conf 2>/dev/null && info "SDDM theme selected: Current=hexciri (/etc/sddm.conf.d/20-hexciri-theme.conf)" || warn "could not write /etc/sddm.conf.d/20-hexciri-theme.conf, SDDM keeps its current theme."
   rm -f "$TMP_SDDM_THEME"
-  # Recolor the greeter background from the applied theme's colors.toml.
+  # Write the applied theme's background colour into the SDDM theme's
+  # theme.conf (Background=): branding Main.qml reads root.bgColor from
+  # config, so a sed recolor of Main.qml cannot work here.
   SDDM_BG=""
   for _colors in "$HOME/.local/state/hexciri/current/theme/colors.toml" "$HEXCIRI_PATH/themes/${DEFAULT_THEME:-}/colors.toml"; do
     if [ -f "$_colors" ]; then
@@ -1117,19 +1266,41 @@ if [ -d "$HEXCIRI_PATH/default/sddm/hexciri" ]; then
   done
   unset _colors
   if [[ "$SDDM_BG" =~ ^#[0-9a-fA-F]{6}$ ]]; then
-    if [ -f /usr/share/sddm/themes/hexciri/Main.qml ]; then
-      if sudo sed -i -E "s/color: \"#[0-9a-fA-F]{6}\"/color: \"$SDDM_BG\"/" /usr/share/sddm/themes/hexciri/Main.qml 2>/dev/null; then
-        info "SDDM background recolored to the ${DEFAULT_THEME:-current} theme background: $SDDM_BG"
-      else
-        warn "could not recolor SDDM Main.qml, it keeps its packaged background colour."
-      fi
+    TMP_SDDM_CONF="$(mktemp)"
+    printf '[General]\nBackground=%s\n' "$SDDM_BG" > "$TMP_SDDM_CONF"
+    if sudo install -Dm644 "$TMP_SDDM_CONF" /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null; then
+      info "SDDM theme background set to the ${DEFAULT_THEME:-current} theme background: $SDDM_BG"
+    else
+      warn "could not write SDDM theme.conf, it keeps its packaged background colour."
     fi
+    rm -f "$TMP_SDDM_CONF"
   else
     warn "could not read a background colour from the applied theme colors.toml, SDDM keeps its packaged background colour."
   fi
   unset SDDM_BG
 else
-  warn "SDDM theme source not found at $HEXCIRI_PATH/default/sddm/hexciri, keeping the EndeavourOS default SDDM theme."
+  warn "No SDDM theme source found, keeping the EndeavourOS default SDDM theme."
+fi
+unset SDDM_SRC
+
+# --- Install Strata (file manager), best-effort ---
+# Devi's default file manager is Strata (GitHub release, lgse/strata), not
+# Omarchy's Folio. The forked launch-files scripts now call strata (rename
+# map), so Strata must exist or Super+Shift+F errors with Command not found.
+# bin/hexciri-strata-install is a symlink to bin/hexciri-setup and dispatches
+# to its strata subcommand: per-user release binary, sha256-verified,
+# idempotent, installs to ~/.local/bin/strata, needs glibc >= 2.39.
+# Scope note: this is shell/launcher scope (terminal + file manager only),
+# not the full v1 app list. Best-effort, never fatal.
+step "Installing Strata (file manager, best-effort)"
+if [ -x "$HEXCIRI_REPO_ROOT/bin/hexciri-strata-install" ]; then
+  if bash "$HEXCIRI_REPO_ROOT/bin/hexciri-strata-install"; then
+    info "Strata installed (or already current)"
+  else
+    warn "Strata install failed or skipped, Super+Shift+F will error until Strata is installed. Install by hand: hexciri-strata-install"
+  fi
+else
+  warn "bin/hexciri-strata-install not found in the installer tree, Strata not installed. Install by hand later if needed."
 fi
 
 # --- Health check, like v1 ---
@@ -1148,7 +1319,7 @@ if command -v systemctl >/dev/null 2>&1; then
     HC_FAIL=1
   fi
 fi
-for _check in "$HEXCIRI_PATH/bin/hexciri-launch-shell" "$HEXCIRI_PATH/shell/shell.qml" "$HOME/.config/hypr/hyprland.lua" "$HOME/.config/hexciri/shell.json" /usr/share/wayland-sessions/hexciri.desktop; do
+for _check in "$HEXCIRI_PATH/bin/hexciri-launch-shell" "$HEXCIRI_PATH/bin/hexciri-menu" "$HEXCIRI_PATH/bin/hexciri-shell" "$HEXCIRI_PATH/shell/shell.qml" "$HOME/.config/hypr/hyprland.lua" "$HOME/.config/hexciri/shell.json" /usr/share/wayland-sessions/hexciri.desktop; do
   if [ -e "$_check" ]; then
     info "  present: $_check"
   else
@@ -1179,6 +1350,10 @@ if [ -f /usr/share/sddm/themes/hexciri/Main.qml ]; then
 else
   warn "  sddm theme: hexciri theme not installed, SDDM uses its default theme (cosmetic only, login still works)"
 fi
+command -v kitty >/dev/null 2>&1 && info "  terminal: kitty present" || warn "  terminal: kitty NOT installed, terminal binds fall back to xdg-terminal-exec"
+command -v udiskie >/dev/null 2>&1 && info "  udiskie: present" || warn "  udiskie: NOT installed, autostart will pop a Command not found error"
+command -v strata >/dev/null 2>&1 && info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"
+command -v xdg-terminal-exec >/dev/null 2>&1 && info "  xdg-terminal-exec: present" || warn "  xdg-terminal-exec: not installed, floating terminals use the xdg-terminals.list fast path only"
 if [ "$HC_FAIL" -eq 0 ]; then
   info "Health check: clean"
 else
@@ -1194,12 +1369,20 @@ Reboot, then check in order:
   1. SDDM login screen appears
   2. Pick Hexiri at the SDDM session menu, log in
   3. Hyprland starts, no black screen, no immediate logout to SDDM
-  4. Quickshell starts, stock bar appears: `quickshell --version` in foot if the shell is missing
+  4. Quickshell starts, stock bar appears: `quickshell --version` in kitty if the shell is missing
   5. Network works: `nmcli device status`
   6. Audio works: `wpctl status` (PipeWire ships with EndeavourOS)
   7. Bluetooth works if needed: `bluetoothctl devices`
   8. Theme: `hexciri-theme-set` with a stock theme, check bar and menu recolor
   9. Plugin: install a stock plugin, check it loads, check the alias resolves omarchy.bar to hexciri.bar
+  10. Menu: Super+Space opens the menu (Arch logo at the bar's left end), Super+Alt+Space opens the dock apps
+  11. File manager: Super+Shift+F opens Strata, terminal opens Kitty
+  12. Clock popup shows the real month and weekday names, not clock.monthYear / clock.weekShort
+  13. Workspace 1 shows 1 / its mode glyph, and SDDM shows the Hexciri emblem, not Omarchy logos
+
+If Super+Space still does nothing after reboot, run this in a terminal and report what it prints:
+  hexciri-menu toggle root
+That tells whether the menu command is missing (PATH), the shell IPC is unreachable, or the menu plugin did not load.
 
 Installed locations:
   /usr/share/hexciri/  (shell, default, themes, bin)

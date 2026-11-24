@@ -64,7 +64,8 @@ lua51
 luarocks
 #
 # Terminal and fonts
-foot
+kitty
+udiskie
 noto-fonts
 noto-fonts-cjk
 noto-fonts-emoji
