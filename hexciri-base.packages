@@ -1,0 +1,101 @@
+# Hexiri 2.0 Phase 1 base packages, EndeavourOS no-DE
+# Minimal only. No apps, no GUI preinstalls, no Limine, no snap/btrfs.
+# EndeavourOS already ships: pacman, yay, PipeWire, NetworkManager, bluez,
+# power-profiles-daemon, upower, fonts, FirewallD, dracut, systemd-boot.
+# Do NOT add: mkinitcpio, limine, snapper, linux-omarchy, Waybar, Mako,
+# Walker, hyprlock, hypridle, swaybg, hyprpolkitagent.
+#
+# Compositor and session
+hyprland
+uwsm
+sddm
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+xdg-user-dirs
+xdg-utils
+xorg-xwayland
+#
+# Quickshell, Arch extra, NOT quickshell-git by default
+quickshell
+qt6-base
+qt6-declarative
+qt6-wayland
+qt6-svg
+qt6-5compat
+qt6-multimedia
+qt6-imageformats
+#
+# Polkit and auth, QS polkit owns it once proven
+polkit
+rtkit
+gnome-keyring
+libsecret
+#
+# Helpers
+pamixer
+brightnessctl
+jq
+bc
+curl
+wget
+git
+base-devel
+imagemagick
+socat
+inotify-tools
+grim
+slurp
+wl-clipboard
+hyprpicker
+hyprsunset
+ffmpeg
+libvips
+ffmpegthumbnailer
+librsvg
+zenity
+unzip
+ripgrep
+fd
+fzf
+gum
+mise # Phase 2 2026-11-24: reinstall mise (lazy tools from /etc/mise/conf.d/hexciri-tools.toml)
+eza
+bat
+starship
+zoxide
+fastfetch
+python
+python-gobject
+lua51
+luarocks
+#
+# Terminal and fonts
+kitty
+udiskie
+noto-fonts
+noto-fonts-cjk
+noto-fonts-emoji
+ttf-jetbrains-mono-nerd
+woff2-font-awesome
+terminus-font
+# NOTE 2026-11-23: noto-fonts-cjk-vf and ttf-jetbrains-mono-nerd-basic are
+# Omarchy-repo-only names, NOT Arch. Arch extra: noto-fonts-cjk, ttf-jetbrains-mono-nerd.
+#
+# GPU, installer branches by PCI vendor, do NOT install all of these
+# AMD: mesa vulkan-radeon lib32-mesa lib32-vulkan-radeon amd-ucode linux-firmware
+# Nvidia Turing+: nvidia-open-dkms nvidia-utils lib32-nvidia-utils nvidia-settings egl-wayland
+# Nvidia Pascal GTX 1080 Ti, AUR only: nvidia-580xx-dkms nvidia-580xx-utils, plus linux-headers
+# Intel fallback: mesa vulkan-intel lib32-mesa lib32-vulkan-intel
+#
+# Arch substitutes for Omarchy-repo-only apps (2026-11-23, v2/install.sh
+# patch step). Do NOT install the Omarchy-repo-only ones, they have no
+# Arch or AUR package: omasnap -> grim + slurp (above), omacalc ->
+# gnome-calculator, omaview -> imv. cliamp, omawrite and Obsidian binds
+# are REMOVED, not substituted: Devi 2026-11-23 does not want ncspot,
+# ghostwriter or obsidian, so there is no substitute to install. Herdr
+# bind removed (AI agent, out of v2 scope).
+# Spotify is AUR, not pacman: yay -S spotify (fallback: pacman
+# spotify-launcher, plus a spotify wrapper in /usr/share/hexciri/bin/).
+# spicetify-cli is AUR too: yay -S spicetify-cli.
+gnome-calculator
+tesseract
