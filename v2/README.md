@@ -8,8 +8,9 @@ End goal: a very minimal almost nothing installed Arch that still has the feel a
 
 ## Files in v2/
 
+- bootstrap.sh, the primary one-command path, thin wrapper, deliberately NOT a second installer. Download it first, then run it: `curl -LO https://raw.githubusercontent.com/Deoxizn/hexciri/nyx/v2/bootstrap.sh`, then `bash bootstrap.sh`. It downloads the nyx branch as a public tarball, no git, no auth, verifies it contains v2/install.sh, then execs that installer. It extracts to a temp dir, NOT ~/.local/opt/hexciri, which holds the v1 checkout.
 - install.sh, the one command, primary entry point. Run as normal user, not root, on a fresh EndeavourOS no-DE install: `bash v2/install.sh`
-  It does it all in order, minus the EndeavourOS install itself: packages, GPU drivers, Quickshell, Hyprland, SDDM plus uwsm, then clones omacom/omarchy at the pinned commit, forks and renames the shell inline, places the forked tree to /usr/share/hexciri, ~/.config/hexciri, ~/.local/state/hexciri, and ~/.config/hypr, wires hexciri-compat.sh into hexciri-launch-shell and env-bootstrap, requires hexciri-compat.lua from default/hypr/hexciri.lua, and verifies placement. Sudo is used only for the /usr/share and /etc steps.
+  It does it all in order, minus the EndeavourOS install itself: packages, GPU drivers, Quickshell, Hyprland, SDDM plus uwsm, then downloads omacom/omarchy at the pinned commit as a public codeload tarball with curl (no git clone, no username or password prompt), verifies the SHA from the tarball top dir, forks and renames the shell inline, places the forked tree to /usr/share/hexciri, ~/.config/hexciri, ~/.local/state/hexciri, and ~/.config/hypr, wires hexciri-compat.sh into hexciri-launch-shell and env-bootstrap, requires hexciri-compat.lua from default/hypr/hexciri.lua, and verifies placement. Sudo is used only for the /usr/share and /etc steps.
 - install-2.0.sh, old Phase 1 EndeavourOS no-DE base installer, kept as reference. Do not use it as the entry point anymore, its steps are now in install.sh.
 - fork-shell.sh, old Phase 1 fork and rename script, kept as reference. Do not use it as the entry point anymore, its logic is now inline in install.sh. It took a cloned Omarchy tree at the pinned commit, or a tarball, extracted only the listed subsets, renamed omarchy to hexciri, generated the compatibility alias files, and failed loudly if any file named omarchy remained.
 - hexciri-base.packages, minimal Phase 1 package list. No apps, no GUI preinstalls.
@@ -31,7 +32,7 @@ End goal: a very minimal almost nothing installed Arch that still has the feel a
 - No apps, no GUI preinstalls, no Docker, no AI agents.
 - No Noctalia, no Niri. Hyprland plus Quickshell only.
 - No Hexciri Phase 2 edits: no Lua binds, windowrules, workspaces, opacity or Steam rules, no Nyxiri overlay, no THPM install, no updater rework, no Hexciri scripts ported from Noctalia calls.
-- No vendored copy of every Omarchy QML file in this repo. The fork script is the vendoring mechanism: it pulls the pinned upstream commit at install time, extracts the subsets, and renames them. A full file-by-file copy through the GitHub MCP was not feasible, and would have gone stale the next upstream commit. The pinned SHA, the subset list, and the rename map are in fork-shell.sh, and are the auditable fork.
+- No vendored copy of every Omarchy QML file in this repo. The fork script is the vendoring mechanism: it downloads the pinned upstream commit as a tarball at install time, extracts the subsets, and renames them. A full file-by-file copy through the GitHub MCP was not feasible, and would have gone stale the next upstream commit. The pinned SHA, the subset list, and the rename map are in fork-shell.sh, and are the auditable fork.
 
 ## Inventory corrections, verified at pinned commit
 
@@ -46,7 +47,34 @@ End goal: a very minimal almost nothing installed Arch that still has the feel a
 
 ## How to test Phase 1, after install.sh
 
-One command, run as normal user on a fresh EndeavourOS no-DE install:
+Primary path, the bootstrap. Download the file first, then run it. Do NOT pipe curl into bash, so stdin stays on the terminal. No git, no username or password prompt:
+
+```bash
+curl -LO https://raw.githubusercontent.com/Deoxizn/hexciri/nyx/v2/bootstrap.sh
+bash bootstrap.sh
+```
+
+The bootstrap downloads the nyx branch as a public tarball, verifies it contains v2/install.sh, then execs that installer. The whole chain is git-auth free: the bootstrap uses curl only, and install.sh fetches its Omarchy source as a codeload tarball too.
+
+Fallback, manual tarball download, no git auth:
+
+```bash
+curl -L https://codeload.github.com/Deoxizn/hexciri/tar.gz/refs/heads/nyx -o hexciri-nyx.tar.gz
+tar -xzf hexciri-nyx.tar.gz
+cd hexciri-nyx
+bash v2/install.sh
+```
+
+Git clone is an optional alternative only, not the primary path:
+
+```bash
+git clone https://github.com/Deoxizn/hexciri.git ~/hexciri
+cd ~/hexciri
+git checkout nyx
+bash v2/install.sh
+```
+
+If you already have the nyx checkout, run as normal user on a fresh EndeavourOS no-DE install:
 
 ```bash
 bash v2/install.sh

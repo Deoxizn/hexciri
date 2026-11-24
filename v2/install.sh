@@ -8,8 +8,8 @@
 # This is the one command, minus the EndeavourOS install itself.
 # It merges the old two Phase 1 scripts into one, in order:
 #   1. Preflight, packages, GPU drivers, Quickshell, Hyprland, SDDM plus uwsm
-#   2. Clone omacom/omarchy branch quattro at the pinned commit, verify SHA
-#   3. Fork and rename the shell inline, extract only the listed subsets
+#   2. Download omacom/omarchy at the pinned commit as a tarball (no git, no auth),
+#      verify SHA from the tarball top dir, then fork and rename the shell inline
 #   4. Place the forked tree to /usr/share/hexciri, ~/.config/hexciri,
 #      ~/.local/state/hexciri, and ~/.config/hypr, and wire the compat alias in
 #   5. Verify placement, then reboot test checklist
@@ -47,10 +47,16 @@
 
 set -euo pipefail
 
+# No git credential prompts anywhere in this script. The Omarchy source is
+# fetched as a public codeload tarball with curl, never with git clone.
+# Git is installed as a package for later use only, it is never invoked here
+# in a way that can ask for a username or password.
+export GIT_TERMINAL_PROMPT=0
+
 PINNED_SHA="94a8c3c3321129fae87a329947711355897e69fd"
 PINNED_BRANCH="quattro"
 PINNED_DATE="2026-11-23"
-OMARCHY_REPO="https://github.com/omacom/omarchy.git"
+OMARCHY_TARBALL_URL="https://codeload.github.com/omacom/omarchy/tar.gz/${PINNED_SHA}"
 
 HEXCIRI_PATH="/usr/share/hexciri"
 TMP_WORK=""
@@ -306,19 +312,32 @@ done
 step "Quick service state check"
 systemctl is-enabled NetworkManager bluetooth power-profiles-daemon firewalld sddm || warn "One or more services above did not report enabled. Check systemctl status for that service."
 
-# --- Clone Omarchy at the pinned commit ---
+# --- Download Omarchy at the pinned commit as a tarball, no git, no auth ---
 
-step "Cloning Omarchy, branch $PINNED_BRANCH, pinned commit $PINNED_SHA ($PINNED_DATE)"
-for cmd in git python3 tar grep find cp mkdir rm; do
+step "Downloading Omarchy, branch $PINNED_BRANCH, pinned commit $PINNED_SHA ($PINNED_DATE)"
+step "No git clone, no username or password prompt: public codeload tarball via curl"
+for cmd in curl python3 tar grep find cp mkdir rm; do
   command -v "$cmd" >/dev/null 2>&1 || die "missing required command: $cmd"
 done
-git clone --branch "$PINNED_BRANCH" "$OMARCHY_REPO" "$OMARCHY_SRC" || die "git clone of omacom/omarchy failed. Fix networking, then rerun."
-git -C "$OMARCHY_SRC" checkout "$PINNED_SHA" || die "git checkout of pinned commit $PINNED_SHA failed."
-ACTUAL_SHA="$(git -C "$OMARCHY_SRC" rev-parse HEAD)"
-if [ "$ACTUAL_SHA" != "$PINNED_SHA" ]; then
-  die "commit mismatch: expected $PINNED_SHA, got $ACTUAL_SHA"
+OMARCHY_TARBALL="$TMP_WORK/omarchy.tar.gz"
+curl -fsSL --max-time 300 -o "$OMARCHY_TARBALL" "$OMARCHY_TARBALL_URL" || die "curl download of omacom/omarchy tarball failed. Fix networking, then rerun."
+[ -s "$OMARCHY_TARBALL" ] || die "Downloaded Omarchy tarball is empty: $OMARCHY_TARBALL"
+# Validate it is really a gzip tarball, not an HTML error page.
+tar -tzf "$OMARCHY_TARBALL" >/dev/null || die "Downloaded file is not a valid gzip tarball: $OMARCHY_TARBALL. Check the URL and networking, then rerun."
+# Codeload names the top dir omarchy-<full commit SHA>. That is the SHA check:
+# a tarball for any other commit has a different top dir name and fails here.
+TOP_DIR="$(tar -tzf "$OMARCHY_TARBALL" | head -1 | cut -d/ -f1)"
+if [ "$TOP_DIR" != "omarchy-$PINNED_SHA" ]; then
+  die "commit mismatch: tarball top dir is '$TOP_DIR', expected 'omarchy-$PINNED_SHA'. Refusing to continue."
 fi
-info "Commit verified by git: $ACTUAL_SHA"
+tar -xzf "$OMARCHY_TARBALL" -C "$TMP_WORK" || die "Failed to extract Omarchy tarball."
+OMARCHY_SRC="$TMP_WORK/$TOP_DIR"
+[ -d "$OMARCHY_SRC" ] || die "Extracted Omarchy tree not found: $OMARCHY_SRC"
+# Marker files from the pinned tree, a wrong or truncated tarball fails here.
+for marker in shell/shell.qml default/hypr config/omarchy/shell.json themes; do
+  [ -e "$OMARCHY_SRC/$marker" ] || die "Extracted Omarchy tree is missing expected path: $marker"
+done
+info "Commit verified by tarball top dir: $TOP_DIR"
 
 # --- Fork and rename, inline (was fork-shell.sh) ---
 # Phase 1 only: extract the listed subsets verbatim, then rename. No Phase 2 Hexciri edits.
