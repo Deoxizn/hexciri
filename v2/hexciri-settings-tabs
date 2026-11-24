@@ -1,0 +1,41 @@
+#!/bin/bash
+# omarchy:summary=Manage Hexciri Settings extra panes (Nyxiri tab hook)
+# omarchy:group=settings
+# omarchy:subcommand=list — List extra settings panes
+# omarchy:subcommand=add <id> <title> <qml-path> [glyph] [group] [keywords] — Register an extra pane
+# omarchy:subcommand=remove <id> — Remove an extra pane
+# omarchy:examples=hexciri-settings-tabs list | hexciri-settings-tabs add nyxiri "Nyxiri" /path/to/NyxiriPane.qml
+#
+# Extra panes live as one JSON file each in ~/.config/hexciri/settings-panes/
+# and Hexciri Settings (Store::list "extraPanes") reads them at startup.
+# Nyxiri's branch adds its tab with one call, no Settings rebuild:
+#   hexciri-settings-tabs add nyxiri "Nyxiri" "$HOME/.config/hexciri/plugins/pizza.dirty.nyxiri/NyxiriPane.qml" "\u{F0431}" 3 "nyxiri bar menu workspaces"
+set -euo pipefail
+DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hexciri/settings-panes"
+usage() { echo "Usage: hexciri-settings-tabs list | add <id> <title> <qml-path> [glyph] [group] [keywords] | remove <id>"; exit "${1:-0}"; }
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  list)
+    mkdir -p "$DIR"
+    for f in "$DIR"/*.json; do
+      [ -e "$f" ] || { echo "No extra panes registered."; exit 0; }
+      jq -r '"\(.id)\t\(.title)\t\(.qml)"' "$f"
+    done
+    ;;
+  add)
+    id="${1:-}"; title="${2:-}"; qml="${3:-}"; glyph="${4:-\\u{F0431}}"; group="${5:-3}"; keywords="${6:-}"
+    [ -n "$id" ] && [ -n "$title" ] && [ -n "$qml" ] || usage 1
+    [ -f "$qml" ] || { echo "hexciri-settings-tabs: QML file not found: $qml" >&2; exit 1; }
+    mkdir -p "$DIR"
+    jq -n --arg id "$id" --arg title "$title" --arg glyph "$glyph" --argjson group "$group" \
+      --arg keywords "$keywords" --arg qml "$qml" \
+      '{id:$id,title:$title,glyph:$glyph,group:$group,keywords:$keywords,qml:$qml}' \
+      > "$DIR/$id.json"
+    echo "Registered extra pane '$id' ($title) -> $qml"
+    ;;
+  remove)
+    id="${1:-}"; [ -n "$id" ] || usage 1
+    rm -f "$DIR/$id.json" && echo "Removed extra pane '$id'"
+    ;;
+  *) usage 1 ;;
+esac

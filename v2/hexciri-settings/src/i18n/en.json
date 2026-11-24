@@ -1,0 +1,146 @@
+{
+  "%1 and %n more": {
+    "one": "%1 and %n more",
+    "other": "%1 and %n more"
+  },
+  "%1 of %n installed": {
+    "one": "%1 of %n installed",
+    "other": "%1 of %n installed"
+  },
+  "%n added": {
+    "one": "%n added",
+    "other": "%n added"
+  },
+  "%n apps weren't installed": {
+    "one": "%n app wasn't installed",
+    "other": "%n apps weren't installed"
+  },
+  "%n changes": {
+    "one": "%n change",
+    "other": "%n changes"
+  },
+  "%n changes. Apps are only added, never removed; the ones that need a password install in a terminal.": {
+    "one": "%n change. Apps are only added, never removed; the ones that need a password install in a terminal.",
+    "other": "%n changes. Apps are only added, never removed; the ones that need a password install in a terminal."
+  },
+  "%n connected": {
+    "one": "%n connected",
+    "other": "%n connected"
+  },
+  "%n days": {
+    "one": "%n day",
+    "other": "%n days"
+  },
+  "%n displays": {
+    "one": "%n display",
+    "other": "%n displays"
+  },
+  "%n enabled": {
+    "one": "%n enabled",
+    "other": "%n enabled"
+  },
+  "%n hidden": {
+    "one": "%n hidden",
+    "other": "%n hidden"
+  },
+  "%n hours": {
+    "one": "%n hour",
+    "other": "%n hours"
+  },
+  "%n in Downloads": {
+    "one": "%n in Downloads",
+    "other": "%n in Downloads"
+  },
+  "%n in the repository": {
+    "one": "%n in the repository",
+    "other": "%n in the repository"
+  },
+  "%n installed": {
+    "one": "%n installed",
+    "other": "%n installed"
+  },
+  "%n items": {
+    "one": "%n item",
+    "other": "%n items"
+  },
+  "%n items in hidden sections still show up in search": {
+    "one": "%n item in a hidden section still shows up in search",
+    "other": "%n items in hidden sections still show up in search"
+  },
+  "%n items inside": {
+    "one": "%n item inside",
+    "other": "%n items inside"
+  },
+  "%n minutes": {
+    "one": "%n minute",
+    "other": "%n minutes"
+  },
+  "%n other settings": {
+    "one": "%n other setting",
+    "other": "%n other settings"
+  },
+  "%n printers": {
+    "one": "%n printer",
+    "other": "%n printers"
+  },
+  "%n rules": {
+    "one": "%n rule",
+    "other": "%n rules"
+  },
+  "%n shown": {
+    "one": "%n shown",
+    "other": "%n shown"
+  },
+  "%n snapshots": {
+    "one": "%n snapshot",
+    "other": "%n snapshots"
+  },
+  "%n themes installed": {
+    "one": "%n theme installed",
+    "other": "%n themes installed"
+  },
+  "%n updates available": {
+    "one": "%n update available",
+    "other": "%n updates available"
+  },
+  "%n widgets": {
+    "one": "%n widget",
+    "other": "%n widgets"
+  },
+  "After %n seconds": {
+    "one": "After %n second",
+    "other": "After %n seconds"
+  },
+  "Filter %n apps": {
+    "one": "Filter %n app",
+    "other": "Filter %n apps"
+  },
+  "Filter %n menu items": {
+    "one": "Filter %n menu item",
+    "other": "Filter %n menu items"
+  },
+  "Filter %n plugins": {
+    "one": "Filter %n plugin",
+    "other": "Filter %n plugins"
+  },
+  "Filter %n shortcuts": {
+    "one": "Filter %n shortcut",
+    "other": "Filter %n shortcuts"
+  },
+  "Going back to the previous settings in %n seconds.": {
+    "one": "Going back to the previous settings in %n second.",
+    "other": "Going back to the previous settings in %n seconds."
+  },
+  "It's a submenu: the %n items inside it go too. A copy of your menu file is kept.": {
+    "one": "It's a submenu: the item inside it goes too. A copy of your menu file is kept.",
+    "other": "It's a submenu: the %n items inside it go too. A copy of your menu file is kept."
+  },
+  "Reset all %n changes?": {
+    "one": "Reset %n change?",
+    "other": "Reset all %n changes?"
+  },
+  "Show all %n hidden items?": {
+    "one": "Show the %n hidden item?",
+    "other": "Show all %n hidden items?"
+  }
+}

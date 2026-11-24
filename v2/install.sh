@@ -193,7 +193,8 @@ upstream_fingerprint() {
 patch_fingerprint() {
   {
     sed -n '/^# --- Wire the compat alias in, before placement ---/,/^# --- Place the forked tree to its install targets ---/p' "$INSTALLER_DIR/install.sh"
-    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search"; do
+    find "$HEXCIRI_REPO_ROOT/v2/hexciri-settings" -type f 2>/dev/null | sort | xargs sha256sum 2>/dev/null || printf 'missing hexciri-settings\n'
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
@@ -401,7 +402,7 @@ current_theme_name() {
 # no fork, no theme re-apply, no settings touched at all.
 if [ "${LIGHT_SYNC:-0}" = "1" ]; then
   _ls_sha="$(sha256sum "$INSTALLER_DIR/install.sh" 2>/dev/null | cut -d' ' -f1)"
-  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link hexciri-web-search; do
+  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link hexciri-web-search hexciri-settings-tabs; do
     if [ -f "$HEXCIRI_REPO_ROOT/v2/$_ls_f" ] && [ -d /usr/share/hexciri/bin ]; then
       if ! cmp -s "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" 2>/dev/null; then
         sudo install -Dm755 "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" && info "Light sync: updated /usr/share/hexciri/bin/$_ls_f"
@@ -550,7 +551,7 @@ CORE_PKGS=(
   hyprland uwsm sddm
   xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
   xdg-user-dirs xdg-utils xorg-xwayland
-  qt6-base qt6-declarative qt6-wayland qt6-svg qt6-5compat qt6-multimedia qt6-imageformats
+  qt6-base qt6-declarative qt6-wayland qt6-svg qt6-5compat qt6-multimedia qt6-imageformats squashfs-tools # squashfs-tools: Hexciri Settings AppImages pane (reads AppImage name/icon without running it)
   polkit rtkit gnome-keyring libsecret
   pamixer brightnessctl jq bc curl wget git base-devel pacman-contrib socat # checkupdates, for hexciri-update-available (update icon); socat is hexciri-shell's IPC transport (socket fast path), upstream omarchy-base.packages line 145, without it every hexciri-shell call fails "not responding"
   fprintd usbutils # fprintd + usbutils: Setup > Security > Fingerprint needs fprintd-enroll/verify, hw-fingerprint probes USB readers
@@ -2562,6 +2563,50 @@ if removed:
 else:
     print("menu: no dead rows found (already patched?)")
 
+# 1b. Menu lean (2026-11-24, Devi): Hexciri Settings now covers these
+# rows, so they leave Super+Alt+Space. Bar position/background, dock
+# position/autohide, window corners/transparency and DNS choices live
+# in Settings (Bar / Dock / Appearance / System tabs); the parents go
+# too, or they would be empty submenus. Install/Remove/Update/Learn/
+# System stay: they are actions, not settings.
+_lean = {
+    "appearance.top-bar.background", "appearance.top-bar.background.opaque",
+    "appearance.top-bar.background.glassy", "appearance.top-bar.background.clear",
+    "appearance.top-bar.position", "appearance.top-bar.position.top",
+    "appearance.top-bar.position.bottom", "appearance.top-bar.position.left",
+    "appearance.top-bar.position.right",
+    "appearance.windows.corners", "appearance.windows.corners.theme",
+    "appearance.windows.corners.sharp", "appearance.windows.corners.rounded",
+    "appearance.windows.transparency", "appearance.windows.transparency.opaque",
+    "appearance.windows.transparency.transparent", "appearance.windows.transparency.glassy",
+    "appearance.dock.autohide", "appearance.dock.always-on",
+    "appearance.dock.position", "appearance.dock.position.top",
+    "appearance.dock.position.bottom", "appearance.dock.position.left",
+    "appearance.dock.position.right",
+    "setup.network.dns", "setup.network.dns.dhcp", "setup.network.dns.cloudflare",
+    "setup.network.dns.google", "setup.network.dns.alidns", "setup.network.dns.custom",
+}
+with open(menu) as _mf:
+    _mlines = _mf.read().splitlines()
+_kept2 = []
+_lean_removed = 0
+for _line in _mlines:
+    _k = _row_key(_line)
+    if _k is not None and _k in _lean:
+        _lean_removed += 1
+        continue
+    _kept2.append(_line)
+_settings_row = '  "settings": {"icon":"","label":"Settings","action":"hexciri-settings"},'
+if not any(_row_key(_l) == "settings" for _l in _kept2):
+    for _i, _l in enumerate(_kept2):
+        if _row_key(_l) == "system":
+            _kept2.insert(_i + 1, _settings_row)
+            break
+if _lean_removed or not any(_row_key(_l) == "settings" for _l in _mlines):
+    with open(menu, "w") as _mf:
+        _mf.write("\n".join(_kept2) + "\n")
+    changed.append("menu lean: removed %d settings rows now in Hexciri Settings, added top-level Settings row" % _lean_removed)
+
 with open(menu) as f:
     m = f.read()
 m_orig = m
@@ -3149,6 +3194,16 @@ if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" ]; then
   info "  web search: hexciri-web-search installed (Super+Shift+S, QS prompt, Brave Origin)"
 else
   die "v2/hexciri-web-search not in the installer tree, Super+Shift+S web search will not exist"
+fi
+# hexciri-settings-tabs (repo file v2/hexciri-settings-tabs): extra-pane
+# registry for Hexciri Settings (Nyxiri tab hook). Dispatcher bin, so
+# `hexciri-settings-tabs add nyxiri ...` works from any terminal.
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" ]; then
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$FORK_OUT/bin/hexciri-settings-tabs"
+  chmod +x "$FORK_OUT/bin/hexciri-settings-tabs"
+  info "  settings tabs: hexciri-settings-tabs installed (extra panes: Nyxiri tab hook)"
+else
+  die "v2/hexciri-settings-tabs not in the installer tree, Hexciri Settings extra panes cannot be registered"
 fi
 # Hexciri custom Lua, 2026-11-24 (Devi: Hexciri Lua, custom parts only).
 # v1 binds.lua / windowrules.lua mostly mimic Omarchy, so only the
@@ -5337,6 +5392,38 @@ bash "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-strata-theme" 2>/dev/nu
 # theme-env.sh is the shared THPM-port runtime every hook sources.
 # No extra apps: GTK/Adapta/THPM/steam are theming only, the apps they
 # theme (Steam, Nautilus, Adapta) are used only when already installed.
+# --- Hexciri Settings, forked omarchy-settings as an app (2026-11-24) ---
+# Fork of ipkalid/omarchy-settings master ad54288, renamed hexciri,
+# converted plugin -> app (no shell plugin, no Service.qml auto-build).
+# Source is vendored in v2/hexciri-settings; this step copies it to
+# ~/.local/opt/hexciri-settings and runs its install script, which
+# builds the Qt app (qmake6 + make, gcc/make/qt6 in CORE_PKGS) and
+# installs ~/.local/bin/hexciri-settings + desktop entry + icon.
+# Super+Ctrl+S opens it (bind in hexciri-custom-binds.lua). Icon is a
+# placeholder (upstream gear): Devi supplies the exact icon later by
+# swapping v2/hexciri-settings/pkgbuild/hexciri-settings.svg, one file.
+# Best-effort, never dies: a failed build warns, the rest of the
+# install still lands, and the app rebuilds by hand from its source dir.
+step "Installing Hexciri Settings (forked omarchy-settings, app, Super+Ctrl+S)"
+SETTINGS_SRC="$HOME/.local/opt/hexciri-settings"
+if [ -d "$HEXCIRI_REPO_ROOT/v2/hexciri-settings" ]; then
+  mkdir -p "$HOME/.local/opt"
+  rm -rf "$SETTINGS_SRC"
+  cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-settings" "$SETTINGS_SRC" && info "  settings source copied: $SETTINGS_SRC (fork of ipkalid/omarchy-settings ad54288)" || warn "  could not copy Hexciri Settings source, app will not be installed"
+  if [ -x "$SETTINGS_SRC/install" ]; then
+    if "$SETTINGS_SRC/install" --quiet; then
+      info "  settings installed: hexciri-settings $(hexciri-settings --version 2>/dev/null || echo present) (Super+Ctrl+S, launcher: Hexciri Settings)"
+    else
+      warn "  Hexciri Settings build failed (see ~/.cache/hexciri-settings-build/build.log), app missing until rebuilt by hand: $SETTINGS_SRC/install"
+    fi
+  else
+    warn "  Hexciri Settings install script missing, app not built"
+  fi
+else
+  warn "  v2/hexciri-settings not in the installer tree, Hexciri Settings not installed"
+fi
+unset SETTINGS_SRC
+
 step "Installing Hexciri theme hooks (~/.config/hexciri/hooks/theme-set.d)"
 mkdir -p "$HOME/.config/hexciri/hooks/theme-set.d" "$HOME/.config/hexciri/hooks/lib"
 if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" ]; then
@@ -5707,6 +5794,7 @@ if grep -q '^gtk-theme-name=Adwaita$' "$HOME/.config/gtk-4.0/settings.ini" 2>/de
 if command -v dbus-run-session >/dev/null 2>&1; then _gtk_scheme_now="$(dbus-run-session -- gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || echo unknown)"; if [ "$_gtk_scheme_now" = "'prefer-dark'" ]; then hc_info "  gtk picker: dconf color-scheme=prefer-dark (portal dialog reads dconf on Wayland, not settings.ini)"; else warn "  gtk picker: dconf color-scheme=$_gtk_scheme_now, portal file picker may stay light (expected 'prefer-dark' for a dark theme)"; fi; unset _gtk_scheme_now; fi
 [ -x /usr/lib/hexciri/speedtest ] && hc_info "  speedtest: /usr/lib/hexciri/speedtest present (Speed Test > Network works)" || warn "  speedtest: /usr/lib/hexciri/speedtest missing, Speed Test > Network will show speedtest.failed"
 command -v btm >/dev/null 2>&1 && hc_info "  activity monitor: btm present (Super+Shift+T)" || warn "  activity monitor: btm NOT installed, Super+Shift+T will fail (package: bottom, binary: btm)"
+command -v hexciri-settings >/dev/null 2>&1 && hc_info "  settings: hexciri-settings present (Super+Ctrl+S, launcher: Hexciri Settings)" || warn "  settings: hexciri-settings NOT installed, Super+Ctrl+S will fail (rebuild: ~/.local/opt/hexciri-settings/install)"
 command -v opencode >/dev/null 2>&1 && hc_info "  agent: opencode present ($(opencode --version 2>/dev/null | head -1), free models need no account)" || warn "  agent: opencode NOT installed, hexciri-agent / default agent opencode will fail (pacman -S opencode)"
 _boot_hc_ok=1; _boot_hc_seen=0; for _f in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf; do if [ -f "$_f" ]; then _boot_hc_seen=1; grep -q '^timeout 1$' "$_f" 2>/dev/null || _boot_hc_ok=0; fi; done; if [ "$_boot_hc_seen" -eq 1 ] && [ "$_boot_hc_ok" -eq 1 ]; then hc_info "  boot timeout: every loader.conf says timeout 1"; elif [ "$_boot_hc_seen" -eq 0 ]; then _boot_hc_noconf=1; else warn "  boot timeout: a loader.conf does not say timeout 1 (grep timeout in /efi/loader/loader.conf /boot/loader/loader.conf /boot/efi/loader/loader.conf)"; fi; _boot_hc_efi=""; [ -r /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f ] && _boot_hc_efi="$(tail -c +5 /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f 2>/dev/null | tr -d '\0')"; if [ "$_boot_hc_efi" = "1" ]; then hc_info "  boot timeout EFI: LoaderConfigTimeout=1"; elif [ -n "$_boot_hc_efi" ]; then warn "  boot timeout EFI: LoaderConfigTimeout=$_boot_hc_efi, overrides loader.conf (run: sudo bootctl set-timeout 1)"; else hc_info "  boot timeout EFI: no LoaderConfigTimeout variable, loader.conf controls it"; fi; if [ "${_boot_hc_noconf:-0}" = "1" ] && [ "$_boot_hc_efi" != "1" ]; then warn "  boot timeout: no loader.conf found and LoaderConfigTimeout is not 1 (GRUB or other bootloader?)"; elif [ "${_boot_hc_noconf:-0}" = "1" ]; then hc_info "  boot timeout: no loader.conf on this ESP layout, EFI LoaderConfigTimeout=1 controls it"; fi; unset _boot_hc_ok _boot_hc_seen _boot_hc_efi _boot_hc_noconf _f
 command -v strata >/dev/null 2>&1 || [ -x "$HOME/.local/bin/strata" ] || [ -x "$HEXCIRI_PATH/bin/strata" ] && hc_info "  file manager: strata present" || warn "  file manager: strata NOT installed, Super+Shift+F will error until it is"

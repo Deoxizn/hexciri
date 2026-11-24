@@ -1,0 +1,91 @@
+import QtQuick
+
+SettingsPage {
+    id: page
+    configFiles: ["input"]
+    resetPane: "pointer"
+    pane: "pointer"
+    title: win.caps.touchpad ? qsTr("Mouse & Trackpad") : qsTr("Mouse")
+    tagline: win.caps.touchpad ? qsTr("Mouse and trackpad") : qsTr("Mouse")
+    glyph: "\u{F037D}"
+    description: qsTr("Set how fast the pointer moves, which way scrolling goes, and what taps and swipes do.")
+    lists: ["power", "system"]
+    // What was picked in this session; the haptics tool has no way to ask.
+    property string haptics: ""
+
+    function times(v) { return qsTr("%1×").arg(v.toLocaleString(Qt.locale(), 'f', 1)) }
+
+    SettingsGroup {
+        title: qsTr("Mouse")
+        SliderRow {
+            setting: "pointer.sensitivity"
+            label: qsTr("Tracking speed")
+            from: -1; to: 1; stepSize: 0.05
+            fromText: qsTr("Slow"); toText: qsTr("Fast")
+        }
+        ChoiceRow {
+            setting: "pointer.acceleration"
+            label: qsTr("Pointer acceleration")
+            sublabel: qsTr("Flat moves the pointer the same distance however fast you move")
+            options: [{ value: "adaptive", text: qsTr("Adaptive") }, { value: "flat", text: qsTr("Flat") }]
+        }
+        ToggleRow {
+            setting: "pointer.naturalScroll"
+            label: qsTr("Natural scrolling")
+            sublabel: qsTr("Content follows your fingers, as on a phone")
+        }
+        SliderRow {
+            setting: "pointer.scrollSpeed"
+            label: qsTr("Scrolling speed")
+            from: 0.2; to: 3; stepSize: 0.1
+            format: page.times
+        }
+        ToggleRow { setting: "pointer.leftHanded"; label: qsTr("Swap left and right buttons") }
+    }
+
+    SettingsGroup {
+        title: qsTr("Trackpad")
+        footer: win.caps.touchpad ? qsTr("Swiping uses three fingers left and right.")
+                                  : qsTr("No trackpad is connected. These apply when one is.")
+        ToggleRow {
+            visible: win.caps.touchpad === true
+            setting: "pointer.touchpad"
+            label: qsTr("Use the trackpad")
+        }
+        ToggleRow { setting: "trackpad.tapToClick"; label: qsTr("Tap to click") }
+        ToggleRow { setting: "trackpad.twoFingerClick"; label: qsTr("Secondary click with two fingers") }
+        ToggleRow { setting: "trackpad.naturalScroll"; label: qsTr("Natural scrolling") }
+        SliderRow {
+            setting: "trackpad.scrollSpeed"
+            label: qsTr("Scrolling speed")
+            from: 0.1; to: 3; stepSize: 0.05
+            format: page.times
+        }
+        ToggleRow { setting: "trackpad.disableWhileTyping"; label: qsTr("Ignore the trackpad while typing") }
+        ToggleRow { setting: "trackpad.threeFingerDrag"; label: qsTr("Three-finger drag") }
+        ToggleRow { setting: "trackpad.swipeWorkspaces"; label: qsTr("Swipe between workspaces") }
+    }
+
+    SettingsGroup {
+        visible: (backend.lists.system || {}).haptics === true
+        title: qsTr("Trackpad Click")
+        SettingRow {
+            label: qsTr("Click strength")
+            Repeater {
+                model: [{ v: "low", t: qsTr("Light") }, { v: "mid", t: qsTr("Medium") }, { v: "high", t: qsTr("Firm") }]
+                delegate: OmaButton {
+                    required property var modelData
+                    text: modelData.t
+                    selected: page.haptics === modelData.v
+                    onClicked: { page.haptics = modelData.v; backend.act("haptics.set", [modelData.v]) }
+                }
+            }
+        }
+    }
+
+    SettingsGroup {
+        visible: (backend.lists.power || {}).touchscreen === true
+        title: qsTr("Touchscreen")
+        ToggleRow { setting: "pointer.touchscreen"; label: qsTr("Use the touchscreen") }
+    }
+}

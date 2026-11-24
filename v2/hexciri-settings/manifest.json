@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "hexciri.settings",
+  "name": "Hexciri Settings",
+  "version": "1.6.5",
+  "author": "Khalid Alhazmi",
+  "license": "MIT",
+  "description": "Hexciri Settings, like System Settings on a Mac: Wi-Fi, sound, displays, keyboard, appearance, the bar, the Hexciri menu, and more, without editing config files. Forked from ipkalid/omarchy-settings, shipped as an app, not a shell plugin.",
+  "kinds": [
+    "app"
+  ]
+}

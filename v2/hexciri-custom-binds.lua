@@ -34,6 +34,10 @@ o.bind("SUPER + CTRL + B", "Brave Origin (incognito)", "brave-origin --incognito
 -- webapp helper, which is in the fork).
 o.bind("SUPER + CTRL + M", "Messenger webapp", "hexciri-launch-or-focus-webapp messenger https://www.messenger.com")
 
+-- Hexciri Settings (2026-11-24, Devi): forked omarchy-settings as an
+-- app, not a shell plugin. Super+Ctrl+S was free (no chord owned it).
+o.bind("SUPER + CTRL + S", "Hexciri Settings", "hexciri-settings")
+
 -- Screen record on Alt+Print. Region/screenshot stay on Omarchy's binds.
 o.bind("ALT + Print", "Screen record", "hexciri-capture-screenrecording")
 

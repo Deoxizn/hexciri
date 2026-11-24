@@ -1,0 +1,166 @@
+#!/bin/bash
+# Builds Hexciri Settings from this vendored source and installs it for
+# the current user, so it shows up in the app launcher: the binary in
+# ~/.local/bin, the launcher entry in ~/.local/share/applications, and
+# the icon beside it. No sudo is needed except to add missing build
+# tools, which only happens when this runs in a terminal. This is an
+# APP now, not a shell plugin: the Hexciri installer runs it, the shell
+# never auto-builds it.
+#
+#   install            build and install (asks to add missing tools)
+#   install --status   print one word: current, build, needs-tools, or package
+#   install --quiet    build and install without asking; exit 3 if tools are
+#                      missing, 4 if another install is already running
+#   install --home D   install under D instead of $HOME (for testing)
+
+set -euo pipefail
+
+# Everything goes into one person's home; as root it would land in root's,
+# owned by root.
+if (( EUID == 0 )); then
+  echo "install: run this as yourself, not as root." >&2
+  exit 1
+fi
+
+SRC="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+TARGET_HOME="$HOME"
+MODE=install
+QUIET=0
+
+while (( $# > 0 )); do
+  case "$1" in
+  --status) MODE=status; shift ;;
+  --quiet) QUIET=1; shift ;;
+  --home) TARGET_HOME="$2"; shift 2 ;;
+  -h | --help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  *) echo "install: unknown option $1" >&2; exit 2 ;;
+  esac
+done
+
+BIN="$TARGET_HOME/.local/bin/hexciri-settings"
+APPS="$TARGET_HOME/.local/share/applications"
+ICONS="$TARGET_HOME/.local/share/icons/hicolor/scalable/apps"
+STATE="$TARGET_HOME/.local/share/hexciri-settings"
+BUILD="${XDG_CACHE_HOME:-$TARGET_HOME/.cache}/hexciri-settings-build"
+
+TOOLS=(gcc make qt6-base qt6-declarative qt6-wayland qt6-imageformats squashfs-tools)
+
+# What is being installed: the manifest's version (the vendored source
+# is not a git checkout, so there is no commit to record). A changed
+# manifest version triggers a rebuild on the next hexciri update.
+source_version() {
+  git -C "$SRC" rev-parse HEAD 2>/dev/null || jq -r '.version' "$SRC/manifest.json"
+}
+
+missing_tools() {
+  pacman -T "${TOOLS[@]}" 2>/dev/null | tr "\n" " " | sed "s/ *$//" || true
+}
+
+status() {
+  # Someone who installed the Arch package keeps it; the app doesn't
+  # put a second copy ahead of it on the PATH.
+  if pacman -Qqo /usr/bin/hexciri-settings >/dev/null 2>&1; then
+    echo package
+  elif [[ -x $BIN && -f $STATE/installed && $(cat "$STATE/installed") == "$(source_version)" ]]; then
+    echo current
+  elif [[ -n $(missing_tools) ]]; then
+    echo needs-tools
+  else
+    echo build
+  fi
+}
+
+if [[ $MODE == status ]]; then
+  status
+  exit 0
+fi
+
+# One install at a time: two builds in one folder corrupt each
+# other. A quiet run that finds another under way leaves it to that
+# one (exit 4); an interactive one waits for it.
+mkdir -p "$(dirname "$BUILD")"
+exec 9>"$BUILD.lock"
+if ! flock -n 9; then
+  (( QUIET )) && exit 4
+  echo "Another install of Settings is running; waiting for it to finish…"
+  flock 9
+fi
+if [[ $(status) == current ]]; then
+  echo "Settings is already up to date."
+  exit 0
+fi
+
+missing=$(missing_tools)
+if [[ -n $missing ]]; then
+  if (( QUIET )); then
+    echo "Settings needs these packages to build: $missing" >&2
+    exit 3
+  fi
+  echo "Settings needs these packages to build:"
+  echo "  $missing"
+  # shellcheck disable=SC2086
+  hexciri-pkg-add $missing
+fi
+
+echo "Building Settings…"
+# From scratch each time, so a build that was cut short can't leave stale
+# objects behind for the next one; it takes seconds.
+rm -rf "$BUILD"
+mkdir -p "$BUILD"
+cd "$BUILD"
+qmake6 "$SRC/hexciri-settings.pro" >/dev/null
+make -j"$(nproc)" >"$BUILD/build.log" 2>&1 || {
+  tail -n 30 "$BUILD/build.log" >&2
+  echo "The build failed; the full log is $BUILD/build.log" >&2
+  exit 1
+}
+
+# Each file is written beside its target and renamed into place, so a
+# Settings that is open keeps running and the launcher never sees half a file.
+put() {
+  local mode="$1" from="$2" to="$3"
+  mkdir -p "$(dirname "$to")"
+  install -m "$mode" "$from" "$to.new"
+  mv -f "$to.new" "$to"
+}
+
+# The binary's path as one Exec= argument, quoted as the Desktop Entry spec
+# asks: inside double quotes \ " ` $ take a backslash and % is doubled, then
+# every backslash is doubled again because the file's own string escapes are
+# undone first. So a home folder with spaces or symbols still launches.
+desktop_exec_arg() {
+  local s="$1"
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//\`/\\\`}
+  s=${s//\$/\\\$}
+  s=${s//%/%%}
+  s=${s//\\/\\\\}
+  printf '"%s"' "$s"
+}
+
+# A line break can't be written into a launcher entry at all.
+if [[ $BIN == *$'\n'* ]]; then
+  echo "The install path has a line break in it, which a launcher entry can't hold: $BIN" >&2
+  exit 1
+fi
+
+put 755 "$BUILD/hexciri-settings" "$BIN"
+# Written line by line rather than with sed, so nothing in the path can be
+# read as part of a sed command.
+exec_arg=$(desktop_exec_arg "$BIN")
+while IFS= read -r line || [[ -n $line ]]; do
+  [[ $line == Exec=hexciri-settings* ]] && line="Exec=$exec_arg${line#Exec=hexciri-settings}"
+  printf '%s\n' "$line"
+done <"$SRC/pkgbuild/hexciri-settings.desktop" >"$BUILD/hexciri-settings.desktop"
+put 644 "$BUILD/hexciri-settings.desktop" "$APPS/hexciri-settings.desktop"
+# Settings draws its icon in the theme's colors when it starts; until then
+# the packaged one stands in.
+[[ -f $ICONS/hexciri-settings.svg ]] || put 644 "$SRC/pkgbuild/hexciri-settings.svg" "$ICONS/hexciri-settings.svg"
+put 755 "$SRC/uninstall" "$STATE/uninstall"
+mkdir -p "$STATE"
+source_version >"$STATE/installed"
+
+command -v update-desktop-database >/dev/null && update-desktop-database -q "$APPS" 2>/dev/null || true
+
+echo "Settings is installed. Find it in the app launcher (Super + Space)."

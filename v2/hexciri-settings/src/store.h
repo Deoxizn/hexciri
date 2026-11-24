@@ -1,0 +1,287 @@
+#pragma once
+
+#include <QDateTime>
+#include <QHash>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QList>
+#include <QMutex>
+#include <QRecursiveMutex>
+#include <QString>
+#include <QVariant>
+#include <functional>
+
+#include "nmsecrets.h"
+#include "proc.h"
+
+// Where Settings reads and writes. Tests point these at temp directories.
+struct Paths {
+    QString config;  // ~/.config
+    QString state;   // ~/.local/state
+    QString hexciri; // $HEXCIRI_PATH, Hexciri's read-only install
+    QString data;    // ~/.local/share
+    QString home;    // ~, where ~/Applications is
+    QString downloads; // the Downloads folder
+    bool hyprland = true; // whether a Hyprland session is there to reload
+
+    static Paths system();
+};
+
+// One setting: what it is, and how to read and change it on this system.
+struct Setting {
+    QString id;       // "keyboard.repeatRate"
+    QString pane;     // "keyboard"
+    QString type;     // bool, int, real, choice, text
+    QString label;    // English, for the CLI and search
+    double min = 0, max = 0, step = 1;
+    QVariantList choices; // fixed choices: values
+    QString choicesList;  // or the name of the list that holds them
+    QString hyprOption;   // for settings kept in the generated Hyprland file
+    QVariant hexciriDefault; // what Hexciri ships, for Restore Defaults
+    std::function<QVariant()> read;
+    // Returns an empty string on success, or what went wrong.
+    std::function<QString(const QVariant &)> write;
+};
+
+// Everything Settings knows how to read and change. Its methods block, so the
+// window calls them from worker threads (see Backend) and the CLI directly.
+class Store {
+public:
+    // The installed apps a window class pattern matches: one app's name and
+    // icon (appName, appIcon), or the names of several (appNames).
+    static QVariantMap appForPattern(const QVariantList &installed, const QString &pattern);
+    explicit Store(Paths paths = Paths::system(), Exec exec = runProcess, SecretWriter secrets = writeNmSecret);
+
+    const QList<Setting> &settings() const { return m_settings; }
+    const Paths &paths() const { return m_paths; }
+    const Setting *setting(const QString &id) const;
+
+    QVariant read(const QString &id) const;
+    QString write(const QString &id, const QVariant &value);
+
+    // Live data the panes show: networks, devices, monitors, themes, ...
+    QVariant list(const QString &name);
+    QStringList listNames() const;
+    // Things a pane does that are not one setting's value.
+    QString act(const QString &action, const QVariantList &args);
+
+    // The saved choices behind the generated Hyprland file.
+    QJsonObject managedState() const;
+    QString managedLuaPath() const { return m_paths.config + "/hypr/hexciri-settings.lua"; }
+    QString statePath() const { return m_paths.config + "/hexciri/hexciri-settings.json"; }
+    // A config file a page offers to open, by its key; empty if unknown.
+    QString configFilePath(const QString &key) const;
+
+    // Hands a Hyprland option back to the user's own config.
+    QString resetHypr(const QString &option);
+
+    // What Restore Defaults would change on a pane, and doing it.
+    QVariantList defaultsFor(const QString &pane);
+    QString resetPane(const QString &pane);
+
+    // Settings that belong to this machine rather than the person: they
+    // stay behind on export and Sync.
+    static bool isMachineSpecific(const QString &id);
+
+    // sync.cpp: keeping settings, apps, and chosen files in a private git
+    // repository, and bringing another computer to match it.
+    QString syncDir() const;
+    QString syncStatePath() const;
+    // Whether changes upload on their own.
+    bool syncAuto() const;
+    // Writes this computer's snapshot into dir, leaving the parts in skip as
+    // they are there.
+    QString writeSyncSnapshot(const QString &dir, const QStringList &skip, const QStringList &dotfiles);
+    // What applying the local copy of the repository would change here.
+    QVariantMap syncPlan();
+    // The packages the person added: explicit ones, less the excluded and
+    // those that come with the machine (kernels, firmware, drivers, Hexciri).
+    static QStringList syncPackages(const QStringList &explicitPackages, const QStringList &excluded);
+    // The tools in a mise config's [tools] table, as tool@version.
+    static QStringList miseTools(const QString &toml);
+
+    // Exposed for tests.
+    static QString reindentJson(const QByteArray &json);
+    // One key's value in a TOML table, as written (a number, true, "text"),
+    // and the text with it set, or removed when `literal` is empty.
+    static QString tomlValue(const QString &text, const QString &table, const QString &key);
+    static QString withTomlValue(const QString &text, const QString &table, const QString &key, const QString &literal);
+    static QVariantList parseWifi(const QByteArray &nmcli);
+    static QStringList splitTerse(const QString &line);
+    static QVariantList parseKeybindings(const QString &text);
+    static QVariantList parseXkbLayouts(const QString &baseLst);
+    static int parsePercent(const QString &text);
+    // Whether a file is an AppImage, and the update information it carries.
+    static bool isAppImage(const QString &path);
+    static QString appImageUpdateInfo(const QString &path);
+    // The name to give an AppImage that carries none, from its file name.
+    static QString appImageName(const QString &path);
+
+private:
+    ProcResult run(const QString &program, const QStringList &args, int timeoutMs = 5000,
+                   const QByteArray &input = {}) const;
+    QString runOk(const QString &program, const QStringList &args, int timeoutMs = 5000) const;
+    QString launch(const QString &program, const QStringList &args) const;
+    QString launchTerminal(const QStringList &command) const;
+    QString output(const QString &program, const QStringList &args, int timeoutMs = 5000) const;
+
+    QVariant hyprGet(const QString &option) const;
+    QString hyprSet(const QVariantMap &options);
+    QString applyState(const QJsonObject &next);
+    QString ensureRequired();
+
+    QJsonValue shellGet(const QString &path, const QJsonValue &fallback) const;
+    QString shellSet(const QString &path, const QJsonValue &value);
+
+    bool flag(const QString &relative) const;
+
+    // extras.cpp: VPN connections, shell plugins, the bar's layout.
+    QVariant listConfigFiles() const;
+    QVariant listVpn();
+    QVariant listPlugins();
+    QVariant listPluginUpdates();
+    QVariant listBar();
+    QString actVpn(const QString &action, const QVariantList &args);
+    QString actPlugin(const QString &action, const QVariantList &args);
+    QString actBar(const QString &action, const QVariantList &args);
+    QString pluginDir(const QString &id) const;
+    QHash<QString, QJsonObject> manifests() const;
+    void waitForShellWrite(const QDateTime &before);
+
+    // features.cpp: apps, shortcuts, login items, rules, Night Shift, network
+    // and power details, firewall, printers, storage, export and import.
+    void buildMore();
+    QVariant listMore(const QString &name);
+    QString actMore(const QString &action, const QVariantList &args);
+    QVariantList apps() const;
+    // Window rules set by Hexciri or the user's own Hyprland files.
+    QVariantList otherWindowRules() const;
+    QString keyboardBacklight() const;
+    QString setNightShift(const QString &key, const QVariant &value);
+    QString writeNightShift(const QJsonObject &night);
+    QString menuPlace();
+    QString setMenuPlace(const QString &place);
+    // Settings' panes and pages in the Hexciri menu's search (see features.cpp).
+    bool menuSearchOn();
+    QString setMenuSearch(const QVariantList &entries, const QString &groupLabel);
+    QString updateState(const std::function<QString(QJsonObject &)> &change);
+    QJsonObject exportSettings();
+
+    // hexciri.cpp: Hexciri's own flags, the window look, the shell's look in
+    // shell.toml, bar widgets' options, the weather's place, and hooks.
+    void buildHexciri();
+    QVariant listHexciri(const QString &name);
+    QString actHexciri(const QString &action, const QVariantList &args);
+    QString shellToml(const QString &table, const QString &key) const;
+    QString setShellToml(const QString &table, const QString &key, const QString &literal);
+    QString setSessionVariable(const QString &name, const QString &value);
+
+    // system.cpp: branding, default tools, security setup, troubleshooting.
+    void buildSystem();
+    QVariant listSystem(const QString &name);
+    QString actSystem(const QString &action, const QVariantList &args);
+    QString directBootProblem();
+    QString defaultKbOptions() const;
+    QString menuFile() const;
+    QVariant listMenu();
+    QString editMenu(const QStringList &hide, const QStringList &show, QJsonObject &kept, QStringList &skipped);
+    QString menuAction(const QString &action, const QString &id);
+    QVariant listMenuCustom();
+    QJsonObject defaultMenuItems() const;
+    // software.cpp: the apps and tools Hexciri's Install and Remove menus offer.
+    QList<QVariantMap> softwareItems(bool evaluate);
+    QVariant listSoftware();
+    // Which of the default browser, terminal, and editor choices are installed.
+    QVariant listDefaultApps();
+    // appimages.cpp: AppImages in the launcher, ~/Applications, and Downloads.
+    QList<QVariantMap> appImageItems() const;
+    QVariant listAppImages();
+    QVariant listAppImageUpdates();
+    QString actAppImage(const QString &action, const QVariantList &args);
+    QString integrateAppImage(const QString &path);
+    QString replaceAppImage(const QString &download);
+    QString resolveIcon(const QString &icon) const;
+    QString appImagesDir() const;
+    QString rewriteMenu(const std::function<QString(QStringList &)> &change);
+    QString menuItemAction(const QString &action, const QVariantMap &item);
+
+public:
+    // The app icon, drawn like Hexciri's own menu entries in the theme's colors.
+    static QString iconSvg(const QString &foreground, double rounding);
+    QString iconPath() const;
+    QString writeThemedIcon();
+    QString ensureIconHook();
+    // Commands a file brings (login items, shortcuts that run one) are only
+    // added when they were shown first, as Sync's confirmation does.
+    QString importSettings(const QJsonObject &doc, bool withCommands = false);
+
+private:
+    QJsonValue cleanManaged(const QString &key, const QJsonValue &value) const;
+    QString normalize(const Setting &setting, const QVariant &value, QVariant &out) const;
+
+    QJsonObject syncState() const;
+    QString updateSyncState(const std::function<void(QJsonObject &)> &change);
+    QStringList syncSkipped() const;
+    ProcResult git(const QStringList &args, int timeoutMs = 15000, bool network = false) const;
+    QString syncBranch() const;
+    QString syncRemoteHead() const;
+    QString syncConnect(const QString &url);
+    void makeSyncDirPrivate() const;
+    QString dotfileError(const QString &rel) const;
+    QString syncCreate(const QString &name);
+    QString syncCheck();
+    QString syncUpload(bool force, bool automatic);
+    QString syncApply(const QString &reviewed = {});
+    QString syncInstallScript(const QVariantMap &plan);
+    QVariantMap appImageSource(const QString &updateInfo) const;
+    QVariant listSync();
+    QVariant listSyncPreview();
+    QString actSync(const QString &action, const QVariantList &args);
+
+public:
+    static QString normalizeKeys(const QString &keys);
+    // The command a terminal launch id stands for, or {} if it isn't one.
+    QStringList terminalCommand(const QString &id);
+    // What software.run and software.drop start, or an error.
+    QString softwareCommand(const QString &action, const QString &arg, QStringList &command);
+    // The terminal command that downloads and swaps in a found update.
+    QString appImageUpdateCommand(const QString &path, QStringList &command);
+
+    // Each connected display's connector name mapped to the name Settings
+    // saves it under (see monitorAction), from `hyprctl -j monitors all`.
+    static QHash<QString, QString> monitorKeys(const QJsonArray &live);
+
+private:
+    QString monitorAction(const QString &action, const QVariantList &args);
+    // Saves a secret on a NetworkManager connection (see nmsecrets.h for how
+    // the names read). It never goes through nmcli.
+    QString setNmSecret(const QString &uuid, const QString &setting, const QString &key, const QString &value);
+    QString joinWifi(const QString &ssid, const QString &password, bool hidden);
+    QString launchInTerminal(const QString &id);
+
+    void addHypr(const QString &id, const QString &pane, const QString &type, const QString &option,
+                 const QString &label, double min = 0, double max = 0, double step = 1);
+    void add(Setting setting);
+    void build();
+
+    Paths m_paths;
+    Exec m_exec;
+    SecretWriter m_secrets;
+    std::function<bool(const QString &, const QStringList &)> m_launch;
+    QList<Setting> m_settings;
+    mutable QMutex m_stateLock;
+    // The last update check's findings, for appimage.update.
+    QMutex m_appImageLock;
+    QHash<QString, QVariantMap> m_appImageUpdates;
+    // One sync operation at a time on the local copy of the repository.
+    QRecursiveMutex m_syncLock;
+    QMutex m_syncStateLock;
+};
+
+// The parts of Settings' own state a settings file or Sync may bring: what
+// exportSettings writes, and nothing else.
+const QStringList &importableManaged();
+
+// Whether a font family name is plain enough to hand to hexciri-font-set,
+// which pastes it into sed expressions and config files as it is.
+bool safeFontName(const QString &name);
