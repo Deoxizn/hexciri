@@ -2211,10 +2211,15 @@ if [ "${SKIP_PATCHES:-0}" = "0" ]; then
 # dies naming the failing patch, so the installer never continues onto
 # a half-patched fork. PATCHES_DIR override is for sims/tests only.
 PATCHES_DIR="${HEXCIRI_PATCHES_DIR:-$INSTALLER_DIR/patches}"
-if [ -x "$PATCHES_DIR/apply.sh" ]; then
+# apply.sh is invoked via bash, never exec'd, so -f is the right test,
+# not -x: github push-files lands repo files mode 644 (no exec bit),
+# and a fresh git clone has apply.sh 644 too. -x died on every update
+# with "not in the installer tree" even though the patches dir was
+# pulled fine (2026-11-24, Devi 16:54 MST, laptop).
+if [ -f "$PATCHES_DIR/apply.sh" ]; then
   FORK_OUT="$FORK_OUT" HEXCIRI_PATH="$HEXCIRI_PATH" HEXCIRI_REPO_ROOT="$HEXCIRI_REPO_ROOT" INSTALLER_DIR="$INSTALLER_DIR" FORK_LOG="$FORK_LOG" _patch_log="$_patch_log" bash "$PATCHES_DIR/apply.sh" "$FORK_OUT" || die "fork patches failed (v2/patches/apply.sh names the failing patch above)"
 else
-  die "v2/patches/apply.sh not in the installer tree ($PATCHES_DIR), cannot apply fork patches"
+  die "v2/patches/apply.sh missing from the installer tree ($PATCHES_DIR), cannot apply fork patches"
 fi
 
 # Save the fully patched fork for the next re-run (fork cache,

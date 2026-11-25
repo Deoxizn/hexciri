@@ -160,6 +160,11 @@ git_sync() {
     git clone --quiet --branch "$BRANCH" "$REPO_URL" "$CHECKOUT" 2>>"$DETAIL_LOG" || { detail "git clone failed, retrying once in 5s"; sleep 5; rm -rf "$CHECKOUT"; git clone --quiet --branch "$BRANCH" "$REPO_URL" "$CHECKOUT" 2>>"$DETAIL_LOG"; } || { detail "git clone failed"; return 1; }
   fi
   [ -f "$CHECKOUT/v2/install.sh" ] || { detail "cloned tree has no v2/install.sh"; return 1; }
+  # Patches must be present before the installer forks Omarchy: a
+  # missing v2/patches/apply.sh used to die only at the fork-patch step,
+  # after the 94 MB fork (2026-11-24, Devi 16:54 MST). Fail the sync
+  # here instead, so the tarball fallback gets a chance.
+  [ -f "$CHECKOUT/v2/patches/apply.sh" ] || { detail "cloned tree has no v2/patches/apply.sh"; return 1; }
   NEW_COMMIT="$(git -C "$CHECKOUT" rev-parse --short HEAD 2>/dev/null || echo none)"
   detail "git full commits: $(git -C "$CHECKOUT" rev-parse HEAD 2>/dev/null || echo none) (old short: $OLD_COMMIT, new short: $NEW_COMMIT)"
   SOURCE_ROOT="$CHECKOUT"
@@ -184,6 +189,7 @@ tarball_sync() {
   [ "$top_dir" = "$EXPECTED_TOP_DIR" ] || { rm -rf "$workdir"; detail "tarball top dir is '$top_dir', expected '$EXPECTED_TOP_DIR'"; return 1; }
   tar -xzf "$tarball" -C "$workdir" || { rm -rf "$workdir"; detail "tarball extraction failed"; return 1; }
   [ -f "$workdir/$top_dir/v2/install.sh" ] || { rm -rf "$workdir"; detail "extracted tree has no v2/install.sh"; return 1; }
+  [ -f "$workdir/$top_dir/v2/patches/apply.sh" ] || { rm -rf "$workdir"; detail "extracted tree has no v2/patches/apply.sh"; return 1; }
   # Keep the extracted tree until the installer finishes: the trap in the
   # old script deleted it on EXIT, which is after the installer runs, so
   # stash the path in a global the caller can clean up.
