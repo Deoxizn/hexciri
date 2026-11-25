@@ -111,6 +111,12 @@ hyprlua_ok() {
 #   * Available: the upstream check only counted the omarchy package, which
 #     Hexciri does not ship, so it always reported up to date. Now any
 #     pending checkupdates entry counts.
+#   * Reboot offer: the one exception to unattended (2026-11-25, Devi:
+#     upstream gave a Reboot Now Yes/No button on a Hyprland / kernel
+#     update; ours only printed "reboot later"). confirm_reboot still
+#     asks with gum confirm when the update runs on a TTY, and prints
+#     "reboot later" on a non-TTY run. Only fires when the kernel /
+#     Hyprland actually updated, like upstream.
 #   * Analyze-logs: dracut failure strings added (EndeavourOS default,
 #     not mkinitcpio).
 #   * Pacman guard: replaced by a no-op. The guard as shipped blocks any
@@ -330,8 +336,9 @@ must_replace(upd, "  authorize_update\n",
 # once it finds an update it should all just be -y, no more Y/n
 # prompts). The confirm above is the one approval; after it the run
 # is unattended, so system-pkgs takes the pacman --noconfirm path
-# instead of eos-update (whose yay prompts [Y/n]), the reboot step
-# prints "reboot later" instead of prompting, and a real package
+# instead of eos-update (whose yay prompts [Y/n]); the reboot step
+# prompts with gum confirm on a TTY (the one exception to unattended,
+# step 8g) and prints "reboot later" on a non-TTY run, and a real package
 # conflict fails with "run interactively" instead of sitting on a
 # prompt nobody answers.
 must_replace(upd, "  authorize_update\n",
@@ -595,7 +602,11 @@ must_replace(_p,
 must_replace(_p,
     "confirm_reboot() {\n  if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} == \"1\" ]]; then\n    echo \"$(hexciri-i18n update.rebootLater \"$1\" \"hexciri-system reboot\")\"",
     "confirm_reboot() {\n  if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} == \"1\" ]]; then\n    echo\n    echo \"$(hexciri-i18n update.rebootLater \"$1\" \"hexciri-system reboot\")\"",
-    "confirm_reboot prints its own leading blank in unattended mode")
+    "confirm_reboot prints its own leading blank in unattended mode",
+    # 8g replaced this whole function (TTY-gated gum prompt); on a
+    # re-run the old text is gone, and the leading blank already lives
+    # in 8g's non-TTY branch, so there is nothing left for this step.
+    marker="# Hexciri: the reboot offer is the one exception to the unattended")
 PYEOF8C
 
 # 8d. Restart reloads Hyprland config after the shell restart
@@ -713,6 +724,45 @@ must_replace(_p,
     '  hexciri-shell hexciri.system-update refresh >/dev/null 2>&1 || true\nfi',
     '  hexciri-shell hexciri.system-update refresh >/dev/null 2>&1 || true\n\n  # Hexciri: GlobalShortcuts must be registered AFTER the last Hyprland\n  # reload (2026-11-24, Devi: shell restarted before the reload, reload\n  # dropped omarchy:menu.root / omarchy:ipc.hexciri.dock.apps, update\n  # ended with Super+Space / Super+Alt+Space dead). Poll, restart the\n  # shell once more if either is missing, poll again. Best-effort.\n  if pgrep -x Hyprland >/dev/null 2>&1 && command -v hyprctl >/dev/null 2>&1; then\n    _gs_ok=0\n    for _gs_try in 1 2 3 4 5 6 7 8 9 10; do\n      if hyprctl globalshortcuts 2>/dev/null | grep -q \'omarchy:menu.root\' && hyprctl globalshortcuts 2>/dev/null | grep -q \'omarchy:ipc.hexciri.dock.apps\'; then _gs_ok=1; break; fi\n      sleep 0.5\n    done\n    if [[ $_gs_ok == "0" ]]; then\n      hexciri-restart-shell || true\n      for _gs_try in 1 2 3 4 5 6 7 8 9 10; do\n        if hyprctl globalshortcuts 2>/dev/null | grep -q \'omarchy:menu.root\' && hyprctl globalshortcuts 2>/dev/null | grep -q \'omarchy:ipc.hexciri.dock.apps\'; then _gs_ok=1; break; fi\n        sleep 0.5\n      done\n    fi\n    if [[ $_gs_ok == "1" ]]; then echo "GlobalShortcuts registered: Super+Space apps / Super+Alt+Space menu"; else echo "GlobalShortcuts still missing after shell restart (omarchy:menu.root / omarchy:ipc.hexciri.dock.apps; run: hexciri-restart-shell)"; fi\n    unset _gs_ok _gs_try\n  fi\nfi',
     "restart re-registers GlobalShortcuts after the last Hyprland reload")
+PY
+
+# 8g. Reboot offer: restore the upstream Yes/No button (2026-11-25,
+# Devi: on a Hyprland or kernel update the original gave a Reboot Now
+# option to click Yes or No via a button, ours just mentioned the
+# reboot). Root cause: hexciri-update exports
+# HEXCIRI_UPDATE_UNATTENDED=1 for the whole run after the start
+# confirm (step 3b), so upstream confirm_reboot always took its
+# unattended branch and only printed the "reboot later" line; the gum
+# confirm branch below it was dead code. The prompt is the one
+# exception to the unattended rule, like upstream: it still only fires
+# when the kernel / Hyprland actually updated (those checks above it
+# are untouched), and it is gated on a TTY, not on the flag, so a
+# scripted / piped run prints "reboot later" instead of hanging on a
+# prompt nobody can answer.
+python3 - "$FORK_OUT" <<'PY' >>"$_patch_log"
+import sys
+fork = sys.argv[1]
+def read(p):
+    with open(p) as f:
+        return f.read()
+def write(p, t):
+    with open(p, "w") as f:
+        f.write(t)
+def must_replace(path, old, new, what, marker=None):
+    t = read(path)
+    if (marker if marker is not None else new) in t:
+        print("  update: " + what + " (already applied, skipping)")
+        return
+    assert old in t, what + ": pattern not found in " + path
+    assert t.count(old) == 1, what + ": pattern not unique in " + path
+    write(path, t.replace(old, new, 1))
+    print("  update: " + what)
+_p = fork + "/bin/hexciri-update-restart"
+must_replace(_p,
+    'confirm_reboot() {\n  if [[ ${HEXCIRI_UPDATE_UNATTENDED:-0} == "1" ]]; then\n    echo\n    echo "$(hexciri-i18n update.rebootLater "$1" "hexciri-system reboot")"\n  elif gum confirm --affirmative "$(hexciri-i18n common.yes)" --negative "$(hexciri-i18n common.no)" "$1"; then\n    hexciri-system reboot\n    exit 0\n  fi\n}',
+    'confirm_reboot() {\n  # Hexciri: the reboot offer is the one exception to the unattended\n  # rule (2026-11-25, Devi: upstream gave a Reboot Now Yes/No button\n  # when Hyprland or the kernel updated, ours only printed "reboot\n  # later" because HEXCIRI_UPDATE_UNATTENDED=1 is exported for the\n  # whole run after the start confirm). gum confirm is the upstream\n  # button UI, same terminal the update already runs in. Gated on a\n  # TTY, not on the flag: a scripted / piped run has nobody to answer,\n  # so it prints the reboot-later line instead of hanging. Yes reboots\n  # now and exits (service restarts are moot after a reboot); No\n  # carries on, like upstream.\n  if [[ -t 0 ]]; then\n    if gum confirm --affirmative "$(hexciri-i18n common.yes)" --negative "$(hexciri-i18n common.no)" "$1"; then\n      hexciri-system reboot\n      exit 0\n    fi\n  else\n    echo\n    echo "$(hexciri-i18n update.rebootLater "$1" "hexciri-system reboot")"\n  fi\n}',
+    "reboot offer prompts with gum confirm on a TTY (unattended exception)",
+    marker="# Hexciri: the reboot offer is the one exception to the unattended")
 PY
 
 # 9. pkg-prune: whole-file rewrite (2026-11-24, Devi: Prune package
