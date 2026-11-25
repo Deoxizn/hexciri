@@ -691,7 +691,7 @@ step "Installing core Hyprland, uwsm, SDDM, portals, Qt6, tools, fonts"
 CORE_PKGS=(
   hyprland uwsm sddm
   xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
-  xdg-user-dirs xdg-utils xorg-xwayland
+  xdg-user-dirs xdg-utils xdg-terminal-exec xorg-xwayland # xdg-terminal-exec: Arch Extra stable 0.14.4-1, verified live 2026-11-25 (was extra-testing at install time, Devi 20:37 MST). Every terminal-with-args launch needs it: launch-terminal with args, launch-tui, floating-terminal-with-presentation, TUI desktop entries, Quickshell Terminal=true entries. Without it the grid shows "App failure: Command not found: xdg-terminal-exec".
   qt6-base qt6-declarative qt6-wayland qt6-svg qt6-5compat qt6-multimedia qt6-imageformats squashfs-tools # squashfs-tools: Hexciri Settings AppImages pane (reads AppImage name/icon without running it)
   polkit rtkit gnome-keyring libsecret
   pamixer brightnessctl jq bc curl wget git base-devel pacman-contrib socat # checkupdates, for hexciri-update-available (update icon); socat is hexciri-shell's IPC transport (socket fast path), upstream omarchy-base.packages line 145, without it every hexciri-shell call fails "not responding"
@@ -719,19 +719,19 @@ CORE_PKGS=(
 
 run_pacman "Core packages" -S --needed --noconfirm "${CORE_PKGS[@]}"
 
-# xdg-terminal-exec is NOT in stable extra and NOT in the AUR (only
-# extra-testing 0.14.4-1), so it must never go in the pacman CORE_PKGS call
-# above, and yay -S xdg-terminal-exec can never succeed: do not try it.
-# launch-terminal's fast path (xdg-terminals.list, kitty first) works
-# without it, and the binary is usually already present on EndeavourOS.
-# If it is missing, enable extra-testing and install it from there; until
-# then floating/presentation terminals fall back to the fast path.
-if ! command -v xdg-terminal-exec >/dev/null 2>&1; then
-  if [ "${IS_RERUN:-0}" = "1" ]; then
-    info "xdg-terminal-exec not installed (extra-testing only, expected): terminal launches use the xdg-terminals.list fast path"
-  else
-    warn "xdg-terminal-exec not installed (only in Arch extra-testing, not AUR), terminal launches use the xdg-terminals.list fast path only. Install later from extra-testing if a floating terminal needs it."
-  fi
+# xdg-terminal-exec is in CORE_PKGS above (Arch Extra stable 0.14.4-1,
+# verified live on archlinux.org 2026-11-25; the extra-testing note this
+# replaced was stale, it moved to stable Extra). Verify it actually
+# landed: a stale mirror can still fail the pacman call above, and
+# without the binary every terminal-with-args launch dies with
+# "App failure: Command not found: xdg-terminal-exec" (desktop dokoz,
+# 2026-11-24). Plain Super+Return still works without it via the
+# xdg-terminals.list fast path (kitty first), but launch-tui /
+# floating-terminal / TUI entries do not.
+if command -v xdg-terminal-exec >/dev/null 2>&1; then
+  info "xdg-terminal-exec installed: $(command -v xdg-terminal-exec)"
+else
+  warn "xdg-terminal-exec NOT installed after Core packages (stale mirror?): terminal-with-args launches will fail, plain Super+Return still works via the xdg-terminals.list fast path. Re-run hexciri update once the mirror syncs."
 fi
 
 step "Updating user directories"

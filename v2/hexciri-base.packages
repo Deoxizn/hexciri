@@ -13,6 +13,7 @@ xdg-desktop-portal-hyprland
 xdg-desktop-portal-gtk
 xdg-user-dirs
 xdg-utils
+xdg-terminal-exec # Arch Extra stable 0.14.4-1, verified 2026-11-25; every terminal-with-args launch needs it
 xorg-xwayland
 #
 # Quickshell, Arch extra, NOT quickshell-git by default
