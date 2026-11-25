@@ -2539,12 +2539,15 @@ place_user_file() {
     info "Kept: $dest (already current)"
     return 0
   fi
-  # Re-run: NEVER overwrite a user file. Save the upstream version next
-  # to it so a fix can be merged by hand, and keep the user's file.
+  # Re-run: NEVER overwrite a user file, and NEVER create a
+  # .hexciri.new copy next to it (2026-11-25: Devi edits these files
+  # constantly, the .new files just pile up in ~/.config/hypr/).
+  # Keep the user's file as-is, log that upstream changed, and
+  # delete any stale .hexciri.new left by an older installer.
   # This is the shell.json / hyprland.lua / kitty.conf reset fix.
   if [ "${IS_RERUN:-0}" = "1" ]; then
-    cp -a "$src" "$dest.hexciri.new"
-    info "Kept your $dest (re-run, upstream version saved to $dest.hexciri.new)"
+    rm -f "$dest.hexciri.new"
+    info "Kept your $dest (re-run, upstream changed, no .hexciri.new created)"
     # Safety migration only: an old hyprland.lua still requiring
     # default.hypr.omarchy trips Hyprland emergency mode at boot.
     # Fix that one line in place, touch nothing else in the file.
@@ -2674,8 +2677,8 @@ fi
 # Without these files every terminal launch falls through to xdg-terminal-exec.
 if [ -f "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" ]; then
   mkdir -p "$HOME/.config/xdg-terminal-exec"
-  # User file, not code: place_user_file keeps it on a re-run (upstream
-  # saved as .hexciri.new) instead of cp -a overwriting it every run.
+  # User file, not code: place_user_file keeps it on a re-run (no
+  # .hexciri.new created) instead of cp -a overwriting it every run.
   place_user_file "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" "$HOME/.config/xdg-terminal-exec/hyprland-xdg-terminals.list"
   place_user_file "$HEXCIRI_PATH/default/xdg-terminal-exec/hyprland-xdg-terminals.list" "$HOME/.config/xdg-terminals.list"
   info "Placed: ~/.config/xdg-terminals.list and ~/.config/xdg-terminal-exec/hyprland-xdg-terminals.list (kitty.desktop)"
@@ -3821,8 +3824,8 @@ EOS_EOF
   if [ -f "$HOME/.local/share/applications/eos-update.desktop" ] && cmp -s "$_eos_new" "$HOME/.local/share/applications/eos-update.desktop"; then
     info "EOS update icon: already correct (kept)"
   elif [ -f "$HOME/.local/share/applications/eos-update.desktop" ] && [ "${IS_RERUN:-0}" = "1" ]; then
-    cp -a "$_eos_new" "$HOME/.local/share/applications/eos-update.desktop.hexciri.new"
-    info "EOS update icon: kept your override (new version saved to eos-update.desktop.hexciri.new)"
+    rm -f "$HOME/.local/share/applications/eos-update.desktop.hexciri.new"
+    info "EOS update icon: kept your override (re-run, no .hexciri.new created)"
   else
     cp -a "$_eos_new" "$HOME/.local/share/applications/eos-update.desktop"
   fi
