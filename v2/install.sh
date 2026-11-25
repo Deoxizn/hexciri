@@ -244,7 +244,7 @@ patch_fingerprint() {
       printf 'missing patches dir %s\n' "$INSTALLER_DIR/patches"
     fi
     sed -n '/^# --- Hexciri Settings, Hexciri shell plugin/,/^step "Installing Hexciri theme hooks/p' "$INSTALLER_DIR/install.sh"
-    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings" "$HEXCIRI_REPO_ROOT/v2/hexciri-font-maple-cn-present"; do
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-color" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-dorion.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-zed.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings" "$HEXCIRI_REPO_ROOT/v2/hexciri-font-maple-cn-present"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
@@ -491,7 +491,7 @@ current_theme_name() {
 # no fork, no theme re-apply, no settings touched at all.
 if [ "${LIGHT_SYNC:-0}" = "1" ]; then
   _ls_sha="$(installer_tree_sha)"
-  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-link hexciri-web-search hexciri-settings-tabs hexciri-launch-settings hexciri-font-maple-cn-present; do
+  for _ls_f in hexciri-update-hexciri hexciri-theme-ansi hexciri-theme-color hexciri-theme-link hexciri-web-search hexciri-settings-tabs hexciri-launch-settings hexciri-font-maple-cn-present; do
     if [ -f "$HEXCIRI_REPO_ROOT/v2/$_ls_f" ] && [ -d /usr/share/hexciri/bin ]; then
       if ! cmp -s "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" 2>/dev/null; then
         sudo install -Dm755 "$HEXCIRI_REPO_ROOT/v2/$_ls_f" "/usr/share/hexciri/bin/$_ls_f" && info "Light sync: updated /usr/share/hexciri/bin/$_ls_f"
@@ -3999,7 +3999,13 @@ fi # end system-config guard (minimal re-apply: skipped in fork-only mode)
 #   10-hexciri-gtk: flat GTK override sheet from the active palette.
 #   11-hexciri-adapta: signaldirective/Adapta GTK, opt-in only.
 #   20-hexciri-thpm: THPM hook-run theme-set (enabled integrations).
+#   21-hexciri-dorion: mirror THPM's vencord.theme.css into Dorion (THPM has no Dorion target, upstream, do not edit THPM).
+#   22-hexciri-zed: generate the dynamic "Hexciri" Zed theme from the palette (fork 20-zed.sh is never deployed; omazed is Omarchy-repo-only).
 #   90-thpm: THPM's own hook, bridged from the omarchy hook dir.
+# hexciri-theme-color (installed below) is the palette resolver THPM needs:
+# without it THPM falls back to a strict TOML parse and stock themes like
+# Solitude (no orange/brown keys) fail every enable/doctor with
+# "missing semantic colors: orange, brown".
 # theme-env.sh is the shared THPM-port runtime every hook sources.
 # No extra apps: GTK/Adapta/THPM/steam are theming only, the apps they
 # theme (Steam, Nautilus, Adapta) are used only when already installed.
@@ -4268,7 +4274,7 @@ fi
 if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-nautilus.fragment.css" ]; then
   cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-nautilus.fragment.css" "$HOME/.config/hexciri/hooks/lib/nautilus-gtk4.fragment.css"
 fi
-for _hook in "hexciri-theme-hook-gtk.sh:10-hexciri-gtk" "hexciri-theme-hook-adapta.sh:11-hexciri-adapta" "hexciri-theme-hook-thpm.sh:20-hexciri-thpm"; do
+for _hook in "hexciri-theme-hook-gtk.sh:10-hexciri-gtk" "hexciri-theme-hook-adapta.sh:11-hexciri-adapta" "hexciri-theme-hook-thpm.sh:20-hexciri-thpm" "hexciri-theme-hook-dorion.sh:21-hexciri-dorion" "hexciri-theme-hook-zed.sh:22-hexciri-zed"; do
   _hook_src="${_hook%%:*}"; _hook_dst="${_hook##*:}"
   if [ -f "$HEXCIRI_REPO_ROOT/v2/$_hook_src" ]; then
     cp -a "$HEXCIRI_REPO_ROOT/v2/$_hook_src" "$HOME/.config/hexciri/hooks/theme-set.d/$_hook_dst"
@@ -4279,6 +4285,25 @@ for _hook in "hexciri-theme-hook-gtk.sh:10-hexciri-gtk" "hexciri-theme-hook-adap
   fi
 done
 unset _hook _hook_src _hook_dst
+# Palette resolver for THPM (2026-11-25, Devi: every `thpm enable` and
+# `thpm doctor` failed "missing semantic colors: orange, brown" on the
+# stock Solitude theme). Upstream omarchy-theme-color derives the missing
+# keys (orange = yellow, brown = mix(orange, black, 50%)), but the fork
+# never carried it: the bin allowlist (theme-*) should have copied it at
+# fork time, yet the installed tree has no hexciri-theme-color at all, so
+# THPM's shutil.which("omarchy-theme-color") finds nothing and it falls
+# back to a strict TOML parse that Solitude cannot pass. v2/hexciri-
+# theme-color is the renamed upstream resolver (quattro pinned 94a8c3c);
+# install it here, post-placement, and shim it as omarchy-theme-color in
+# /usr/local/bin (default PATH, same accepted compat-alias class as the
+# /usr/local/bin/omarchy CLI alias above). Verified in sim: THPM's own
+# palette.load() on Solitude fails strict and passes with the resolver.
+if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-color" ]; then
+  sudo install -Dm755 "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-color" /usr/share/hexciri/bin/hexciri-theme-color && info "  theme hook: /usr/share/hexciri/bin/hexciri-theme-color installed (THPM palette resolver)" || warn "  could not install hexciri-theme-color, THPM enable/doctor will keep failing on themes without orange/brown"
+  sudo ln -sfn /usr/share/hexciri/bin/hexciri-theme-color /usr/local/bin/omarchy-theme-color 2>/dev/null && info "  theme hook: /usr/local/bin/omarchy-theme-color -> hexciri-theme-color (THPM finds its resolver)" || warn "  could not link /usr/local/bin/omarchy-theme-color, THPM will keep using its strict parse"
+else
+  warn "  v2/hexciri-theme-color not in the installer tree, THPM enable/doctor will keep failing on themes without orange/brown"
+fi
 # theme-hook.toml is a USER setting: seed once, never overwrite on a
 # re-run. Adapta stays off by default; flip [gtk] adapta=true after
 # cloning signaldirective/Adapta to ~/.themes/Adapta.
@@ -4750,9 +4775,10 @@ command -v mise >/dev/null 2>&1 && hc_info "  mise: $(mise --version 2>/dev/null
 [ -d "$HEXCIRI_PATH/default/themed" ] && hc_info "  theme templates: default/themed present" || warn "  theme templates: default/themed missing, theme-set generates nothing"
 [ -f "$HEXCIRI_PATH/default/hypr/bindings/hexciri.lua" ] && [ -f "$HEXCIRI_PATH/default/hypr/apps/hexciri.lua" ] && hc_info "  hexciri lua: bindings/hexciri.lua + apps/hexciri.lua present (custom binds/rules only, Omarchy binds not duplicated)" || warn "  hexciri lua: custom binds/apps Lua missing, monocle cycle / TUI float / mpv+imv opacity will not load"
 grep -q 'require("default.hypr.bindings.hexciri")' "$HEXCIRI_PATH/default/hypr/hexciri.lua" 2>/dev/null && hc_info "  hexciri binds wired: hexciri.lua requires default.hypr.bindings.hexciri (Super+Ctrl+S Settings, Super+Shift+S web search, Super+Shift+C calculator register)" || warn "  hexciri binds NOT wired: hexciri.lua does not require default.hypr.bindings.hexciri, Super+Ctrl+S Settings will not register (run hexciri update)"
-[ -x "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-gtk" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/11-hexciri-adapta" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/20-hexciri-thpm" ] && [ -f "$HOME/.config/hexciri/hooks/lib/theme-env.sh" ] && hc_info "  theme hooks: 10-gtk + 11-adapta + 20-thpm + theme-env.sh present (theme-set.d)" || warn "  theme hooks: a Hexciri theme hook is missing from ~/.config/hexciri/hooks/theme-set.d/, theme switch will skip GTK/Adapta/THPM"
+[ -x "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-gtk" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/11-hexciri-adapta" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/20-hexciri-thpm" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/21-hexciri-dorion" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/22-hexciri-zed" ] && [ -f "$HOME/.config/hexciri/hooks/lib/theme-env.sh" ] && hc_info "  theme hooks: 10-gtk + 11-adapta + 20-thpm + 21-dorion + 22-zed + theme-env.sh present (theme-set.d)" || warn "  theme hooks: a Hexciri theme hook is missing from ~/.config/hexciri/hooks/theme-set.d/, theme switch will skip GTK/Adapta/THPM/Dorion/Zed"
 command -v thpm >/dev/null 2>&1 && hc_info "  thpm: $(thpm --version 2>/dev/null || echo present) (source install, not AUR)" || warn "  thpm: NOT installed, theme switch skips THPM integrations (install: git clone OldJobobo/thpm, ./install.sh --no-ui)"
 [ -x /usr/local/bin/omarchy ] && hc_info "  thpm compat: /usr/local/bin/omarchy -> hexciri (THPM hardcodes the omarchy CLI)" || warn "  thpm compat: /usr/local/bin/omarchy missing, thpm install/doctor will fail its capability check"
+[ -x /usr/share/hexciri/bin/hexciri-theme-color ] && [ -x /usr/local/bin/omarchy-theme-color ] && hc_info "  thpm palette: hexciri-theme-color + /usr/local/bin/omarchy-theme-color present (Solitude orange/brown derive, thpm enable/doctor pass)" || warn "  thpm palette: theme-color resolver or its omarchy-theme-color shim is missing, thpm enable/doctor will fail on themes without orange/brown"
 if command -v theme-link >/dev/null 2>&1; then hc_info "  theme-link: $(theme-link --version 2>/dev/null || echo present) (trusted theme symlinks, restores theme Lua)"; else warn "  theme-link: NOT installed, hexciri theme link is unavailable (install: git clone ministry-of-taste/theme-link, make install)"; fi
 if command -v theme-link >/dev/null 2>&1 && theme-link config show 2>/dev/null | grep -q "themes_dir = \"$HOME/.config/hexciri/themes\""; then hc_info "  theme-link config: themes_dir = ~/.config/hexciri/themes (links land where Hexciri reads them)"; elif command -v theme-link >/dev/null 2>&1; then warn "  theme-link config: themes_dir is not ~/.config/hexciri/themes, hexciri theme link refuses until it does (theme-link config show)"; fi
 [ -x "$HEXCIRI_PATH/bin/hexciri-theme-link" ] && hc_info "  theme link: hexciri-theme-link present (hexciri theme link <git-url>)" || warn "  theme link: hexciri-theme-link missing from $HEXCIRI_PATH/bin, hexciri theme link will fail (theme-link add still works)"
