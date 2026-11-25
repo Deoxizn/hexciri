@@ -3227,6 +3227,29 @@ else
 fi
 [ -f /etc/pam.d/hexciri-lock-password ] || warn "Lock PAM file /etc/pam.d/hexciri-lock-password still missing after apply-lock, System > Lock will return missing-pam until it exists. Run by hand: sudo hexciri-apply-lock"
 # --- SDDM fingerprint (login unlock, 2026-11-23) ---
+# hexciri_has_fingerprint_reader / hexciri_finger_enrolled (2026-11-24,
+# Devi desktop dokoz, no reader: SDDM password login failed while the same
+# password worked at a tty, same as Hexciri v1 on vanilla Arch). Fingerprint
+# setup must only happen when a reader is actually detected, and a machine
+# with no reader must have any stray fingerprint lines stripped, not left
+# alone: pam_fprintd in /etc/pam.d/sddm makes SDDM demand a touch it can
+# never get, so password login fails at the greeter only. The sysfs USB
+# probe (forked hexciri-hw-fingerprint) works before fprintd is installed;
+# fprintd-list's exit status is the fallback for non-USB readers (Touch ID
+# behind a Secure Enclave): exit 0 means a device answered, non-zero means
+# "No devices available".
+hexciri_has_fingerprint_reader() {
+  if [ -x "$HEXCIRI_PATH/bin/hexciri-hw-fingerprint" ]; then
+    "$HEXCIRI_PATH/bin/hexciri-hw-fingerprint" 2>/dev/null && return 0
+  fi
+  if command -v fprintd-list >/dev/null 2>&1; then
+    /usr/bin/fprintd-list "$USER" >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+hexciri_finger_enrolled() {
+  command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/dev/null | grep -qE '^[[:space:]]*-[[:space:]]*#[0-9]+:'
+}
 # Fingerprint works for sudo because setup-security-fingerprint writes
 # /etc/pam.d/sudo and /etc/pam.d/polkit-1, but it never touched SDDM:
 # upstream only configures sudo, polkit and the lock screen, so the login
@@ -3241,9 +3264,11 @@ fi
 # pam_fprintd first) demanded a fingerprint AFTER a correct password.
 # Repair first: strip any earlier Hexciri SDDM lines, so a rerun fixes a
 # machine that already has the broken order instead of skipping it.
-# Idempotent, best-effort: without an enrolled finger the file is left alone.
+# Idempotent, best-effort: without a detected reader (or without an
+# enrolled finger) the step strips any stray fingerprint lines instead of
+# adding any, so a re-run repairs a no-reader machine.
 step "Configuring SDDM fingerprint (login unlock)"
-if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/dev/null | grep -qE '^[[:space:]]*-[[:space:]]*#[0-9]+:'; then
+if hexciri_has_fingerprint_reader && hexciri_finger_enrolled; then
   if [ -f /etc/pam.d/sddm ]; then
     _sddm_tmp="$(mktemp)"
     sudo sed -e '/pam_fprintd\.so/d' -e '/hexciri-hw-laptop-closed/d' -e '/try_first_pass likeauth nullok/d' /etc/pam.d/sddm > "$_sddm_tmp" 2>/dev/null || cp /etc/pam.d/sddm "$_sddm_tmp"
@@ -3274,7 +3299,28 @@ if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/d
     warn "/etc/pam.d/sddm not found, SDDM login stays password-only"
   fi
 else
-  info "No fingers enrolled, /etc/pam.d/sddm left alone (enroll one, then re-run the installer or Setup > Security > Fingerprint)"
+  # Repair, not "left alone": no reader, or a reader with nothing enrolled.
+  # Any Hexciri fingerprint lines already in /etc/pam.d/sddm (earlier run,
+  # manual Setup > Security > Fingerprint, stale order) demand a touch
+  # SDDM can never get on this machine, so password login fails at the
+  # greeter while the same password works at a tty. Strip them; the stock
+  # password stack (auth include system-login and friends) stays in the
+  # file underneath, untouched by these patterns.
+  if [ -f /etc/pam.d/sddm ] && grep -Eq 'pam_fprintd\.so|hexciri-hw-laptop-closed|try_first_pass likeauth nullok' /etc/pam.d/sddm; then
+    _sddm_tmp="$(mktemp)"
+    if sudo sed -e '/pam_fprintd\.so/d' -e '/hexciri-hw-laptop-closed/d' -e '/try_first_pass likeauth nullok/d' /etc/pam.d/sddm > "$_sddm_tmp" 2>/dev/null && sudo install -Dm644 "$_sddm_tmp" /etc/pam.d/sddm; then
+      info "No fingerprint reader detected, SDDM fingerprint lines stripped from /etc/pam.d/sddm (password-only login restored)"
+    else
+      warn "could not strip SDDM fingerprint lines from /etc/pam.d/sddm, password login may still fail (strip them by hand: sudo sed -i -e '/pam_fprintd\.so/d' -e '/hexciri-hw-laptop-closed/d' -e '/try_first_pass likeauth nullok/d' /etc/pam.d/sddm)"
+    fi
+    rm -f "$_sddm_tmp"
+    unset _sddm_tmp
+  else
+    info "No fingerprint reader detected, /etc/pam.d/sddm left alone (password-only login)"
+  fi
+  if [ -f /usr/share/sddm/themes/hexciri/theme.conf ] && grep -q '^Fingerprint=' /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null; then
+    sudo sed -i '/^Fingerprint=/d' /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null && info "SDDM theme Fingerprint flag removed (no reader)" || true
+  fi
 fi
 # --- SDDM keyring auto-unlock (Brave password prompt, 2026-11-24) ---
 # Root cause: gnome-keyring was installed (CORE_PKGS) and Seahorse with
@@ -3751,7 +3797,7 @@ if [ -n "$SDDM_SRC" ]; then
     # The greeter shows "touch the reader or enter your password" only when
     # Fingerprint=true is in theme.conf (branding Main.qml reads
     # config.Fingerprint). Only when a finger is actually enrolled.
-    if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/dev/null | grep -qE '^[[:space:]]*-[[:space:]]*#[0-9]+:'; then
+    if hexciri_has_fingerprint_reader && hexciri_finger_enrolled; then
       printf 'Fingerprint=true\n' >> "$TMP_SDDM_CONF"
     fi
     if sudo install -Dm644 "$TMP_SDDM_CONF" /usr/share/sddm/themes/hexciri/theme.conf 2>/dev/null; then
@@ -4494,6 +4540,13 @@ if command -v fprintd-list >/dev/null 2>&1 && /usr/bin/fprintd-list "$USER" 2>/d
     warn "  fingerprint: /etc/pam.d/sddm has pam_fprintd but no pam_unix-first line (old order: fingerprint demanded after password)"
   else
     warn "  fingerprint: enrolled, but /etc/pam.d/sddm has no pam_fprintd, SDDM login stays password-only"
+  fi
+fi
+if ! hexciri_has_fingerprint_reader 2>/dev/null; then
+  if grep -q pam_fprintd.so /etc/pam.d/sddm 2>/dev/null; then
+    warn "  fingerprint: /etc/pam.d/sddm still has pam_fprintd but no fingerprint reader was detected, SDDM password login may fail (re-run the installer to strip it)"
+  else
+    hc_info "  fingerprint: no reader detected, SDDM is password-only"
   fi
 fi
 if grep -q 'pam_gnome_keyring.so' /etc/pam.d/sddm 2>/dev/null && grep -q 'pam_gnome_keyring.so auto_start' /etc/pam.d/sddm 2>/dev/null; then hc_info "  keyring: SDDM PAM unlocks gnome-keyring at login (Brave launches with no password prompt)"; else warn "  keyring: /etc/pam.d/sddm has no pam_gnome_keyring.so, Brave asks for the keyring password on every launch (re-run the installer)"; fi
