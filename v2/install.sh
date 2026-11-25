@@ -2532,25 +2532,51 @@ info "Linked: ~/.local/bin/hexciri (bare dispatcher, the hexciri-* glob never ma
 # terminal launchers (and the dock's stand-ins for WebBrowser /
 # TerminalEmulator windows), so they are placed even though they are NOT
 # dock pins: the pinned list is brave-origin / kitty directly, and pinning
-# these wrappers too would duplicate both. Plus foot.desktop (2026-11-24):
-# install-terminal foot installs it as the Foot desktop entry, so it is
-# placed as a user entry here too. Only these three are placed: the other
-# applications/*.desktop files are Omarchy web apps (ChatGPT, Herdr,
-# Discord, ...) and AI/out-of-scope entries.
+# these wrappers too would duplicate both. Only these two are placed:
+# the other applications/*.desktop files are Omarchy web apps (ChatGPT,
+# Herdr, Discord, ...) and AI/out-of-scope entries.
+# foot.desktop is deliberately NOT placed here (2026-11-24, Devi:
+# pacman -Q | grep foot came back blank, only the desktop file was
+# there, Foot looked installed on top of Kitty). It lives only in
+# /usr/share/hexciri/applications/ as install-terminal foot's source;
+# install-terminal foot copies it to ~/.local/share/applications/
+# itself, at the moment it installs the foot package, so a Foot entry
+# appears only when Foot is actually installed.
+# 2026-11-24 21:21: this skip was in f3c6b59c and was silently reverted
+# by a1e97b06 (SDDM fix rebased on a stale pre-f3c6b59c base); re-applied
+# here, do not rebase this file from a base older than f3c6b59c.
 mkdir -p "$HOME/.local/share/applications"
 for desk_file in "$FORK_OUT"/applications/*.desktop; do
   [ -e "$desk_file" ] || continue
+  if [ "$(basename "$desk_file")" = "foot.desktop" ] && ! command -v foot >/dev/null 2>&1; then
+    info "Skipped desktop entry: foot.desktop (Foot is not installed, Kitty is the default terminal)"
+    continue
+  fi
   place_user_file "$desk_file" "$HOME/.local/share/applications/$(basename "$desk_file")"
   # NoDisplay on the placed wrappers, 2026-11-23: without it the Super+Space
   # app grid shows Browser + Terminal wrapper entries next to Brave Origin
   # + Kitty, which are already pinned. The dock stand-in logic does not
   # need these entries visible, and hexciri-launch-browser / terminal exec
   # the default browser / terminal directly, not via the .desktop file.
-  if ! grep -q '^NoDisplay=' "$HOME/.local/share/applications/$(basename "$desk_file")"; then
+  # Foot is a real app, not a wrapper: when it is installed it stays
+  # visible, so NoDisplay is wrappers-only (2026-11-24).
+  if [ "$(basename "$desk_file")" != "foot.desktop" ] && ! grep -q '^NoDisplay=' "$HOME/.local/share/applications/$(basename "$desk_file")"; then
     printf 'NoDisplay=true\n' >> "$HOME/.local/share/applications/$(basename "$desk_file")"
   fi
   info "Placed desktop entry: $HOME/.local/share/applications/$(basename "$desk_file") (NoDisplay, wrapper only)"
 done
+# Stray Foot entry repair, loop side (2026-11-24 21:21, re-applied f3c6b59c
+# plus this second site): earlier installs placed foot.desktop as a user
+# entry on every run, so a Foot launcher showed in the grid for a terminal
+# that does not exist. Remove it when Foot is not installed; only remove
+# the Hexciri-placed copy (plain Exec=foot), never a user-customised entry.
+# This site runs in full + --re-apply mode; the trim-site repair below
+# runs in full + --re-apply-provision mode. Together they cover every
+# installer mode. If Foot IS installed, leave it visible.
+if ! command -v foot >/dev/null 2>&1 && [ -f "$HOME/.local/share/applications/foot.desktop" ] && grep -q '^Exec=foot$' "$HOME/.local/share/applications/foot.desktop"; then
+  rm -f "$HOME/.local/share/applications/foot.desktop" "$HOME/.local/share/applications/foot.desktop.hexciri.new"
+  info "Removed stray desktop entry: foot.desktop (Foot is not installed)"
+fi
 
 # hexciri CLI on PATH everywhere, not just login shells: /usr/local/bin is
 # on the default PATH for login and non-login shells alike, and Kitty runs
@@ -4434,6 +4460,25 @@ if [ -f /usr/share/applications/yad-settings.desktop ]; then
 else
   warn "yad-settings.desktop not found, nothing to hide"
 fi
+# Stray Foot entry repair (2026-11-24, Devi: only the desktop file was
+# there, foot package not installed, pacman -Q | grep foot blank).
+# Earlier installs placed foot.desktop as a user entry on every run, so
+# a Foot launcher showed in the grid for a terminal that does not
+# exist. Remove it when Foot is not installed; only remove the
+# Hexciri-placed copy (plain Exec=foot), never a user-customised entry.
+# If Foot IS installed, leave it visible. This lives in the trim
+# section, not by the placement loop, on purpose: the loop sits in the
+# "Place the forked tree" section, which is in NO fingerprint range,
+# so a repair there would light-sync and never run on existing
+# machines. Trim is in the provision range, so this change moves the
+# provision fingerprint and the next update re-applies provision.
+# 2026-11-24 21:21: re-applied after a1e97b06 silently reverted f3c6b59c;
+# a second repair site after the placement loop (above) now covers
+# --re-apply mode too, which trim skips.
+if ! command -v foot >/dev/null 2>&1 && [ -f "$HOME/.local/share/applications/foot.desktop" ] && grep -q '^Exec=foot$' "$HOME/.local/share/applications/foot.desktop"; then
+  rm -f "$HOME/.local/share/applications/foot.desktop" "$HOME/.local/share/applications/foot.desktop.hexciri.new"
+  info "Removed stray desktop entry: foot.desktop (Foot is not installed)"
+fi
 
 # Post-update hook: hexciri-update runs `hexciri-hook post-update` at the end
 # of every update, and the hook runner executes every script in
@@ -4537,6 +4582,7 @@ else
 fi
 if [ -f /var/lib/sddm/state.conf ] && grep -q '^User=' /var/lib/sddm/state.conf 2>/dev/null; then hc_info "  sddm last user: $(grep '^User=' /var/lib/sddm/state.conf | cut -d= -f2)"; else warn "  sddm last user: /var/lib/sddm/state.conf has no Last User, first SDDM login relies on the theme's first-user fallback (re-run the installer to seed it)"; fi
 command -v kitty >/dev/null 2>&1 && hc_info "  terminal: kitty present" || warn "  terminal: kitty NOT installed, terminal binds fall back to xdg-terminal-exec"
+if ! command -v foot >/dev/null 2>&1 && [ -f "$HOME/.local/share/applications/foot.desktop" ]; then warn "  foot entry: ~/.local/share/applications/foot.desktop exists but foot is not installed, Foot will show in the app grid (run: rm ~/.local/share/applications/foot.desktop)"; fi
 command -v tmux >/dev/null 2>&1 && hc_info "  tmux: present" || warn "  tmux: NOT installed, Learn > Tmux and Super+Alt+Return will fail"
 command -v udiskie >/dev/null 2>&1 && hc_info "  udiskie: present" || warn "  udiskie: NOT installed, autostart will pop a Command not found error"
 if command -v brave-origin >/dev/null 2>&1; then
