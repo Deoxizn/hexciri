@@ -244,7 +244,7 @@ patch_fingerprint() {
       printf 'missing patches dir %s\n' "$INSTALLER_DIR/patches"
     fi
     sed -n '/^# --- Hexciri Settings, Hexciri shell plugin/,/^step "Installing Hexciri theme hooks/p' "$INSTALLER_DIR/install.sh"
-    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-color" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-dorion.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-zed.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings" "$HEXCIRI_REPO_ROOT/v2/hexciri-font-maple-cn-present"; do
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm-sync.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-color" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-dorion.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-zed.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings" "$HEXCIRI_REPO_ROOT/v2/hexciri-font-maple-cn-present"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
@@ -2399,15 +2399,46 @@ if [ -x "$THPM_SRC/install.sh" ]; then
   fi
 fi
 # steam-adwaita checkout: THPM's steam integration (and v1's 40-steam.sh)
-# install the active palette through it. Clone once, pull on re-run.
+# install the active palette through it. Pinned to tag 3.17, the last v3
+# installer (2026-11-25): THPM 1.0.0's steam integration is built on the
+# v3 contract, a flat install.py that writes steamui/libraryroot.custom.css
+# into a bare staging dir and patches library.css with a /*patched*/
+# header. Upstream master is now v4 (Release 4.5, scripts/installer
+# package): it never writes libraryroot.custom.css, it patches three CSS
+# files (library, gamerecording, gamenotes) with an /* Adwaita-for-Steam */
+# header, and it refuses any target that is not a valid Steam dir, so a
+# THPM staging dir (library.css only) is skipped with exit 0 and THPM
+# then fails validation on the missing loader file. An unpinned clone
+# pulls master and steam theming can never apply; 3.17 keeps the v3
+# contract THPM validates against. Existing checkouts are moved to the
+# tag (THPM's generated omarchy.css in the checkout is untracked, so the
+# checkout succeeds); a checkout that refuses the move warns and steam
+# stays broken until it is fixed by hand. Before the first theme-set
+# after this pin, restore Steam's own files once with the old installer
+# (`~/.local/share/steam-adwaita/install.py --uninstall` while it is
+# still v4, or `thpm disable steam`), so v3 does not stage on top of a
+# v4-patched library.css.
 STEAM_ADWAITA="$HOME/.local/share/steam-adwaita"
+STEAM_ADWAITA_PIN="3.17"
 if command -v git >/dev/null 2>&1; then
   if [ -d "$STEAM_ADWAITA/.git" ]; then
-    git -C "$STEAM_ADWAITA" pull --ff-only --quiet 2>/dev/null || true
+    _steam_head="$(git -C "$STEAM_ADWAITA" describe --tags --exact-match 2>/dev/null || echo "")"
+    if [ "$_steam_head" != "$STEAM_ADWAITA_PIN" ]; then
+      git -C "$STEAM_ADWAITA" fetch --tags --quiet origin 2>/dev/null || true
+      if git -C "$STEAM_ADWAITA" checkout --quiet "$STEAM_ADWAITA_PIN" 2>/dev/null; then
+        info "  steam-adwaita pinned to $STEAM_ADWAITA_PIN (last v3 installer THPM 1.0.0 supports; master is v4, no libraryroot.custom.css)"
+      else
+        warn "  steam-adwaita pin to $STEAM_ADWAITA_PIN failed, THPM steam stays broken until the checkout is at $STEAM_ADWAITA_PIN (see /tmp/hexciri-install.log)"
+      fi
+    else
+      info "  steam-adwaita already at $STEAM_ADWAITA_PIN"
+    fi
+    unset _steam_head
   elif [ ! -d "$STEAM_ADWAITA" ]; then
-    git clone --quiet https://github.com/tkashkin/Adwaita-for-Steam "$STEAM_ADWAITA" 2>/dev/null && info "  steam-adwaita checkout cloned: $STEAM_ADWAITA" || warn "  steam-adwaita clone failed, THPM steam integration stays unavailable (thpm report steam)"
+    git clone --quiet --branch "$STEAM_ADWAITA_PIN" --depth 1 https://github.com/tkashkin/Adwaita-for-Steam "$STEAM_ADWAITA" 2>/dev/null && info "  steam-adwaita checkout cloned at $STEAM_ADWAITA_PIN: $STEAM_ADWAITA" || warn "  steam-adwaita clone failed, THPM steam integration stays unavailable (thpm report steam)"
   fi
 fi
+unset STEAM_ADWAITA_PIN
 # Bridge THPM's own hook into Hexciri's hook dir, and enable steam.
 if command -v thpm >/dev/null 2>&1; then
   if [ -f "$HOME/.config/omarchy/hooks/theme-set.d/90-thpm" ]; then
@@ -3998,6 +4029,7 @@ fi # end system-config guard (minimal re-apply: skipped in fork-only mode)
 #   10-hexciri-strata-theme (above): Strata Follow-Omarchy symlinks.
 #   10-hexciri-gtk: flat GTK override sheet from the active palette.
 #   11-hexciri-adapta: signaldirective/Adapta GTK, opt-in only.
+#   15-hexciri-thpm-sync: THPM bridge sync, template dir + staged theme files into THPM's omarchy paths, before 20 runs.
 #   20-hexciri-thpm: THPM hook-run theme-set (enabled integrations).
 #   21-hexciri-dorion: mirror THPM's vencord.theme.css into Dorion (THPM has no Dorion target, upstream, do not edit THPM).
 #   22-hexciri-zed: generate the dynamic "Hexciri" Zed theme from the palette (fork 20-zed.sh is never deployed; omazed is Omarchy-repo-only).
@@ -4274,7 +4306,7 @@ fi
 if [ -f "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-nautilus.fragment.css" ]; then
   cp -a "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-nautilus.fragment.css" "$HOME/.config/hexciri/hooks/lib/nautilus-gtk4.fragment.css"
 fi
-for _hook in "hexciri-theme-hook-gtk.sh:10-hexciri-gtk" "hexciri-theme-hook-adapta.sh:11-hexciri-adapta" "hexciri-theme-hook-thpm.sh:20-hexciri-thpm" "hexciri-theme-hook-dorion.sh:21-hexciri-dorion" "hexciri-theme-hook-zed.sh:22-hexciri-zed"; do
+for _hook in "hexciri-theme-hook-gtk.sh:10-hexciri-gtk" "hexciri-theme-hook-adapta.sh:11-hexciri-adapta" "hexciri-theme-hook-thpm-sync.sh:15-hexciri-thpm-sync" "hexciri-theme-hook-thpm.sh:20-hexciri-thpm" "hexciri-theme-hook-dorion.sh:21-hexciri-dorion" "hexciri-theme-hook-zed.sh:22-hexciri-zed"; do
   _hook_src="${_hook%%:*}"; _hook_dst="${_hook##*:}"
   if [ -f "$HEXCIRI_REPO_ROOT/v2/$_hook_src" ]; then
     cp -a "$HEXCIRI_REPO_ROOT/v2/$_hook_src" "$HOME/.config/hexciri/hooks/theme-set.d/$_hook_dst"
@@ -4285,6 +4317,12 @@ for _hook in "hexciri-theme-hook-gtk.sh:10-hexciri-gtk" "hexciri-theme-hook-adap
   fi
 done
 unset _hook _hook_src _hook_dst
+# Bridge + sync once now, not only on the next theme switch: the
+# template-dir bridge has to exist before the renderer runs (it runs
+# before the hooks on a switch), so a switch right after this update
+# already renders THPM templates, and the staged theme files are linked
+# into THPM's omarchy paths immediately.
+bash "$HOME/.config/hexciri/hooks/theme-set.d/15-hexciri-thpm-sync" 2>/dev/null && info "  theme hook: THPM bridge sync applied (themed dir + staged theme files linked into THPM paths)" || warn "  THPM bridge sync failed, THPM fish/fzf/discord will fail on the next theme switch until it runs (hexciri update retries it)"
 # Palette resolver for THPM (2026-11-25, Devi: every `thpm enable` and
 # `thpm doctor` failed "missing semantic colors: orange, brown" on the
 # stock Solitude theme). Upstream omarchy-theme-color derives the missing
@@ -4775,14 +4813,14 @@ command -v mise >/dev/null 2>&1 && hc_info "  mise: $(mise --version 2>/dev/null
 [ -d "$HEXCIRI_PATH/default/themed" ] && hc_info "  theme templates: default/themed present" || warn "  theme templates: default/themed missing, theme-set generates nothing"
 [ -f "$HEXCIRI_PATH/default/hypr/bindings/hexciri.lua" ] && [ -f "$HEXCIRI_PATH/default/hypr/apps/hexciri.lua" ] && hc_info "  hexciri lua: bindings/hexciri.lua + apps/hexciri.lua present (custom binds/rules only, Omarchy binds not duplicated)" || warn "  hexciri lua: custom binds/apps Lua missing, monocle cycle / TUI float / mpv+imv opacity will not load"
 grep -q 'require("default.hypr.bindings.hexciri")' "$HEXCIRI_PATH/default/hypr/hexciri.lua" 2>/dev/null && hc_info "  hexciri binds wired: hexciri.lua requires default.hypr.bindings.hexciri (Super+Ctrl+S Settings, Super+Shift+S web search, Super+Shift+C calculator register)" || warn "  hexciri binds NOT wired: hexciri.lua does not require default.hypr.bindings.hexciri, Super+Ctrl+S Settings will not register (run hexciri update)"
-[ -x "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-gtk" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/11-hexciri-adapta" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/20-hexciri-thpm" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/21-hexciri-dorion" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/22-hexciri-zed" ] && [ -f "$HOME/.config/hexciri/hooks/lib/theme-env.sh" ] && hc_info "  theme hooks: 10-gtk + 11-adapta + 20-thpm + 21-dorion + 22-zed + theme-env.sh present (theme-set.d)" || warn "  theme hooks: a Hexciri theme hook is missing from ~/.config/hexciri/hooks/theme-set.d/, theme switch will skip GTK/Adapta/THPM/Dorion/Zed"
+[ -x "$HOME/.config/hexciri/hooks/theme-set.d/10-hexciri-gtk" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/11-hexciri-adapta" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/15-hexciri-thpm-sync" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/20-hexciri-thpm" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/21-hexciri-dorion" ] && [ -x "$HOME/.config/hexciri/hooks/theme-set.d/22-hexciri-zed" ] && [ -f "$HOME/.config/hexciri/hooks/lib/theme-env.sh" ] && hc_info "  theme hooks: 10-gtk + 11-adapta + 15-thpm-sync + 20-thpm + 21-dorion + 22-zed + theme-env.sh present (theme-set.d)" || warn "  theme hooks: a Hexciri theme hook is missing from ~/.config/hexciri/hooks/theme-set.d/, theme switch will skip GTK/Adapta/THPM/Dorion/Zed"
 command -v thpm >/dev/null 2>&1 && hc_info "  thpm: $(thpm --version 2>/dev/null || echo present) (source install, not AUR)" || warn "  thpm: NOT installed, theme switch skips THPM integrations (install: git clone OldJobobo/thpm, ./install.sh --no-ui)"
 [ -x /usr/local/bin/omarchy ] && hc_info "  thpm compat: /usr/local/bin/omarchy -> hexciri (THPM hardcodes the omarchy CLI)" || warn "  thpm compat: /usr/local/bin/omarchy missing, thpm install/doctor will fail its capability check"
 [ -x /usr/share/hexciri/bin/hexciri-theme-color ] && [ -x /usr/local/bin/omarchy-theme-color ] && hc_info "  thpm palette: hexciri-theme-color + /usr/local/bin/omarchy-theme-color present (Solitude orange/brown derive, thpm enable/doctor pass)" || warn "  thpm palette: theme-color resolver or its omarchy-theme-color shim is missing, thpm enable/doctor will fail on themes without orange/brown"
 if command -v theme-link >/dev/null 2>&1; then hc_info "  theme-link: $(theme-link --version 2>/dev/null || echo present) (trusted theme symlinks, restores theme Lua)"; else warn "  theme-link: NOT installed, hexciri theme link is unavailable (install: git clone ministry-of-taste/theme-link, make install)"; fi
 if command -v theme-link >/dev/null 2>&1 && theme-link config show 2>/dev/null | grep -q "themes_dir = \"$HOME/.config/hexciri/themes\""; then hc_info "  theme-link config: themes_dir = ~/.config/hexciri/themes (links land where Hexciri reads them)"; elif command -v theme-link >/dev/null 2>&1; then warn "  theme-link config: themes_dir is not ~/.config/hexciri/themes, hexciri theme link refuses until it does (theme-link config show)"; fi
 [ -x "$HEXCIRI_PATH/bin/hexciri-theme-link" ] && hc_info "  theme link: hexciri-theme-link present (hexciri theme link <git-url>)" || warn "  theme link: hexciri-theme-link missing from $HEXCIRI_PATH/bin, hexciri theme link will fail (theme-link add still works)"
-[ -d "$HOME/.local/share/steam-adwaita" ] && hc_info "  steam-adwaita: checkout present (THPM steam target)" || warn "  steam-adwaita: checkout missing at ~/.local/share/steam-adwaita, THPM steam integration stays unavailable (thpm report steam)"
+[ -d "$HOME/.local/share/steam-adwaita" ] && [ "$(git -C "$HOME/.local/share/steam-adwaita" describe --tags --exact-match 2>/dev/null || echo "")" = "3.17" ] && hc_info "  steam-adwaita: checkout at 3.17 (THPM steam target, last v3 installer)" || warn "  steam-adwaita: checkout missing or not at 3.17, THPM steam will fail until hexciri update re-pins it (thpm report steam)"
 if command -v grim >/dev/null 2>&1 && command -v slurp >/dev/null 2>&1; then hc_info "  screenshot: grim + slurp present (PRINT, hexciri-capture-screenshot)"; else warn "  screenshot: grim/slurp missing, PRINT will fail"; fi
 command -v tesseract >/dev/null 2>&1 && hc_info "  OCR: tesseract present (SUPER+CTRL+PRINT capture-text)" || warn "  OCR: tesseract NOT installed, capture-text will fail"
 if [ "$HC_FAIL" -eq 0 ]; then
