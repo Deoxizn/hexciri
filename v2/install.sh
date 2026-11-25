@@ -1671,6 +1671,17 @@ HEXCIRI_LOGO_EOF
   # removes via Remove > Package (pkg-remove, already restored).
   copy_subset "$OMARCHY_SRC/config/foot" "$FORK_OUT/config/foot" "config/foot/"
   copy_optional_file "$OMARCHY_SRC/applications/foot.desktop" "$FORK_OUT/applications/foot.desktop" "applications/foot.desktop" || warn "applications/foot.desktop not found in source, install-terminal foot installs without its desktop entry."
+  # Battle.net (2026-11-24, Devi: install-gaming-battlenet died at
+  # "cannot stat /usr/share/hexciri/default/applications/battlenet.desktop"):
+  # install-gaming-battlenet copies default/applications/battlenet.desktop
+  # into ~/.local/share/applications/, but the fork never copied that file
+  # (or its icon) from upstream, so the install failed at the last step
+  # after Battle.net itself was already installed. Only this one file:
+  # the rest of default/applications/ is Omarchy agent web apps, out of
+  # scope. rewrite_contents below renames its Exec=omarchy-launch-battlenet
+  # to hexciri-launch-battlenet, same as the other launchers.
+  copy_optional_file "$OMARCHY_SRC/default/applications/battlenet.desktop" "$FORK_OUT/default/applications/battlenet.desktop" "default/applications/battlenet.desktop" || warn "default/applications/battlenet.desktop not found in source, install-gaming-battlenet installs without its desktop entry."
+  copy_optional_file "$OMARCHY_SRC/applications/icons/Battle.net.png" "$FORK_OUT/applications/icons/Battle.net.png" "applications/icons/Battle.net.png" || warn "applications/icons/Battle.net.png not found in source, install-gaming-battlenet installs without its icon."
   copy_optional_path "$OMARCHY_SRC/default/voxtype" "$FORK_OUT/default/voxtype" "default/voxtype/" || warn "default/voxtype/ not found in source, install-dictation-voxtype has no config to install."
   mkdir -p "$FORK_OUT/default/systemd/user"
   copy_optional_file "$OMARCHY_SRC/default/systemd/user/omarchy-tailscale-receive.service" "$FORK_OUT/default/systemd/user/hexciri-tailscale-receive.service" "default/systemd/user/omarchy-tailscale-receive.service" || warn "default/systemd/user/omarchy-tailscale-receive.service not found in source, install-service-tailscale enables a unit that is never installed."
@@ -2998,6 +3009,13 @@ unset _bin
 [ -f "$HEXCIRI_PATH/default/alacritty/Alacritty.desktop" ] || die "missing: default/alacritty/Alacritty.desktop, install-terminal alacritty installs without its desktop entry"
 [ -f "$HEXCIRI_PATH/config/foot/foot.ini" ] || die "missing: config/foot/foot.ini, install-terminal foot has no config to install"
 [ -f "$HEXCIRI_PATH/applications/foot.desktop" ] || die "missing: applications/foot.desktop, install-terminal foot installs without its desktop entry"
+# Battle.net (2026-11-24): install-gaming-battlenet hard-requires the
+# desktop entry (it copies it to ~/.local/share/applications/) and the
+# icon patch 12-battlenet.sh hard-requires the icon source; without
+# either, the install fails at the last step or the launcher shows no icon.
+[ -f "$HEXCIRI_PATH/default/applications/battlenet.desktop" ] || die "missing: default/applications/battlenet.desktop, install-gaming-battlenet installs without its desktop entry"
+grep -q '^Exec=hexciri-launch-battlenet$' "$HEXCIRI_PATH/default/applications/battlenet.desktop" || die "battlenet.desktop does not Exec hexciri-launch-battlenet, the launcher entry runs nothing (2026-11-24)"
+[ -f "$HEXCIRI_PATH/applications/icons/Battle.net.png" ] || die "missing: applications/icons/Battle.net.png, install-gaming-battlenet installs without its icon"
 # Install > Terminal is four rows (2026-11-24, Devi: alacritty, kitty,
 # ghostty, foot, not just two): the placed install-terminal must map
 # every one to a desktop entry, or its row installs the package and
