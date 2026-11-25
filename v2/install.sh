@@ -1618,6 +1618,15 @@ HEXCIRI_LOGO_EOF
   # theme-browser step after placement, validated with visudo -cf.
   mkdir -p "$FORK_OUT/etc/sudoers.d"
   copy_optional_file "$OMARCHY_SRC/etc/sudoers.d/omarchy-theme-browser" "$FORK_OUT/etc/sudoers.d/omarchy-theme-browser" "etc/sudoers.d/omarchy-theme-browser" || warn "etc/sudoers.d/omarchy-theme-browser not found in source, theme-set-browser will fall back to pkexec and fail detached."
+  # Passwordless sudo support files (2026-11-24, Devi: sudo: /usr/bin/hexciri-sudo-passwordless: command not found).
+  # Upstream's omarchy-settings package installs these; Hexciri's settings is a plugin, so the fork must carry them:
+  # etc/tmpfiles.d/omarchy-nopasswd-sudo.conf (boot cleanup of timed grants) and
+  # default/libalpm/hooks/05-omarchy-passwordless-revoke.hook (revoke grants before a settings package change).
+  # rename_files turns them into hexciri-*, rewrite_contents fixes their paths (see the /usr/bin rules below).
+  # Without them, timed grants (15min/1h/1day) fail verify_boot_cleanup even after the INSTALLED_SELF fix below.
+  mkdir -p "$FORK_OUT/etc/tmpfiles.d" "$FORK_OUT/default/libalpm/hooks"
+  copy_optional_file "$OMARCHY_SRC/etc/tmpfiles.d/omarchy-nopasswd-sudo.conf" "$FORK_OUT/etc/tmpfiles.d/omarchy-nopasswd-sudo.conf" "etc/tmpfiles.d/omarchy-nopasswd-sudo.conf" || warn "etc/tmpfiles.d/omarchy-nopasswd-sudo.conf not found in source, timed passwordless sudo grants will fail verify_boot_cleanup."
+  copy_optional_file "$OMARCHY_SRC/default/libalpm/hooks/05-omarchy-passwordless-revoke.hook" "$FORK_OUT/default/libalpm/hooks/05-omarchy-passwordless-revoke.hook" "default/libalpm/hooks/05-omarchy-passwordless-revoke.hook" || warn "default/libalpm/hooks/05-omarchy-passwordless-revoke.hook not found in source, timed passwordless sudo grants will fail verify_boot_cleanup."
   # Browser + terminal desktop entries for the dock pins (see placement):
   # upstream applications/omarchy-browser.desktop + omarchy-terminal.desktop.
   # rename_files turns them into hexciri-*.desktop, rewrite_contents fixes
@@ -1798,6 +1807,19 @@ replacements = [
     # Fingerprint PAM clamshell gate: pam_exec needs a literal absolute
     # path, and the gate binary is hexciri-hw-laptop-closed in the fork bin.
     (b"/usr/bin/hexciri-hw-laptop-closed", b"/usr/share/hexciri/bin/hexciri-hw-laptop-closed"),
+    # Passwordless sudo + DNS self-paths (2026-11-24, Devi: sudo: /usr/bin/hexciri-sudo-passwordless: command not found).
+    # hexciri-sudo-passwordless calls ITSELF via sudo "$INSTALLED_SELF" on every probe/enable/disable
+    # (__status/__enable/__disable), so a dangling INSTALLED_SELF makes the whole feature fail: sudo prompts for
+    # the password, then "command not found", exit 1, and the floating-terminal presentation wrapper shows
+    # "Failed (exit code 1)". Same class for hexciri-dns PACKAGED_PATH (require_root execs sudo/pkexec
+    # "$PACKAGED_PATH" with no fallback) and the /usr/bin/hexciri-shell calls in refresh_indicator (best-effort,
+    # || true, but still dead). hexciri-kernel needs no rule: it falls back to $HEXCIRI_PATH/bin when
+    # /usr/bin/hexciri-kernel is not executable. theme-set-browser-policy and hw-laptop-closed already have
+    # their own rules above. The hook literal inside sudo-passwordless (__package-removing) is rewritten by the
+    # same rule, so it matches the installed hook file below.
+    (b"/usr/bin/hexciri-sudo-passwordless", b"/usr/share/hexciri/bin/hexciri-sudo-passwordless"),
+    (b"/usr/bin/hexciri-shell", b"/usr/share/hexciri/bin/hexciri-shell"),
+    (b"/usr/bin/hexciri-dns", b"/usr/share/hexciri/bin/hexciri-dns"),
     # Fingerprint packages: libfprint-git is an AUR package Omarchy builds
     # with its own patches; the Framework 13 Goodix reader (27c6) is driven
     # by stock libfprint, so install the Arch extra package instead. The
@@ -2941,6 +2963,13 @@ unset _bin
 [ -f "$HEXCIRI_PATH/install/helpers/as-root.sh" ] || die "missing: install/helpers/as-root.sh, theme-set-browser fails on every theme switch"
 [ -f "$FORK_OUT/etc/sudoers.d/hexciri-theme-browser" ] || die "missing: fork etc/sudoers.d/hexciri-theme-browser, theme-set-browser falls back to pkexec"
 grep -q '/usr/share/hexciri/bin/hexciri-theme-set-browser-policy' "$FORK_OUT/etc/sudoers.d/hexciri-theme-browser" || die "sudoers hexciri-theme-browser does not name /usr/share/hexciri/bin/hexciri-theme-set-browser-policy"
+# Passwordless sudo self-path (2026-11-24): INSTALLED_SELF must name the real bin, or every sudo self-call fails "command not found".
+grep -q 'INSTALLED_SELF=/usr/share/hexciri/bin/hexciri-sudo-passwordless' "$HEXCIRI_PATH/bin/hexciri-sudo-passwordless" || die "sudo-passwordless INSTALLED_SELF is not /usr/share/hexciri/bin/hexciri-sudo-passwordless, sudo self-calls fail 'command not found' (2026-11-24)"
+grep -q 'PACKAGED_PATH=/usr/share/hexciri/bin/hexciri-dns' "$HEXCIRI_PATH/bin/hexciri-dns" || die "dns PACKAGED_PATH is not /usr/share/hexciri/bin/hexciri-dns, require_root execs a missing file (2026-11-24)"
+[ -f "$FORK_OUT/etc/tmpfiles.d/hexciri-nopasswd-sudo.conf" ] || die "missing: fork etc/tmpfiles.d/hexciri-nopasswd-sudo.conf, timed passwordless sudo grants fail verify_boot_cleanup (2026-11-24)"
+grep -q 'r! /etc/sudoers.d/99-hexciri-nopasswd-\*' "$FORK_OUT/etc/tmpfiles.d/hexciri-nopasswd-sudo.conf" || die "tmpfiles hexciri-nopasswd-sudo.conf does not clean 99-hexciri-nopasswd-* grants (2026-11-24)"
+[ -f "$FORK_OUT/default/libalpm/hooks/05-hexciri-passwordless-revoke.hook" ] || die "missing: fork default/libalpm/hooks/05-hexciri-passwordless-revoke.hook, timed passwordless sudo grants fail verify_boot_cleanup (2026-11-24)"
+grep -q 'Exec = /usr/share/hexciri/bin/hexciri-sudo-passwordless __package-removing' "$FORK_OUT/default/libalpm/hooks/05-hexciri-passwordless-revoke.hook" || die "passwordless revoke hook does not name /usr/share/hexciri/bin/hexciri-sudo-passwordless __package-removing (2026-11-24)"
 grep -q 'HEXCIRI_PATH="/usr/share/hexciri"' "$HEXCIRI_PATH/bin/hexciri-shell" || die "hexciri-shell does not default HEXCIRI_PATH, bar trigger and menu Apps click depend on session env"
 grep -q '/usr/share/hexciri/bin/hexciri-shell shell toggle hexciri.menu' "$HEXCIRI_PATH/shell/plugins/menu/BarWidget.qml" || die "bar trigger does not call hexciri-shell by absolute path"
 grep -q '/usr/share/hexciri/bin/hexciri-shell hexciri.dock apps' "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc" || die "menu apps row does not call hexciri-shell by absolute path"
@@ -3239,6 +3268,27 @@ if command -v brave-origin >/dev/null 2>&1; then
   sudo install -d -m 0755 -o root -g root /etc/brave /etc/brave/policies /etc/brave/policies/managed 2>/dev/null && info "Created: /etc/brave/policies/managed (Brave Origin theme color.json goes here)" || warn "could not create /etc/brave/policies/managed, theme-set-browser will skip Brave Origin"
 else
   warn "Brave Origin not installed yet, /etc/brave/policies/managed not created (theme-set-browser skips Brave until it is)"
+fi
+
+step "Installing passwordless sudo boot cleanup + revoke hook (timed grants)"
+# Timed grants (15min/1h/1day) call verify_boot_cleanup: without the tmpfiles
+# conf (/etc/tmpfiles.d/hexciri-nopasswd-sudo.conf, boot cleanup of timed
+# grants) and the ALPM hook (/usr/share/libalpm/hooks/05-hexciri-passwordless-revoke.hook,
+# revoke grants before a settings package change) the script refuses with
+# "Temporary sudo cleanup is unavailable...". Upstream's omarchy-settings
+# package installs both; Hexciri's settings is a plugin, so the installer
+# installs the forked copies here. Permanent grants do not need them, but
+# the UI's timed choices do. Best-effort: a failed install warns, and the
+# script's own error tells Devi why timed grants refuse.
+if [ -f "$FORK_OUT/etc/tmpfiles.d/hexciri-nopasswd-sudo.conf" ]; then
+  sudo install -Dm644 "$FORK_OUT/etc/tmpfiles.d/hexciri-nopasswd-sudo.conf" /etc/tmpfiles.d/hexciri-nopasswd-sudo.conf && info "Installed: /etc/tmpfiles.d/hexciri-nopasswd-sudo.conf (timed passwordless sudo grants are cleaned at boot)" || warn "could not install /etc/tmpfiles.d/hexciri-nopasswd-sudo.conf, timed passwordless sudo grants will fail verify_boot_cleanup (permanent grants still work)"
+else
+  warn "fork etc/tmpfiles.d/hexciri-nopasswd-sudo.conf not found, timed passwordless sudo grants will fail verify_boot_cleanup"
+fi
+if [ -f "$FORK_OUT/default/libalpm/hooks/05-hexciri-passwordless-revoke.hook" ]; then
+  sudo install -Dm644 "$FORK_OUT/default/libalpm/hooks/05-hexciri-passwordless-revoke.hook" /usr/share/libalpm/hooks/05-hexciri-passwordless-revoke.hook && info "Installed: /usr/share/libalpm/hooks/05-hexciri-passwordless-revoke.hook (temporary sudo grants are revoked before settings package changes)" || warn "could not install /usr/share/libalpm/hooks/05-hexciri-passwordless-revoke.hook, timed passwordless sudo grants will fail verify_boot_cleanup (permanent grants still work)"
+else
+  warn "fork default/libalpm/hooks/05-hexciri-passwordless-revoke.hook not found, timed passwordless sudo grants will fail verify_boot_cleanup"
 fi
 
 step "Configuring lock screen PAM (System > Lock)"
@@ -4593,6 +4643,9 @@ fi
 if command -v zathura >/dev/null 2>&1; then hc_info "  pdf: zathura present"; else warn "  pdf: zathura NOT installed"; fi
 if [ -f /etc/pam.d/hexciri-lock-password ]; then hc_info "  lock PAM: /etc/pam.d/hexciri-lock-password present (System > Lock works)"; else warn "  lock PAM: missing, System > Lock returns missing-pam (run: sudo hexciri-apply-lock)"; fi
 if sudo test -f /etc/sudoers.d/hexciri-theme-browser 2>/dev/null || [ -f /etc/sudoers.d/hexciri-theme-browser ]; then hc_info "  browser policy sudoers: present (theme switch repaints Brave)"; else warn "  browser policy sudoers: missing, theme switch reports hexciri-theme-set-browser failed"; fi
+# Passwordless sudo (2026-11-24): bin present + INSTALLED_SELF pointing at the real bin, and the timed-grant support files.
+if [ -x "$HEXCIRI_PATH/bin/hexciri-sudo-passwordless" ] && grep -q 'INSTALLED_SELF=/usr/share/hexciri/bin/hexciri-sudo-passwordless' "$HEXCIRI_PATH/bin/hexciri-sudo-passwordless" 2>/dev/null; then hc_info "  passwordless sudo: present, INSTALLED_SELF correct (Settings > Security > Passwordless Sudo)"; else warn "  passwordless sudo: hexciri-sudo-passwordless missing or INSTALLED_SELF wrong, Settings > Security > Passwordless Sudo fails 'command not found'"; fi
+if [ -f /etc/tmpfiles.d/hexciri-nopasswd-sudo.conf ] && [ -f /usr/share/libalpm/hooks/05-hexciri-passwordless-revoke.hook ]; then hc_info "  passwordless sudo cleanup: tmpfiles + revoke hook present (timed grants work)"; else warn "  passwordless sudo cleanup: tmpfiles conf or revoke hook missing, timed grants fail verify_boot_cleanup (permanent grants still work)"; fi
 # (sudo test first: /etc/sudoers.d can be 0750 root, so a plain -f as the
 # user reports a present file as missing.)
 if pacman -Q fprintd >/dev/null 2>&1 || command -v fprintd-enroll >/dev/null 2>&1; then hc_info "  fingerprint: fprintd present (Setup > Security > Fingerprint)"; else warn "  fingerprint: fprintd NOT installed, Setup > Security > Fingerprint will fail"; fi
