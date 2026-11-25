@@ -28,9 +28,24 @@ Rectangle {
   // (2880x1920 here) everything renders at true pixel size; smaller panels
   // scale the canvas down proportionally to fit.
   property real scaleFactor: Math.min(1, root.width / 640, root.height / 790)
+  // First login after a fresh install has no last user yet: SDDM only
+  // writes /var/lib/sddm/state.conf [Last] User on a successful login,
+  // and this theme has no username field at all, so userModel.lastUser
+  // is "" and sddm.login("", password) dies in PAM with "User not known
+  // to the underlying authentication module" (dokoz + laptop, 2026-11-24).
+  // Fall back to the first account in the user model, so a fresh box
+  // logs in on its first SDDM attempt. DisplayRole is what Omarchy's
+  // own theme uses for model names; UserRole+1 is SDDM's NameRole.
   property string currentUser: {
     if (config.Username && config.Username.length > 0) return config.Username
-    return userModel.lastUser
+    if (userModel.lastUser && userModel.lastUser.length > 0) return userModel.lastUser
+    if (userModel.rowCount() > 0) {
+      var first = userModel.data(userModel.index(0, 0), Qt.DisplayRole)
+      if (first && first.toString().length > 0) return first.toString()
+      first = userModel.data(userModel.index(0, 0), Qt.UserRole + 1)
+      if (first && first.toString().length > 0) return first.toString()
+    }
+    return ""
   }
   // Touch-login is explicit-only: System > Security > Fingerprint writes
   // /etc/hexciri/fingerprint-enabled, and root sync mirrors it here. No
@@ -209,6 +224,11 @@ Rectangle {
             Keys.onPressed: {
               if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                 root.infoText = ""
+                if (root.currentUser.length === 0) {
+                  root.errText = "no user account found"
+                  event.accepted = true
+                  return
+                }
                 sddm.login(root.currentUser, password.text, root.sessionIndex)
                 event.accepted = true
               }
