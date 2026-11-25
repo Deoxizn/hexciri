@@ -2532,21 +2532,32 @@ info "Linked: ~/.local/bin/hexciri (bare dispatcher, the hexciri-* glob never ma
 # terminal launchers (and the dock's stand-ins for WebBrowser /
 # TerminalEmulator windows), so they are placed even though they are NOT
 # dock pins: the pinned list is brave-origin / kitty directly, and pinning
-# these wrappers too would duplicate both. Plus foot.desktop (2026-11-24):
-# install-terminal foot installs it as the Foot desktop entry, so it is
-# placed as a user entry here too. Only these three are placed: the other
-# applications/*.desktop files are Omarchy web apps (ChatGPT, Herdr,
-# Discord, ...) and AI/out-of-scope entries.
+# these wrappers too would duplicate both. Only these two are placed:
+# the other applications/*.desktop files are Omarchy web apps (ChatGPT,
+# Herdr, Discord, ...) and AI/out-of-scope entries.
+# foot.desktop is deliberately NOT placed here (2026-11-24, Devi:
+# pacman -Q | grep foot came back blank, only the desktop file was
+# there, Foot looked installed on top of Kitty). It lives only in
+# /usr/share/hexciri/applications/ as install-terminal foot's source;
+# install-terminal foot copies it to ~/.local/share/applications/
+# itself, at the moment it installs the foot package, so a Foot entry
+# appears only when Foot is actually installed.
 mkdir -p "$HOME/.local/share/applications"
 for desk_file in "$FORK_OUT"/applications/*.desktop; do
   [ -e "$desk_file" ] || continue
+  if [ "$(basename "$desk_file")" = "foot.desktop" ] && ! command -v foot >/dev/null 2>&1; then
+    info "Skipped desktop entry: foot.desktop (Foot is not installed, Kitty is the default terminal)"
+    continue
+  fi
   place_user_file "$desk_file" "$HOME/.local/share/applications/$(basename "$desk_file")"
   # NoDisplay on the placed wrappers, 2026-11-23: without it the Super+Space
   # app grid shows Browser + Terminal wrapper entries next to Brave Origin
   # + Kitty, which are already pinned. The dock stand-in logic does not
   # need these entries visible, and hexciri-launch-browser / terminal exec
   # the default browser / terminal directly, not via the .desktop file.
-  if ! grep -q '^NoDisplay=' "$HOME/.local/share/applications/$(basename "$desk_file")"; then
+  # Foot is a real app, not a wrapper: when it is installed it stays
+  # visible, so NoDisplay is wrappers-only (2026-11-24).
+  if [ "$(basename "$desk_file")" != "foot.desktop" ] && ! grep -q '^NoDisplay=' "$HOME/.local/share/applications/$(basename "$desk_file")"; then
     printf 'NoDisplay=true\n' >> "$HOME/.local/share/applications/$(basename "$desk_file")"
   fi
   info "Placed desktop entry: $HOME/.local/share/applications/$(basename "$desk_file") (NoDisplay, wrapper only)"
@@ -4415,6 +4426,22 @@ if [ -f /usr/share/applications/yad-settings.desktop ]; then
   info "Hidden: YAD settings app entry (NoDisplay override, yad package kept for EOS tools)"
 else
   warn "yad-settings.desktop not found, nothing to hide"
+fi
+# Stray Foot entry repair (2026-11-24, Devi: only the desktop file was
+# there, foot package not installed, pacman -Q | grep foot blank).
+# Earlier installs placed foot.desktop as a user entry on every run, so
+# a Foot launcher showed in the grid for a terminal that does not
+# exist. Remove it when Foot is not installed; only remove the
+# Hexciri-placed copy (plain Exec=foot), never a user-customised entry.
+# If Foot IS installed, leave it visible. This lives in the trim
+# section, not by the placement loop, on purpose: the loop sits in the
+# "Place the forked tree" section, which is in NO fingerprint range,
+# so a repair there would light-sync and never run on existing
+# machines. Trim is in the provision range, so this change moves the
+# provision fingerprint and the next update re-applies provision.
+if ! command -v foot >/dev/null 2>&1 && [ -f "$HOME/.local/share/applications/foot.desktop" ] && grep -q '^Exec=foot$' "$HOME/.local/share/applications/foot.desktop"; then
+  rm -f "$HOME/.local/share/applications/foot.desktop" "$HOME/.local/share/applications/foot.desktop.hexciri.new"
+  info "Removed stray desktop entry: foot.desktop (Foot is not installed)"
 fi
 
 # Post-update hook: hexciri-update runs `hexciri-hook post-update` at the end
