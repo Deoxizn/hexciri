@@ -13,4 +13,5 @@
 09-opencode.sh
 10-plugin-update.sh
 11-plugin-enable.sh
-12-pkg-aur.sh
+12-battlenet.sh
+13-pkg-aur.sh
