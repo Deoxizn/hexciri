@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hexciri fork patch 12: AUR packages must go through pkg-aur-add, not pkg-add.
+# Hexciri fork patch 13: AUR packages must go through pkg-aur-add, not pkg-add.
 # Trigger (2026-11-25, Devi): Install > Gaming > Heroic failed with
 #   "error: target not found: heroic-games-launcher-bin"
 # because hexciri-pkg-add is pacman-only (pacman -S --noconfirm --needed),
@@ -40,7 +40,7 @@
 #     a source switch. Their menu rows still fail as before; this patch
 #     does not make them worse and does not claim to fix them.
 #
-# Standalone: bash v2/patches/12-pkg-aur.sh [FORK_OUT]
+# Standalone: bash v2/patches/13-pkg-aur.sh [FORK_OUT]
 #   FORK_OUT may also come from the environment. HEXCIRI_REPO_ROOT,
 #   INSTALLER_DIR, FORK_LOG and _patch_log are honored from the
 #   environment when set (the installer and apply.sh export them);
@@ -52,7 +52,7 @@
 
 set -euo pipefail
 FORK_OUT="${1:-${FORK_OUT:-}}"
-[ -n "$FORK_OUT" ] || { printf 'ERROR: %s\n' "12-pkg-aur.sh: FORK_OUT is required (pass it as \$1 or set FORK_OUT)" >&2; exit 1; }
+[ -n "$FORK_OUT" ] || { printf 'ERROR: %s\n' "13-pkg-aur.sh: FORK_OUT is required (pass it as \$1 or set FORK_OUT)" >&2; exit 1; }
 HEXCIRI_PATH="${HEXCIRI_PATH:-/usr/share/hexciri}"
 _PATCHES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 HEXCIRI_REPO_ROOT="${HEXCIRI_REPO_ROOT:-$(cd "$_PATCHES_DIR/../.." && pwd)}"
