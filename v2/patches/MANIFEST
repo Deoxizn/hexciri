@@ -69,3 +69,4 @@
 68-browser-handoff-flags.sh
 69-mise-hookenv-cache.sh
 70-libreoffice-qt6.sh
+71-bluetooth-rfkill-hci.sh
