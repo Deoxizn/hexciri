@@ -53,3 +53,4 @@
 52-update-config-relocate.sh
 53-theme-row-icons.sh
 54-firmware-exit2.sh
+55-power-panel.sh
