@@ -54,3 +54,4 @@
 53-theme-row-icons.sh
 54-firmware-exit2.sh
 55-power-panel.sh
+56-udisks2-automounter.sh
