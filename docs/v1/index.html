@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hexciri V1 — CachyOS dotfiles: a real menu and a theme engine</title>
+<meta name="description" content="CachyOS plus Niri or Hyprland. hexciri is dotfiles: a menu where everything works, a theme hook that recolors 30+ apps, and a one-time app swap. One curl line away.">
+<meta name="author" content="Deoxizn">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://hexciri.dirty.pizza/v1/">
+<meta name="theme-color" content="#0b0911">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Hexciri">
+<meta property="og:url" content="https://hexciri.dirty.pizza/v1/">
+<meta property="og:title" content="Hexciri V1 — CachyOS + Niri dotfiles">
+<meta property="og:description" content="A menu where everything works. Themes that color everything. One curl line away.">
+<meta property="og:image" content="https://hexciri.dirty.pizza/brand.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Hexciri V1 — CachyOS + Niri dotfiles">
+<meta name="twitter:description" content="A menu where everything works. Themes that color everything.">
+<meta name="twitter:image" content="https://hexciri.dirty.pizza/brand.png">
+<link rel="icon" type="image/png" href="../brand.png">
+<style>
+  :root {
+    --bg: #0b0911;
+    --bg-soft: #14111a;
+    --card: #171620;
+    --rose: #b6849d;
+    --muted: #6b5e72;
+    --text: #d8d0dc;
+    --line: rgba(182, 132, 157, 0.22);
+    --accent: #f7768e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(900px 420px at 50% -80px, rgba(183, 65, 80, 0.20), transparent 70%),
+      radial-gradient(760px 480px at 85% 30%, rgba(90, 50, 140, 0.16), transparent 70%),
+      radial-gradient(760px 480px at 10% 60%, rgba(120, 30, 45, 0.12), transparent 70%),
+      linear-gradient(180deg, #0b0911 0%, #120d1a 55%, #0b0911 100%);
+    color: var(--text); font: 16px/1.65 system-ui, sans-serif; min-height: 100vh;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+  header.hero { text-align: center; padding: 40px 24px 24px; }
+  header.hero img { width: min(800px, 96%); height: auto; filter: drop-shadow(0 0 42px rgba(183, 65, 80, 0.35)); }
+  header.hero h1 { font-size: 30px; margin: 22px 0 6px; line-height: 1.25;
+    background: linear-gradient(100deg, #f7768e, #b6849d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header.hero .tag { font-size: 17px; color: var(--muted); max-width: 660px; margin: 0 auto; }
+  .back { display: inline-block; font-size: 13px; color: var(--muted); text-decoration: none; margin-bottom: 18px; }
+  .back:hover { color: var(--rose); }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 22px auto 10px; }
+  .chip { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; font-size: 13px; color: var(--rose); }
+  pre.curl { background: rgba(20, 17, 26, 0.9); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin: 30px auto 8px; max-width: 640px; overflow-x: auto; font: 14px/1.6 ui-monospace, monospace; box-shadow: 0 0 28px rgba(124, 92, 191, 0.18), inset 0 0 18px rgba(183, 65, 80, 0.06); }
+  .hero-sub { color: var(--muted); font-size: 13px; margin-top: 12px; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 18px auto 4px; }
+  nav.toc a { color: var(--rose); font-size: 13px; text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 14px; }
+  nav.toc a:hover { border-color: rgba(182, 132, 157, 0.5); }
+  section { padding: 36px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 22px; margin-bottom: 6px;
+    background: linear-gradient(100deg, #f7768e, #b6849d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+  .sub a { white-space: nowrap; }
+  code { font-family: ui-monospace, monospace; font-size: 13px; background: var(--bg-soft); padding: 2px 6px; border-radius: 5px; }
+  footer { text-align: center; padding: 40px 24px 64px; color: var(--muted); border-top: 1px solid var(--line); }
+  footer a { color: var(--rose); }
+  a { color: var(--rose); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 1.3rem 1.4rem; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  .card:hover {
+    transform: translateY(-4px); border-color: rgba(182, 132, 157, 0.40);
+    box-shadow: 0 10px 30px rgba(183, 65, 80, 0.18);
+  }
+  .card h3 { font-size: 1.02rem; color: var(--rose); margin-bottom: 0.4rem; }
+  .card p { font-size: 0.94rem; color: var(--muted); }
+  table.keys { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+  table.keys td { padding: 7px 10px; border-bottom: 1px solid var(--line); color: var(--muted); }
+  table.keys td:first-child { white-space: nowrap; width: 190px; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <a class="back" href="../">← All versions</a>
+  <img src="../brand.png" alt="Hexciri emblem">
+  <h1>CachyOS, minus the chores</h1>
+  <p class="tag">Dotfiles with a real menu and a theme engine. Every menu option works. One theme pick recolors 30+ apps. Pick Niri or Hyprland when you install CachyOS — hexciri adapts to it.</p>
+  <div class="chips">
+    <span class="chip">CachyOS</span><span class="chip">Niri or Hyprland</span><span class="chip">Noctalia</span><span class="chip">theme hook</span><span class="chip">working menu</span>
+  </div>
+  <pre class="curl">curl -LO https://hexciri.dirty.pizza/install.sh &amp;&amp; sh install.sh</pre>
+  <p class="hero-sub">Nothing you didn't ask for. Re-runs are safe; updates are pull + re-run.</p>
+  <nav class="toc">
+    <a href="#highlights">Highlights</a><a href="#keys">Keys</a>
+  </nav>
+</header>
+<div class="wrap">
+<section id="highlights">
+  <h2>Highlights</h2>
+  <p class="sub">The whole pitch, six cards.</p>
+  <div class="grid">
+    <div class="card"><h3>A menu that does things</h3><p>9 root entries, ~60 leaves — packages, sharing, hardware, themes, network, security, maintenance, gaming. Every row works. Root is <code>Mod+Alt+Space</code>; Esc always goes back.</p></div>
+    <div class="card"><h3>Themes that color everything</h3><p><code>hexciri-theme set</code> recolors terminals, editors, browsers, Discord, GTK/Qt, Spotify, the bar, lock screen and login in one hook. 22 defaults ship; extras are one line each.</p></div>
+    <div class="card"><h3>Niri or Hyprland</h3><p>Same menu, themes and keys on both. Install CachyOS with your pick; hexciri detects the active WM and wires the matching config. No WM switching or reinstall.</p></div>
+    <div class="card"><h3>Apps in, cruft out — once</h3><p>Install adds kitty, Zed, OpenCode, Brave Origin and friends, and removes what they replace. Afterwards your choices stick.</p></div>
+    <div class="card"><h3>Wallpapers you keep</h3><p>Drop images in a folder; they join every theme's picker and survive every swap.</p></div>
+    <div class="card"><h3>Search, calc, clipboard</h3><p><code>Mod+Shift+S</code> searches the web, <code>Mod+Shift+C</code> calculates, <code>Mod+Ctrl+V</code> recalls everything you copied. Menu modes, not apps.</p></div>
+  </div>
+</section>
+<section id="keys">
+  <h2>The keys that matter</h2>
+  <p class="sub">Mod = Super. Search them all live with <code>Mod+K</code>.</p>
+  <table class="keys">
+    <tr><td><code>Mod+Alt+Space</code></td><td>hexciri menu — packages, sharing, hardware, themes, system, updates</td></tr>
+    <tr><td><code>Mod+Space</code></td><td>app launcher</td></tr>
+    <tr><td><code>Mod+Return</code></td><td>terminal (opens a new tab in your live kitty when one exists)</td></tr>
+    <tr><td><code>Mod+Q</code></td><td>close window</td></tr>
+    <tr><td><code>Mod+T</code></td><td>float / tile toggle</td></tr>
+    <tr><td><code>Mod+L</code></td><td>cycle tiling layouts (Hyprland)</td></tr>
+    <tr><td><code>Mod+1…9</code></td><td>workspaces (<code>Shift</code> moves windows; keycodes, so AZERTY-safe)</td></tr>
+    <tr><td><code>Mod+Shift+F</code></td><td>file manager (nemo on Hyprland, nautilus on Niri)</td></tr>
+    <tr><td><code>Mod+Shift+B</code></td><td>browser</td></tr>
+    <tr><td><code>Mod+Shift+S</code></td><td>web + file search with history</td></tr>
+    <tr><td><code>Mod+Shift+C</code></td><td>calculator with history</td></tr>
+    <tr><td><code>Mod+Shift+T</code></td><td>system monitor (bottom)</td></tr>
+    <tr><td><code>Mod+C</code> / <code>Mod+V</code></td><td>copy / paste everywhere, terminals included (Hyprland only)</td></tr>
+    <tr><td><code>Mod+Ctrl+B</code></td><td>private browser window</td></tr>
+    <tr><td><code>Mod+Ctrl+V</code></td><td>clipboard history</td></tr>
+    <tr><td><code>Mod+Escape</code></td><td>power menu (confirms before it acts)</td></tr>
+  </table>
+</section>
+</div>
+<footer>
+  <div>
+    <a href="https://github.com/Deoxizn/hexciri" target="_blank" rel="noopener">hexciri</a>
+  </div>
+  <div style="margin-top:.4rem;">© 2026–2026 <a href="https://dirty.pizza" target="_blank" rel="noopener">dirty.pizza</a></div>
+</footer>
+</body>
+</html>
