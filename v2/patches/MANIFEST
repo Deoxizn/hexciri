@@ -63,3 +63,4 @@
 62-session-memorylow-oomd.sh
 63-thp-journal-cap.sh
 64-disable-nmi-watchdog.sh
+65-balanced-on-battery.sh
