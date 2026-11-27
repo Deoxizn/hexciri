@@ -283,15 +283,17 @@ REPLACEMENTS = [
      "  desktop_id=$(xdg-terminal-exec --print-id 2>/dev/null || true)",
      "default-terminal: add fast_default_terminal + terminal_binary_for_desktop_id",
      None),
-    # The no-arg case block becomes the shared helper call. The fork's old
-    # block mapped kitty.desktop to "foot" (rename mishap); the PR's new
-    # code answers "kitty" correctly, fixing that as a side effect.
+    # The no-arg case block becomes the shared helper call. (An earlier
+    # draft of this patch assumed the fork's block had a duplicate
+    # kitty.desktop line mapping to "foot"; that duplicate existed only
+    # in the sim's rename mimic, never in the live fork. The live block
+    # already maps foot->foot and kitty->kitty correctly.)
     ("bin/hexciri-default-terminal",
      "  desktop_id=$(xdg-terminal-exec --print-id 2>/dev/null || true)\n"
      "  desktop_id=${desktop_id%%:*}\n"
      "  case \"$desktop_id\" in\n"
      "  Alacritty.desktop) echo \"alacritty\" ;;\n"
-     "  kitty.desktop) echo \"foot\" ;;\n"
+     "  foot.desktop) echo \"foot\" ;;\n"
      "  com.mitchellh.ghostty.desktop) echo \"ghostty\" ;;\n"
      "  kitty.desktop) echo \"kitty\" ;;\n"
      "  *) echo \"$desktop_id\" ;;\n"
