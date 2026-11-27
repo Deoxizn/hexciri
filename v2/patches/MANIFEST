@@ -62,3 +62,4 @@
 61-bar-tooltips.sh
 62-session-memorylow-oomd.sh
 63-thp-journal-cap.sh
+64-disable-nmi-watchdog.sh
