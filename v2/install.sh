@@ -3102,7 +3102,7 @@ unset _rb
 # browsers and dictation OUT of this list, and the AI/Foot correction
 # took AI (except Herdr) and install.terminal.foot out too: those rows
 # are live now.
-for _dead in '"install.ai.herdr"' '"install.windows"' '"install.preinstalls"' '"install.development.docker-dbs"' '"install.editor.emacs"' '"remove.windows"' '"remove.preinstalls"' '"remove.factory-reset"' '"remove.security.sudoless-docker"' '"update.channel' '"update.omarchy"' '"system.screensaver"' '"learn.herdr-keybindings"' '"learn.neovim"' '"learn.community"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
+for _dead in '"install.ai.herdr"' '"install.windows"' '"install.preinstalls"' '"install.development.docker-dbs"' '"install.editor.emacs"' '"remove.windows"' '"remove.preinstalls"' '"remove.factory-reset"' '"remove.security.sudoless-docker"' '"update.channel' '"update.omarchy"' '"learn.herdr-keybindings"' '"learn.neovim"' '"learn.community"' '"setup.default.editor.neovim"' '"setup.security.sudoless-docker"' '"appearance.unlock"'; do
   if grep -q "$_dead" "$HEXCIRI_PATH/default/hexciri/hexciri-menu.jsonc"; then
     die "dead menu row still present in hexciri-menu.jsonc: $_dead"
   fi

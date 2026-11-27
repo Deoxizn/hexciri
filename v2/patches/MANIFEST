@@ -71,3 +71,4 @@
 70-libreoffice-qt6.sh
 71-bluetooth-rfkill-hci.sh
 72-cups-socket-activate.sh
+73-screensaver.sh
