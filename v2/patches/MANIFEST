@@ -67,3 +67,4 @@
 66-chromium-vaapi.sh
 67-terminal-fastpath.sh
 68-browser-handoff-flags.sh
+69-mise-hookenv-cache.sh
