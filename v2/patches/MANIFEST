@@ -17,3 +17,9 @@
 13-pkg-aur.sh
 14-menu-typo-search.sh
 15-dock-typo-search.sh
+16-jemalloc.sh
+17-brightness-live.sh
+18-screenrecord-fullscreen.sh
+19-refresh-config-backups.sh
+21-dropdown-palette.sh
+22-keyboard-layout-scale.sh
