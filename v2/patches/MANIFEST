@@ -50,3 +50,4 @@
 49-icons-sync-fixes.sh
 50-imv-mpv-calc-float.sh
 51-search-provider.sh
+52-update-config-relocate.sh
