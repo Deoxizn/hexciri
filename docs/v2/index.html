@@ -51,7 +51,10 @@
   .chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 22px auto 10px; }
   .chip { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; font-size: 13px; color: var(--rose); }
   pre.curl { background: rgba(20, 17, 26, 0.9); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin: 30px auto 8px; max-width: 640px; overflow-x: auto; font: 14px/1.6 ui-monospace, monospace; box-shadow: 0 0 28px rgba(124, 92, 191, 0.18), inset 0 0 18px rgba(183, 65, 80, 0.06); }
-  .hero-sub { color: var(--muted); font-size: 13px; margin-top: 12px; }
+  .install { max-width: 640px; margin: 30px auto 8px; text-align: left; }
+  .install p { color: var(--muted); font-size: 14px; margin-bottom: 10px; }
+  .install p b { color: var(--text); }
+  .install pre.curl { margin: 0; max-width: none; }
   nav.toc { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 18px auto 4px; }
   nav.toc a { color: var(--rose); font-size: 13px; text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 14px; }
   nav.toc a:hover { border-color: rgba(182, 132, 157, 0.5); }
@@ -85,12 +88,14 @@
   <a class="back" href="../">← All versions</a>
   <img src="../brand.png" alt="Hexciri emblem">
   <h1>Minimal Arch, full shell</h1>
-  <p class="tag">EndeavourOS with no desktop, plus a forked Omarchy shell: Hyprland and Quickshell, one update command, and a theme hook that recolors everything. Install from a tty, reboot, done.</p>
+  <p class="tag">A forked Omarchy shell on a minimal Arch base: Hyprland and Quickshell, one update command, and a theme hook that recolors everything. Reboot, done.</p>
   <div class="chips">
     <span class="chip">EndeavourOS</span><span class="chip">Hyprland + Quickshell</span><span class="chip">hexciri update</span><span class="chip">theme hook</span><span class="chip">Nyxiri optional</span>
   </div>
-  <pre class="curl">curl -LO https://hexciri.dirty.pizza/v2/bootstrap.sh; bash bootstrap.sh</pre>
-  <p class="hero-sub">Install from tty3. Re-runs are safe; updates are <code>hexciri update</code>.</p>
+  <div class="install">
+    <p>Start from <b>EndeavourOS with no desktop environment</b>. Switch to tty3 and run:</p>
+    <pre class="curl">curl -LO https://hexciri.dirty.pizza/v2/bootstrap.sh; bash bootstrap.sh</pre>
+  </div>
   <nav class="toc">
     <a href="#highlights">Highlights</a><a href="#keys">Keys</a>
   </nav>
@@ -100,10 +105,10 @@
   <h2>Highlights</h2>
   <p class="sub">The whole pitch, six cards.</p>
   <div class="grid">
-    <div class="card"><h3>A shell, forked not cloned</h3><p>Omarchy's Quickshell shell, rebuilt as Hexciri end to end: same menu, bar, themes and keys, renamed throughout. Hyprland only, no Niri, no Noctalia.</p></div>
-    <div class="card"><h3>One update command</h3><p><code>hexciri update</code> covers system packages, AUR and the shell itself, unattended after a single confirm. No snapshots, no re-bootstrap.</p></div>
+    <div class="card"><h3>A shell, forked not cloned</h3><p>Omarchy's Quickshell shell, rebuilt as Hexciri end to end: same menu, bar, themes and keys, renamed throughout. Hyprland only.</p></div>
+    <div class="card"><h3>One update command</h3><p><code>hexciri update</code> covers system packages, AUR and the shell itself, unattended after a single confirm.</p></div>
     <div class="card"><h3>Themes that color everything</h3><p><code>hexciri theme set</code> recolors terminals, editors, browsers, Discord and Dorion, GTK/Qt, Spotify, the bar, lock screen and login in one hook. THPM themes Discord, Dorion, Zed and Heroic.</p></div>
-    <div class="card"><h3>Minimal by default</h3><p>EndeavourOS with no desktop environment. Almost nothing installed; the shell, the theme engine and your apps are the system.</p></div>
+    <div class="card"><h3>Minimal by default</h3><p>Almost nothing installed; the shell, the theme engine and your apps are the system.</p></div>
     <div class="card"><h3>Nyxiri, if you want it</h3><p>The bar, menu and workspaces suite is optional, never base install. Wallcraft too. They work with Hexciri when you ask for them.</p></div>
     <div class="card"><h3>Search, calc, clipboard</h3><p><code>Super+Shift+S</code> searches the web, <code>Super+Shift+C</code> calculates, <code>Super+Ctrl+V</code> recalls everything you copied. Menu modes, not apps.</p></div>
   </div>
@@ -134,7 +139,7 @@
 </div>
 <footer>
   <div>
-    <a href="https://github.com/Deoxizn/hexciri" target="_blank" rel="noopener">hexciri</a>
+    <a href="https://github.com/Deoxizn/hexciri/tree/nyx" target="_blank" rel="noopener">hexciri</a>
   </div>
   <div style="margin-top:.4rem;">© 2026–2026 <a href="https://dirty.pizza" target="_blank" rel="noopener">dirty.pizza</a></div>
 </footer>

@@ -14,12 +14,12 @@
 <meta property="og:url" content="https://hexciri.dirty.pizza/">
 <meta property="og:title" content="Hexciri — V1 or V2, pick yours">
 <meta property="og:description" content="CachyOS dotfiles, or a minimal EndeavourOS build with a forked Omarchy shell. Two ways to run Hexciri.">
-<meta property="og:image" content="https://hexciri.dirty.pizza/brand.png">
+<meta property="og:image" content="https://hexciri.dirty.pizza/logo.png">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Hexciri — V1 or V2, pick yours">
 <meta name="twitter:description" content="CachyOS dotfiles, or a minimal EndeavourOS build with a forked Omarchy shell.">
-<meta name="twitter:image" content="https://hexciri.dirty.pizza/brand.png">
-<link rel="icon" type="image/png" href="brand.png">
+<meta name="twitter:image" content="https://hexciri.dirty.pizza/logo.png">
+<link rel="icon" type="image/png" href="logo.png">
 <style>
   :root {
     --bg: #0b0911;
@@ -45,7 +45,6 @@
   header.hero img { width: min(800px, 96%); height: auto; filter: drop-shadow(0 0 42px rgba(183, 65, 80, 0.35)); }
   header.hero h1 { font-size: 30px; margin: 22px 0 6px; line-height: 1.25;
     background: linear-gradient(100deg, #f7768e, #b6849d); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  header.hero .tag { font-size: 17px; color: var(--muted); max-width: 660px; margin: 0 auto; }
   a { color: var(--rose); }
   code { font-family: ui-monospace, monospace; font-size: 13px; background: var(--bg-soft); padding: 2px 6px; border-radius: 5px; }
 
@@ -65,55 +64,31 @@
   .vsub { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
 
   .window { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-soft); }
-  .titlebar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(20, 17, 26, 0.9); border-bottom: 1px solid var(--line); }
+  .titlebar { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(20, 17, 26, 0.9); }
   .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); opacity: 0.55; }
   .titlebar .dot:first-child { background: var(--accent); opacity: 0.85; }
   .titlebar .wtitle { margin-left: 8px; font-size: 12px; color: var(--muted); font-family: ui-monospace, monospace; }
-  .preview { height: 150px; padding: 14px; position: relative; }
-  .preview .bar { display: flex; justify-content: space-between; align-items: center; background: rgba(11, 9, 17, 0.75); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font-size: 12px; color: var(--rose); font-family: ui-monospace, monospace; }
-  .preview .bar .ws { letter-spacing: 4px; }
-  .preview .menu { margin-top: 12px; background: rgba(11, 9, 17, 0.75); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .preview .menu .row { display: flex; justify-content: space-between; padding: 6px 12px; font-size: 13px; color: var(--text); border-bottom: 1px solid rgba(182, 132, 157, 0.10); }
-  .preview .menu .row:last-child { border-bottom: none; }
-  .preview .menu .row span:last-child { color: var(--muted); }
-  .preview .dock { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; gap: 8px; background: rgba(11, 9, 17, 0.85); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
-  .preview .dock i { width: 14px; height: 14px; border-radius: 4px; background: var(--rose); opacity: 0.75; display: block; }
-  .preview .dock i:nth-child(2) { background: var(--accent); }
-  .preview .dock i:nth-child(4) { background: #7c5cbf; }
 
   ul.features { list-style: none; margin: 0 0 16px; }
   ul.features li { font-size: 14px; color: var(--muted); padding: 5px 0 5px 20px; position: relative; }
   ul.features li::before { content: "›"; position: absolute; left: 2px; color: var(--accent); }
   ul.features li b { color: var(--text); font-weight: 600; }
-  pre.curl { background: rgba(20, 17, 26, 0.9); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 0 0 16px; overflow-x: auto; font: 12px/1.6 ui-monospace, monospace; color: var(--text); }
   .enter { display: inline-block; background: var(--accent); color: #0b0911; font-weight: 600; font-size: 14px; border-radius: 999px; padding: 8px 20px; }
 
-  .which { text-align: center; color: var(--muted); font-size: 14px; max-width: 640px; margin: 28px auto 0; padding-bottom: 8px; }
-  .which b { color: var(--text); }
   footer { text-align: center; padding: 40px 24px 64px; color: var(--muted); border-top: 1px solid var(--line); margin-top: 36px; }
   footer a { color: var(--rose); }
 </style>
 </head>
 <body>
 <header class="hero">
-  <img src="brand.png" alt="Hexciri emblem">
+  <img src="logo.png" alt="Hexciri emblem">
   <h1>Hexciri</h1>
-  <p class="tag">Two ways to run it. V1 is the straightforward one, CachyOS dotfiles kept simple. V2 is the customized one, a minimal EndeavourOS build with a forked Omarchy shell. Both are Hexciri. Pick what fits you.</p>
 </header>
 <div class="wrap">
   <div class="versions">
     <a class="version" href="/v1/">
       <div class="window">
         <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="wtitle">hexciri v1 — menu</span></div>
-        <div class="preview">
-          <div class="menu">
-            <div class="row"><span>Packages</span><span>›</span></div>
-            <div class="row"><span>Themes</span><span>›</span></div>
-            <div class="row"><span>System</span><span>›</span></div>
-            <div class="row"><span>Gaming</span><span>›</span></div>
-          </div>
-          <div class="dock"><i></i><i></i><i></i><i></i><i></i></div>
-        </div>
       </div>
       <h2>Hexciri V1</h2>
       <p class="vsub">CachyOS base + dots</p>
@@ -124,21 +99,11 @@
         <li><b>A menu that does things</b> — 9 root entries, ~60 leaves, every row works</li>
         <li><b>Theme hook</b> — 22 defaults, one pick recolors 30+ apps</li>
       </ul>
-      <pre class="curl">curl -LO https://hexciri.dirty.pizza/install.sh &amp;&amp; sh install.sh</pre>
       <span class="enter">Enter V1 →</span>
     </a>
     <a class="version" href="/v2/">
       <div class="window">
         <div class="titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="wtitle">hexciri v2 — shell</span></div>
-        <div class="preview">
-          <div class="bar"><span class="ws">● ○ ○ ○ ○</span><span>hexciri</span><span>Fri 09:39</span></div>
-          <div class="menu">
-            <div class="row"><span>Update</span><span>›</span></div>
-            <div class="row"><span>Theme</span><span>›</span></div>
-            <div class="row"><span>Settings</span><span>›</span></div>
-          </div>
-          <div class="dock"><i></i><i></i><i></i><i></i><i></i></div>
-        </div>
       </div>
       <h2>Hexciri V2</h2>
       <p class="vsub">EOS base + shell</p>
@@ -149,11 +114,9 @@
         <li><b>Theme engine + THPM</b> — Discord, Dorion, Zed and Heroic included</li>
         <li><b>Nyxiri, if you want it</b> — bar, menu and workspaces, optional not base</li>
       </ul>
-      <pre class="curl">curl -LO https://hexciri.dirty.pizza/v2/bootstrap.sh; bash bootstrap.sh</pre>
       <span class="enter">Enter V2 →</span>
     </a>
   </div>
-  <p class="which">Not sure? <b>V1 is the simple pick</b>, the one kept for Kitten. <b>V2 is the one with the shell rebuilt</b> and everything personalized. Either way, you get the menu, the themes, and the keys.</p>
 </div>
 <footer>
   <div>
