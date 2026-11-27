@@ -65,3 +65,4 @@
 64-disable-nmi-watchdog.sh
 65-balanced-on-battery.sh
 66-chromium-vaapi.sh
+67-terminal-fastpath.sh
