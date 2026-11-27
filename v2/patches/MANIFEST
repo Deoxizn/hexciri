@@ -58,3 +58,4 @@
 57-shell-jemalloc-followup.sh
 58-lazy-overlays.sh
 59-plugin-services-first.sh
+60-skip-ime-watcher.sh
