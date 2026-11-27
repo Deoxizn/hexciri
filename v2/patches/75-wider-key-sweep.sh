@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Hexciri fork patch 75: wider Windows-key sweep + menu icon (Devi 2026-11-27).
-# Two edits, one patch:
-# (1) Bin: extend the patch-74 bin/hexciri-windows-key (upstream
+# Hexciri fork patch 75: wider Windows-key sweep (Devi 2026-11-27).
+# One edit, one patch (REVISED 2026-11-27, see below): the bin sweep.
+# Bin: extend the patch-74 bin/hexciri-windows-key (upstream
 #     omarchy-windows-key, MSDM only) with the v1 shell's wider sweep
 #     from root bin/hexciri-hw (windows_key): MSDM first, then OA3
 #     efivars, then SMBIOS oem_strings, then every ACPI table.
@@ -21,29 +21,14 @@
 #     key found in firmware (checked MSDM/OA3/SMBIOS + all ACPI
 #     tables)." (the v1 message; patch 74's two MSDM-only messages go
 #     away with the MSDM-only early exit they belonged to).
-# (2) Menu: give the patch-74 System > "Windows product key" row the
-#     icon of the Windows VM menu entry (install.windows), copied from
-#     that row's icon value at apply time -- patch 53 precedent, never
-#     baked in or retyped (the glyph is a raw PUA char). The row
-#     currently has icon:"".
-#
-# Icon source, and why it is not the fork menu: patch 02 deletes
-# install.windows (and remove.windows) from the fork menu -- install.sh
-# placement verification dies if either is still present -- so the
-# fork menu has no install.windows row to copy from at apply time.
-# The icon is therefore copied from the live upstream source tree the
-# installer just extracted: $OMARCHY_SRC/default/omarchy/
-# omarchy-menu.jsonc (fallback: default/hexciri-menu.jsonc for the old
-# pin layout). OMARCHY_SRC is not exported to patches, but in the
-# normal install/update path FORK_OUT is $TMP_WORK/fork-out and the
-# extracted tree sits next to it, so the patch locates it as the
-# unique <dirname(FORK_OUT)>/*/default/omarchy/omarchy-menu.jsonc.
-# Zero matches (upstream tree not next to FORK_OUT, e.g. a re-apply
-# mode that never extracts) or more than one both die loudly, as does
-# a missing install.windows row or an empty icon in that file. The
-# target row must already exist (patch 74); if its icon is already
-# the copied value the edit skips, if it is some other non-empty
-# value the patch dies rather than overwriting it.
+# REVISED 2026-11-27: the menu-icon edit that was here is REMOVED.
+# It copied the icon from the upstream source tree next to FORK_OUT,
+# but on a live update that tree is not there (0 candidates under
+# /tmp/hexciri-install.*), so the edit died and aborted the whole
+# update -- the exact failure its own header warned about. The icon
+# was cosmetic; the row moves to Setup under patch 76 and keeps
+# icon:"". If the glyph is ever wanted, it needs a source that exists
+# in update mode, not this lookup.
 #
 # Fork adaptations / scope notes (bin):
 # - No new env overrides: v1 has only HEXCIRI_MSDM_PATH, and this port
@@ -55,11 +40,10 @@
 #   failing sudo degrades to "no key from that source" (call sites use
 #   `|| true`), grep is already required by patch 74. No dmidecode:
 #   oem_strings is read straight from sysfs, as in v1.
-# - This patch touches the key-extraction logic and the one menu icon
-#   ONLY. No install.sh companion edit (the windows-key allowlist
-#   entry from patch 74 already ships the bin), no other menu change
-#   (patch 74's System > "Windows product key" row already runs this
-#   bin; the wider sweep is behind the same row).
+# - This patch touches the key-extraction logic ONLY. No install.sh
+#   companion edit (the windows-key allowlist entry from patch 74
+#   already ships the bin), no menu change at all (patch 76 moves the
+#   row to Setup; the wider sweep is behind that row wherever it sits).
 #
 # Devi context (2026-11-27): desktop is a CLX prebuilt; key retrieval
 # did NOT work on his earlier stellarchy/noctarchy setups, yet Windows
@@ -266,131 +250,5 @@ fi
 # --- 2. The spliced bin must still parse ---
 bash -n "$_BIN" || die "hexciri-windows-key fails bash -n after the splice"
 
-# --- 3. Menu icon: copy install.windows' icon onto system.windows-key ---
-# Patch 53 precedent: the icon value is copied from the sibling row at
-# apply time, never baked in or retyped. The sibling here is the
-# upstream install.windows row, which patch 02 deletes from the fork
-# menu, so the value comes from the live upstream source tree the
-# installer just extracted (see the header). The target row keeps its
-# label and action from patch 74; only the icon field changes.
-step "Giving System > Windows product key the Windows VM entry icon"
-_PY_OUT="$(mktemp)"
-python3 - "$FORK_OUT" >"$_PY_OUT" 2>&1 <<'PY' || { cat "$_PY_OUT" >&2; rm -f "$_PY_OUT"; die "patch 75 menu icon edit failed"; }
-import glob
-import json
-import os
-import re
-import sys
-
-fork = sys.argv[1]
-menu = fork + "/default/hexciri/hexciri-menu.jsonc"
-
-
-def _die(msg):
-    print("ERROR: " + msg, file=sys.stderr)
-    sys.exit(1)
-
-
-# --- source: the upstream menu next to FORK_OUT ---
-parent = os.path.dirname(os.path.normpath(fork))
-candidates = sorted(
-    glob.glob(parent + "/*/default/omarchy/omarchy-menu.jsonc")
-    + glob.glob(parent + "/*/default/hexciri-menu.jsonc")
-)
-if len(candidates) != 1:
-    _die("upstream menu not found exactly once next to FORK_OUT "
-         "(want <dirname(FORK_OUT)>/*/default/omarchy/omarchy-menu.jsonc, "
-         "got %d candidates under %s: upstream tree missing or ambiguous)"
-         % (len(candidates), parent))
-upstream = candidates[0]
-try:
-    with open(upstream) as f:
-        up_lines = f.read().splitlines()
-except FileNotFoundError:
-    _die("upstream menu %s not readable" % upstream)
-src_hits = [l for l in up_lines if '"install.windows":' in l]
-if len(src_hits) != 1:
-    _die('install.windows occurs %d times in %s, refusing to guess'
-         % (len(src_hits), upstream))
-m = re.search(r'"icon"\s*:\s*"([^"]*)"', src_hits[0])
-if not m or not m.group(1):
-    _die("install.windows row in %s has no (empty) icon to copy" % upstream)
-icon = m.group(1)
-
-# --- target: the patch-74 row in the fork menu ---
-try:
-    with open(menu) as f:
-        lines = f.read().splitlines()
-except FileNotFoundError:
-    _die("%s not found in fork output, patch 74 must be applied first" % menu)
-
-
-def key_index(key):
-    """Index of the line carrying dotted key `key`, or None. Dies if the
-    key occurs more than once: the anchor must be unambiguous."""
-    hits = [i for i, l in enumerate(lines) if ('"%s":' % key) in l]
-    if len(hits) > 1:
-        _die('menu key "%s" occurs %d times, refusing to guess' % (key, len(hits)))
-    return hits[0] if hits else None
-
-
-TARGET_KEY = "system.windows-key"
-TARGET_ACTION = "hexciri-launch-floating-terminal-with-presentation hexciri-windows-key"
-tgt = key_index(TARGET_KEY)
-if tgt is None:
-    _die('target row "system.windows-key" not found in menu jsonc, patch 74 must be applied first')
-tgt_line = lines[tgt]
-if '"label":"Windows product key"' not in tgt_line and '"label": "Windows product key"' not in tgt_line:
-    _die('target row is not the Windows product key row: %r' % tgt_line)
-if TARGET_ACTION not in tgt_line:
-    _die('target row action changed: %r' % tgt_line)
-tm = re.search(r'"icon"\s*:\s*"([^"]*)"', tgt_line)
-if not tm:
-    _die('target row has no icon field to set: %r' % tgt_line)
-if tm.group(1) == icon:
-    print("menu: Windows product key icon already set, skipping")
-elif tm.group(1) != "":
-    _die('target row already has a different non-empty icon %r, refusing to overwrite' % tm.group(1))
-else:
-    lines[tgt] = tgt_line[:tm.start(1)] + icon + tgt_line[tm.end(1):]
-    print("patched: Windows product key row icon copied from install.windows")
-
-with open(menu, "w") as f:
-    f.write("\n".join(lines) + "\n")
-
-# --- validation: the jsonc must still parse exactly like the shell parses
-# it (patch 02's check). One bad row empties the whole Super+Alt+Space menu.
-with open(menu) as f:
-    raw = f.read()
-stripped = re.sub(r'^\s*//[^\n]*(\n|$)', '', raw, flags=re.M)
-stripped = re.sub(r',(\s*[\}\]])', r'\1', stripped)
-try:
-    parsed = json.loads(stripped)
-except Exception as e:  # noqa: BLE001 - any parse failure is fatal here
-    _die("menu jsonc does not parse, shell would show an empty menu: %s" % e)
-for r in ("apps", "appearance", "trigger", "setup", "install", "remove",
-          "update", "learn", "system"):
-    if r not in parsed:
-        _die("menu jsonc missing root entry %s, shell would show an empty menu" % r)
-row = parsed.get(TARGET_KEY)
-if row is None:
-    _die("menu jsonc missing row %s" % TARGET_KEY)
-if row.get("label") != "Windows product key":
-    _die("windows-key row label is %r, want 'Windows product key'" % row.get("label"))
-if row.get("action") != TARGET_ACTION:
-    _die("windows-key row action is %r, want %r" % (row.get("action"), TARGET_ACTION))
-if row.get("icon") != icon:
-    _die("windows-key row icon is %r, want the install.windows icon" % row.get("icon"))
-if raw.count('"%s":' % TARGET_KEY) != 1:
-    _die('menu key "%s" occurs %d times in the file'
-         % (TARGET_KEY, raw.count('"%s":' % TARGET_KEY)))
-print("menu jsonc parses (%d entries, 9 root entries, system.windows-key icon set)"
-      % len(parsed))
-PY
-cat "$_PY_OUT" >>"$_patch_log"
-_PY_EDITS=$(grep -c '^patched: ' "$_PY_OUT" || true)
-CHANGED=$((CHANGED + _PY_EDITS))
-rm -f "$_PY_OUT"
-
 printf 'windows-key sweep patch: %d file edits applied\n' "$CHANGED" >>"$_patch_log"
-info "  patch 75: hexciri-windows-key widened to MSDM + OA3 + SMBIOS + all-ACPI-tables sweep (v1 hexciri-hw port); Windows product key row icon copied from install.windows"
+info "  patch 75: hexciri-windows-key widened to MSDM + OA3 + SMBIOS + all-ACPI-tables sweep (v1 hexciri-hw port)"
