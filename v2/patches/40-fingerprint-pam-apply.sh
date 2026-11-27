@@ -29,9 +29,10 @@
 #   only flow: --terminal is declared in the metadata (as upstream) and
 #   accepted, and the script runs its enrollment inline as before. When a
 #   panel lands, the summon branch can be added then.
-# - setup_pam_config is deleted outright (not left as a wrapper): the
-#   helper is the only copy of that logic now, so the gate cannot drift
-#   between files.
+# - setup_pam_config is split, not deleted outright: the sudo/polkit part
+#   moves to the helper (the only copy of that logic now, so the gate cannot
+#   drift between files), while the fork's Hexciri-only SDDM section stays
+#   in the setup script as setup_sddm_config, called alongside the helper.
 #
 # Skipped from the PR, deliberately:
 # - shell/plugins/panels/fingerprint/* + manifest (the panel; see above).
@@ -193,7 +194,7 @@ import sys
 
 root = sys.argv[1]
 changed = []
-SETUP_PAM_BLOCK = r"""setup_pam_config() {
+SDDM_HEAD = r"""setup_sddm_config() {
   # A clamshell gate runs before pam_fprintd in every stack: when the lid is
   # shut the reader is unreachable, so it skips fingerprint (success=1) and PAM
   # drops straight to the password prompt instead of blocking on the reader
@@ -205,44 +206,6 @@ SETUP_PAM_BLOCK = r"""setup_pam_config() {
   # $HEXCIRI_PATH trees but leaves /usr/bin untouched.
   local fprintd_gate="auth      [success=1 default=ignore] pam_exec.so quiet /usr/share/hexciri/bin/hexciri-hw-laptop-closed"
 
-  # Configure sudo
-  if ! grep -q pam_fprintd.so /etc/pam.d/sudo; then
-    echo "Configuring sudo for fingerprint authentication..."
-    sudo sed -i '1i auth      sufficient pam_fprintd.so' /etc/pam.d/sudo
-  fi
-  if ! grep -q 'hexciri-hw-laptop-closed' /etc/pam.d/sudo; then
-    echo "Adding clamshell gate to sudo..."
-    # Insert immediately before pam_fprintd so success=1 skips exactly it.
-    sudo sed -i "/pam_fprintd\.so/i $fprintd_gate" /etc/pam.d/sudo
-  fi
-
-  # Configure polkit
-  if [[ -f /etc/pam.d/polkit-1 ]]; then
-    if ! grep -q 'pam_fprintd.so' /etc/pam.d/polkit-1; then
-      echo "Configuring polkit for fingerprint authentication..."
-      sudo sed -i '1i auth      sufficient pam_fprintd.so' /etc/pam.d/polkit-1
-    fi
-    if ! grep -q 'hexciri-hw-laptop-closed' /etc/pam.d/polkit-1; then
-      echo "Adding clamshell gate to polkit..."
-      sudo sed -i "/pam_fprintd\.so/i $fprintd_gate" /etc/pam.d/polkit-1
-    fi
-  else
-    echo "Creating polkit configuration with fingerprint authentication..."
-    # omarchy:heredoc-expands paths=none -- $fprintd_gate is the literal PAM
-    # line defined above, shared with the two sed insertions so the gate cannot
-    # drift between files. The only path in it is the fixed /usr/bin one.
-    sudo tee /etc/pam.d/polkit-1 >/dev/null <<EOF
-$fprintd_gate
-auth      sufficient pam_fprintd.so
-auth      include system-auth
-
-account   include system-auth
-password  include system-auth
-session   include system-auth
-EOF
-  fi
-}
-
 """
 SETUP_REL = "bin/hexciri-setup-security-fingerprint"
 try:
@@ -252,18 +215,34 @@ except FileNotFoundError:
     print("WARN: %s not in fork output, skipping (setup refactor)" % SETUP_REL)
     s = None
 if s is not None:
-    # Delete setup_pam_config outright: the helper is now the only copy.
-    # (A plain REPLACEMENTS entry cannot express a deletion: new="" is
-    # trivially "already present", so this is handled explicitly.)
-    if SETUP_PAM_BLOCK not in s:
-        print("setup: setup_pam_config already removed, skipping")
+    # Refactor setup_pam_config structurally, not by literal match: the live
+    # fork's function carries a Hexciri-only SDDM section after the polkit
+    # block that the PR's upstream text does not have, so a literal delete
+    # silently skips and the drift guard fires (live failure 2026-11-26).
+    # Keep the SDDM section, now as its own function setup_sddm_config
+    # (it needs the gate variable, so the new header defines it); drop the
+    # sudo/polkit part, which the helper now owns.
+    fn_start = s.find("setup_pam_config() {")
+    sddm_start = s.find("# Hexciri: SDDM login unlock")
+    fn_close = s.find("\n}\n", sddm_start) if sddm_start != -1 else -1
+    if fn_start == -1 and "setup_sddm_config() {" in s:
+        print("setup: setup_pam_config already refactored, skipping")
+    elif fn_start == -1 or sddm_start == -1 or fn_close == -1:
+        print("ERROR: setup_pam_config structure not recognised in %s (fn_start=%d sddm_start=%d fn_close=%d)" % (SETUP_REL, fn_start, sddm_start, fn_close), file=sys.stderr)
+        sys.exit(1)
     else:
-        s = s.replace(SETUP_PAM_BLOCK, "", 1)
-        changed.append("setup: delete inline setup_pam_config (moved to hexciri-apply-fingerprint-pam)")
+        # Keep everything from the SDDM comment to the end of the file
+        # (the SDDM section, the function's closing brace, and all the
+        # code after it, including the call site). fn_close only validates
+        # the structure; the slice must not end there. Back up to the
+        # start of the comment's line so its indent survives.
+        sddm_line = s.rfind("\n", 0, sddm_start) + 1
+        s = s[:fn_start] + SDDM_HEAD + s[sddm_line:]
+        changed.append("setup: setup_pam_config split, SDDM kept as setup_sddm_config (sudo/polkit moved to hexciri-apply-fingerprint-pam)")
     REPLACEMENTS = [
-        ("setup: call hexciri-apply-fingerprint-pam after verified enrollment",
+        ("setup: call hexciri-apply-fingerprint-pam + setup_sddm_config after verified enrollment",
          "    setup_pam_config\n",
-         "    hexciri-apply-fingerprint-pam\n"),
+         "    hexciri-apply-fingerprint-pam\n    setup_sddm_config\n"),
         ("setup: declare --terminal arg (panel summon not ported: no hexciri.fingerprint panel)",
          "# omarchy:summary=Set up fingerprint authentication for sudo, polkit, and lock screen\n",
          "# omarchy:summary=Set up fingerprint authentication for sudo, polkit, and lock screen\n# omarchy:args=[--terminal]\n"),
