@@ -3163,7 +3163,7 @@ done
 unset _icons_list _set
 [ -f "$HEXCIRI_PATH/logo.txt" ] || die "missing: logo.txt, hexciri-show-logo fails"
 [ -f "$HEXCIRI_PATH/icon.txt" ] || die "missing: icon.txt, About branding reset fails"
-grep -q 'foot.desktop) echo "foot"' "$HEXCIRI_PATH/bin/hexciri-default-terminal" || die "hexciri-default-terminal getter still corrupted, settings show Foot for Kitty"
+grep -q 'kitty.desktop) echo "foot"' "$HEXCIRI_PATH/bin/hexciri-default-terminal" && die "hexciri-default-terminal getter still corrupted, settings show Foot for Kitty"
 grep -q 'kitty.desktop) echo "kitty"' "$HEXCIRI_PATH/bin/hexciri-default-terminal" || die "hexciri-default-terminal getter has no kitty arm"
 [ -L "$HOME/.local/bin/hexciri" ] || die "missing symlink ~/.local/bin/hexciri, hexciri will be command not found in terminals"
 bash -lc 'command -v hexciri' >/dev/null 2>&1 || warn "hexciri not on PATH in a fresh login shell, check ~/.bashrc / fish conf.d PATH lines"
