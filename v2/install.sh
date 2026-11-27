@@ -244,7 +244,7 @@ patch_fingerprint() {
       printf 'missing patches dir %s\n' "$INSTALLER_DIR/patches"
     fi
     sed -n '/^# --- Hexciri Settings, Hexciri shell plugin/,/^step "Installing Hexciri theme hooks/p' "$INSTALLER_DIR/install.sh"
-    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm-sync.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-color" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-dorion.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-zed.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings" "$HEXCIRI_REPO_ROOT/v2/hexciri-font-maple-cn-present"; do
+    for _ff in "$HEXCIRI_REPO_ROOT/v2/hexciri-update-hexciri" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-ansi" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-env.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-gtk.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-adapta.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-thpm-sync.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-color" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-dorion.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook-zed.sh" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-hook.toml" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-binds.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-custom-apps.lua" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-link" "$HEXCIRI_REPO_ROOT/v2/hexciri-theme-sync" "$HEXCIRI_REPO_ROOT/v2/hexciri-web-search" "$HEXCIRI_REPO_ROOT/v2/hexciri-settings-tabs" "$HEXCIRI_REPO_ROOT/v2/hexciri-launch-settings" "$HEXCIRI_REPO_ROOT/v2/hexciri-font-maple-cn-present" "$HEXCIRI_REPO_ROOT/bin/hexciri-mime-defaults"; do
       if [ -f "$_ff" ]; then sha256sum "$_ff"; else printf 'missing %s\n' "$_ff"; fi
     done
   } | sha256sum | cut -d' ' -f1
@@ -975,7 +975,7 @@ fi
 
 # --- Pin Hexciri default apps ---
 # Same picks as v1 bin/hexciri-mime-defaults: browser brave-origin, PDF
-# zathura, images imv, editor zed (nano fallback, neovim removed 2026-11-23). Files (Strata) is
+# zathura, images imv, video mpv, editor zed (nano fallback, neovim removed 2026-11-23). Files (Strata) is
 # pinned in the Strata step below, its desktop entry does not exist until
 # Strata is installed. State files live at ~/.local/state/hexciri/defaults/,
 # the same path launch-editor reads (renamed from omarchy by the fork).
@@ -1018,6 +1018,10 @@ fi
 if command -v imv >/dev/null 2>&1; then
   [ -f "$HOME/.local/state/hexciri/defaults/images" ] || printf '%s' "imv" > "$HOME/.local/state/hexciri/defaults/images"
   info "Default image viewer: imv"
+fi
+if command -v mpv >/dev/null 2>&1; then
+  [ -f "$HOME/.local/state/hexciri/defaults/video" ] || printf '%s' "mpv" > "$HOME/.local/state/hexciri/defaults/video"
+  info "Default video player: mpv"
 fi
 
 # --- fastfetch config (Hexciri's, from the repo tree) ---

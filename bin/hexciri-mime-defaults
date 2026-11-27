@@ -3,7 +3,7 @@
 # hexciri:args=[heal|apply <type>|apply all]
 #
 # The single table for every file association hexciri manages (images,
-# documents, files, browser) — add future associations HERE, not new scripts.
+# documents, files, browser, video) — add future associations HERE, not new scripts.
 # Picks live in ~/.local/state/hexciri/defaults/* (owned by hexciri-defaults).
 #
 # usage: hexciri-mime-defaults [heal|apply <type>|apply all]
@@ -51,6 +51,9 @@ DOC_MIMES=(application/pdf application/epub+zip application/oxps application/vnd
   application/postscript application/x-postscript application/eps application/x-eps
   image/vnd.djvu image/x-djvu application/x-cbr application/x-cbz application/x-cb7 application/x-cbt)
 FILES_MIMES=(inode/directory)
+# mpv covers these (patch 50: video was missing from the table entirely,
+# so videos fell through to the browser because nothing owned the slot).
+VIDEO_MIMES=(video/mp4 video/x-matroska video/webm video/x-msvideo video/quicktime video/x-flv video/mpeg video/ogg video/x-ms-wmv)
 
 # ── pick -> desktop resolution (same maps the hexciri-defaults picker offers) ──
 images_desktop() { # <pick>
@@ -90,6 +93,13 @@ browser_desktop() { # <pick>
     firefox) set -- firefox.desktop ;;
     chromium) set -- chromium.desktop ;;
     zen) set -- zen.desktop ;;
+    *) return 1 ;;
+  esac
+  first_desktop "$@"
+}
+video_desktop() { # <pick>
+  case "$1" in
+    mpv) set -- mpv.desktop ;;
     *) return 1 ;;
   esac
   first_desktop "$@"
@@ -190,6 +200,19 @@ heal_browser() {
   fi
   return 0
 }
+heal_video() {
+  local pick target mt changed=0
+  pick="$(get video)"; [[ -n $pick ]] || pick=mpv
+  target="$(video_desktop "$pick" || true)"; [[ -n ${target:-} ]] || return 0
+  for mt in "${VIDEO_MIMES[@]}"; do
+    if slot_broken "$mt"; then
+      xdg-mime default "$target" "$mt" 2>/dev/null || true
+      changed=1
+    fi
+  done
+  [[ $changed == 1 ]] && echo "video default applied ($pick)"
+  return 0
+}
 
 # ── appliers (explicit user choice wins over whatever owns the slot) ──
 resolve_or_skip() { # <type> <pick> — print desktop or skip with a message
@@ -199,7 +222,8 @@ resolve_or_skip() { # <type> <pick> — print desktop or skip with a message
     pdf|documents) target="$(docs_desktop "$2" || true)" ;;
     files) target="$(files_desktop "$2" || true)" ;;
     browser) target="$(browser_desktop "$2" || true)" ;;
-    *) echo "mime-defaults: unknown type '$1' (images|pdf|files|browser)" >&2; return 1 ;;
+    video) target="$(video_desktop "$2" || true)" ;;
+    *) echo "mime-defaults: unknown type '$1' (images|pdf|files|browser|video)" >&2; return 1 ;;
   esac
   if [[ -z ${target:-} ]]; then
     echo "mime-defaults: no desktop installed for $1 pick '$2' — skipping" >&2
@@ -232,19 +256,26 @@ apply_browser() {
   target="$(resolve_or_skip browser "$pick")" || return 0
   xdg-settings set default-web-browser "$target" 2>/dev/null || true
 }
+apply_video() {
+  local pick target
+  pick="$(get video)"; [[ -n $pick ]] || pick=mpv
+  target="$(resolve_or_skip video "$pick")" || return 0
+  pin_mimes "$target" "${VIDEO_MIMES[@]}"
+}
 
-usage() { echo "usage: hexciri-mime-defaults [heal|apply <images|pdf|files|browser|all>]"; exit 1; }
+usage() { echo "usage: hexciri-mime-defaults [heal|apply <images|pdf|files|browser|video|all>]"; exit 1; }
 
 cmd="${1:-heal}"
 case "$cmd" in
-  heal) heal_images; heal_docs; heal_files; heal_browser ;;
+  heal) heal_images; heal_docs; heal_files; heal_browser; heal_video ;;
   apply)
     case "${2:-}" in
       images) apply_images ;;
       pdf|documents) apply_docs ;;
       files) apply_files ;;
       browser) apply_browser ;;
-      all) apply_images; apply_docs; apply_files; apply_browser ;;
+      video) apply_video ;;
+      all) apply_images; apply_docs; apply_files; apply_browser; apply_video ;;
       *) usage ;;
     esac
     ;;
