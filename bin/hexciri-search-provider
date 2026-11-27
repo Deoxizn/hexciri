@@ -1,31 +1,48 @@
 #!/bin/bash
 # hexciri:menu=config-search
-# hexciri:summary=Choose the default web search provider for hexciri-fuzzel search
+# hexciri:summary=Choose the default web search provider for Super+Shift+S search
 # Usage: hexciri-search-provider            pick from the builtin providers
 #        hexciri-search-provider NAME       set the default directly
 #
-# Providers are a rolling hardcoded table inside bin/hexciri-fuzzel (read here
-# via its hidden `providers` subcommand). The chosen default is persisted to
+# Providers are the table inside v2/hexciri-web-search (read here via its
+# `providers` subcommand). The chosen default is persisted to
 # ~/.local/state/hexciri/search-provider; no user-editable config file exists.
+# v2 has no fuzzel: the no-arg picker is gum choose in a terminal (gum is in
+# hexciri-base.packages). The menu itself never takes that path -- Setup >
+# Config > Search provider lists one row per provider, each calling this
+# script with its NAME, so picking from the menu needs no terminal at all.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd || dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 bindir="${HEXCIRI_BIN_DIR:-$SCRIPT_DIR}"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/hexciri/search-provider"
 
+# Resolve hexciri-web-search: next to this script, else PATH, else the
+# installed fork path. v2/hexciri-web-search is installed to
+# /usr/share/hexciri/bin, not repo bin/, so the sibling lookup is expected
+# to miss and the fallbacks carry it.
+WEB_SEARCH=""
+for _cand in "$bindir/hexciri-web-search" "$(command -v hexciri-web-search 2>/dev/null || true)" "/usr/share/hexciri/bin/hexciri-web-search"; do
+  if [[ -n $_cand && -f $_cand ]]; then WEB_SEARCH="$_cand"; break; fi
+done
+[[ -n $WEB_SEARCH ]] || { echo "hexciri-search-provider: hexciri-web-search not found" >&2; exit 1; }
+
 default="$(cat "$STATE" 2>/dev/null || true)"
 [[ -n $default ]] || default="google"
 
-# one pass over `hexciri-fuzzel providers` → parallel name/label arrays
+# one pass over `hexciri-web-search providers` -> parallel name/label arrays
 names=(); labels=()
 while IFS=$'\t' read -r name label _url; do
   [[ -n $name ]] || continue
   names+=("$name"); labels+=("$label")
-done < <("$bindir/hexciri-fuzzel" providers 2>/dev/null || true)
+done < <(bash "$WEB_SEARCH" providers 2>/dev/null || true)
 
-(( ${#names[@]} > 0 )) || { echo "hexciri-search-provider: hexciri-fuzzel listed no providers" >&2; exit 1; }
+(( ${#names[@]} > 0 )) || { echo "hexciri-search-provider: hexciri-web-search listed no providers" >&2; exit 1; }
 
-idx_of() { # NAME → index in names[] or empty
+declare -A by_label=()
+for i in "${!names[@]}"; do by_label["${labels[$i]}"]="${names[$i]}"; done
+
+idx_of() { # NAME -> index in names[] or empty
   local n i
   for i in "${!names[@]}"; do [[ ${names[$i]} == "$1" ]] && { printf '%s' "$i"; return; }; done
   return 1
@@ -33,14 +50,18 @@ idx_of() { # NAME → index in names[] or empty
 
 pick="${1:-}"
 if [[ -z $pick ]]; then
+  # No NAME: pick in a terminal. gum choose needs a TTY and gum itself.
+  [[ -t 0 ]] || { echo "hexciri-search-provider: no provider given and no terminal (usage: hexciri-search-provider [NAME])" >&2; exit 1; }
+  command -v gum >/dev/null 2>&1 || { echo "hexciri-search-provider: gum not found (hexciri-base.packages installs it)" >&2; exit 1; }
   rows=()
   for i in "${!names[@]}"; do
     star=" "; [[ ${names[$i]} == "$default" ]] && star="*"
-    rows+=("${names[$i]}|$star ${labels[$i]}")
+    rows+=("$star ${labels[$i]}")
   done
-  pick=$(printf '%s\n' "${rows[@]}" | LC_ALL=C sort -t'|' -k2 |
-    "$bindir/hexciri-fuzzel" --dmenu --prompt='Search provider: ' \
-      --width=50 --lines=12 --nth-delimiter='|' --with-nth=2 --accept-nth=1 2>/dev/null) || exit 0
+  chosen="$(printf '%s\n' "${rows[@]}" | LC_ALL=C sort | gum choose --header "Search provider:" --height 13)" || exit 0
+  [[ -n $chosen ]] || exit 0
+  pick="${by_label[${chosen:2}]:-}"
+  [[ -n $pick ]] || { echo "hexciri-search-provider: could not map choice '$chosen' to a provider" >&2; exit 1; }
 fi
 
 [[ -n $pick ]] || exit 0
