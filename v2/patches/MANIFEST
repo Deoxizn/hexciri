@@ -60,3 +60,4 @@
 59-plugin-services-first.sh
 60-skip-ime-watcher.sh
 61-bar-tooltips.sh
+62-session-memorylow-oomd.sh
